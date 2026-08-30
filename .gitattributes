@@ -1,0 +1,10 @@
+# Auto detect text files
+* text=auto
+
+# Windows scripts must always have CRLF line endings
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.vbs text eol=crlf
+
+# Linux scripts must always have LF line endings
+*.sh text eol=lf
