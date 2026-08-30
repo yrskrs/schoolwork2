@@ -1,0 +1,170 @@
+{% load static %}<!DOCTYPE html>
+<html lang="uk" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="{% block meta_description %}Шкільні Завдання — шкільна платформа для перегляду та виконання навчальних завдань{% endblock %}">
+    <title>{% block title %}Шкільні Завдання{% endblock %} | Шкільні Завдання</title>
+
+    <link rel="stylesheet" href="{% static 'css/main.css' %}">
+<link rel="stylesheet" href="{% static 'css/design.css' %}">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📚</text></svg>">
+
+    {% block extra_head %}{% endblock %}
+
+    <script>
+        (function(){
+            var t = localStorage.getItem('sn-theme') ||
+                (window.matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 'light');
+            document.documentElement.setAttribute('data-theme', t);
+        })();
+    </script>
+</head>
+<body class="{% block body_class %}{% endblock %}">
+<div id="global-progress-bar"></div>
+
+{% if is_superadmin_mode %}
+<div class="superadmin-top-banner" role="status">
+    <span>👑 РЕЖИМ СУПЕР-АДМІНІСТРАТОРА АКТИВОВАНО — дозволені системні зміни</span>
+    <a href="{% url 'exit_superadmin_mode' %}" class="btn btn-sm" style="background:#fff;color:#7f1d1d;font-weight:700;padding:2px 10px;border:none;">
+        Вийти з Адміна
+    </a>
+</div>
+{% endif %}
+
+<nav class="navbar {% if is_superadmin_mode %}navbar-superadmin{% endif %}" role="navigation" aria-label="Головна навігація">
+    <div class="navbar-inner">
+
+        <a href="{% url 'index' %}" class="navbar-brand" aria-label="Шкільні Завдання — на головну">
+            <div class="brand-icon" aria-hidden="true">{% if is_superadmin_mode %}👑{% else %}📚{% endif %}</div>
+            <span>Шкільні Завдання</span>
+        </a>
+
+        <form class="navbar-search" method="GET" action="{% url 'index' %}" role="search">
+            <span class="search-icon" aria-hidden="true">🔍</span>
+            <input
+                id="navbar-search"
+                type="search"
+                name="q"
+                value="{{ query|default:'' }}"
+                placeholder="Пошук завдань..."
+                aria-label="Пошук завдань"
+            >
+            {% if selected_class_id %}
+                <input type="hidden" name="class" value="{{ selected_class_id }}">
+            {% endif %}
+        </form>
+
+        <div class="navbar-actions">
+            <button id="mobile-menu-btn" class="theme-toggle" type="button" aria-label="Відкрити меню" aria-expanded="false">☰</button>
+
+            {% if not user.is_authenticated or not user.teacher_profile %}
+            <a href="{% url 'student_submissions_portal' %}" class="nav-link-quiet" title="Мої здані роботи">
+                📥 <span class="nav-btn-text">Мої роботи</span>
+            </a>
+            {% endif %}
+
+            <button id="theme-toggle-btn" class="theme-toggle" type="button" aria-label="Перемикач теми">🌙</button>
+
+            {% if user.is_authenticated and user.teacher_profile %}
+            <a href="{% url 'assignment_create' %}" class="btn btn-primary btn-sm" style="font-weight:700;display:inline-flex;align-items:center;gap:5px;padding:5px 12px;border-radius:var(--radius-md);text-decoration:none;" title="Створити нове навчальне завдання">
+                <span>➕</span> <span class="nav-btn-text">Нове завдання</span>
+            </a>
+            <a href="{% url 'teacher_dashboard' %}" class="nav-link-quiet" title="Панель вчителя">
+                📋 <span class="nav-btn-text">Панель</span>
+                {% if pending_submissions_count and pending_submissions_count > 0 %}
+                <span class="nav-badge">{{ pending_submissions_count }}</span>
+                {% endif %}
+            </a>
+            <div class="user-menu" id="user-menu">
+                <button type="button" class="user-menu-btn" id="user-menu-btn" aria-haspopup="true" aria-expanded="false">
+                    {% if user.teacher_profile.avatar_image %}
+                    <img src="{{ user.teacher_profile.avatar_image.url }}" alt="" class="avatar-mini-img" style="width:28px;height:28px;border-radius:50%;object-fit:cover;">
+                    {% else %}
+                    <span class="avatar-mini" style="background:{{ user.teacher_profile.avatar_color|default:'#6366f1' }};width:28px;height:28px;font-size:11px;display:inline-flex;align-items:center;justify-content:center;color:#fff;border-radius:50%;">
+                        {{ user.teacher_profile.get_initials|default:"В" }}
+                    </span>
+                    {% endif %}
+                    <span class="user-menu-name">{{ user.teacher_profile.full_name|default:user.username }}</span>
+                </button>
+                <div class="user-menu-panel" role="menu">
+                    <a href="{% url 'teacher_dashboard' %}">📋 Мої завдання</a>
+                    <a href="{% url 'all_submissions_dashboard' %}">📥 Здані роботи</a>
+                    <a href="{% url 'gradebook' %}">📊 Журнал</a>
+                    <a href="{% url 'teacher_students' %}">👥 Учні та класи</a>
+                    <a href="{% url 'teacher_settings' %}">⚙️ Налаштування</a>
+                    {% if user.is_superuser and not is_superadmin_mode %}
+                    <a href="{% url 'enter_superadmin_mode' %}">👑 Режим адміна</a>
+                    {% endif %}
+                    <form method="POST" action="{% url 'teacher_logout' %}">
+                        {% csrf_token %}
+                        <button type="submit" class="danger">Вийти</button>
+                    </form>
+                </div>
+            </div>
+            {% else %}
+            <a href="{% url 'teacher_login' %}" class="btn btn-secondary btn-sm">Вхід</a>
+            {% endif %}
+        </div>
+    </div>
+</nav>
+
+{% if messages %}
+<div class="messages-container" aria-live="polite">
+    {% for message in messages %}
+    <div class="alert alert-{{ message.tags|default:'info' }}" role="alert">
+        <span>
+            {% if message.tags == 'success' %}✅{% elif message.tags == 'error' %}❌{% elif message.tags == 'warning' %}⚠️{% else %}ℹ️{% endif %}
+        </span>
+        <span>{{ message }}</span>
+        <button class="alert-close" type="button" aria-label="Закрити">✕</button>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<main>
+    {% block content %}{% endblock %}
+</main>
+
+<footer class="site-footer">
+    Шкільні Завдання · Локальна шкільна мережа
+</footer>
+
+<div id="assignment-modal-overlay" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal">
+        <div class="modal-header">
+            <h2 class="modal-title" id="modal-title">Завдання</h2>
+            <button class="modal-close" id="modal-close-btn" type="button" aria-label="Закрити">✕</button>
+        </div>
+        <div class="modal-body" id="modal-body-content">
+            <div style="padding:60px;display:flex;align-items:center;justify-content:center;">
+                <div class="spinner"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="{% static 'js/main.js' %}"></script>
+{% block extra_scripts %}{% endblock %}
+
+<script>
+    function sendClientHeartbeat() {
+        var currentPath = window.location.pathname + window.location.search;
+        fetch('/api/heartbeat/?path=' + encodeURIComponent(currentPath), {
+            method: 'GET',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        }).catch(function(){});
+    }
+    setTimeout(sendClientHeartbeat, 4000);
+    setInterval(sendClientHeartbeat, 30000);
+
+    window.addEventListener('pagehide', function() {
+        if (navigator.sendBeacon) {
+            navigator.sendBeacon('/api/client-disconnect/');
+        }
+    });
+</script>
+
+</body>
+</html>

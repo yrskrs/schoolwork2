@@ -1,0 +1,348 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Журнал оцінок — {% if selected_class %}{{ selected_class.name }} | {% endif %}Шкільні Завдання{% endblock %}
+
+{% block content %}
+<div class="page-wrapper">
+
+    <!-- ── Двоколонковий layout сайту ────────────────────────────────────── -->
+    <div class="feed-layout">
+
+        <!-- ════ ЛІВИЙ САЙДБАР ВЧИТЕЛЯ ════════════════════════════════════════ -->
+        {% include 'feed/components/teacher_sidebar.html' %}
+
+        <!-- ════ ЦЕНТРАЛЬНА ЧАСТИНА (ЕЛЕКТРОННИЙ ЖУРНАЛ) ═══════════════════════ -->
+        <div class="feed-main-content">
+
+            <!-- ── Шапка журналу ─────────────────────────────────────────────── -->
+            <div class="page-hero" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+                <div>
+                    <div class="page-hero-kicker">Успішність</div>
+                    <h1>Електронний журнал</h1>
+                </div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                    {% if selected_class %}
+                    <a href="{% url 'teacher_students' %}?class_group={{ selected_class.id }}" class="btn btn-secondary btn-sm" title="Керувати учнями класу та редагувати імена">👥 Учні класу {{ selected_class.name }}</a>
+                    {% else %}
+                    <a href="{% url 'teacher_students' %}" class="btn btn-secondary btn-sm" title="Керування всіма учнями школи">👥 Учні та класи</a>
+                    {% endif %}
+                    <a href="?view=all_grades" class="btn btn-secondary btn-sm">Всі оцінки</a>
+                    {% if selected_class %}
+                    <a href="{% url 'export_grades' %}?class_group={{ selected_class.id }}" class="btn btn-secondary btn-sm">Експорт CSV</a>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- ── Вибір класу, фільтри та перемикання режимів відображення ─── -->
+            <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:16px 20px;margin-bottom:20px;box-shadow:0 2px 8px rgba(0,0,0,0.02);">
+
+                <form method="GET" id="gradebook-filter-form">
+                    <input type="hidden" name="view_mode" value="{{ view_mode }}">
+
+                    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:14px;margin-bottom:{% if selected_class %}14px{% else %}0{% endif %};">
+                        <!-- Вибір класу -->
+                        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+                            <label for="class_group_select" style="font-weight:700;font-size:14px;color:var(--color-text-primary);white-space:nowrap;">🏫 Клас:</label>
+                            <select name="class_group" id="class_group_select" class="form-input" style="min-width:180px;font-size:13px;padding:6px 12px;font-weight:700;" onchange="this.form.submit()">
+                                <option value="">-- Оберіть клас --</option>
+                                {% for cls in class_groups %}
+                                <option value="{{ cls.id }}" {% if cls.selected %}selected{% endif %}>
+                                    {{ cls.name }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        {% if selected_class %}
+                        <!-- Перемикач режимів: Класичний журнал (матриця) vs Табличний список -->
+                        <div style="display:flex;gap:6px;align-items:center;background:var(--color-bg-secondary);padding:3px;border-radius:var(--radius-md);border:1px solid var(--color-border);">
+                            <a href="?class_group={{ selected_class.id }}&view_mode=journal{% if date_preset %}&date_preset={{ date_preset }}{% endif %}{% if single_date %}&single_date={{ single_date }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}{% if grade_filter %}&grade_filter={{ grade_filter }}{% endif %}"
+                               class="btn {% if view_mode == 'journal' or not view_mode %}btn-primary{% else %}btn-secondary{% endif %} btn-sm"
+                               style="font-size:12px;font-weight:700;padding:4px 10px;border:none;">
+                                📑 Класичний журнал
+                            </a>
+                            <a href="?class_group={{ selected_class.id }}&view_mode=table{% if date_preset %}&date_preset={{ date_preset }}{% endif %}{% if single_date %}&single_date={{ single_date }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}{% if grade_filter %}&grade_filter={{ grade_filter }}{% endif %}"
+                               class="btn {% if view_mode == 'table' %}btn-primary{% else %}btn-secondary{% endif %} btn-sm"
+                               style="font-size:12px;font-weight:700;padding:4px 10px;border:none;">
+                                📋 Табличний список
+                            </a>
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    {% if selected_class %}
+                    <!-- ── Панель фільтрації дат та діапазону оцінок ──────────────── -->
+                    <div style="display:flex;align-items:center;flex-wrap:wrap;gap:12px;padding-top:12px;border-top:1px solid var(--color-border);background:var(--color-bg-secondary);padding:10px 14px;border-radius:var(--radius-md);">
+                        
+                        <!-- Швидкий фільтр одного дня -->
+                        <div style="display:flex;align-items:center;gap:6px;">
+                            <label for="filter-single-date" style="font-size:12px;font-weight:700;color:var(--color-text-secondary);white-space:nowrap;">📅 Конкретний день:</label>
+                            <input type="date"
+                                   id="filter-single-date"
+                                   name="single_date"
+                                   value="{{ single_date }}"
+                                   class="form-input"
+                                   style="padding:4px 8px;font-size:12px;width:auto;"
+                                   onchange="this.form.submit()">
+                        </div>
+
+                        <!-- Діапазон дат (Від і До) -->
+                        <div style="display:flex;align-items:center;gap:6px;">
+                            <label style="font-size:12px;font-weight:700;color:var(--color-text-secondary);white-space:nowrap;">📆 Період:</label>
+                            <input type="date"
+                                   name="date_from"
+                                   value="{{ date_from }}"
+                                   placeholder="Від"
+                                   class="form-input"
+                                   style="padding:4px 6px;font-size:12px;width:auto;"
+                                   onchange="this.form.submit()"
+                                   title="Дата від">
+                            <span style="color:var(--color-text-muted);font-size:12px;">—</span>
+                            <input type="date"
+                                   name="date_to"
+                                   value="{{ date_to }}"
+                                   placeholder="До"
+                                   class="form-input"
+                                   style="padding:4px 6px;font-size:12px;width:auto;"
+                                   onchange="this.form.submit()"
+                                   title="Дата до">
+                        </div>
+
+                        <!-- Фільтр за оцінками / балами -->
+                        <div style="display:flex;align-items:center;gap:6px;">
+                            <label for="filter-grade" style="font-size:12px;font-weight:700;color:var(--color-text-secondary);white-space:nowrap;">🎯 Оцінки:</label>
+                            <select id="filter-grade" name="grade_filter" class="form-input" style="padding:4px 8px;font-size:12px;width:auto;" onchange="this.form.submit()">
+                                <option value="all" {% if not grade_filter or grade_filter == 'all' %}selected{% endif %}>Всі оцінки</option>
+                                <option value="10-12" {% if grade_filter == '10-12' %}selected{% endif %}>10–12 б. (Високий)</option>
+                                <option value="7-9" {% if grade_filter == '7-9' %}selected{% endif %}>7–9 б. (Достатній)</option>
+                                <option value="4-6" {% if grade_filter == '4-6' %}selected{% endif %}>4–6 б. (Середній)</option>
+                                <option value="1-3" {% if grade_filter == '1-3' %}selected{% endif %}>1–3 б. (Початковий)</option>
+                                <option value="rework" {% if grade_filter == 'rework' %}selected{% endif %}>🔄 Тільки Д (Доопрацювати)</option>
+                                <option value="ungraded" {% if grade_filter == 'ungraded' %}selected{% endif %}>⏳ Тільки неоцінені</option>
+                            </select>
+                        </div>
+
+                        {% if has_active_filter %}
+                        <div style="margin-left:auto;">
+                            <a href="?class_group={{ selected_class.id }}&view_mode={{ view_mode }}"
+                               class="btn btn-secondary btn-sm"
+                               style="font-size:11.5px;padding:3px 8px;color:#ef4444;border-color:rgba(239,68,68,0.3);font-weight:700;"
+                               title="Скинути всі фільтри">
+                                ✕ Скинути фільтри
+                            </a>
+                        </div>
+                        {% endif %}
+
+                    </div>
+                    {% endif %}
+
+                </form>
+
+            </div>
+
+            {% if selected_class %}
+
+                <!-- Підсумкова статистика по класу -->
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:16px;">
+                    <div class="sidebar-card" style="padding:10px;text-align:center;">
+                        <div style="font-size:20px;font-weight:800;color:var(--color-primary);">{{ selected_class.name }}</div>
+                        <div class="text-muted text-sm" style="font-size:11px;">Клас</div>
+                    </div>
+                    <div class="sidebar-card" style="padding:10px;text-align:center;">
+                        <div style="font-size:20px;font-weight:800;color:var(--color-text-primary);">{{ students|length }}</div>
+                        <div class="text-muted text-sm" style="font-size:11px;">Учнів у вибірці</div>
+                    </div>
+                    <div class="sidebar-card" style="padding:10px;text-align:center;">
+                        <div style="font-size:20px;font-weight:800;color:var(--color-info);">{{ dates|length }}</div>
+                        <div class="text-muted text-sm" style="font-size:11px;">Відображено дат</div>
+                    </div>
+                    <div class="sidebar-card" style="padding:10px;text-align:center;">
+                        <div style="font-size:20px;font-weight:800;color:{% if class_avg and class_avg >= 10 %}var(--color-success){% elif class_avg and class_avg >= 7 %}var(--color-warning){% else %}var(--color-primary){% endif %};">
+                            {{ class_avg|default:"—" }}
+                        </div>
+                        <div class="text-muted text-sm" style="font-size:11px;">Сер. бал класу</div>
+                    </div>
+                </div>
+
+                {% if students and dates %}
+
+                    {% if view_mode == 'table' %}
+                    <!-- ══ РЕЖИМ 2: ТАБЛИЧНИЙ СПИСОК РОБІТ ════════════════════════ -->
+                    <div class="submissions-table-wrapper" style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.04);">
+                        <table class="submissions-table">
+                            <thead>
+                                <tr>
+                                    <th style="width:40px;text-align:center;">№</th>
+                                    <th>Прізвище та ім'я учня</th>
+                                    <th style="text-align:center;">Здано робіт</th>
+                                    <th style="text-align:center;">Оцінено</th>
+                                    <th style="text-align:center;">Середній бал</th>
+                                    <th style="text-align:center;">Дії</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for student in students %}
+                                <tr>
+                                    <td style="text-align:center;font-size:12px;color:var(--color-text-muted);">{{ forloop.counter }}</td>
+                                    <td>
+                                        <a href="{% url 'student_detail' student_name=student.name_key %}" style="font-weight:700;color:var(--color-primary);text-decoration:none;font-size:13px;">
+                                            👤 {{ student.full_name }}
+                                        </a>
+                                    </td>
+                                    <td style="text-align:center;font-weight:600;font-size:13px;">{{ student.total_submissions }}</td>
+                                    <td style="text-align:center;color:var(--color-success);font-weight:700;font-size:13px;">{{ student.graded_count }}</td>
+                                    <td style="text-align:center;">
+                                        {% if student.avg_score %}
+                                        <span class="journal-avg-badge">{{ student.avg_score }}</span>
+                                        {% else %}
+                                        <span style="color:var(--color-text-muted);font-size:12px;">—</span>
+                                        {% endif %}
+                                    </td>
+                                    <td style="text-align:center;">
+                                        <a href="{% url 'student_detail' student_name=student.name_key %}" class="btn btn-secondary btn-sm" style="font-size:11.5px;padding:3px 8px;">
+                                            Історія оцінок →
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {% else %}
+                    <!-- ══ РЕЖИМ 1: КЛАСИЧНИЙ КЛАСНИЙ ЖУРНАЛ (МАТРИЦЯ) ════════════ -->
+                    <div class="journal-wrapper">
+                        
+                        <div style="padding:10px 16px;background:var(--color-bg-secondary);border-bottom:1px solid var(--color-border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+                            <div style="font-size:12.5px;font-weight:700;color:var(--color-text-primary);">
+                                📑 Розгортка журналу: <span style="color:var(--color-primary);">{{ selected_class.name }}</span>
+                                {% if has_active_filter %}<span class="badge" style="background:rgba(99,102,241,0.12);color:var(--color-primary);font-size:11px;margin-left:6px;">Застосовано фільтр</span>{% endif %}
+                            </div>
+                            <div style="font-size:11.5px;color:var(--color-text-muted);">
+                                💡 Натисніть на оцінку для перевірки. «Д» = Доопрацювати
+                            </div>
+                        </div>
+
+                        <div class="journal-scroll-area">
+                            <table class="journal-table">
+                                <thead>
+                                    <tr>
+                                        <th class="journal-th-student">
+                                            № &nbsp; Прізвище та ім'я учня
+                                        </th>
+                                        {% for d_meta in dates_meta %}
+                                        <th title="{{ d_meta.title }} ({{ d_meta.date|date:'d.m.Y' }})" style="cursor:help;">
+                                            <div style="font-size:12px;font-weight:800;">{{ d_meta.date|date:"d.m" }}</div>
+                                            <div style="font-size:9.5px;font-weight:normal;color:var(--color-text-muted);overflow:hidden;text-overflow:ellipsis;max-width:70px;white-space:nowrap;">
+                                                {{ d_meta.title|truncatechars:8 }}
+                                            </div>
+                                        </th>
+                                        {% endfor %}
+                                        <th style="min-width:65px;background:var(--color-bg-secondary);border-left:2px solid var(--color-border);color:var(--color-primary);font-size:11.5px;">
+                                            Сер. бал
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for student in students %}
+                                    <tr>
+                                        <!-- Ліва фіксована колонка з учнем -->
+                                        <td class="journal-td-student">
+                                            <span style="color:var(--color-text-muted);font-weight:normal;font-size:11px;margin-right:4px;">{{ forloop.counter }}.</span>
+                                            <a href="{% url 'student_detail' student_name=student.name_key %}" style="color:var(--color-text-primary);text-decoration:none;font-weight:700;font-size:12.5px;">
+                                                {{ student.full_name }}
+                                            </a>
+                                        </td>
+
+                                        <!-- Комірки оцінок за датами -->
+                                        {% for cell in student.cells %}
+                                        <td>
+                                            {% if cell.items %}
+                                            <div style="display:flex;gap:3px;justify-content:center;align-items:center;flex-wrap:wrap;">
+                                                {% for it in cell.items %}
+                                                    {% if it.grade == 'Доопрацювати' or it.grade == 'доопрацювання' or it.grade == 'д' or it.grade == 'Д' %}
+                                                    <a href="{% url 'view_file' it.submission_id %}"
+                                                       class="journal-grade-badge rework"
+                                                       title="🔄 Доопрацювати (роботу повернуто на виправлення) — {{ it.assignment_title }}">
+                                                        Д
+                                                    </a>
+                                                    {% elif it.has_grade %}
+                                                    <a href="{% url 'view_file' it.submission_id %}"
+                                                       class="journal-grade-badge {% if it.grade == '10' or it.grade == '11' or it.grade == '12' %}high{% endif %}"
+                                                       {% if it.has_gr %}style="position:relative;"{% endif %}
+                                                       title="{{ it.assignment_title }} ({{ it.submitted_at|date:'d.m.Y H:i' }}){% if it.has_gr %} — Оцінка за ГР: {{ it.grade }} ({% for gr in it.gr_results %}{{ gr.code }}: {{ gr.grade }} б.{% if not forloop.last %}, {% endif %}{% endfor %}){% endif %} — Натисніть для перегляду">
+                                                        {{ it.grade }}{% if it.has_gr %}<span style="font-size:7px;position:absolute;top:-3px;right:-3px;">📊</span>{% endif %}
+                                                    </a>
+                                                    {% else %}
+                                                    <a href="{% url 'view_file' it.submission_id %}"
+                                                       class="journal-grade-badge pending"
+                                                       title="⏳ Очікує оцінки — {{ it.assignment_title }}">
+                                                        ⏳
+                                                    </a>
+                                                    {% endif %}
+                                                {% endfor %}
+                                            </div>
+                                            {% else %}
+                                            <span style="color:var(--color-text-muted);font-size:10px;opacity:0.3;">·</span>
+                                            {% endif %}
+                                        </td>
+                                        {% endfor %}
+
+                                        <!-- Права колонка середнього балу -->
+                                        <td style="border-left:2px solid var(--color-border);background:var(--color-surface);">
+                                            {% if student.avg_score %}
+                                            <span class="journal-avg-badge">{{ student.avg_score }}</span>
+                                            {% else %}
+                                            <span style="color:var(--color-text-muted);font-size:11px;">—</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+
+                    </div>
+                    {% endif %}
+
+                {% else %}
+                <div class="sidebar-card" style="padding:36px;text-align:center;">
+                    <div class="empty-state">
+                        <div class="empty-icon" style="font-size:42px;margin-bottom:10px;">📭</div>
+                        <h3 style="font-size:1.15rem;font-weight:800;margin:0 0 6px;">Оцінок не знайдено</h3>
+                        <p style="color:var(--color-text-muted);font-size:13.5px;margin:0 0 14px;">
+                            {% if has_active_filter %}
+                            За вибраними критеріями фільтрації (дата / діапазон оцінок) робіт не знайдено.
+                            {% else %}
+                            У цьому класі ще немає зданих або оцінених робіт.
+                            {% endif %}
+                        </p>
+                        {% if has_active_filter %}
+                        <a href="?class_group={{ selected_class.id }}&view_mode={{ view_mode }}" class="btn btn-primary btn-sm">
+                            Скинути фільтри
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+
+            {% else %}
+            <!-- Стан коли клас не обрано -->
+            <div class="sidebar-card" style="padding:48px 24px;text-align:center;">
+                <div class="empty-state">
+                    <div class="empty-icon" style="font-size:54px;margin-bottom:14px;">👈</div>
+                    <h3 style="font-size:1.3rem;font-weight:800;margin:0 0 8px;color:var(--color-text-primary);">Оберіть клас зі списку</h3>
+                    <p style="color:var(--color-text-muted);font-size:14px;max-width:480px;margin:0 auto 20px;">
+                        Виберіть клас у випадаючому списку вгорі, щоб переглянути повноцінний шкільний журнал оцінок, середній бал учнів та експортувати відомості.
+                    </p>
+                </div>
+            </div>
+            {% endif %}
+
+        </div>
+
+    </div>
+
+</div>
+{% endblock %}

@@ -1,0 +1,293 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Деталі здачі — {{ submission.last_name }} {{ submission.first_name }} | {{ submission.assignment.title|default:"Шкільні Завдання" }}{% endblock %}
+
+{% block content %}
+<div class="page-wrapper">
+
+    <!-- ── Двоколонковий layout сайту ────────────────────────────────────── -->
+    <div class="feed-layout">
+
+        <!-- ════ САЙДБАР (СТАТУС, ОЦІНКА ТА УЧЕНЬ) ════════════════════════════ -->
+        <aside class="sidebar" id="submission-detail-sidebar" aria-label="Дані про здачу">
+
+            <!-- 1. СТАТУС РОБОТИ -->
+            <div class="sidebar-card">
+                <div class="sidebar-header">🎯 Статус роботи</div>
+                <div style="padding:16px;display:flex;flex-direction:column;gap:10px;text-align:center;">
+                    {% if submission.grade %}
+                    <div>
+                        <span class="badge badge-success" style="font-size:14px;padding:8px 18px;display:inline-block;border-radius:24px;font-weight:800;background:rgba(16,185,129,0.15);color:#059669;border:1px solid rgba(16,185,129,0.3);">
+                            ✅ Оцінено вчителем
+                        </span>
+                        {% if submission.graded_at %}
+                        <div style="font-size:11px;color:var(--color-text-muted);margin-top:8px;">
+                            Дата оцінки: {{ submission.graded_at|date:"d.m.Y H:i" }}
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% else %}
+                    <div>
+                        <span style="background:rgba(234,179,8,0.15);color:#b45309;border:1px solid rgba(234,179,8,0.3);border-radius:20px;padding:6px 14px;font-size:13px;font-weight:700;display:inline-block;">
+                            ⏳ Очікує перевірки
+                        </span>
+                        <div style="font-size:12px;color:var(--color-text-muted);margin-top:8px;">
+                            Вчитель незабаром перевірить роботу.
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- 2. ДАНІ ПРО УЧНЯ -->
+            <div class="sidebar-card">
+                <div class="sidebar-header">👤 Учень</div>
+                <div style="padding:14px 16px;display:flex;flex-direction:column;gap:10px;font-size:13px;">
+                    <div style="font-weight:800;font-size:15px;color:var(--color-text-primary);">
+                        {{ submission.last_name }} {{ submission.first_name }}
+                    </div>
+                    <div style="display:flex;justify-content:space-between;align-items:center;">
+                        <span style="color:var(--color-text-muted);">Клас:</span>
+                        <span class="class-prominent-badge" style="font-size:11px;">{{ submission.class_group.name }}</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;align-items:center;">
+                        <span style="color:var(--color-text-muted);">Здано:</span>
+                        <span style="font-weight:600;">{{ submission.submitted_at|date:"d.m.Y H:i" }}</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 3. НАВІГАЦІЯ -->
+            <div class="sidebar-card">
+                <div class="sidebar-header">🔗 Навігація</div>
+                <ul class="sidebar-list" role="list">
+                    {% if submission.assignment %}
+                    <li>
+                        <a href="{% url 'assignment_detail' submission.assignment.pk %}">
+                            <span>📖</span>
+                            <span>До завдання «{{ submission.assignment.title|truncatechars:20 }}»</span>
+                        </a>
+                    </li>
+                    {% endif %}
+                    <li>
+                        <a href="{% url 'student_submissions_portal' %}">
+                            <span>📥</span>
+                            <span>Всі мої здані роботи</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="{% url 'index' %}">
+                            <span>🏠</span>
+                            <span>Головна стрічка</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+
+        </aside>
+
+
+        <!-- ════ ЦЕНТРАЛЬНА ЧАСТИНА (ВМІСТ ЗДАЧІ ТА КОМЕНТАРІ) ════════════════ -->
+        <div class="feed-main-content">
+
+            <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.05);margin-bottom:24px;padding:28px 32px;">
+
+                <!-- Заголовок завдання -->
+                <div style="margin-bottom:20px;">
+                    <div style="font-size:11px;text-transform:uppercase;font-weight:800;color:var(--color-primary);letter-spacing:0.05em;">
+                        Здача роботи до завдання
+                    </div>
+                    <h1 style="font-size:1.5rem;font-weight:800;margin:2px 0 6px;color:var(--color-text-primary);">
+                        {{ submission.assignment.title|default:"Самостійна робота" }}
+                    </h1>
+                    {% if submission.assignment and submission.assignment.teacher %}
+                    <div style="font-size:13px;color:var(--color-text-muted);">
+                        Вчитель: <strong>{{ submission.assignment.teacher.full_name }}</strong>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <!-- Здані файли або посилання (Тільки інфо) -->
+                <div style="padding:16px 20px;background:var(--color-bg-secondary);border-radius:var(--radius-md);margin-bottom:20px;border:1px solid var(--color-border);">
+                    <div style="font-size:12px;font-weight:800;color:var(--color-text-muted);text-transform:uppercase;margin-bottom:8px;">
+                        📎 Надіслані матеріали:
+                    </div>
+
+                    {% if submission.files.exists %}
+                    <div style="display:flex;flex-direction:column;gap:12px;">
+                        {% for sf in submission.files.all %}
+                        <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:12px 16px;">
+                            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+                                <div style="display:flex;align-items:center;gap:10px;">
+                                    <span style="font-size:24px;">{{ sf.get_file_icon }}</span>
+                                    <div>
+                                        <div style="font-weight:700;font-size:14px;color:var(--color-text-primary);word-break:break-all;">
+                                            {{ sf.original_name }}
+                                        </div>
+                                        <div style="font-size:12px;color:var(--color-text-muted);margin-top:1px;">
+                                            {{ sf.get_size_display }} · Розширення {{ sf.get_extension }}
+                                        </div>
+                                    </div>
+                                </div>
+                                <a href="{{ sf.file.url }}" download class="btn btn-secondary btn-sm" style="font-weight:700;">
+                                    ⬇️ Завантажити
+                                </a>
+                            </div>
+
+                            {% if sf.get_file_type == 'video' %}
+                            <div style="margin-top:10px;text-align:center;background:#000;border-radius:8px;overflow:hidden;padding:10px;">
+                                <video src="{{ sf.file.url }}" controls playsinline preload="metadata" style="max-width:100%;max-height:55vh;border-radius:6px;outline:none;display:block;margin:0 auto;"></video>
+                            </div>
+                            {% elif sf.get_file_type == 'audio' %}
+                            <div style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--color-border);">
+                                <audio src="{{ sf.file.url }}" controls style="width:100%;max-width:420px;"></audio>
+                            </div>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% elif submission.file %}
+                    <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:12px 16px;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+                            <div style="display:flex;align-items:center;gap:12px;">
+                                <span style="font-size:28px;">{{ submission.get_file_icon }}</span>
+                                <div>
+                                    <div style="font-weight:700;font-size:14px;color:var(--color-text-primary);word-break:break-all;">
+                                        {{ submission.file.name|slice:"-45:" }}
+                                    </div>
+                                    <div style="font-size:12px;color:var(--color-text-muted);margin-top:2px;">
+                                        {{ submission.get_file_size_display }} · 📎 Файл збережено на сервері
+                                    </div>
+                                </div>
+                            </div>
+                            <a href="{{ submission.file.url }}" download class="btn btn-secondary btn-sm" style="font-weight:700;">
+                                ⬇️ Завантажити
+                            </a>
+                        </div>
+
+                        {% if submission.get_file_type == 'video' %}
+                        <div style="margin-top:10px;text-align:center;background:#000;border-radius:8px;overflow:hidden;padding:10px;">
+                            <video src="{{ submission.file.url }}" controls playsinline preload="metadata" style="max-width:100%;max-height:55vh;border-radius:6px;outline:none;display:block;margin:0 auto;"></video>
+                        </div>
+                        {% elif submission.get_file_type == 'audio' %}
+                        <div style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--color-border);">
+                            <audio src="{{ submission.file.url }}" controls style="width:100%;max-width:420px;"></audio>
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% elif submission.link %}
+                    <div style="display:flex;align-items:center;gap:10px;">
+                        <span style="font-size:24px;">🔗</span>
+                        <div>
+                            <div style="font-size:11px;color:var(--color-text-muted);font-weight:700;">ПОСИЛАННЯ:</div>
+                            <a href="{{ submission.link }}" target="_blank" rel="noopener noreferrer" style="font-weight:700;color:var(--color-primary);font-size:14px;word-break:break-all;">
+                                {{ submission.link }} ↗
+                            </a>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    {% if submission.comment_student %}
+                    <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--color-border);font-size:13px;color:var(--color-text-secondary);">
+                        💬 <strong>Коментар учня:</strong> «{{ submission.comment_student }}»
+                    </div>
+                    {% endif %}
+                </div>
+
+                <!-- Повідомлення про виявлення використання ШІ -->
+                {% if submission.ai_generated_detected %}
+                <div style="margin-bottom:20px;padding:16px 20px;background:{% if submission.is_ai_allowed %}rgba(16,185,129,0.08){% else %}rgba(239,68,68,0.08){% endif %};border:1.5px solid {% if submission.is_ai_allowed %}#10b981{% else %}#ef4444{% endif %};border-radius:var(--radius-md);">
+                    <div style="display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;color:{% if submission.is_ai_allowed %}#065f46{% else %}#b91c1c{% endif %};margin-bottom:4px;">
+                        <span>🤖</span>
+                        <span>{% if submission.is_ai_allowed %}У роботі зафіксовано використання генеративного ШІ (дозволено вчителем){% else %}У роботі виявлено ознаки використання штучного інтелекту (ШІ){% endif %}</span>
+                    </div>
+                    {% if submission.ai_generated_details %}
+                    <div style="font-size:12.5px;color:var(--color-text-secondary);line-height:1.4;margin-bottom:6px;">
+                        {{ submission.ai_generated_details }}
+                    </div>
+                    {% endif %}
+                    <div style="font-size:12px;color:var(--color-text-muted);">
+                        {% if submission.is_ai_allowed %}
+                        💡 Вчитель дозволив використання ШІ для виконання цього завдання.
+                        {% else %}
+                        ⚠️ Для цього завдання вчитель вимагав повністю самостійне виконання учнем.
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if submission.has_gr_results and not submission.is_traditional_grading %}
+                <!-- Оцінювання за групами результатів (ГР НУШ) -->
+                <div style="margin-top:20px;padding:18px 20px;background:var(--color-surface);border:1px solid rgba(99,102,241,0.25);border-radius:var(--radius-md);box-shadow:0 2px 8px rgba(0,0,0,0.03);">
+                    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
+                        <h3 style="font-size:1.1rem;font-weight:800;margin:0;color:var(--color-primary);display:flex;align-items:center;gap:8px;">
+                            <span>📊</span> <span>Оцінювання за групами результатів (ГР НУШ)</span>
+                        </h3>
+                        {% if submission.get_ai_gr_average %}
+                        <div style="display:inline-flex;align-items:center;gap:8px;background:rgba(16,185,129,0.12);border:1px solid rgba(16,185,129,0.3);border-radius:20px;padding:4px 14px;">
+                            <span style="font-size:12px;font-weight:700;color:#065f46;">Загальна середня оцінка по ГР:</span>
+                            <span class="badge" style="background:#10b981;color:#fff;font-size:13px;font-weight:800;">
+                                {{ submission.get_ai_gr_average_display }} б.
+                            </span>
+                        </div>
+                        {% endif %}
+                    </div>
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(260px, 1fr));gap:12px;">
+                        {% for gr in submission.get_ai_gr_results_list %}
+                        <div style="background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:12px 14px;">
+                            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:6px;">
+                                <strong style="color:var(--color-text-primary);font-size:13px;">{{ gr.code }}: {{ gr.name }}</strong>
+                                <span class="badge" style="background:rgba(99,102,241,0.15);color:var(--color-primary);font-weight:800;font-size:12px;white-space:nowrap;">
+                                    {{ gr.grade|default:"—" }} б.
+                                </span>
+                            </div>
+                            {% if gr.level %}
+                            <div style="font-size:11.5px;color:var(--color-text-muted);font-weight:700;margin-bottom:4px;">
+                                Рівень: <span style="color:var(--color-text-primary);">{{ gr.level }}</span>
+                            </div>
+                            {% endif %}
+                            {% if gr.comment %}
+                            <div style="font-size:12px;color:var(--color-text-secondary);line-height:1.4;">
+                                {{ gr.comment }}
+                            </div>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Коментарі та відгук вчителя -->
+                <div style="margin-top:24px;">
+                    <h3 style="font-size:1.15rem;font-weight:800;margin:0 0 14px;color:var(--color-text-primary);display:flex;align-items:center;gap:8px;">
+                        💬 Відгуки та зауваження вчителя
+                    </h3>
+
+                    <div style="display:flex;flex-direction:column;gap:10px;">
+                        {% for comment in comments %}
+                        <div style="padding:14px 18px;background:rgba(99,102,241,0.06);border-left:4px solid var(--color-primary);border-radius:var(--radius-sm);">
+                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                                <strong style="color:var(--color-primary);font-size:14px;">{{ comment.get_author_name }}</strong>
+                                <span style="font-size:11px;color:var(--color-text-muted);">{{ comment.created_at|date:"d.m.Y H:i" }}</span>
+                            </div>
+                            <div style="white-space:pre-wrap;color:var(--color-text-primary);line-height:1.6;font-size:13px;">
+                                {{ comment.text }}
+                            </div>
+                        </div>
+                        {% empty %}
+                        <div style="padding:20px;text-align:center;background:var(--color-bg-secondary);border-radius:var(--radius-md);color:var(--color-text-muted);font-size:13px;">
+                            Коментарів від вчителя поки немає.
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+{% endblock %}

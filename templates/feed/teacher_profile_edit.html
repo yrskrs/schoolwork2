@@ -1,0 +1,62 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Редагування профілю вчителя — {{ teacher_obj.full_name }} | Шкільні Завдання{% endblock %}
+
+{% block content %}
+<div class="page-wrapper">
+
+    <!-- ── Двоколонковий layout сайту ────────────────────────────────────── -->
+    <div class="feed-layout">
+
+        <!-- ════ ЛІВИЙ САЙДБАР НАЛАШТУВАНЬ ТА АДМІНІСТРАТОРА ════════════════ -->
+        {% include 'feed/components/settings_sidebar.html' %}
+
+        <!-- ════ ЦЕНТРАЛЬНА ЧАСТИНА (РЕДАГУВАННЯ ПРОФІЛЮ) ═════════════════════ -->
+        <div class="feed-main-content">
+
+            <div style="margin-bottom:16px;">
+                <a href="{% url 'teacher_profiles' %}" class="btn btn-secondary btn-sm">← До списку вчителів</a>
+            </div>
+
+            <div class="submit-form-card" style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:24px 28px;box-shadow:0 4px 20px rgba(0,0,0,0.05);">
+                <h2 style="font-size:1.3rem;font-weight:800;margin:0 0 16px;color:var(--color-text-primary);">
+                    ✏️ Редагування профілю: {{ teacher_obj.full_name }}
+                </h2>
+
+                <form method="POST" enctype="multipart/form-data">
+                    {% csrf_token %}
+
+                    <div class="form-group" style="margin-bottom:14px;">
+                        <label class="form-label" style="font-weight:600;">ПІБ вчителя:</label>
+                        {{ form.full_name }}
+                    </div>
+
+                    <div class="form-group" style="margin-bottom:14px;">
+                        <label class="form-label" style="font-weight:600;">Класи, в яких викладає:</label>
+                        {{ form.classes }}
+                        <div style="font-size:11px;color:var(--color-text-muted);margin-top:4px;">(Утримуйте Ctrl / Cmd для вибору кількох)</div>
+                    </div>
+
+                    <div class="form-group" style="margin-bottom:14px;">
+                        <label class="form-label" style="font-weight:600;">Предмети:</label>
+                        {{ form.subjects }}
+                    </div>
+
+                    <div class="form-group" style="margin-bottom:16px;">
+                        <label class="form-label" style="font-weight:600;">Кабінет / Контакт:</label>
+                        {{ form.bio }}
+                    </div>
+
+                    <button type="submit" class="btn btn-primary" style="width:100%;font-weight:700;padding:12px;">
+                        ✓ Зберегти зміни
+                    </button>
+                </form>
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+{% endblock %}

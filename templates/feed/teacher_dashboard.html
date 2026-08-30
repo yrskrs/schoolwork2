@@ -1,0 +1,162 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Панель вчителя — {{ teacher.full_name }} | Шкільні Завдання{% endblock %}
+
+{% block content %}
+<div class="page-wrapper">
+
+    <!-- ── Двоколонковий layout сайту ────────────────────────────────────── -->
+    <div class="feed-layout">
+
+        <!-- ════ ЛІВИЙ САЙДБАР ВЧИТЕЛЯ ════════════════════════════════════════ -->
+        {% include 'feed/components/teacher_sidebar.html' %}
+
+        <!-- ════ ЦЕНТРАЛЬНА ЧАСТИНА (СТАТИСТИКА ТА СПИСОК ЗАВДАНЬ) ═══════════ -->
+        <div class="feed-main-content">
+
+            <!-- ══ Заголовок панелі ════════════════════════════════════════════ -->
+            <div class="page-hero" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+                <div>
+                    <div class="page-hero-kicker">Робочий кабінет</div>
+                    <h1>Управління завданнями</h1>
+                </div>
+            </div>
+
+            <div class="stat-grid">
+                <div class="stat-card">
+                    <div class="stat-value" style="color:var(--color-success)">{{ counts.published }}</div>
+                    <div class="stat-label">Опубліковано</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">{{ counts.draft }}</div>
+                    <div class="stat-label">Чернетки</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" style="color:var(--color-warning)">{{ counts.scheduled }}</div>
+                    <div class="stat-label">Заплановано</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" style="color:var(--color-info)">{{ counts.archived }}</div>
+                    <div class="stat-label">Архів</div>
+                </div>
+            </div>
+
+            <!-- ══ Вкладки за статусом ══════════════════════════════════════════ -->
+            <div class="tabs" role="tablist" aria-label="Фільтр завдань за статусом" id="dashboard-tabs" style="margin-bottom:16px;">
+                <a href="?tab=published"
+                   data-tab="published"
+                   class="tab-btn {% if tab == 'published' %}active{% endif %}"
+                   role="tab" aria-selected="{% if tab == 'published' %}true{% else %}false{% endif %}"
+                   onclick="return switchDashboardTab('published', this)">
+                    ✅ Опубліковані
+                    <span class="tab-count" id="count-published">{{ counts.published }}</span>
+                </a>
+                <a href="?tab=draft"
+                   data-tab="draft"
+                   class="tab-btn {% if tab == 'draft' %}active{% endif %}"
+                   role="tab" aria-selected="{% if tab == 'draft' %}true{% else %}false{% endif %}"
+                   onclick="return switchDashboardTab('draft', this)">
+                    📝 Чернетки
+                    <span class="tab-count" id="count-draft">{{ counts.draft }}</span>
+                </a>
+                <a href="?tab=scheduled"
+                   data-tab="scheduled"
+                   class="tab-btn {% if tab == 'scheduled' %}active{% endif %}"
+                   role="tab" aria-selected="{% if tab == 'scheduled' %}true{% else %}false{% endif %}"
+                   onclick="return switchDashboardTab('scheduled', this)">
+                    ⏰ Заплановані
+                    <span class="tab-count" id="count-scheduled">{{ counts.scheduled }}</span>
+                </a>
+                <a href="?tab=archived"
+                   data-tab="archived"
+                   class="tab-btn {% if tab == 'archived' %}active{% endif %}"
+                   role="tab" aria-selected="{% if tab == 'archived' %}true{% else %}false{% endif %}"
+                   onclick="return switchDashboardTab('archived', this)">
+                    📦 Архів
+                    <span class="tab-count" id="count-archived">{{ counts.archived }}</span>
+                </a>
+            </div>
+
+            <!-- ══ Зона списку завдань (динамічна) ═══════════════════════════════ -->
+            <div id="dashboard-list-zone">
+                {% include 'feed/teacher_dashboard_fragment.html' %}
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+/* ─── Плавне анімаційне перемикання вкладок у панелі вчителя ──────────────── */
+var _currentDashboardTab = '{{ tab|default:"published" }}';
+var _dashboardTabAbort   = null;
+
+function switchDashboardTab(tabName, btnEl) {
+    if (!tabName) return false;
+    
+    var pureTab = tabName.split('&')[0];
+    document.querySelectorAll('#dashboard-tabs .tab-btn').forEach(function(b) {
+        if (b.getAttribute('data-tab') === pureTab) {
+            b.classList.add('active');
+            b.setAttribute('aria-selected', 'true');
+        } else {
+            b.classList.remove('active');
+            b.setAttribute('aria-selected', 'false');
+        }
+    });
+
+    _currentDashboardTab = pureTab;
+
+    var newUrl = window.location.pathname + '?tab=' + tabName;
+    try { window.history.pushState({ tab: tabName }, '', newUrl); } catch(e){}
+
+    var zone = document.getElementById('dashboard-list-zone');
+    if (!zone) return false;
+
+    if (window.startProgressBar) window.startProgressBar();
+    zone.style.opacity    = '0.88';
+    zone.style.transition = 'opacity 0.12s ease';
+
+    if (_dashboardTabAbort) {
+        try { _dashboardTabAbort.abort(); } catch(e){}
+    }
+    _dashboardTabAbort = new AbortController();
+
+    fetch('/teacher/?tab=' + tabName + '&fragment=1', {
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        signal: _dashboardTabAbort.signal
+    })
+    .then(function(r) { return r.text(); })
+    .then(function(html) {
+        zone.innerHTML = html;
+        zone.style.opacity = '1';
+        if (window.finishProgressBar) window.finishProgressBar();
+        if (tabName.indexOf('page=') !== -1) {
+            zone.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    })
+    .catch(function(e) {
+        if (window.finishProgressBar) window.finishProgressBar();
+        if (e.name !== 'AbortError') {
+            zone.style.opacity = '1';
+        }
+    });
+
+    return false;
+}
+
+window.addEventListener('popstate', function(e) {
+    var params = new URLSearchParams(window.location.search);
+    var t = params.get('tab') || 'published';
+    var targetBtn = document.querySelector('#dashboard-tabs [data-tab="' + t + '"]');
+    if (targetBtn) {
+        switchDashboardTab(t, targetBtn);
+    }
+});
+</script>
+{% endblock %}

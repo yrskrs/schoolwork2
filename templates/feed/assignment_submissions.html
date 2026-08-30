@@ -1,0 +1,509 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Здачі по завданню — {{ assignment.title }} | Шкільні Завдання{% endblock %}
+
+{% block content %}
+<div class="page-wrapper">
+
+    <!-- ── Двоколонковий layout сайту ────────────────────────────────────── -->
+    <div class="feed-layout">
+
+        <!-- ════ ЛІВИЙ САЙДБАР ВЧИТЕЛЯ ════════════════════════════════════════ -->
+        {% include 'feed/components/teacher_sidebar.html' %}
+
+        <!-- ════ ЦЕНТРАЛЬНА ЧАСТИНА (ЗДАЧІ ПО ЗАВДАННЮ) ═══════════════════════ -->
+        <div class="feed-main-content">
+
+            <!-- Заголовок завдання -->
+            <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:20px 24px;margin-bottom:20px;box-shadow:0 2px 10px rgba(0,0,0,0.03);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:14px;">
+                <div style="flex:1;min-width:240px;">
+                    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px;">
+                        {% if assignment.subject %}
+                        <span style="background:{{ assignment.subject.color }}22;color:{{ assignment.subject.color }};padding:4px 10px;border-radius:20px;font-size:12px;font-weight:700;">
+                            {{ assignment.subject.icon }} {{ assignment.subject.name }}
+                        </span>
+                        {% endif %}
+                        <span class="status-badge status-{{ assignment.status }}">{{ assignment.get_status_display }}</span>
+                    </div>
+                    <h1 style="font-size:1.35rem;font-weight:800;margin:0 0 6px;color:var(--color-text-primary);">
+                        {{ assignment.title }}
+                    </h1>
+                    <div style="font-size:13px;color:var(--color-text-muted);display:flex;flex-wrap:wrap;gap:12px;">
+                        <span>👤 {{ assignment.teacher.full_name }}</span>
+                        {% if assignment.due_date %}<span>⏰ Дедлайн: <strong>{{ assignment.due_date|date:"d.m.Y" }}</strong></span>{% endif %}
+                        <span>📅 Опубліковано: {{ assignment.published_at|date:"d.m.Y" }}</span>
+                        {% for class in assignment.classes.all %}<span>🏫 {{ class.name }}</span>{% endfor %}
+                    </div>
+                </div>
+
+                <!-- Кнопки дій -->
+                <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                    <a href="{% url 'download_assignment_submissions_zip' assignment.pk %}{% if selected_class_id %}?class_group={{ selected_class_id }}{% endif %}" class="btn btn-success btn-sm" style="font-weight:700;">
+                        📥 Завантажити ZIP
+                    </a>
+                    <a href="{% url 'submit_assignment' assignment.pk %}" class="btn btn-secondary btn-sm" target="_blank" title="Відкрити форму для учнів">
+                        🔗 Лінк для учнів ↗
+                    </a>
+                    <a href="{% url 'assignment_edit' assignment.pk %}" class="btn btn-secondary btn-sm">
+                        ✏️ Редагувати
+                    </a>
+                    <a href="{% url 'all_submissions_dashboard' %}" class="btn btn-secondary btn-sm">
+                        📥 Всі здачі
+                    </a>
+                </div>
+            </div>
+
+            <!-- Статистика та аналітика успішності -->
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:20px;">
+                <div class="sidebar-card" style="padding:14px;text-align:center;border-top:3px solid var(--color-primary);">
+                    <div style="font-size:24px;font-weight:800;color:var(--color-primary);">{{ total_count }}</div>
+                    <div class="text-muted text-sm" style="font-weight:600;">Всього здач</div>
+                </div>
+                <div class="sidebar-card" style="padding:14px;text-align:center;border-top:3px solid var(--color-warning);">
+                    <div style="font-size:24px;font-weight:800;color:var(--color-warning);">{{ ungraded_count }}</div>
+                    <div class="text-muted text-sm" style="font-weight:600;">⏳ Очікують перевірки</div>
+                </div>
+                <div class="sidebar-card" style="padding:14px;text-align:center;border-top:3px solid var(--color-success);">
+                    <div style="font-size:24px;font-weight:800;color:var(--color-success);">{{ graded_count }}</div>
+                    <div class="text-muted text-sm" style="font-weight:600;">✅ Оцінено</div>
+                </div>
+                <div class="sidebar-card" style="padding:14px;text-align:center;border-top:3px solid #6366f1;">
+                    <div style="font-size:24px;font-weight:800;color:#6366f1;">{{ avg_score|default:"—" }}</div>
+                    <div class="text-muted text-sm" style="font-weight:600;">Середній бал</div>
+                </div>
+            </div>
+
+            <!-- Розподіл оцінок та список учнів, що не здали -->
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
+                <!-- Розподіл оцінок -->
+                <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:16px 20px;">
+                    <div style="font-size:12px;font-weight:800;text-transform:uppercase;color:var(--color-text-muted);margin-bottom:12px;">
+                        📊 Розподіл оцінок:
+                    </div>
+                    <div style="display:flex;flex-direction:column;gap:8px;font-size:13px;">
+                        <div style="display:flex;align-items:center;justify-content:space-between;">
+                            <span>🟢 Високий (10-12):</span>
+                            <strong>{{ grade_dist.excellent }} учнів</strong>
+                        </div>
+                        <div style="display:flex;align-items:center;justify-content:space-between;">
+                            <span>🔵 Достатній (7-9):</span>
+                            <strong>{{ grade_dist.good }} учнів</strong>
+                        </div>
+                        <div style="display:flex;align-items:center;justify-content:space-between;">
+                            <span>🟡 Середній (4-6):</span>
+                            <strong>{{ grade_dist.medium }} учнів</strong>
+                        </div>
+                        <div style="display:flex;align-items:center;justify-content:space-between;">
+                            <span>🔴 Початковий (1-3):</span>
+                            <strong>{{ grade_dist.low }} учнів</strong>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Список боржників -->
+                <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:16px 20px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                        <div style="font-size:12px;font-weight:800;text-transform:uppercase;color:var(--color-text-muted);">
+                            ⏳ Ще не здали роботу ({{ unsubmitted_students|length }}):
+                        </div>
+                    </div>
+                    <div style="max-height:120px;overflow-y:auto;font-size:12px;display:flex;flex-direction:column;gap:6px;">
+                        {% for st in unsubmitted_students %}
+                        <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 8px;background:var(--color-bg-secondary);border-radius:var(--radius-sm);">
+                            <span>👤 {{ st.full_name }}</span>
+                            <span class="badge" style="font-size:10px;">{{ st.class_name }}</span>
+                        </div>
+                        {% empty %}
+                        <div style="color:var(--color-success);font-weight:600;padding:8px 0;">🎉 Усі учні здали це завдання!</div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+
+            <!-- Фільтри -->
+            <div class="submissions-filters" style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:16px 20px;margin-bottom:20px;">
+                <form method="GET" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;width:100%;">
+                    <!-- Фільтр по класу -->
+                    <select name="class" class="form-input" style="min-width:140px;" onchange="this.form.submit()">
+                        <option value="">🏫 Всі класи</option>
+                        {% for class in assigned_classes %}
+                        <option value="{{ class.id }}" {% if class.id == selected_class_id %}selected{% endif %}>
+                            {{ class.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+
+                    <!-- Фільтр по оцінці -->
+                    <select name="grade_filter" class="form-input" style="min-width:160px;" onchange="this.form.submit()">
+                        <option value="all" {% if grade_filter == 'all' %}selected{% endif %}>Всі здачі</option>
+                        <option value="ungraded" {% if grade_filter == 'ungraded' %}selected{% endif %}>🔴 Без оцінки</option>
+                        <option value="graded" {% if grade_filter == 'graded' %}selected{% endif %}>🟢 Оцінені</option>
+                    </select>
+
+                    <!-- Режим групування -->
+                    <select name="mode" class="form-input" style="min-width:170px;" onchange="this.form.submit()">
+                        <option value="grouped" {% if show_mode == 'grouped' %}selected{% endif %}>👥 Згруповано за учнями</option>
+                        <option value="all" {% if show_mode == 'all' %}selected{% endif %}>📜 Всі спроби окремо</option>
+                    </select>
+
+                    <!-- Пошук учня -->
+                    <input type="text" name="search" value="{{ search_query|default:'' }}"
+                           placeholder="🔍 Пошук учня (з автовиправленням)..."
+                           class="form-input" style="flex:1;min-width:200px;">
+
+                    <button type="submit" class="btn btn-primary btn-sm" style="font-weight:700;padding:8px 14px;">Знайти</button>
+
+                    {% if selected_class_id or grade_filter != 'all' or search_query or show_mode != 'grouped' %}
+                    <a href="{% url 'assignment_submissions' assignment.pk %}" class="btn btn-secondary btn-sm" style="color:#ef4444;">✕ Скинути</a>
+                    {% endif %}
+                </form>
+            </div>
+
+            <!-- Список здач -->
+            <div id="submissions-list" style="display:flex;flex-direction:column;gap:14px;">
+                {% for submission in page_obj %}
+                <div class="submission-row {% if submission.is_graded %}is-graded{% else %}is-ungraded{% endif %}"
+                     id="submission-{{ submission.id }}" style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:18px 20px;display:flex;gap:20px;justify-content:space-between;align-items:flex-start;">
+
+                    <!-- Ліва частина: інфо про учня, файли, коментарі, історія -->
+                    <div style="flex:1;min-width:0;">
+                        <div style="display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:8px;">
+                            <div class="submission-student-name" style="font-weight:800;font-size:16px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                                <a href="{% url 'student_detail' student_name=submission.last_name|add:'_'|add:submission.first_name %}" style="color:var(--color-text-primary);text-decoration:none;">
+                                    👤 {{ submission.last_name }} {{ submission.first_name }}
+                                </a>
+                                {% if submission.is_resubmission or submission.resubmission_attempt > 1 %}
+                                    {% if submission.is_latest_attempt %}
+                                    <span class="badge" style="background:#d1fae5;color:#065f46;border:1px solid #6ee7b7;font-size:11px;font-weight:800;padding:2px 6px;">
+                                        🔄 Спроба #{{ submission.resubmission_attempt }} (Робота над помилками)
+                                    </span>
+                                    {% else %}
+                                    <span class="badge" style="background:#fef3c7;color:#92400e;border:1px solid #fde68a;font-size:10.5px;font-weight:700;">
+                                        📦 Попередня спроба #{{ submission.resubmission_attempt }}
+                                    </span>
+                                    {% endif %}
+                                {% endif %}
+                                {% if submission.ai_generated_detected %}
+                                    <span class="badge" style="background:{% if submission.is_ai_allowed %}#ecfdf5;color:#065f46;border:1px solid #a7f3d0;{% else %}#fef2f2;color:#991b1b;border:1px solid #fecaca;{% endif %}font-size:10.5px;font-weight:700;padding:2px 6px;" title="{% if submission.is_ai_allowed %}Виявлено ознаки ШІ (дозволено вчителем){% else %}Виявлено ознаки ШІ (самостійна робота, заборонено){% endif %}: {{ submission.ai_generated_details }}">
+                                        🤖 Ознаки ШІ ({{ submission.get_ai_generated_confidence_display|default:submission.ai_generated_confidence }})
+                                    </span>
+                                {% endif %}
+                            </div>
+                            <div class="submission-meta" style="font-size:12px;color:var(--color-text-muted);display:flex;gap:10px;margin-top:2px;">
+                                <span>🏫 {{ submission.class_group.name }}</span>
+                                <span>📅 {{ submission.submitted_at|date:"d.m.Y H:i" }}</span>
+                                {% if submission.is_graded %}
+                                <span style="color:var(--color-success);font-weight:700;">✓ Оцінено</span>
+                                {% else %}
+                                <span style="color:var(--color-warning);font-weight:700;">⏳ Очікує оцінки</span>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <!-- Файли або посилання -->
+                        <div class="submission-attachments" style="margin-bottom:12px;">
+                            {% if submission.files.all %}
+                            <div style="display:flex;flex-direction:column;gap:6px;">
+                                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;">
+                                    <span style="font-size:11.5px;font-weight:700;color:var(--color-text-muted);">
+                                        📎 Прикріплені файли ({{ submission.files.all|length }}):
+                                    </span>
+                                    {% if submission.files.all|length > 1 %}
+                                    <a href="{% url 'download_submission_files_zip' submission.id %}" class="btn btn-secondary btn-sm" style="font-size:11px;padding:2px 8px;gap:4px;" title="Завантажити всі файли учня у форматі ZIP">
+                                        📦 Завантажити всі (ZIP)
+                                    </a>
+                                    {% endif %}
+                                </div>
+                                <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;">
+                                    {% for sf in submission.files.all %}
+                                    <div style="display:inline-flex;align-items:center;background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:var(--radius-sm);overflow:hidden;">
+                                        <a href="{% url 'view_file' submission.id %}?file_id={{ sf.id }}" class="btn btn-sm" style="font-size:12px;padding:5px 10px;border:none;background:none;color:var(--color-text-primary);display:inline-flex;align-items:center;gap:6px;text-decoration:none;" title="Відкрити '{{ sf.original_name }}' у File Viewer">
+                                            <span>{{ sf.get_file_icon }}</span>
+                                            <span style="font-weight:700;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ sf.original_name|default:sf.file.name }}</span>
+                                            <span style="font-size:10.5px;color:var(--color-text-muted);">({{ sf.get_size_display }})</span>
+                                        </a>
+                                        <a href="{% url 'view_submission_raw_file' submission.id %}?file_id={{ sf.id }}" download class="btn btn-sm" style="font-size:11px;padding:5px 7px;border:none;border-left:1px solid var(--color-border);background:rgba(0,0,0,0.02);color:var(--color-text-secondary);" title="Завантажити {{ sf.original_name }}">
+                                            ⬇️
+                                        </a>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            {% elif submission.file %}
+                            <div style="display:inline-flex;align-items:center;background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:var(--radius-sm);overflow:hidden;">
+                                <a href="{% url 'view_file' submission.id %}" class="btn btn-sm" style="font-size:12px;padding:5px 10px;border:none;background:none;color:var(--color-text-primary);display:inline-flex;align-items:center;gap:6px;text-decoration:none;">
+                                    <span>{{ submission.get_file_icon }}</span>
+                                    <span style="font-weight:700;">{{ submission.get_file_name }}</span>
+                                    <span style="font-size:10.5px;color:var(--color-text-muted);">({{ submission.get_file_size_display }})</span>
+                                </a>
+                                <a href="{% url 'view_submission_raw_file' submission.id %}" download class="btn btn-sm" style="font-size:11px;padding:5px 7px;border:none;border-left:1px solid var(--color-border);background:none;color:var(--color-text-secondary);">
+                                    ⬇️
+                                </a>
+                            </div>
+                            {% endif %}
+
+                            {% if submission.link %}
+                            <div style="margin-top:6px;">
+                                <a href="{% url 'view_file' submission.id %}" class="btn btn-secondary btn-sm" style="font-size:12px;margin-left:4px;">
+                                    🔗 Переглянути посилання
+                                </a>
+                            </div>
+                            {% endif %}
+
+                            {% if not submission.files.exists and not submission.file and not submission.link %}
+                            <span style="color:var(--color-text-muted);font-size:12px;">Файлів не прикріплено</span>
+                            {% endif %}
+                        </div>
+
+                        <!-- Коментар учня -->
+                        {% if submission.comment_student %}
+                        <div class="submission-comment-student" style="background:var(--color-bg-secondary);padding:8px 12px;border-radius:var(--radius-sm);font-size:13px;margin-bottom:10px;">
+                            <strong style="color:var(--color-text-primary);">💬 Коментар учня:</strong>
+                            <div style="color:var(--color-text-secondary);margin-top:2px;">{{ submission.comment_student }}</div>
+                        </div>
+                        {% endif %}
+
+                        <!-- Історія спроб учня (Робота над помилками) -->
+                        {% if submission.is_resubmission or submission.previous_submission %}
+                        <div class="submission-history-box" style="margin-bottom:12px;background:rgba(16,185,129,0.05);border:1px solid rgba(16,185,129,0.25);border-radius:var(--radius-sm);padding:10px 12px;font-size:12px;">
+                            <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;" onclick="var el=document.getElementById('history-{{ submission.id }}'); el.style.display=(el.style.display==='none'?'block':'none');">
+                                <strong style="color:#065f46;display:flex;align-items:center;gap:6px;">
+                                    <span>📜</span>
+                                    <span>Попередні спроби здачі (Робота над помилками)</span>
+                                </strong>
+                                <span style="font-size:11px;color:var(--color-primary);font-weight:700;">Показати історію ▼</span>
+                            </div>
+                            <div id="history-{{ submission.id }}" style="display:none;margin-top:8px;border-top:1px dashed rgba(16,185,129,0.25);padding-top:8px;">
+                                {% for prev in submission.get_previous_attempts %}
+                                <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid rgba(0,0,0,0.04);gap:8px;flex-wrap:wrap;">
+                                    <div>
+                                        <span class="badge" style="background:#f3f4f6;color:#374151;font-size:10.5px;font-weight:700;">Спроба #{{ prev.resubmission_attempt }}</span>
+                                        <span style="color:var(--color-text-muted);font-size:11.5px;margin-left:6px;">📅 {{ prev.submitted_at|date:"d.m.Y H:i" }}</span>
+                                        <span style="margin-left:8px;font-size:11.5px;">📎 {{ prev.get_files_count }} файл(ів)</span>
+                                        {% if prev.student_ai_grade %}
+                                        <span style="margin-left:8px;font-size:11.5px;color:#6366f1;">🤖 ШІ: <strong>{{ prev.student_ai_grade }}</strong></span>
+                                        {% endif %}
+                                        {% if prev.grade %}
+                                        <span style="margin-left:8px;font-size:11.5px;color:#059669;">✅ Оцінка: <strong>{{ prev.grade }}</strong></span>
+                                        {% endif %}
+                                    </div>
+                                    <a href="{% url 'view_file' prev.id %}" class="btn btn-secondary btn-sm" style="font-size:11px;padding:2px 8px;" title="Переглянути матеріали спроби #{{ prev.resubmission_attempt }}">
+                                        👁️ Переглянути спробу #{{ prev.resubmission_attempt }} ↗
+                                    </a>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        <!-- Коментарі вчителя -->
+                        {% if submission.comments.all %}
+                        <div class="submission-comments" style="margin-top:8px;">
+                            {% for comment in submission.comments.all %}
+                            <div class="submission-comment-item" style="background:rgba(99,102,241,0.06);border-left:3px solid var(--color-primary);padding:8px 12px;border-radius:0 var(--radius-sm) var(--radius-sm) 0;margin-bottom:6px;font-size:12px;">
+                                <div style="display:flex;justify-content:space-between;align-items:center;">
+                                    <strong style="color:var(--color-primary);">{{ comment.author.get_full_name|default:comment.author.username }}</strong>
+                                    <span style="color:var(--color-text-muted);font-size:11px;">{{ comment.created_at|date:"d.m.Y H:i" }}</span>
+                                </div>
+                                <div style="margin-top:3px;color:var(--color-text-primary);">{{ comment.text }}</div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+
+                        <!-- Форма додавання коментаря вчителя -->
+                        <div class="submission-add-comment" id="comment-form-{{ submission.id }}" style="margin-top:8px;">
+                            <div style="display:flex;gap:6px;">
+                                <input type="text"
+                                       id="comment-text-{{ submission.id }}"
+                                       placeholder="Залишити відгук чи зауваження учню..."
+                                       class="form-input"
+                                       style="font-size:12px;flex:1;padding:6px 10px;"
+                                       onkeydown="if(event.key==='Enter'){addComment({{ submission.id }})}">
+                                <button type="button"
+                                        class="btn btn-secondary btn-sm"
+                                        style="font-size:12px;"
+                                        onclick="addComment({{ submission.id }})">
+                                    Надіслати
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Права частина: оцінка -->
+                    <div class="submission-grade-section" style="min-width:180px;border-left:1px solid var(--color-border);padding-left:16px;">
+                        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px;">
+                            <div style="display:flex;align-items:center;gap:8px;">
+                                <span style="font-size:12px;color:var(--color-text-muted);font-weight:600;">Оцінка:</span>
+                                {% if submission.grade == 'Доопрацювати' %}
+                                <span class="grade-badge" id="grade-display-{{ submission.id }}" style="background:#fef3c7;color:#d97706;border:1px solid #fcd34d;font-size:12px;padding:3px 8px;font-weight:700;">
+                                    🔄 Доопрацювати
+                                </span>
+                                {% else %}
+                                <span class="grade-badge {% if not submission.grade %}no-grade{% endif %}"
+                                      id="grade-display-{{ submission.id }}" style="font-size:16px;padding:4px 12px;">
+                                    {{ submission.grade|default:"—" }}
+                                </span>
+                                {% endif %}
+                            </div>
+
+                            <div style="display:flex;align-items:center;gap:6px;">
+                                <input type="text"
+                                       class="grade-input-inline"
+                                       id="grade-input-{{ submission.id }}"
+                                       value="{% if submission.grade != 'Доопрацювати' %}{{ submission.grade|default:'' }}{% endif %}"
+                                       placeholder="1–12"
+                                       maxlength="15"
+                                       style="width:58px;font-size:13px;padding:4px 6px;"
+                                       title="Введіть бал (1-12) або Доопрацювати"
+                                       onkeydown="if(event.key==='Enter'){saveGrade({{ submission.id }})}">
+                                <button type="button"
+                                        class="btn btn-primary btn-sm"
+                                        style="padding:4px 10px;font-size:12px;"
+                                        onclick="saveGrade({{ submission.id }})">
+                                    ✓
+                                </button>
+                            </div>
+                            <span class="grade-status-msg" id="grade-status-{{ submission.id }}" style="font-size:11px;"></span>
+
+
+                            <!-- Кнопка повної перевірки -->
+                            <a href="{% url 'view_file' submission.id %}" class="btn btn-success btn-sm" style="width:100%;text-align:center;font-weight:700;margin-top:4px;">
+                                👁️ Перевірити роботу
+                            </a>
+                        </div>
+                    </div>
+
+                </div>
+                {% empty %}
+                <div class="sidebar-card" style="padding:40px;text-align:center;">
+                    <div class="empty-state">
+                        <div class="empty-icon" style="font-size:48px;margin-bottom:12px;">📭</div>
+                        <h3 style="font-size:1.2rem;font-weight:800;margin:0 0 6px;">Здач ще немає</h3>
+                        <p style="color:var(--color-text-muted);font-size:14px;margin:0 0 16px;">Учні ще не здали роботу по цьому завданню.</p>
+                        <a href="{% url 'submit_assignment' assignment.pk %}" class="btn btn-secondary btn-sm" target="_blank">
+                            🔗 Посилання для учнів
+                        </a>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+            <!-- Пагінація -->
+            {% if page_obj.has_other_pages %}
+            <div style="display:flex;justify-content:center;gap:6px;flex-wrap:wrap;margin-top:20px;">
+                {% if page_obj.has_previous %}
+                <a href="?page={{ page_obj.previous_page_number }}&class={{ selected_class_id|default:'' }}&grade_filter={{ grade_filter }}&search={{ search_query|default:'' }}"
+                   class="btn btn-secondary btn-sm">« Попередня</a>
+                {% endif %}
+                {% for i in page_obj.paginator.page_range %}
+                {% if page_obj.number == i %}
+                <span class="btn btn-primary btn-sm">{{ i }}</span>
+                {% elif i > page_obj.number|add:"-4" and i < page_obj.number|add:"4" %}
+                <a href="?page={{ i }}&class={{ selected_class_id|default:'' }}&grade_filter={{ grade_filter }}&search={{ search_query|default:'' }}"
+                   class="btn btn-secondary btn-sm">{{ i }}</a>
+                {% endif %}
+                {% endfor %}
+                {% if page_obj.has_next %}
+                <a href="?page={{ page_obj.next_page_number }}&class={{ selected_class_id|default:'' }}&grade_filter={{ grade_filter }}&search={{ search_query|default:'' }}"
+                   class="btn btn-secondary btn-sm">Наступна »</a>
+                {% endif %}
+            </div>
+            {% endif %}
+
+        </div>
+
+    </div>
+
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+const CSRF_TOKEN = '{{ csrf_token }}';
+
+// Виставлення оцінки (AJAX)
+function saveGrade(subId) {
+    const input = document.getElementById('grade-input-' + subId);
+    const grade = input.value.trim();
+    const statusEl = document.getElementById('grade-status-' + subId);
+    const displayEl = document.getElementById('grade-display-' + subId);
+
+    statusEl.textContent = '⏳ Зберігаємо...';
+
+    fetch('/teacher/submission/' + subId + '/grade/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'X-CSRFToken': CSRF_TOKEN,
+        },
+        body: 'grade=' + encodeURIComponent(grade)
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.status === 'success') {
+            displayEl.textContent = data.grade || '—';
+            displayEl.className = 'grade-badge' + (data.grade ? '' : ' no-grade');
+            statusEl.textContent = '✓ Збережено';
+            statusEl.style.color = 'var(--color-success)';
+
+            const row = document.getElementById('submission-' + subId);
+            if (row) {
+                row.classList.toggle('is-graded', data.is_graded);
+                row.classList.toggle('is-ungraded', !data.is_graded);
+            }
+            setTimeout(() => { statusEl.textContent = ''; }, 2500);
+        } else {
+            statusEl.textContent = '❌ Помилка';
+            statusEl.style.color = 'var(--color-error)';
+        }
+    })
+    .catch(() => {
+        statusEl.textContent = '❌ Помилка мережі';
+    });
+}
+
+// Додавання коментаря (AJAX)
+function addComment(subId) {
+    const textarea = document.getElementById('comment-text-' + subId);
+    const text = textarea.value.trim();
+    if (!text) return;
+
+    fetch('/teacher/submission/' + subId + '/comment/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'X-CSRFToken': CSRF_TOKEN,
+        },
+        body: 'text=' + encodeURIComponent(text)
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.status === 'success') {
+            const c = data.comment;
+            const commentsBlock = document.querySelector('#submission-' + subId + ' .submission-comments');
+            const newComment = `
+                <div class="submission-comment-item" style="background:rgba(99,102,241,0.06);border-left:3px solid var(--color-primary);padding:8px 12px;border-radius:0 var(--radius-sm) var(--radius-sm) 0;margin-bottom:6px;font-size:12px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;">
+                        <strong style="color:var(--color-primary);">${c.author}</strong>
+                        <span style="color:var(--color-text-muted);font-size:11px;">${c.created_at}</span>
+                    </div>
+                    <div style="margin-top:3px;color:var(--color-text-primary);">${c.text.replace(/</g,'&lt;')}</div>
+                </div>`;
+
+            if (commentsBlock) {
+                commentsBlock.insertAdjacentHTML('beforeend', newComment);
+            } else {
+                const formEl = document.getElementById('comment-form-' + subId);
+                formEl.insertAdjacentHTML('beforebegin',
+                    '<div class="submission-comments" style="margin-top:8px;">' + newComment + '</div>');
+            }
+            textarea.value = '';
+        }
+    })
+    .catch(console.error);
+}
+</script>
+{% endblock %}

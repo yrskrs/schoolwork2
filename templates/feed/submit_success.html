@@ -1,0 +1,318 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Роботу успішно здано! — {{ assignment.title }} | Шкільні Завдання{% endblock %}
+{% block meta_description %}Підтвердження успішної здачі роботи по завданню {{ assignment.title }}{% endblock %}
+
+{% block content %}
+<div class="page-wrapper">
+
+    <!-- ── Двоколонковий layout однаковий з усім сайтом ────────────────────── -->
+    <div class="feed-layout">
+
+        <!-- ════ САЙДБАР (ШВИДКІ ДІЇ ТА ІНФО ЗАВДАННЯ) ═════════════════════════ -->
+        <aside class="sidebar" id="success-sidebar" aria-label="Швидкі дії">
+
+            <!-- 1. ДІЇ ПІСЛЯ ЗДАЧІ -->
+            <div class="sidebar-card">
+                <div class="sidebar-header">🚀 Швидкі дії</div>
+                <div style="padding:14px 16px;display:flex;flex-direction:column;gap:10px;">
+                    <a href="{% url 'index' %}" class="btn btn-primary" style="width:100%;font-weight:700;text-align:center;">
+                        🏠 До стрічки завдань
+                    </a>
+                    <a href="{% url 'student_submissions_portal' %}" class="btn btn-secondary" style="width:100%;font-weight:600;text-align:center;">
+                        📥 Мої здані роботи
+                    </a>
+                    <a href="{% url 'submit_assignment' assignment.pk %}" class="btn btn-secondary" style="width:100%;font-weight:600;text-align:center;">
+                        📤 Здати ще раз
+                    </a>
+                </div>
+            </div>
+
+            <!-- 2. ІНФОРМАЦІЯ ПРО ЗАВДАННЯ -->
+            <div class="sidebar-card">
+                <div class="sidebar-header">📋 Завдання</div>
+                <div style="padding:14px 16px;display:flex;flex-direction:column;gap:10px;font-size:13px;">
+                    <div style="font-weight:800;color:var(--color-text-primary);line-height:1.3;">
+                        {{ assignment.title }}
+                    </div>
+
+                    {% if assignment.subject %}
+                    <div>
+                        <span class="subject-tag" style="background-color:{{ assignment.subject.color }}22;color:{{ assignment.subject.color }};font-size:11px;">
+                            {{ assignment.subject.icon }} {{ assignment.subject.name }}
+                        </span>
+                    </div>
+                    {% endif %}
+
+                    <div style="border-top:1px solid var(--color-border);padding-top:8px;color:var(--color-text-muted);">
+                        Вчитель: <strong style="color:var(--color-text-primary);">{{ assignment.teacher.full_name }}</strong>
+                    </div>
+                </div>
+            </div>
+
+        </aside>
+
+
+        <!-- ════ ЦЕНТРАЛЬНА ЧАСТИНА (ПІДТВЕРДЖЕННЯ ТА ТАБЛИЦЯ РОБІТ) ═══════════ -->
+        <div class="feed-main-content">
+
+            <!-- Вітальна картка успіху -->
+            <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.05);margin-bottom:24px;text-align:center;padding:36px 24px;">
+                <div style="font-size:56px;margin-bottom:12px;">🎉</div>
+                <h1 style="font-size:1.6rem;font-weight:800;margin:0 0 8px;color:var(--color-text-primary);">
+                    Роботу успішно здано!
+                </h1>
+                <p style="color:var(--color-text-secondary);font-size:15px;max-width:540px;margin:0 auto 20px;line-height:1.5;">
+                    Вашу роботу по завданню <strong>«{{ assignment.title }}»</strong> успішно збережено на шкільному сервері. Вчитель перевірить її та поставить оцінку в журнал.
+                </p>
+
+                <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
+                    <a href="{% url 'index' %}" class="btn btn-primary btn-lg" style="font-weight:700;">
+                        ← Повернутися до всіх завдань
+                    </a>
+                    <a href="{% url 'student_submissions_portal' %}" class="btn btn-secondary btn-lg" style="font-weight:600;">
+                        📥 Мої здані роботи
+                    </a>
+                </div>
+            </div>
+
+            {% if duplicate_warning %}
+            <div style="background:{% if duplicate_type == 'teacher_duplicate' %}rgba(239,68,68,0.1){% else %}rgba(245,158,11,0.1){% endif %};border:2px solid {% if duplicate_type == 'teacher_duplicate' %}#ef4444{% else %}#f59e0b{% endif %};border-radius:var(--radius-lg);padding:20px 24px;margin-bottom:24px;display:flex;gap:16px;align-items:flex-start;">
+                <div style="font-size:28px;line-height:1;flex-shrink:0;">{% if duplicate_type == 'teacher_duplicate' %}🚫{% else %}⚠️{% endif %}</div>
+                <div>
+                    <div style="font-weight:800;font-size:15px;color:{% if duplicate_type == 'teacher_duplicate' %}#dc2626{% else %}#b45309{% endif %};margin-bottom:6px;">
+                        {% if duplicate_type == 'teacher_duplicate' %}Увага: Виявлено збіг з файлом завдання!{% else %}Увага: Виявлено збіг з роботою іншого учня!{% endif %}
+                    </div>
+                    <div style="font-size:14px;color:var(--color-text-secondary);line-height:1.5;">{{ duplicate_warning }}</div>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if latest_submission and latest_submission.is_resubmission %}
+            <div style="background:rgba(16,185,129,0.08);border:2px solid #10b981;border-radius:var(--radius-lg);padding:18px 22px;margin-bottom:24px;display:flex;align-items:center;gap:14px;">
+                <span style="font-size:32px;">🔄</span>
+                <div>
+                    <div style="font-weight:800;font-size:16px;color:#059669;">
+                        Повторну здачу прийнято (Спроба #{{ latest_submission.resubmission_attempt }} — Робота над помилками)!
+                    </div>
+                    <div style="font-size:13px;color:var(--color-text-secondary);margin-top:2px;">
+                        Ваші оновлені матеріали успішно зафіксовано. Вчитель побачить, що ви врахували попередні зауваження та перездали роботу.
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- 🤖 САМОПЕРЕВІРКА УЧНЕМ ШІ -->
+            {% if can_student_ai_check and latest_submission %}
+            <div id="student-selfcheck-block" style="background:linear-gradient(135deg,rgba(99,102,241,0.06),rgba(139,92,246,0.06));border:2px solid rgba(99,102,241,0.35);border-radius:var(--radius-lg);padding:24px;margin-bottom:24px;text-align:center;">
+                <div style="font-size:40px;margin-bottom:10px;">🤖</div>
+                <div style="font-weight:800;font-size:18px;color:var(--color-text-primary);margin-bottom:8px;">Перевірте роботу за допомогою ШІ!</div>
+                <p style="color:var(--color-text-secondary);font-size:14px;max-width:500px;margin:0 auto 20px;line-height:1.5;">
+                    Вчитель дозволив вам один раз перевірити свою роботу через <strong>Google Gemini AI</strong>. Ви отримаєте попередню оцінку та коментарі по групах результатів (ГР).
+                </p>
+                <button type="button" id="student-ai-check-btn"
+                        onclick="runStudentAICheck({{ latest_submission.id }})"
+                        style="padding:14px 32px;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:white;border:none;border-radius:var(--radius-md);font-weight:800;font-size:15px;cursor:pointer;display:inline-flex;align-items:center;gap:8px;box-shadow:0 4px 16px rgba(99,102,241,0.3);transition:all 0.2s;">
+                    <span>⚡</span> Перевірити роботу ШІ
+                </button>
+                <div style="font-size:11px;color:var(--color-text-muted);margin-top:8px;">⚠️ Ця можливість надається лише 1 раз на завдання</div>
+            </div>
+
+            <!-- Результат самоперевірки (з'являється після натискання) -->
+            <div id="student-ai-result" style="display:none;margin-bottom:24px;"></div>
+            {% elif ai_check_already_used and latest_submission %}
+            <div style="background:rgba(99,102,241,0.05);border:1px solid rgba(99,102,241,0.2);border-radius:var(--radius-lg);padding:16px 20px;margin-bottom:24px;display:flex;align-items:center;gap:14px;">
+                <span style="font-size:28px;">ℹ️</span>
+                <div>
+                    <div style="font-weight:800;font-size:14px;color:var(--color-text-primary);">
+                        Спроба самоперевірки ШІ вже була використана
+                    </div>
+                    <div style="font-size:12.5px;color:var(--color-text-muted);margin-top:2px;">
+                        Ви вже скористалися перевіркою ШІ під час попередньої здачі цього завдання (дозволено 1 раз на 1 завдання). Оновлену роботу передано вчителю як роботу над помилками.
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Таблиця прийнятих робіт учнів по цьому завданню -->
+            <div class="submissions-table-wrapper" style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);overflow:hidden;">
+                <div style="padding:16px 20px;background:var(--color-bg-secondary);border-bottom:1px solid var(--color-border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+                    <span style="font-weight:700;font-size:14px;color:var(--color-text-primary);">
+                        📋 Прийняті роботи учнів ({{ page_obj.paginator.count }})
+                    </span>
+
+                    <form method="GET" style="display:flex;gap:6px;">
+                        <input type="text" name="search" value="{{ search_query|default:'' }}"
+                                placeholder="🔍 Пошук за прізвищем..." class="form-input" style="font-size:12px;padding:6px 10px;width:180px;">
+                        <button type="submit" class="btn btn-secondary btn-sm">Пошук</button>
+                    </form>
+                </div>
+
+                <table class="submissions-table">
+                    <thead>
+                        <tr>
+                            <th>Учень</th>
+                            <th>Клас</th>
+                            <th>Час здачі</th>
+                            <th>Статус перевірки</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for sub in page_obj %}
+                        <tr>
+                            <td>
+                                <div style="display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                                    <a href="{% url 'submission_detail' sub.id %}" style="font-weight:700;color:var(--color-primary);text-decoration:none;">
+                                        {{ sub.last_name }} {{ sub.first_name }}
+                                    </a>
+                                    {% if sub.is_resubmission or sub.resubmission_attempt > 1 %}
+                                    <span class="badge" style="background:#d1fae5;color:#065f46;border:1px solid #a7f3d0;font-size:10px;font-weight:800;padding:1px 5px;">
+                                        🔄 Спроба #{{ sub.resubmission_attempt }}
+                                    </span>
+                                    {% endif %}
+                                </div>
+                            </td>
+                            <td><span class="class-prominent-badge" style="font-size:11px;">{{ sub.class_group.name }}</span></td>
+                            <td style="font-size:13px;color:var(--color-text-muted);">{{ sub.submitted_at|date:"d.m.Y H:i" }}</td>
+                            <td>
+                                {% if sub.grade %}
+                                <span class="badge badge-success" style="font-size:11px;padding:3px 10px;font-weight:800;background:rgba(16,185,129,0.15);color:#059669;border-radius:12px;">
+                                    ✅ Оцінено
+                                </span>
+                                {% else %}
+                                <span style="color:#b45309;background:rgba(234,179,8,0.15);padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700;">
+                                    ⏳ Очікує перевірки
+                                </span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="4" style="text-align:center;padding:24px;color:var(--color-text-muted);">
+                                Поки що немає робіт.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+{% if can_student_ai_check and latest_submission %}
+function runStudentAICheck(subId) {
+    var btn = document.getElementById('student-ai-check-btn');
+    var resultBox = document.getElementById('student-ai-result');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span style="display:inline-block;animation:spin 0.8s linear infinite;">⏳</span> ШІ аналізує роботу...';
+    }
+
+    fetch('/submission/' + subId + '/student-ai-check/', {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}',
+            'X-Requested-With': 'XMLHttpRequest',
+        },
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        var selfCheckBlock = document.getElementById('student-selfcheck-block');
+        if (selfCheckBlock) selfCheckBlock.style.display = 'none';
+
+        if (!data.ok) {
+            if (resultBox) {
+                resultBox.style.display = 'block';
+                resultBox.innerHTML = '<div style="padding:20px;background:rgba(239,68,68,0.1);border:1px solid #ef4444;border-radius:var(--radius-lg);color:#dc2626;font-weight:700;">❌ ' + (data.error || 'Помилка') + '</div>';
+            }
+            return;
+        }
+
+        // Будуємо красивий результат
+        var grHtml = '';
+        if (!data.is_traditional && data.gr_results && data.gr_results.length > 0) {
+            grHtml = '<div style="display:flex;flex-direction:column;gap:10px;margin-top:12px;">';
+            data.gr_results.forEach(function(gr) {
+                var isGood = gr.grade && gr.grade !== 'Доопрацювати';
+                var badgeColor = isGood ? '#059669' : '#d97706';
+                var badgeBg = isGood ? 'rgba(16,185,129,0.12)' : '#fef3c7';
+                grHtml += '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:12px 16px;">' +
+                    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">' +
+                    '<strong style="color:var(--color-primary);font-size:13px;">' + gr.code + '</strong>' +
+                    '<span style="font-weight:800;font-size:13px;padding:3px 10px;border-radius:10px;background:' + badgeBg + ';color:' + badgeColor + ';">' + (gr.grade || '') + '</span>' +
+                    '</div>' +
+                    (gr.name ? '<div style="font-size:11.5px;color:var(--color-text-muted);margin-bottom:4px;">' + gr.name + '</div>' : '') +
+                    (gr.comment ? '<div style="font-size:13px;color:var(--color-text-secondary);line-height:1.4;">' + gr.comment + '</div>' : '') +
+                    '</div>';
+            });
+            grHtml += '</div>';
+        }
+
+        var gradeIsGood = data.grade && data.grade !== 'Доопрацювати';
+        var gradeBadgeStyle = gradeIsGood
+            ? 'background:rgba(16,185,129,0.15);color:#059669;'
+            : 'background:#fef3c7;color:#d97706;border:1px solid #fcd34d;';
+
+        var aiDetectionHtml = '';
+        if (data.ai_generated_detected) {
+            var isAllowed = data.allow_ai_usage;
+            var alertBg = isAllowed ? 'rgba(16,185,129,0.08)' : 'rgba(239,68,68,0.08)';
+            var alertBorder = isAllowed ? '#10b981' : '#ef4444';
+            var alertColor = isAllowed ? '#065f46' : '#b91c1c';
+            var alertTitle = isAllowed ? 'У роботі зафіксовано використання генеративного ШІ (дозволено вчителем)' : 'У роботі виявлено ознаки використання штучного інтелекту (ШІ)';
+            var alertNote = isAllowed ? '💡 Вчитель дозволив використання ШІ для виконання цього завдання.' : '⚠️ Для цього завдання вчитель вимагав повністю самостійного виконання учнем!';
+            var detailsText = data.ai_generated_details ? '<div style="margin-top:4px;font-size:12.5px;color:var(--color-text-secondary);line-height:1.4;">' + data.ai_generated_details + '</div>' : '';
+
+            aiDetectionHtml = '<div style="margin-bottom:16px;padding:14px 18px;background:' + alertBg + ';border:1.5px solid ' + alertBorder + ';border-radius:var(--radius-md);">' +
+                '<div style="font-weight:800;font-size:13.5px;color:' + alertColor + ';display:flex;align-items:center;gap:6px;">' +
+                    '<span>🤖</span> <span>' + alertTitle + '</span>' +
+                '</div>' +
+                detailsText +
+                '<div style="margin-top:4px;font-size:11.5px;color:var(--color-text-muted);">' + alertNote + '</div>' +
+            '</div>';
+        }
+
+        var html = '<div style="background:var(--color-surface);border:1.5px solid rgba(99,102,241,0.3);border-radius:var(--radius-lg);overflow:hidden;">' +
+            '<div style="padding:20px 24px;background:linear-gradient(135deg,rgba(99,102,241,0.06),rgba(139,92,246,0.06));border-bottom:1px solid var(--color-border);">' +
+            '<div style="font-weight:800;font-size:16px;color:var(--color-text-primary);margin-bottom:8px;display:flex;align-items:center;gap:8px;">' +
+            '<span>🤖</span> <span>Результат перевірки ШІ</span>' +
+            '</div>' +
+            '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">' +
+            '<span style="font-size:13px;font-weight:700;color:var(--color-text-secondary);">Попередня оцінка:</span>' +
+            '<span style="font-size:15px;font-weight:900;padding:4px 14px;border-radius:20px;' + gradeBadgeStyle + '">' + (data.grade || '—') + (data.level ? ' (' + data.level + ')' : '') + '</span>' +
+            '</div>' +
+            '</div>' +
+            '<div style="padding:20px 24px;">' +
+            aiDetectionHtml +
+            (data.summary ? '<div style="font-size:14px;color:var(--color-text-secondary);line-height:1.6;margin-bottom:12px;padding:12px 16px;background:var(--color-bg-secondary);border-radius:var(--radius-md);">' + data.summary + '</div>' : '') +
+            (grHtml ? '<div style="font-weight:800;font-size:13px;color:var(--color-text-primary);margin-bottom:8px;">📊 Оцінки за групами результатів:</div>' + grHtml : '') +
+            (data.feedback ? '<div style="margin-top:12px;font-size:13px;color:var(--color-text-muted);line-height:1.5;border-top:1px solid var(--color-border);padding-top:12px;"><strong>Загальний відгук:</strong> ' + data.feedback + '</div>' : '') +
+            '</div>' +
+            '<div style="padding:14px 24px;background:rgba(16,185,129,0.05);border-top:1px solid var(--color-border);font-size:12px;color:var(--color-text-muted);">ℹ️ Це попередня оцінка від ШІ. Остаточну оцінку виставляє вчитель.</div>' +
+            '</div>';
+
+        if (resultBox) {
+            resultBox.style.display = 'block';
+            resultBox.innerHTML = html;
+        }
+    })
+    .catch(function(e) {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<span>⚡</span> Перевірити роботу ШІ';
+        }
+        alert('Помилка мережі. Будь ласка, спробуйте ще раз.');
+    });
+}
+{% endif %}
+</script>
+{% endblock %}
+

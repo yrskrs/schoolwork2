@@ -1,0 +1,525 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ assignment.title }} | Шкільні Завдання{% endblock %}
+{% block meta_description %}{{ assignment.description|truncatechars:150|default:assignment.title }}{% endblock %}
+
+{% block extra_head %}
+<!-- Prism.js для підсвічування синтаксису коду -->
+<link href="{% static 'vendor/prism/prism-tomorrow.min.css' %}" rel="stylesheet" />
+{% endblock %}
+
+{% block content %}
+<div class="page-wrapper">
+
+    <!-- Двоколонковий layout однаковий з головною стрічкою -->
+    <div class="feed-layout">
+
+        <!-- ════ САЙДБАР (КНОПКА ЗДАЧІ ТА МЕТАДАНІ) ═════════════════════════ -->
+        <aside class="sidebar" id="detail-sidebar" aria-label="Панель дій та інформації">
+
+            <!-- 1. ГОЛОВНА КНОПКА ЗДАЧІ РОБОТИ УЧНЕМ -->
+            {% if not is_teacher %}
+            <div class="sidebar-card" style="padding:16px;">
+                <div class="page-hero-kicker" style="margin-bottom:6px;">Для учнів</div>
+                <h3 style="font-size:1.05rem;font-weight:750;margin:0 0 10px;">Виконали завдання?</h3>
+                <a href="{% url 'submit_assignment' assignment.pk %}" class="btn btn-primary btn-block" style="padding:11px;">
+                    Здати роботу
+                </a>
+            </div>
+            {% endif %}
+
+            <!-- 2. ІНФОРМАЦІЯ ПРО ЗАВДАННЯ -->
+            <div class="sidebar-card">
+                <div class="sidebar-header">📌 Інформація</div>
+                <div style="padding:14px 16px;display:flex;flex-direction:column;gap:12px;font-size:13px;">
+
+                    <!-- Класи -->
+                    <div>
+                        <div style="color:var(--color-text-muted);font-size:11px;font-weight:700;text-transform:uppercase;margin-bottom:4px;">
+                            Для класу:
+                        </div>
+                        <div style="display:flex;gap:4px;flex-wrap:wrap;">
+                            {% for class in assignment.classes.all %}
+                            <span class="class-prominent-badge" style="font-size:12px;">
+                                <span class="class-icon">🏫</span>
+                                <span class="class-text">{{ class.name }}</span>
+                            </span>
+                            {% empty %}
+                            <span style="color:var(--color-text-muted);">Всі класи</span>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    <!-- Дедлайн / На який день -->
+                    <div>
+                        <div style="color:var(--color-text-muted);font-size:11px;font-weight:700;text-transform:uppercase;margin-bottom:4px;">
+                            Термін здачі:
+                        </div>
+                        {% if assignment.due_date %}
+                        <div class="due-badge" style="display:inline-flex;font-size:13px;padding:4px 10px;">
+                            ⏰ до {{ assignment.due_date|date:"d.m.Y" }}
+                        </div>
+                        {% else %}
+                        <span style="color:var(--color-text-muted);">Без обмежень за часом</span>
+                        {% endif %}
+                    </div>
+
+                    <!-- Дата публікації -->
+                    <div>
+                        <div style="color:var(--color-text-muted);font-size:11px;font-weight:700;text-transform:uppercase;margin-bottom:4px;">
+                            Опубліковано:
+                        </div>
+                        <div style="color:var(--color-text-primary);font-weight:600;">
+                            📅 {{ assignment.published_at|date:"d.m.Y" }}
+                            <span style="color:var(--color-text-muted);font-size:11px;font-weight:normal;">({{ assignment.relative_published_display }})</span>
+                        </div>
+                    </div>
+
+                    <!-- Політика використання ШІ -->
+                    <div>
+                        <div style="color:var(--color-text-muted);font-size:11px;font-weight:700;text-transform:uppercase;margin-bottom:4px;">
+                            Використання ШІ:
+                        </div>
+                        {% if assignment.allow_ai_usage %}
+                        <div style="display:inline-flex;align-items:center;gap:6px;background:rgba(16,185,129,0.1);color:#065f46;border:1px solid rgba(16,185,129,0.3);border-radius:var(--radius-sm);padding:3px 8px;font-size:11.5px;font-weight:700;">
+                            <span>💡</span> Дозволено вчителем
+                        </div>
+                        {% else %}
+                        <div style="display:inline-flex;align-items:center;gap:6px;background:rgba(100,116,139,0.08);color:var(--color-text-secondary);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:3px 8px;font-size:11.5px;font-weight:600;">
+                            <span>🚫</span> Самостійна робота
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    <!-- Вчитель -->
+                    <div style="border-top:1px solid var(--color-border);padding-top:10px;">
+                        <div style="color:var(--color-text-muted);font-size:11px;font-weight:700;text-transform:uppercase;margin-bottom:6px;">
+                            Вчитель:
+                        </div>
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            {% if assignment.teacher.avatar_image %}
+                            <img src="{{ assignment.teacher.avatar_image.url }}" alt="{{ assignment.teacher.full_name }}" class="avatar-mini-img" style="width:30px;height:30px;">
+                            {% else %}
+                            <div class="avatar-mini" style="background:{{ assignment.teacher.avatar_color }};width:30px;height:30px;font-size:12px;">
+                                {{ assignment.teacher.get_initials }}
+                            </div>
+                            {% endif %}
+                            <div>
+                                <div style="font-weight:700;color:var(--color-text-primary);line-height:1.2;">
+                                    {{ assignment.teacher.full_name }}
+                                </div>
+                                {% if assignment.subject %}
+                                <div style="font-size:11px;color:{{ assignment.subject.color|default:'var(--color-primary)' }};font-weight:600;">
+                                    {{ assignment.subject.icon }} {{ assignment.subject.name }}
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+
+                    {% if is_teacher %}
+                    <!-- Статистика для вчителя -->
+                    <div style="border-top:1px solid var(--color-border);padding-top:10px;display:flex;justify-content:space-between;color:var(--color-text-muted);font-size:12px;">
+                        <span>👁️ {{ assignment.views_count }} переглядів</span>
+                        <a href="{% url 'assignment_submissions' assignment.pk %}" style="color:var(--color-primary);font-weight:700;text-decoration:none;">
+                            📥 Здано: {{ submissions_count }}
+                        </a>
+                    </div>
+                    {% endif %}
+
+                </div>
+            </div>
+
+            <!-- 3. НАВІГАЦІЯ ТА ШВИДКІ ПОСИЛАННЯ -->
+            <div class="sidebar-card">
+                <div class="sidebar-header">🔗 Навігація</div>
+                <ul class="sidebar-list" role="list">
+                    <li>
+                        <a href="{% url 'index' %}">
+                            <span>🏠</span>
+                            <span>Стрічка завдань</span>
+                        </a>
+                    </li>
+                    {% if not is_teacher %}
+                    <li>
+                        <a href="{% url 'student_submissions_portal' %}">
+                            <span>📥</span>
+                            <span>Мої здані роботи</span>
+                        </a>
+                    </li>
+                    {% endif %}
+                    {% if is_teacher %}
+                    <li>
+                        <a href="{% url 'assignment_edit' assignment.pk %}">
+                            <span>✏️</span>
+                            <span>Редагувати це завдання</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="{% url 'assignment_submissions' assignment.pk %}">
+                            <span>📊</span>
+                            <span>Перевірити здані роботи ({{ submissions_count }})</span>
+                        </a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </div>
+
+            <!-- 4. ІНШІ ЗАВДАННЯ -->
+            {% if related_assignments %}
+            <div class="sidebar-card">
+                <div class="sidebar-header">📚 Інші завдання</div>
+                <div style="padding:8px 0;display:flex;flex-direction:column;">
+                    {% for rel in related_assignments %}
+                    <a href="{% url 'assignment_detail' rel.pk %}" style="padding:10px 16px;text-decoration:none;border-bottom:1px solid var(--color-border);transition:background 0.15s;display:block;">
+                        <div style="font-weight:700;font-size:13px;color:var(--color-text-primary);margin-bottom:2px;line-height:1.3;">
+                            {{ rel.title|truncatechars:35 }}
+                        </div>
+                        <div style="font-size:11px;color:var(--color-text-muted);">
+                            {{ rel.teacher.full_name }} · {{ rel.published_at|date:"d.m" }}
+                        </div>
+                    </a>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+        </aside>
+
+
+        <!-- ════ ЦЕНТРАЛЬНА ЧАСТИНА (ВМІСТ ЗАВДАННЯ) ═════════════════════════ -->
+        <div class="feed-main-content">
+
+            <div class="assignment-detail-card" style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.05);margin-bottom:24px;">
+
+                <!-- Верхній колірний акцент -->
+                <div style="height:6px;background:linear-gradient(90deg,{{ assignment.subject.color|default:'#6366f1' }},#8b5cf6);"></div>
+
+                <div style="padding:24px 28px;">
+
+                    <!-- Верхні теги -->
+                    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:16px;">
+                        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+                            {% if assignment.subject %}
+                            <span class="subject-tag" style="background-color:{{ assignment.subject.color }}22;color:{{ assignment.subject.color }};font-size:13px;padding:4px 12px;font-weight:700;">
+                                {{ assignment.subject.icon }} {{ assignment.subject.name }}
+                            </span>
+                            {% endif %}
+
+                            {% for class in assignment.classes.all %}
+                            <span class="class-prominent-badge" style="font-size:12px;">
+                                <span class="class-icon">🏫</span>
+                                <span class="class-text">{{ class.name }}</span>
+                            </span>
+                            {% endfor %}
+
+                            {% if assignment.is_individual %}
+                            <span class="individual-tag">👤 {{ assignment.student_display }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <!-- Назва завдання -->
+                    <h1 style="font-size:1.6rem;font-weight:800;margin:0 0 16px;color:var(--color-text-primary);line-height:1.3;">
+                        {{ assignment.title }}
+                    </h1>
+
+                    <!-- Опис завдання -->
+                    {% if assignment.description %}
+                    <div class="assignment-description-card" style="margin-bottom:24px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,0.03);">
+                        <div style="padding:10px 18px;background:linear-gradient(135deg, rgba(99,102,241,0.08) 0%, rgba(139,92,246,0.04) 100%);border-bottom:1px solid var(--color-border);display:flex;align-items:center;gap:8px;">
+                            <span style="font-size:15px;">📝</span>
+                            <span style="font-size:11.5px;font-weight:800;text-transform:uppercase;color:var(--color-primary);letter-spacing:0.04em;">
+                                Опис завдання
+                            </span>
+                        </div>
+                        <div class="assignment-full-description" style="font-size:15px;line-height:1.75;color:var(--color-text-primary);white-space:pre-wrap;padding:18px 20px;font-family:inherit;">{{ assignment.description }}</div>
+                    </div>
+                    {% endif %}
+
+                    <!-- Посилання -->
+                    {% if assignment.link_url %}
+                    <div style="margin-bottom:20px;padding:14px 18px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);display:flex;align-items:center;gap:12px;box-shadow:0 1px 4px rgba(0,0,0,0.02);">
+                        <span style="font-size:22px;">🔗</span>
+                        <div style="flex:1;">
+                            <div style="font-size:11px;color:var(--color-text-muted);font-weight:800;letter-spacing:0.04em;text-transform:uppercase;">Корисне посилання:</div>
+                            <a href="{{ assignment.link_url }}" target="_blank" rel="noopener noreferrer" style="font-weight:700;color:var(--color-primary);font-size:14px;word-break:break-all;">
+                                {{ assignment.link_label|default:assignment.link_url }} ↗
+                            </a>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <!-- Додаткові посилання -->
+                    {% if assignment.additional_links.all %}
+                    <div style="margin-bottom:20px;display:flex;flex-direction:column;gap:8px;">
+                        {% for link in assignment.additional_links.all %}
+                        <div style="padding:12px 16px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);display:flex;align-items:center;gap:10px;box-shadow:0 1px 4px rgba(0,0,0,0.02);">
+                            <span style="font-size:16px;">🔗</span>
+                            <a href="{{ link.url }}" target="_blank" rel="noopener noreferrer" style="font-weight:600;color:var(--color-primary);font-size:13px;">
+                                {{ link.label|default:link.url }} ↗
+                            </a>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+
+                    <!-- Прикріплені навчальні матеріали (файли вчителя) -->
+                    {% if files_with_preview %}
+                    <div style="margin-bottom:32px;">
+                        <h3 style="font-size:1.15rem;font-weight:800;margin:0 0 14px;color:var(--color-text-primary);display:flex;align-items:center;gap:8px;">
+                            📁 Навчальні матеріали до уроку ({{ files_with_preview|length }})
+                        </h3>
+
+                        <div style="display:flex;flex-direction:column;gap:14px;">
+                            {% for f in files_with_preview %}
+                            <div class="assignment-file-box" style="background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:var(--radius-lg);overflow:hidden;transition:box-shadow 0.2s ease;">
+                                
+                                <!-- Шапка файлу з діями -->
+                                <div style="padding:14px 18px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;background:var(--color-surface);border-bottom:1px solid var(--color-border);">
+                                    <div style="display:flex;align-items:center;gap:12px;overflow:hidden;">
+                                        <span style="font-size:28px;flex-shrink:0;">{{ f.icon }}</span>
+                                        <div>
+                                            <div style="font-weight:800;font-size:14px;color:var(--color-text-primary);word-break:break-all;">
+                                                {{ f.original_name }}
+                                            </div>
+                                            <div style="font-size:12px;color:var(--color-text-muted);margin-top:2px;">
+                                                {{ f.size_display }} · Розширення {{ f.extension }}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                                        {% if f.preview_type != 'download_only' %}
+                                        <button type="button" class="btn btn-primary btn-sm" onclick="toggleFileInlinePreview({{ forloop.counter }})" id="preview-toggle-btn-{{ forloop.counter }}">
+                                            👁️ Переглянути в браузері
+                                        </button>
+                                        {% endif %}
+                                        <a href="{{ f.url }}" download class="btn btn-secondary btn-sm" style="font-weight:700;">
+                                            ⬇️ Завантажити файл
+                                        </a>
+                                    </div>
+                                </div>
+
+                                <!-- Тіло попереднього перегляду прямо у цій вкладці -->
+                                {% if f.preview_type != 'download_only' %}
+                                <div id="inline-file-preview-{{ forloop.counter }}" style="display:none;padding:16px;background:var(--color-bg-secondary);border-top:1px solid var(--color-border);">
+                                    
+                                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;padding:8px 14px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);">
+                                        <span style="font-size:13px;font-weight:700;color:var(--color-primary);">
+                                            📖 Попередній перегляд документа: {{ f.original_name }}
+                                        </span>
+                                        <button type="button" class="btn btn-secondary btn-sm" onclick="toggleFileInlinePreview({{ forloop.counter }})">
+                                            ✕ Сховати перегляд
+                                        </button>
+                                    </div>
+
+                                    <!-- 1. ОФІСНІ ДОКУМЕНТИ (Word, Excel, PowerPoint, ODT) -->
+                                    {% if f.preview_type == 'office' %}
+                                        {% if f.error_preview %}
+                                        <div class="alert alert-warning" style="margin-bottom:12px;">⚠️ {{ f.error_preview }}</div>
+                                        {% endif %}
+                                        {% if f.html_preview %}
+                                        <div style="overflow-x:auto;">
+                                            {{ f.html_preview|safe }}
+                                        </div>
+                                        {% endif %}
+
+                                    <!-- 2. PDF ДОКУМЕНТИ -->
+                                    {% elif f.preview_type == 'pdf' %}
+                                    <div style="height:700px;background:#1e293b;border-radius:var(--radius-md);overflow:hidden;position:relative;">
+                                        <iframe src="{% url 'file_view' f.id %}#toolbar=1" width="100%" height="100%" style="border:none;width:100%;height:100%;background:#fff;" title="{{ f.original_name }}"></iframe>
+                                    </div>
+
+
+                                    <!-- 3. ЗОБРАЖЕННЯ -->
+                                    {% elif f.preview_type == 'image' %}
+                                    <div style="text-align:center;padding:16px;background:#0f172a;border-radius:var(--radius-md);">
+                                        <img src="{{ f.url }}" alt="{{ f.original_name }}" style="max-width:100%;max-height:70vh;border-radius:6px;box-shadow:0 4px 20px rgba(0,0,0,0.3);">
+                                    </div>
+
+                                    <!-- 4. ТЕКСТОВІ ФАЙЛИ (.txt, .log) -->
+                                    {% elif f.preview_type == 'text' %}
+                                    <div class="fv-text-paper" style="margin:0;max-width:100%;">
+                                        {{ f.text_preview }}
+                                    </div>
+
+                                    <!-- 5. ПРОГРАМНИЙ КОД -->
+                                    {% elif f.preview_type == 'code' %}
+                                    <div style="background:#1e1e2e;border-radius:var(--radius-md);overflow:hidden;border:1px solid rgba(255,255,255,0.1);box-shadow:0 4px 16px rgba(0,0,0,0.15);">
+                                        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 16px;background:rgba(255,255,255,0.05);border-bottom:1px solid rgba(255,255,255,0.1);">
+                                            <span style="font-size:12px;font-weight:700;color:#93c5fd;font-family:'JetBrains Mono',monospace;">💻 {{ f.original_name }} ({{ f.extension|upper }})</span>
+                                            <span style="font-size:11px;color:#94a3b8;">✨ Підсвітка синтаксису увімкнена</span>
+                                        </div>
+                                        <pre style="margin:0;padding:20px;font-family:'JetBrains Mono',Consolas,monospace;font-size:13.5px;line-height:1.65;color:#f8fafc;overflow-x:auto;white-space:pre-wrap;word-break:break-word;"><code class="language-{% if f.extension == '.py' %}python{% elif f.extension == '.js' %}javascript{% elif f.extension == '.html' or f.extension == '.htm' %}markup{% elif f.extension == '.css' %}css{% elif f.extension == '.json' %}json{% elif f.extension == '.cpp' or f.extension == '.c' or f.extension == '.java' or f.extension == '.cs' or f.extension == '.pas' %}clike{% else %}{{ f.extension|slice:'1:' }}{% endif %}">{{ f.text_preview }}</code></pre>
+                                    </div>
+
+                                    <!-- 6. ВІДЕО -->
+                                    {% elif f.preview_type == 'video' %}
+                                    <div style="text-align:center;background:#000;border-radius:var(--radius-md);overflow:hidden;padding:12px;">
+                                        <video src="{{ f.url }}" controls playsinline preload="metadata" style="max-width:100%;max-height:70vh;border-radius:6px;outline:none;display:block;margin:0 auto;"></video>
+                                    </div>
+
+                                    <!-- 7. SCRATCH 3 (.sb3) -->
+                                    {% elif f.preview_type == 'scratch' %}
+                                    <div style="overflow-x:auto;">
+                                        {% if f.error_preview %}
+                                        <div class="alert alert-warning" style="margin-bottom:12px;">⚠️ {{ f.error_preview }}</div>
+                                        {% endif %}
+                                        {% if f.html_preview %}
+                                        {{ f.html_preview|safe }}
+                                        {% endif %}
+                                    </div>
+
+                                    <!-- 8. BBC MICRO:BIT (.hex) -->
+                                    {% elif f.preview_type == 'microbit' %}
+                                    <div style="overflow-x:auto;">
+                                        {% if f.error_preview %}
+                                        <div class="alert alert-warning" style="margin-bottom:12px;">⚠️ {{ f.error_preview }}</div>
+                                        {% endif %}
+                                        {% if f.html_preview %}
+                                        {{ f.html_preview|safe }}
+                                        {% endif %}
+                                    </div>
+
+                                    <!-- 9. АУДІО -->
+                                    {% elif f.preview_type == 'audio' %}
+                                    <div style="padding:20px;text-align:center;background:var(--color-surface);border-radius:var(--radius-md);">
+                                        <audio src="{{ f.url }}" controls style="width:100%;max-width:500px;"></audio>
+                                    </div>
+
+                                    <!-- 10. АРХІВИ -->
+                                    {% elif f.preview_type == 'archive' %}
+                                    <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);overflow:hidden;">
+                                        <div style="padding:10px 16px;background:var(--color-bg-secondary);border-bottom:1px solid var(--color-border);font-weight:700;font-size:13px;">
+                                            📦 Вміст архіву:
+                                        </div>
+                                        <div style="display:flex;flex-direction:column;">
+                                            {% for itm in f.archive_items %}
+                                            <div style="display:flex;justify-content:space-between;padding:8px 16px;border-bottom:1px solid var(--color-border);font-size:13px;">
+                                                <div>{% if itm.is_dir %}📁 <strong>{{ itm.name }}</strong>{% else %}📄 {{ itm.name }}{% endif %}</div>
+                                                <span style="color:var(--color-text-muted);">{{ itm.size|filesizeformat }}</span>
+                                            </div>
+                                            {% empty %}
+                                            <div style="padding:16px;text-align:center;color:var(--color-text-muted);">Архів порожній</div>
+                                            {% endfor %}
+                                        </div>
+                                    </div>
+                                    {% endif %}
+
+                                </div>
+                                {% endif %}
+
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+
+
+                    <!-- YouTube відеоматеріали -->
+                    {% if assignment.all_youtube_videos %}
+                    <div style="margin-bottom:28px;">
+                        <h3 style="font-size:1.1rem;font-weight:800;margin:0 0 14px;color:var(--color-text-primary);display:flex;align-items:center;gap:8px;">
+                            ▶ Відеоуроки та матеріали ({{ assignment.all_youtube_videos|length }})
+                        </h3>
+
+                        <div style="display:flex;flex-direction:column;gap:16px;">
+                            {% for video in assignment.all_youtube_videos %}
+                            <div style="background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:14px;">
+                                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
+                                    <span style="font-weight:700;font-size:14px;">▶ {{ video.title }}</span>
+                                    <a href="{{ video.watch_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm">
+                                        Відкрити на YouTube ↗
+                                    </a>
+                                </div>
+                                <div style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;border-radius:var(--radius-md);background:#000;">
+                                    <iframe src="{{ video.embed_url }}"
+                                            title="{{ video.title|default:'YouTube відео' }}"
+                                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                                            referrerpolicy="strict-origin-when-cross-origin"
+                                            allowfullscreen
+                                            style="position:absolute;top:0;left:0;width:100%;height:100%;border:none;">
+                                    </iframe>
+                                </div>
+                                <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-size:12px;color:var(--color-text-muted);">
+                                    <span>💡 Якщо плеєр показує помилку через обмеження автора:</span>
+                                    <a href="{{ video.watch_url }}" target="_blank" rel="noopener noreferrer" style="font-weight:700;color:var(--color-primary);text-decoration:none;">
+                                        Дивитися на YouTube ↗
+                                    </a>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    {% endif %}
+
+                    <!-- Нижній блок здачі роботи -->
+                    <div style="padding:20px;background:linear-gradient(135deg,rgba(99,102,241,0.06),rgba(139,92,246,0.12));border:1px solid rgba(99,102,241,0.25);border-radius:var(--radius-lg);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px;">
+                        <div>
+                            <h4 style="font-size:1.1rem;font-weight:800;margin:0 0 4px;color:var(--color-text-primary);">
+                                Готові здати виконане завдання?
+                            </h4>
+                            <p style="font-size:13px;color:var(--color-text-muted);margin:0;">
+                                Натисніть кнопку, щоб прикріпити ваш файл або посилання для вчителя.
+                            </p>
+                        </div>
+
+                        <a href="{% url 'submit_assignment' assignment.pk %}" class="btn btn-primary btn-lg" style="font-weight:800;box-shadow:0 4px 16px rgba(99,102,241,0.35);">
+                            📤 Здати роботу зараз ➔
+                        </a>
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<!-- Prism.js для локального підсвічування коду -->
+<script src="{% static 'vendor/prism/prism.min.js' %}"></script>
+<script src="{% static 'vendor/prism/prism-python.min.js' %}"></script>
+<script src="{% static 'vendor/prism/prism-javascript.min.js' %}"></script>
+<script src="{% static 'vendor/prism/prism-css.min.js' %}"></script>
+<script src="{% static 'vendor/prism/prism-markup.min.js' %}"></script>
+<script src="{% static 'vendor/prism/prism-json.min.js' %}"></script>
+
+<script>
+function toggleFileInlinePreview(id) {
+    const previewBox = document.getElementById('inline-file-preview-' + id);
+    const btn = document.getElementById('preview-toggle-btn-' + id);
+    if (!previewBox) return;
+
+    if (previewBox.style.display === 'none' || !previewBox.style.display) {
+        previewBox.style.display = 'block';
+        if (btn) btn.textContent = '✕ Сховати перегляд';
+        // Викликаємо Prism для підсвічування синтаксису коду
+        if (window.Prism) {
+            const codeBlocks = previewBox.querySelectorAll('pre code');
+            codeBlocks.forEach(function(codeEl) {
+                Prism.highlightElement(codeEl);
+            });
+        }
+        previewBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    } else {
+        previewBox.style.display = 'none';
+        if (btn) btn.textContent = '👁️ Переглянути в браузері';
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    if (window.Prism) {
+        Prism.highlightAll();
+    }
+});
+</script>
+{% endblock %}
+

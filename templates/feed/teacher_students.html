@@ -1,0 +1,744 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Керування учнями та класами — Шкільні Завдання{% endblock %}
+
+{% block extra_head %}
+<style>
+.students-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 14px;
+    margin-bottom: 20px;
+}
+.stat-box {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    padding: 16px 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.stat-box:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(0,0,0,0.06);
+}
+.stat-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: var(--radius-md);
+    background: rgba(99,102,241,0.12);
+    color: var(--color-primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    flex-shrink: 0;
+}
+.stat-value {
+    font-size: 1.6rem;
+    font-weight: 800;
+    line-height: 1.1;
+    color: var(--color-text-primary);
+}
+.stat-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    margin-top: 2px;
+}
+
+.class-tabs-scroll {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 6px;
+    margin-bottom: 16px;
+    scrollbar-width: thin;
+}
+.class-tab-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 14px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
+    color: var(--color-text-secondary);
+    font-size: 13px;
+    font-weight: 700;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: all 0.15s ease;
+}
+.class-tab-pill:hover {
+    background: var(--color-bg-secondary);
+    color: var(--color-text-primary);
+    border-color: var(--color-primary);
+}
+.class-tab-pill.active {
+    background: var(--color-primary);
+    color: #fff;
+    border-color: var(--color-primary);
+    box-shadow: 0 2px 8px rgba(99,102,241,0.35);
+}
+.class-tab-badge {
+    background: rgba(0,0,0,0.12);
+    font-size: 11px;
+    padding: 1px 7px;
+    border-radius: 12px;
+    font-weight: 700;
+}
+.class-tab-pill.active .class-tab-badge {
+    background: rgba(255,255,255,0.25);
+    color: #fff;
+}
+
+.student-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+}
+.student-table th {
+    background: var(--color-bg-secondary);
+    color: var(--color-text-secondary);
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--color-border);
+    text-align: left;
+}
+.student-table td {
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--color-border);
+    vertical-align: middle;
+    font-size: 13.5px;
+}
+.student-table tr:hover td {
+    background: rgba(99,102,241,0.03);
+}
+.student-row-avatar {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--color-primary), #8b5cf6);
+    color: #fff;
+    font-weight: 700;
+    font-size: 13px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 10px;
+    flex-shrink: 0;
+}
+.class-badge-pill {
+    background: rgba(99,102,241,0.12);
+    color: var(--color-primary);
+    border: 1px solid rgba(99,102,241,0.25);
+    padding: 3px 9px;
+    border-radius: 14px;
+    font-size: 12px;
+    font-weight: 700;
+    display: inline-block;
+}
+.custom-modal-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(15, 23, 42, 0.65);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.2s ease;
+}
+.custom-modal-backdrop.open {
+    opacity: 1;
+    visibility: visible;
+}
+.custom-modal-box {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 20px 45px rgba(0,0,0,0.25);
+    width: 92%;
+    max-width: 580px;
+    max-height: 90vh;
+    overflow-y: auto;
+    transform: scale(0.96);
+    transition: transform 0.2s ease;
+}
+.custom-modal-backdrop.open .custom-modal-box {
+    transform: scale(1);
+}
+.custom-modal-header {
+    padding: 18px 22px;
+    border-bottom: 1px solid var(--color-border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+.custom-modal-title {
+    font-size: 1.25rem;
+    font-weight: 800;
+    margin: 0;
+    color: var(--color-text-primary);
+}
+.custom-modal-close {
+    background: none;
+    border: none;
+    font-size: 20px;
+    cursor: pointer;
+    color: var(--color-text-muted);
+    padding: 4px;
+    border-radius: 4px;
+}
+.custom-modal-close:hover {
+    color: var(--color-text-primary);
+}
+.custom-modal-body {
+    padding: 20px 22px;
+}
+.import-tab-btn {
+    flex: 1;
+    padding: 8px 12px;
+    font-size: 13px;
+    font-weight: 700;
+    border: 1px solid var(--color-border);
+    background: var(--color-bg-secondary);
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    border-radius: var(--radius-md);
+    transition: all 0.15s ease;
+}
+.import-tab-btn.active {
+    background: var(--color-primary);
+    color: #fff;
+    border-color: var(--color-primary);
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-wrapper">
+    <div class="feed-layout">
+
+        <!-- ════ ЛІВИЙ САЙДБАР ВЧИТЕЛЯ ════════════════════════════════════════ -->
+        {% include 'feed/components/teacher_sidebar.html' %}
+
+        <!-- ════ ЦЕНТРАЛЬНА ЧАСТИНА: КЕРУВАННЯ УЧНЯМИ ═══════════════════════════ -->
+        <div class="feed-main-content">
+
+            <!-- ── Шапка розділу ─────────────────────────────────────────────── -->
+            <div class="page-hero" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:14px;">
+                <div>
+                    <div class="page-hero-kicker">Шкільна база даних</div>
+                    <h1>👥 Керування учнями та класами</h1>
+                    <div class="page-hero-sub">Редагування імен, зміна класів з перенесенням робіт та імпорт списків</div>
+                </div>
+
+                <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                    <button type="button" class="btn btn-primary" onclick="openAddStudentModal()" style="font-weight:700;">
+                        ➕ Додати учня
+                    </button>
+                    <button type="button" class="btn btn-secondary" onclick="openImportModal()" style="font-weight:700;">
+                        📥 Імпорт списку
+                    </button>
+                    <a href="{% url 'teacher_students_export' %}{% if selected_class %}?class_group={{ selected_class.id }}{% endif %}" class="btn btn-secondary" title="Завантажити список у CSV для Excel">
+                        📤 Експорт CSV
+                    </a>
+                </div>
+            </div>
+
+            <!-- ── Статистика бази учнів ──────────────────────────────────────── -->
+            <div class="students-stats-grid">
+                <div class="stat-box">
+                    <div class="stat-icon">👨‍🎓</div>
+                    <div>
+                        <div class="stat-value">{{ total_students_count }}</div>
+                        <div class="stat-label">Всього учнів у школі</div>
+                    </div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-icon">🏫</div>
+                    <div>
+                        <div class="stat-value">{{ total_classes_count }}</div>
+                        <div class="stat-label">Навчальних класів</div>
+                    </div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-icon">📥</div>
+                    <div>
+                        <div class="stat-value">{{ total_submissions_count }}</div>
+                        <div class="stat-label">Зданих робіт учнями</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── Панель фільтрації та пошуку ─────────────────────────────────── -->
+            <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:18px 20px;margin-bottom:20px;box-shadow:0 2px 10px rgba(0,0,0,0.03);">
+                
+                <!-- Таби вибору класу -->
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
+                    <div style="font-size:13px;font-weight:800;text-transform:uppercase;color:var(--color-text-secondary);letter-spacing:0.04em;">
+                        🏫 Оберіть клас:
+                    </div>
+                    {% if selected_class %}
+                    <div style="display:flex;gap:8px;">
+                        <a href="{% url 'gradebook' %}?class_group={{ selected_class.id }}" class="btn btn-secondary btn-sm" style="font-size:12px;">
+                            📊 Відкрити журнал класу {{ selected_class.name }}
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <div class="class-tabs-scroll">
+                    <a href="{% url 'teacher_students' %}{% if search_query %}?search={{ search_query }}{% endif %}"
+                       class="class-tab-pill {% if not selected_class %}active{% endif %}">
+                        <span>Усі класи</span>
+                        <span class="class-tab-badge">{{ total_students_count }}</span>
+                    </a>
+                    {% for cg in class_groups %}
+                    <a href="{% url 'teacher_students' %}?class_group={{ cg.id }}{% if search_query %}&search={{ search_query }}{% endif %}"
+                       class="class-tab-pill {% if cg.is_selected %}active{% endif %}">
+                        <span>{{ cg.name }}</span>
+                        <span class="class-tab-badge">{{ cg.students_count }}</span>
+                    </a>
+                    {% endfor %}
+                </div>
+
+                <!-- Рядок пошуку учня -->
+                <form method="GET" style="display:flex;gap:10px;align-items:center;margin-top:10px;">
+                    {% if selected_class %}
+                    <input type="hidden" name="class_group" value="{{ selected_class.id }}">
+                    {% endif %}
+                    <div style="position:relative;flex:1;">
+                        <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--color-text-muted);">🔍</span>
+                        <input type="text"
+                               name="search"
+                               value="{{ search_query }}"
+                               placeholder="Пошук учня за прізвищем, ім'ям або класом..."
+                               class="form-input"
+                               style="padding-left:36px;font-size:13.5px;width:100%;">
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-sm" style="font-weight:700;padding:8px 16px;">
+                        Знайти
+                    </button>
+                    {% if search_query %}
+                    <a href="{% url 'teacher_students' %}{% if selected_class %}?class_group={{ selected_class.id }}{% endif %}" class="btn btn-secondary btn-sm">
+                        ✕ Скинути
+                    </a>
+                    {% endif %}
+                </form>
+            </div>
+
+            <!-- ── Таблиця учнів ──────────────────────────────────────────────── -->
+            <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,0.03);">
+                
+                <div style="padding:14px 20px;border-bottom:1px solid var(--color-border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;background:var(--color-bg-secondary);">
+                    <div style="font-size:14px;font-weight:700;color:var(--color-text-primary);">
+                        {% if selected_class %}
+                            Список учнів класу <strong>{{ selected_class.name }}</strong> ({{ page_obj.paginator.count }})
+                        {% else %}
+                            Усі зареєстровані учні школи ({{ page_obj.paginator.count }})
+                        {% endif %}
+                    </div>
+                    <div style="font-size:12px;color:var(--color-text-muted);">
+                        Показано {{ page_obj.start_index|default:0 }}–{{ page_obj.end_index|default:0 }} з {{ page_obj.paginator.count }}
+                    </div>
+                </div>
+
+                {% if page_obj %}
+                <div style="overflow-x:auto;">
+                    <table class="student-table">
+                        <thead>
+                            <tr>
+                                <th style="width:40px;text-align:center;">№</th>
+                                <th>Учень (ПІБ)</th>
+                                <th>Клас</th>
+                                <th>Здані роботи</th>
+                                <th>Нотатки</th>
+                                <th style="text-align:right;">Дії</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for student in page_obj %}
+                            <tr id="student-row-{{ student.id }}">
+                                <td style="text-align:center;color:var(--color-text-muted);font-weight:700;font-size:12px;">
+                                    {{ forloop.counter0|add:page_obj.start_index }}
+                                </td>
+                                <td>
+                                    <div style="display:flex;align-items:center;">
+                                        <div class="student-row-avatar">
+                                            {{ student.get_initials }}
+                                        </div>
+                                        <div>
+                                            <a href="{% url 'student_detail' student.get_full_name %}"
+                                               style="font-weight:700;color:var(--color-text-primary);text-decoration:none;font-size:14px;"
+                                               class="student-link-hover"
+                                               title="Переглянути історію робіт учня">
+                                                <span class="student-display-name">{{ student.last_name }} {{ student.first_name }}</span>
+                                            </a>
+                                            <div style="font-size:11px;color:var(--color-text-muted);">
+                                                Додано: {{ student.created_at|date:"d.m.Y" }}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="class-badge-pill student-class-label">
+                                        🏫 {{ student.class_group.name }}
+                                    </span>
+                                </td>
+                                <td>
+                                    {% if student.subs_count > 0 %}
+                                    <a href="{% url 'student_detail' student.get_full_name %}" class="badge-tag" style="background:rgba(16,185,129,0.12);color:#059669;border:1px solid rgba(16,185,129,0.3);text-decoration:none;padding:3px 8px;border-radius:12px;font-size:12px;font-weight:700;">
+                                        📥 {{ student.subs_count }} робіт ({{ student.graded_count }} оцінено)
+                                    </a>
+                                    {% else %}
+                                    <span style="font-size:12px;color:var(--color-text-muted);">Робіт ще не здано</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if student.notes %}
+                                    <span style="font-size:12px;color:var(--color-text-secondary);max-width:200px;display:inline-block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="{{ student.notes }}">
+                                        📝 {{ student.notes }}
+                                    </span>
+                                    {% else %}
+                                    <span style="font-size:12px;color:var(--color-text-muted);">—</span>
+                                    {% endif %}
+                                </td>
+                                <td style="text-align:right;white-space:nowrap;">
+                                    <div style="display:inline-flex;gap:6px;align-items:center;">
+                                        <button type="button"
+                                                class="btn btn-secondary btn-sm"
+                                                onclick="openEditStudentModal({{ student.id }}, '{{ student.last_name|escapejs }}', '{{ student.first_name|escapejs }}', {{ student.class_group_id }}, '{{ student.notes|escapejs }}')"
+                                                title="Редагувати ім'я чи змінити клас"
+                                                style="padding:4px 10px;font-size:12px;">
+                                            ✏️ Змінити
+                                        </button>
+                                        <a href="{% url 'student_detail' student.get_full_name %}" class="btn btn-secondary btn-sm" title="Історія робіт" style="padding:4px 8px;font-size:12px;">
+                                            📋
+                                        </a>
+                                        <form method="POST" action="{% url 'teacher_student_delete' student.id %}" style="display:inline;" onsubmit="return confirm('Видалити учня «{{ student.get_full_name|escapejs }}» зі списку класу? Його здані роботи збережуться.');">
+                                            {% csrf_token %}
+                                            <button type="submit" class="btn btn-sm" style="background:rgba(239,68,68,0.1);color:#ef4444;border:1px solid rgba(239,68,68,0.25);padding:4px 8px;font-size:12px;" title="Видалити зі списку">
+                                                🗑️
+                                            </button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Пагінація -->
+                {% if page_obj.has_other_pages %}
+                <div style="padding:16px 20px;border-top:1px solid var(--color-border);display:flex;justify-content:center;gap:6px;align-items:center;">
+                    {% if page_obj.has_previous %}
+                    <a href="?page={{ page_obj.previous_page_number }}{% if selected_class %}&class_group={{ selected_class.id }}{% endif %}{% if search_query %}&search={{ search_query }}{% endif %}" class="btn btn-secondary btn-sm">← Попередня</a>
+                    {% endif %}
+
+                    <span style="font-size:13px;color:var(--color-text-secondary);padding:0 10px;">
+                        Сторінка {{ page_obj.number }} з {{ page_obj.paginator.num_pages }}
+                    </span>
+
+                    {% if page_obj.has_next %}
+                    <a href="?page={{ page_obj.next_page_number }}{% if selected_class %}&class_group={{ selected_class.id }}{% endif %}{% if search_query %}&search={{ search_query }}{% endif %}" class="btn btn-secondary btn-sm">Наступна →</a>
+                    {% endif %}
+                </div>
+                {% endif %}
+
+                {% else %}
+                <div style="padding:50px 20px;text-align:center;">
+                    <div style="font-size:42px;margin-bottom:12px;">👨‍🎓</div>
+                    <h3 style="font-size:1.15rem;font-weight:700;margin:0 0 6px;color:var(--color-text-primary);">
+                        {% if search_query %}Учнів за запитом «{{ search_query }}» не знайдено{% else %}У цьому класі ще немає доданих учнів{% endif %}
+                    </h3>
+                    <p style="font-size:13px;color:var(--color-text-muted);max-width:400px;margin:0 auto 16px;">
+                        Ви можете додати учня вручну або імпортувати готовий список учнів з файлу чи буфера обміну.
+                    </p>
+                    <div style="display:flex;gap:8px;justify-content:center;">
+                        <button type="button" class="btn btn-primary btn-sm" onclick="openAddStudentModal()">➕ Додати першого учня</button>
+                        <button type="button" class="btn btn-secondary btn-sm" onclick="openImportModal()">📥 Імпортувати список</button>
+                    </div>
+                </div>
+                {% endif %}
+
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<!-- МОДАЛЬНЕ ВІКНО 1: ДОДАВАННЯ УЧНЯ                                            -->
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="add-student-modal" class="custom-modal-backdrop" onclick="if(event.target===this)closeModal('add-student-modal');">
+    <div class="custom-modal-box">
+        <div class="custom-modal-header">
+            <h3 class="custom-modal-title">➕ Додати нового учня</h3>
+            <button type="button" class="custom-modal-close" onclick="closeModal('add-student-modal')">✕</button>
+        </div>
+        <div class="custom-modal-body">
+            <form method="POST" action="{% url 'teacher_students' %}">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="add_student">
+
+                <div class="form-group" style="margin-bottom:14px;">
+                    <label class="form-label" style="font-weight:700;font-size:13px;">Прізвище учня <span style="color:#ef4444">*</span></label>
+                    {{ add_form.last_name }}
+                </div>
+
+                <div class="form-group" style="margin-bottom:14px;">
+                    <label class="form-label" style="font-weight:700;font-size:13px;">Ім'я учня <span style="color:#ef4444">*</span></label>
+                    {{ add_form.first_name }}
+                </div>
+
+                <div class="form-group" style="margin-bottom:14px;">
+                    <label class="form-label" style="font-weight:700;font-size:13px;">Клас <span style="color:#ef4444">*</span></label>
+                    {{ add_form.class_group }}
+                </div>
+
+                <div class="form-group" style="margin-bottom:14px;">
+                    <label class="form-label" style="font-weight:700;font-size:13px;">Нотатки вчителя (необов'язково)</label>
+                    {{ add_form.notes }}
+                </div>
+
+                <div style="margin-bottom:18px;background:var(--color-bg-secondary);padding:10px 12px;border-radius:var(--radius-md);border:1px solid var(--color-border);">
+                    <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;font-weight:600;">
+                        {{ add_form.sync_submissions }}
+                        <span>Синхронізувати попередні здані роботи учня з цим класом</span>
+                    </label>
+                </div>
+
+                <div style="display:flex;justify-content:flex-end;gap:8px;">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('add-student-modal')">Скасувати</button>
+                    <button type="submit" class="btn btn-primary" style="font-weight:700;">✓ Додати учня</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<!-- МОДАЛЬНЕ ВІКНО 2: РЕДАГУВАННЯ УЧНЯ (ЗМІНА ІМЕНІ ТА КЛАСУ)                   -->
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="edit-student-modal" class="custom-modal-backdrop" onclick="if(event.target===this)closeModal('edit-student-modal');">
+    <div class="custom-modal-box">
+        <div class="custom-modal-header">
+            <h3 class="custom-modal-title">✏️ Редагувати профіль учня</h3>
+            <button type="button" class="custom-modal-close" onclick="closeModal('edit-student-modal')">✕</button>
+        </div>
+        <div class="custom-modal-body">
+            <form id="edit-student-form" method="POST" action="">
+                {% csrf_token %}
+
+                <div class="form-group" style="margin-bottom:14px;">
+                    <label class="form-label" style="font-weight:700;font-size:13px;">Прізвище учня <span style="color:#ef4444">*</span></label>
+                    <input type="text" id="edit_modal_last_name" name="last_name" class="form-input" required placeholder="Наприклад: Шевченко">
+                </div>
+
+                <div class="form-group" style="margin-bottom:14px;">
+                    <label class="form-label" style="font-weight:700;font-size:13px;">Ім'я учня <span style="color:#ef4444">*</span></label>
+                    <input type="text" id="edit_modal_first_name" name="first_name" class="form-input" required placeholder="Наприклад: Тарас">
+                </div>
+
+                <div class="form-group" style="margin-bottom:14px;">
+                    <label class="form-label" style="font-weight:700;font-size:13px;">Клас учня <span style="color:#ef4444">*</span></label>
+                    <select id="edit_modal_class_group" name="class_group" class="form-input" required>
+                        {% for cg in class_groups %}
+                        <option value="{{ cg.id }}">{{ cg.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <div style="font-size:11px;color:var(--color-text-muted);margin-top:3px;">
+                        Якщо учень обрав неправильний клас при здачі, змініть його тут — роботи автоматично перенесуться в журнал обраного класу.
+                    </div>
+                </div>
+
+                <div class="form-group" style="margin-bottom:14px;">
+                    <label class="form-label" style="font-weight:700;font-size:13px;">Нотатки про учня</label>
+                    <textarea id="edit_modal_notes" name="notes" class="form-input" rows="2" placeholder="Особисті примітки вчителя..."></textarea>
+                </div>
+
+                <div style="margin-bottom:18px;background:rgba(99,102,241,0.06);padding:12px 14px;border-radius:var(--radius-md);border:1px solid rgba(99,102,241,0.2);">
+                    <label style="display:flex;align-items:flex-start;gap:8px;font-size:12.5px;cursor:pointer;font-weight:600;color:var(--color-text-primary);">
+                        <input type="checkbox" name="sync_submissions" value="true" checked style="margin-top:2px;">
+                        <span>🔄 <strong>Синхронізувати всі здані роботи учня</strong>: оновити ім'я, прізвище та перенести всі попередні оцінки і здачі в обраний клас.</span>
+                    </label>
+                </div>
+
+                <div style="display:flex;justify-content:flex-end;gap:8px;">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('edit-student-modal')">Скасувати</button>
+                    <button type="submit" class="btn btn-primary" style="font-weight:700;">💾 Зберегти зміни</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<!-- МОДАЛЬНЕ ВІКНО 3: ІМПОРТ СПИСКУ УЧНІВ ТА КЛАСІВ                              -->
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="import-modal" class="custom-modal-backdrop" onclick="if(event.target===this)closeModal('import-modal');">
+    <div class="custom-modal-box" style="max-width:640px;">
+        <div class="custom-modal-header">
+            <h3 class="custom-modal-title">📥 Імпорт списку учнів та класів</h3>
+            <button type="button" class="custom-modal-close" onclick="closeModal('import-modal')">✕</button>
+        </div>
+        <div class="custom-modal-body">
+            <form method="POST" action="{% url 'teacher_students_import' %}" enctype="multipart/form-data">
+                {% csrf_token %}
+
+                <!-- Перемикач режиму імпорту -->
+                <div style="display:flex;gap:8px;margin-bottom:16px;">
+                    <button type="button" id="tab-btn-text" class="import-tab-btn active" onclick="switchImportMode('text')">
+                        📝 Вставка тексту зі списком
+                    </button>
+                    <button type="button" id="tab-btn-file" class="import-tab-btn" onclick="switchImportMode('file')">
+                        📁 Завантаження файлу (CSV/TXT)
+                    </button>
+                </div>
+                <input type="hidden" name="import_mode" id="import_mode_input" value="text">
+
+                <!-- Режим 1: Текстове поле -->
+                <div id="import-panel-text" style="margin-bottom:14px;">
+                    <label class="form-label" style="font-weight:700;font-size:13px;">
+                        Вставте список учнів:
+                    </label>
+                    <textarea name="raw_text"
+                              id="id_import_raw_text"
+                              class="form-input code-font"
+                              rows="8"
+                              style="font-family:monospace;font-size:13px;line-height:1.4;"
+                              placeholder="Іваненко Тарас, 9-А&#10;Петренко Олена, 9-А&#10;Коваленко Дмитро, 10-Б&#10;Шевченко Софія, 11-В&#10;&#10;Або оберіть клас нижче і вставте список імен:&#10;1. Бондарчук Максим&#10;2. Грищенко Тетяна"></textarea>
+                </div>
+
+                <!-- Режим 2: Файл -->
+                <div id="import-panel-file" style="margin-bottom:14px;display:none;">
+                    <label class="form-label" style="font-weight:700;font-size:13px;">
+                        Оберіть файл зі списком (.csv, .txt, .tsv):
+                    </label>
+                    <input type="file" name="file" id="id_import_file" class="form-file-input" accept=".csv,.txt,.tsv">
+                    <div style="font-size:11px;color:var(--color-text-muted);margin-top:4px;">
+                        Підтримуються файли CSV з роздільниками (кома, крапка з комою, табуляція) у кодуванні UTF-8 або Windows-1251.
+                    </div>
+                </div>
+
+                <!-- Опціональний клас за замовчуванням -->
+                <div class="form-group" style="margin-bottom:14px;">
+                    <label class="form-label" style="font-weight:700;font-size:13px;">
+                        Клас за замовчуванням (якщо клас не вказано в рядку):
+                    </label>
+                    <select name="default_class" class="form-input">
+                        <option value="">— Визначати автоматично з кожного рядка —</option>
+                        {% for cg in class_groups %}
+                        <option value="{{ cg.id }}" {% if selected_class and selected_class.id == cg.id %}selected{% endif %}>
+                            {{ cg.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Авто-створення відсутніх класів -->
+                <div style="margin-bottom:16px;background:var(--color-bg-secondary);padding:10px 12px;border-radius:var(--radius-md);border:1px solid var(--color-border);">
+                    <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;font-weight:600;">
+                        <input type="checkbox" name="create_missing_classes" value="true" checked>
+                        <span>Автоматично створювати класи в базі, якщо їх ще немає (наприклад "9-А", "10-Б")</span>
+                    </label>
+                </div>
+
+                <!-- Зразок форматів -->
+                <div style="font-size:12px;color:var(--color-text-muted);background:rgba(0,0,0,0.02);border:1px dashed var(--color-border);padding:10px 14px;border-radius:var(--radius-md);margin-bottom:18px;">
+                    <strong>💡 Підтримувані формати рядків:</strong><br>
+                    • <code>Іваненко Тарас, 9-А</code><br>
+                    • <code>Іваненко, Тарас, 9-А</code><br>
+                    • <code>9-А: Іваненко Тарас</code><br>
+                    • <code>Іваненко Тарас (9-А)</code><br>
+                    • <code>1. Іваненко Тарас</code> (якщо обрано клас за замовчуванням)
+                </div>
+
+                <div style="display:flex;justify-content:flex-end;gap:8px;">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('import-modal')">Скасувати</button>
+                    <button type="submit" class="btn btn-primary" style="font-weight:700;">🚀 Почати імпорт</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function openModal(id) {
+    var modal = document.getElementById(id);
+    if (modal) modal.classList.add('open');
+}
+function closeModal(id) {
+    var modal = document.getElementById(id);
+    if (modal) modal.classList.remove('open');
+}
+
+function openAddStudentModal() {
+    openModal('add-student-modal');
+}
+
+function openImportModal() {
+    openModal('import-modal');
+}
+
+function switchImportMode(mode) {
+    document.getElementById('import_mode_input').value = mode;
+    var btnText = document.getElementById('tab-btn-text');
+    var btnFile = document.getElementById('tab-btn-file');
+    var panelText = document.getElementById('import-panel-text');
+    var panelFile = document.getElementById('import-panel-file');
+
+    if (mode === 'file') {
+        btnFile.classList.add('active');
+        btnText.classList.remove('active');
+        panelFile.style.display = 'block';
+        panelText.style.display = 'none';
+    } else {
+        btnText.classList.add('active');
+        btnFile.classList.remove('active');
+        panelText.style.display = 'block';
+        panelFile.style.display = 'none';
+    }
+}
+
+function openEditStudentModal(id, lastName, firstName, classId, notes) {
+    var form = document.getElementById('edit-student-form');
+    form.action = '/teacher/students/' + id + '/edit/';
+
+    document.getElementById('edit_modal_last_name').value = lastName || '';
+    document.getElementById('edit_modal_first_name').value = firstName || '';
+    document.getElementById('edit_modal_class_group').value = classId || '';
+    document.getElementById('edit_modal_notes').value = notes || '';
+
+    openModal('edit-student-modal');
+}
+
+// Закриття модалок по Escape
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        closeModal('add-student-modal');
+        closeModal('edit-student-modal');
+        closeModal('import-modal');
+    }
+});
+</script>
+{% endblock %}

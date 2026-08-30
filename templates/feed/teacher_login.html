@@ -1,0 +1,56 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Вхід для вчителя — Шкільні Завдання{% endblock %}
+{% block meta_description %}Захищений вхід до панелі вчителя — Шкільні Завдання{% endblock %}
+
+{% block body_class %}page-auth{% endblock %}
+
+{% block content %}
+<div class="page-wrapper">
+    <div class="feed-layout" style="grid-template-columns: minmax(0, 1fr); max-width: 440px; margin: 0 auto;">
+        <div class="feed-main-content">
+            <div class="login-card" style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:28px;">
+                <div class="login-header" style="margin-bottom:22px;">
+                    <h1 class="login-title" style="font-size:1.35rem;font-weight:750;margin:0 0 6px;">
+                        Вхід для вчителя
+                    </h1>
+                    <p class="login-subtitle" style="font-size:13px;color:var(--color-text-muted);margin:0;">
+                        Учням логін не потрібен — завдання відкриваються зі стрічки.
+                    </p>
+                </div>
+
+                <form method="POST" action="{% url 'teacher_login' %}" novalidate>
+                    {% csrf_token %}
+
+                    <div class="form-group" style="margin-bottom:16px;">
+                        <label class="form-label required" for="{{ form.username.id_for_label }}">Логін</label>
+                        {{ form.username }}
+                        {% if form.username.errors %}
+                        <p class="form-error" style="color:#ef4444;font-size:12px;margin-top:4px;">{{ form.username.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+
+                    <div class="form-group" style="margin-bottom:20px;">
+                        <label class="form-label required" for="{{ form.password.id_for_label }}">Пароль</label>
+                        {{ form.password }}
+                        {% if form.password.errors %}
+                        <p class="form-error" style="color:#ef4444;font-size:12px;margin-top:4px;">{{ form.password.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+
+                    {% if form.non_field_errors %}
+                    <div class="alert alert-error" style="margin-bottom:16px;padding:12px;border-radius:var(--radius-sm);background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);color:#ef4444;">
+                        {{ form.non_field_errors.0 }}
+                    </div>
+                    {% endif %}
+
+                    <button type="submit" class="btn btn-primary btn-block" style="padding:11px;font-size:15px;">
+                        Увійти
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,71 @@
+# Byte-compiled Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+*.pyo
+
+# Virtual environment
+venv/
+env/
+.env
+.venv/
+
+# Django
+*.sqlite3
+schoolnet.sqlite3
+
+# Uploaded media files (generated at runtime) — keep directory structure
+media/*
+!media/assignments/
+!media/submissions/
+!media/ai_criteria_docs/
+!media/previews/
+!media/teacher_avatars/
+media/assignments/*
+!media/assignments/.gitkeep
+media/submissions/*
+!media/submissions/.gitkeep
+media/ai_criteria_docs/*
+!media/ai_criteria_docs/.gitkeep
+media/previews/*
+!media/previews/.gitkeep
+media/teacher_avatars/*
+!media/teacher_avatars/.gitkeep
+
+# Session logs (generated at runtime) — keep directory structure
+logs/*
+!logs/.gitkeep
+
+# IDE / OS files
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Celery
+celerybeat-schedule
+
+# Coverage reports
+htmlcov/
+.coverage
+coverage.xml
+
+# MyPy
+.mypy_cache/
+
+# pytest
+.pytest_cache/

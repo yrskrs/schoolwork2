@@ -1,0 +1,623 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Пакетна ШІ-перевірка робіт (Gemini AI) — Шкільні Завдання{% endblock %}
+
+{% block content %}
+<div class="page-wrapper">
+
+    <!-- ── Двоколонковий layout сайту ────────────────────────────────────── -->
+    <div class="feed-layout">
+
+        <!-- ════ ЛІВИЙ САЙДБАР ВЧИТЕЛЯ ════════════════════════════════════════ -->
+        {% include 'feed/components/teacher_sidebar.html' %}
+
+        <!-- ════ ЦЕНТРАЛЬНА ЧАСТИНА (ПАКЕТНА ШІ-ПЕРЕВІРКА) ═════════════════════ -->
+        <div class="feed-main-content">
+
+            <!-- Заголовок сторінки -->
+            <div class="page-hero">
+                <div class="page-hero-kicker">Автоматизоване оцінювання</div>
+                <h1>Пакетна ШІ-перевірка</h1>
+            </div>
+
+            {% if not ai_settings.api_key %}
+            <div class="alert alert-warning" style="margin-bottom:20px;padding:16px 20px;border-radius:var(--radius-md);background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.3);color:#d97706;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+                <div>
+                    <strong>⚠️ Google Gemini API Key не налаштовано.</strong>
+                    <div style="font-size:13px;margin-top:2px;">Введіть ваш безкоштовний ключ у налаштуваннях для активації автоматичного оцінювання.</div>
+                </div>
+                <a href="{% url 'teacher_settings' %}?tab=ai" class="btn btn-warning btn-sm" style="font-weight:700;color:#fff;">
+                    Ввести ключ →
+                </a>
+            </div>
+            {% elif not ai_settings.is_enabled %}
+            <div class="alert alert-warning" style="margin-bottom:20px;padding:16px 20px;border-radius:var(--radius-md);background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.3);color:#d97706;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+                <div>
+                    <strong>⚠️ Модуль ШІ вимкнено в налаштуваннях.</strong>
+                    <div style="font-size:13px;margin-top:2px;">API ключ налаштовано, але галочку «Увімкнути модуль» знято.</div>
+                </div>
+                <a href="{% url 'teacher_settings' %}?tab=ai" class="btn btn-warning btn-sm" style="font-weight:700;color:#fff;">
+                    Увімкнути в налаштуваннях →
+                </a>
+            </div>
+            {% endif %}
+
+
+            <!-- Статистичні картки -->
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:20px;">
+                <div class="sidebar-card" style="padding:14px;text-align:center;border-top:3px solid var(--color-primary);">
+                    <div style="font-size:24px;font-weight:800;color:var(--color-primary);">{{ total_submissions }}</div>
+                    <div class="text-muted text-sm" style="font-weight:600;">Всього зданих робіт</div>
+                </div>
+                <div class="sidebar-card" style="padding:14px;text-align:center;border-top:3px solid var(--color-warning);">
+                    <div style="font-size:24px;font-weight:800;color:var(--color-warning);">{{ ungraded_submissions }}</div>
+                    <div class="text-muted text-sm" style="font-weight:600;">⏳ Очікують перевірки</div>
+                </div>
+                <div class="sidebar-card" style="padding:14px;text-align:center;border-top:3px solid #10b981;">
+                    <div style="font-size:24px;font-weight:800;color:#10b981;">{{ ai_evaluated_submissions }}</div>
+                    <div class="text-muted text-sm" style="font-weight:600;">🤖 Перевірено ШІ</div>
+                </div>
+            </div>
+
+            <!-- Панель фільтрів та запуску -->
+            <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:20px 24px;margin-bottom:20px;box-shadow:0 2px 8px rgba(0,0,0,0.02);">
+                <h3 style="font-size:1.1rem;font-weight:800;margin:0 0 14px;color:var(--color-text-primary);">
+                    🎯 Вибір робіт для пакетного аналізу
+                </h3>
+
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-bottom:16px;">
+                    <!-- Клас -->
+                    <div class="form-group" style="margin:0;">
+                        <label for="filter-class" class="form-label" style="font-weight:700;">🏫 Клас:</label>
+                        <select id="filter-class" class="form-input" onchange="loadQueuePreview()">
+                            <option value="">Всі класи школи</option>
+                            {% for c in all_classes %}
+                            <option value="{{ c.id }}">{{ c.name }} (паралель {{ c.grade }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <!-- Завдання -->
+                    <div class="form-group" style="margin:0;">
+                        <label for="filter-assignment" class="form-label" style="font-weight:700;">📋 Конкретне завдання:</label>
+                        <select id="filter-assignment" class="form-input" onchange="loadQueuePreview()">
+                            <option value="">Всі завдання</option>
+                            {% for a in all_assignments %}
+                            <option value="{{ a.id }}">{{ a.title|truncatechars:38 }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <!-- Критерії оцінювання -->
+                    <div class="form-group" style="margin:0;">
+                        <label for="filter-preset" class="form-label" style="font-weight:700;color:var(--color-primary);">📋 Критерії перевірки ШІ:</label>
+                        <select id="filter-preset" class="form-input" onchange="onBatchPresetChanged()" style="font-weight:700;border-color:var(--color-primary);">
+                            {% for p in criteria_presets %}
+                            <option value="{{ p.id }}" {% if p.is_default %}selected{% endif %}>
+                                {{ p.name }}{% if p.document_name %} (📎 {{ p.document_name|truncatechars:20 }}){% endif %}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Блок вибору груп результатів (ГР) прапорцями -->
+                <div id="batch-gr-selector" style="margin-bottom:16px;background:var(--color-bg-secondary);border:1px solid rgba(99,102,241,0.25);border-radius:var(--radius-md);padding:12px 16px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:8px;">
+                        <span style="font-size:12px;font-weight:800;color:var(--color-primary);text-transform:uppercase;display:flex;align-items:center;gap:6px;">
+                            <span>☑️</span> <span>Оберіть групи результатів (ГР) для пакетної перевірки:</span>
+                        </span>
+                        <div style="display:flex;gap:6px;">
+                            <button type="button" onclick="toggleAllBatchGr(true)" class="btn btn-secondary btn-sm" style="font-size:11px;padding:2px 8px;font-weight:700;">Всі</button>
+                            <button type="button" onclick="toggleAllBatchGr(false)" class="btn btn-secondary btn-sm" style="font-size:11px;padding:2px 8px;font-weight:700;">Зняти</button>
+                        </div>
+                    </div>
+                    <div id="batch-gr-checkboxes" style="display:grid;grid-template-columns:repeat(auto-fit, minmax(240px, 1fr));gap:6px;">
+                        <!-- Заповнюється динамічно через JS -->
+                    </div>
+                </div>
+
+                <!-- Чекбокси умов та пауза -->
+                <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:center;padding:12px 16px;background:var(--color-bg-secondary);border-radius:var(--radius-md);margin-bottom:20px;">
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:600;margin:0;">
+                        <input type="checkbox" id="filter-only-ungraded" checked onchange="loadQueuePreview()" style="width:16px;height:16px;accent-color:var(--color-primary);">
+                        <span>Тільки роботи без оцінки вчителя</span>
+                    </label>
+
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:600;margin:0;">
+                        <input type="checkbox" id="filter-only-unreviewed-ai" checked onchange="loadQueuePreview()" style="width:16px;height:16px;accent-color:var(--color-primary);">
+                        <span>Тільки роботи, які ще не оцінював ШІ</span>
+                    </label>
+
+                    <div style="margin-left:auto;display:flex;align-items:center;gap:8px;">
+                        <label for="batch-delay" style="font-size:13px;font-weight:700;margin:0;color:var(--color-text-primary);white-space:nowrap;">
+                            ⏱️ Пауза між запитами:
+                        </label>
+                        <select id="batch-delay" class="form-input" style="padding:4px 10px;font-size:12px;font-weight:700;width:auto;">
+                            <option value="4000" selected>4 секунди (Рекомендовано для Free 15 RPM)</option>
+                            <option value="5000">5 секунд (Надійний режим)</option>
+                            <option value="3000">3 секунди</option>
+                            <option value="1500">1.5 секунди (Для платних ключів)</option>
+                            <option value="0">Без паузи</option>
+                        </select>
+                    </div>
+                </div>
+
+
+                <!-- Кнопки керування пакетом -->
+                <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+                    <div style="font-size:14px;font-weight:700;color:var(--color-text-secondary);">
+                        Знайдено для обробки: <span id="queue-count" style="color:var(--color-primary);font-size:16px;">0</span> робіт
+                    </div>
+
+                    <div style="display:flex;gap:10px;">
+                        <button type="button" class="btn btn-secondary" id="btn-reload-queue" onclick="loadQueuePreview()">
+                            🔄 Оновити список
+                        </button>
+                        <button type="button" class="btn btn-primary" id="btn-start-batch" onclick="startBatchProcessing()" style="font-weight:800;padding:10px 24px;box-shadow:0 2px 10px rgba(99,102,241,0.3);">
+                            🚀 Запустити перевірку ШІ
+                        </button>
+                        <button type="button" class="btn btn-danger" id="btn-stop-batch" onclick="stopBatchProcessing()" style="display:none;font-weight:700;">
+                            ⏹ Зупинити
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Прогрес-бар пакетної обробки -->
+            <div id="progress-container" style="display:none;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:20px 24px;margin-bottom:20px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-weight:700;">
+                    <span id="progress-status-text">Виконується обробка робіт через Google Gemini...</span>
+                    <span id="progress-percent-text" style="color:var(--color-primary);">0%</span>
+                </div>
+
+                <div style="height:12px;background:var(--color-bg-secondary);border-radius:6px;overflow:hidden;margin-bottom:12px;">
+                    <div id="progress-bar-fill" style="height:100%;width:0%;background:linear-gradient(90deg,#6366f1,#10b981);transition:width 0.3s ease;"></div>
+                </div>
+
+                <div style="display:flex;gap:16px;font-size:13px;flex-wrap:wrap;">
+                    <span>Всього: <strong id="stat-total">0</strong></span>
+                    <span style="color:#059669;">✅ Оцінено ШІ: <strong id="stat-success">0</strong></span>
+                    <span style="color:#ef4444;">❌ Помилок / Не підтримується: <strong id="stat-errors">0</strong></span>
+                </div>
+            </div>
+
+            <!-- Таблиця результатів обробки -->
+            <div class="submissions-table-wrapper" style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);overflow-x:auto;box-shadow:0 2px 10px rgba(0,0,0,0.03);width:100%;">
+                <table class="submissions-table">
+                    <thead>
+                        <tr>
+                            <th style="width:50px;text-align:center;">#</th>
+                            <th style="min-width:150px;">Учень</th>
+                            <th style="width:70px;text-align:center;">Клас</th>
+                            <th style="min-width:180px;">Завдання</th>
+                            <th style="width:120px;text-align:center;">Оцінка ШІ</th>
+                            <th style="min-width:240px;">Аналіз та відгук ШІ</th>
+                            <th style="width:120px;text-align:center;">Дія</th>
+                        </tr>
+                    </thead>
+                    <tbody id="queue-tbody">
+                        <tr>
+                            <td colspan="7" style="text-align:center;padding:30px;color:var(--color-text-muted);">
+                                Завантаження черги робіт...
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Пагінація таблиці черги (не більше 25 учнів на сторінку) -->
+            <div id="batch-pagination-container" style="display:none;justify-content:space-between;align-items:center;margin-top:16px;flex-wrap:wrap;gap:12px;">
+                <div id="batch-pagination-info" style="font-size:13px;color:var(--color-text-secondary);font-weight:600;">
+                    Показано 1–25 з 50 учнів
+                </div>
+                <div id="batch-pagination-controls" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+                    <!-- Кнопки сторінок генеруються через JS -->
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+const PAGE_SIZE = 25;
+let currentPage = 1;
+let currentQueue = [];
+let isProcessing = false;
+let shouldStop = false;
+let processedCount = 0;
+let successCount = 0;
+let errorCount = 0;
+
+// Дані шаблонів критеріїв для динамічного вибору ГР
+var BATCH_PRESETS_DATA = [
+    {% for p in criteria_presets %}
+    {
+        id: '{{ p.id }}',
+        name: '{{ p.name|escapejs }}',
+        type: '{{ p.evaluation_type }}',
+        gr_list: [
+            {% for gr in p.get_gr_list %}
+            { code: '{{ gr.code|escapejs }}', name: '{{ gr.name|escapejs }}' }{% if not forloop.last %},{% endif %}
+            {% endfor %}
+        ]
+    }{% if not forloop.last %},{% endif %}
+    {% endfor %}
+];
+
+function onBatchPresetChanged() {
+    var presetEl = document.getElementById('filter-preset');
+    if (!presetEl) return;
+    var pId = presetEl.value;
+    var presetObj = BATCH_PRESETS_DATA.find(function(p) { return String(p.id) === String(pId); });
+    renderBatchGrCheckboxes(presetObj);
+}
+
+function renderBatchGrCheckboxes(presetObj) {
+    var container = document.getElementById('batch-gr-selector');
+    var listEl = document.getElementById('batch-gr-checkboxes');
+    if (!container || !listEl) return;
+
+    if (!presetObj || !presetObj.gr_list || presetObj.gr_list.length === 0 || presetObj.type === 'traditional') {
+        container.style.display = 'none';
+        listEl.innerHTML = '';
+        return;
+    }
+
+    container.style.display = 'block';
+    var html = '';
+    presetObj.gr_list.forEach(function(gr, idx) {
+        var grCode = gr.code || ('ГР ' + (idx + 1));
+        var grName = gr.name || '';
+        var inputId = 'batch-gr-cb-' + idx;
+        html += '<label for="' + inputId + '" style="font-size:12px;color:var(--color-text-primary);cursor:pointer;display:flex;align-items:flex-start;gap:6px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:7px 10px;margin:0;line-height:1.35;">' +
+            '<input type="checkbox" id="' + inputId + '" value="' + grCode + '" checked style="accent-color:var(--color-primary);width:15px;height:15px;margin-top:1px;cursor:pointer;">' +
+            '<span><strong style="color:var(--color-primary);">' + grCode + ':</strong> ' + grName + '</span>' +
+        '</label>';
+    });
+    listEl.innerHTML = html;
+}
+
+function toggleAllBatchGr(checkedState) {
+    document.querySelectorAll('#batch-gr-checkboxes input[type="checkbox"]').forEach(function(cb) {
+        cb.checked = checkedState;
+    });
+}
+
+function goToBatchPage(page) {
+    var totalPages = Math.ceil(currentQueue.length / PAGE_SIZE) || 1;
+    if (page < 1) page = 1;
+    if (page > totalPages) page = totalPages;
+    currentPage = page;
+    renderQueueTable();
+}
+
+function renderPagination() {
+    var container = document.getElementById('batch-pagination-container');
+    var infoEl = document.getElementById('batch-pagination-info');
+    var controlsEl = document.getElementById('batch-pagination-controls');
+    if (!container || !infoEl || !controlsEl) return;
+
+    var total = currentQueue.length;
+    if (total <= PAGE_SIZE) {
+        container.style.display = 'none';
+        return;
+    }
+
+    container.style.display = 'flex';
+    var totalPages = Math.ceil(total / PAGE_SIZE);
+    var startIdx = (currentPage - 1) * PAGE_SIZE + 1;
+    var endIdx = Math.min(currentPage * PAGE_SIZE, total);
+
+    infoEl.textContent = 'Показано ' + startIdx + '–' + endIdx + ' з ' + total + ' учнів (по ' + PAGE_SIZE + ' на сторінці)';
+
+    var html = '';
+    // Кнопка попередня
+    if (currentPage > 1) {
+        html += '<button type="button" onclick="goToBatchPage(' + (currentPage - 1) + ')" class="btn btn-secondary btn-sm" style="padding:4px 10px;font-size:12px;font-weight:700;">« Попередня</button>';
+    } else {
+        html += '<button type="button" disabled class="btn btn-secondary btn-sm" style="padding:4px 10px;font-size:12px;opacity:0.4;cursor:not-allowed;">« Попередня</button>';
+    }
+
+    // Номери сторінок
+    for (var p = 1; p <= totalPages; p++) {
+        if (p === 1 || p === totalPages || (p >= currentPage - 2 && p <= currentPage + 2)) {
+            if (p === currentPage) {
+                html += '<button type="button" class="btn btn-primary btn-sm" style="font-weight:800;min-width:32px;padding:4px 8px;font-size:12px;">' + p + '</button>';
+            } else {
+                html += '<button type="button" onclick="goToBatchPage(' + p + ')" class="btn btn-secondary btn-sm" style="min-width:32px;padding:4px 8px;font-size:12px;">' + p + '</button>';
+            }
+        } else if (p === currentPage - 3 || p === currentPage + 3) {
+            html += '<span style="color:var(--color-text-muted);padding:0 2px;">...</span>';
+        }
+    }
+
+    // Кнопка наступна
+    if (currentPage < totalPages) {
+        html += '<button type="button" onclick="goToBatchPage(' + (currentPage + 1) + ')" class="btn btn-secondary btn-sm" style="padding:4px 10px;font-size:12px;font-weight:700;">Наступна »</button>';
+    } else {
+        html += '<button type="button" disabled class="btn btn-secondary btn-sm" style="padding:4px 10px;font-size:12px;opacity:0.4;cursor:not-allowed;">Наступна »</button>';
+    }
+
+    controlsEl.innerHTML = html;
+}
+
+function loadQueuePreview() {
+    if (isProcessing) return;
+
+    var classId = document.getElementById('filter-class').value;
+    var assignmentId = document.getElementById('filter-assignment').value;
+    var onlyUngraded = document.getElementById('filter-only-ungraded').checked;
+    var onlyUnreviewedAi = document.getElementById('filter-only-unreviewed-ai').checked;
+
+    var tbody = document.getElementById('queue-tbody');
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:30px;color:var(--color-text-muted);">Завантаження черги...</td></tr>';
+
+    var formData = new FormData();
+    formData.append('class_id', classId);
+    formData.append('assignment_id', assignmentId);
+    formData.append('only_ungraded', onlyUngraded);
+    formData.append('only_unreviewed_ai', onlyUnreviewedAi);
+    formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+
+    fetch('{% url "api_ai_get_batch_queue" %}', {
+        method: 'POST',
+        body: formData,
+        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        currentQueue = data.queue || [];
+        currentPage = 1;
+        document.getElementById('queue-count').textContent = currentQueue.length;
+        renderQueueTable();
+    })
+    .catch(function(err) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:30px;color:#ef4444;">Помилка завантаження черги: ' + err + '</td></tr>';
+    });
+}
+
+function renderQueueTable() {
+    var tbody = document.getElementById('queue-tbody');
+    if (!currentQueue.length) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--color-text-muted);"><div style="font-size:36px;margin-bottom:8px;">🎉</div><strong>Немає робіт для обробки за вибраними фільтрами.</strong></td></tr>';
+        renderPagination();
+        return;
+    }
+
+    var totalPages = Math.ceil(currentQueue.length / PAGE_SIZE) || 1;
+    if (currentPage > totalPages) currentPage = totalPages;
+    if (currentPage < 1) currentPage = 1;
+
+    var startIdx = (currentPage - 1) * PAGE_SIZE;
+    var endIdx = Math.min(startIdx + PAGE_SIZE, currentQueue.length);
+    var pageItems = currentQueue.slice(startIdx, endIdx);
+
+    var html = '';
+    pageItems.forEach(function(item, i) {
+        var globalIdx = startIdx + i + 1;
+        var statusBadge = '';
+        var formatBadge = item.has_format_warning ? '<div style="margin-top:2px;"><span class="badge" style="background:#fffbeb;color:#b45309;border:1px solid #fde68a;font-size:10px;font-weight:700;">⚠️ Не той формат</span></div>' : '';
+
+        var grPills = '';
+        if (item.gr_results && Array.isArray(item.gr_results) && item.gr_results.length > 0) {
+            grPills = '<div style="display:flex;flex-wrap:wrap;gap:3px;margin-top:4px;justify-content:center;">';
+            item.gr_results.forEach(function(gr) {
+                grPills += '<span class="badge" style="background:rgba(99,102,241,0.12);color:var(--color-primary);font-size:9.5px;padding:1px 5px;font-weight:700;" title="' + (gr.name || '') + ': ' + (gr.comment || '') + '">' +
+                    (gr.code || 'ГР') + ': ' + (gr.grade || '—') +
+                '</span>';
+            });
+            grPills += '</div>';
+        }
+
+        if (item.ai_status === 'success') {
+            if (item.ai_grade === 'Доопрацювати') {
+                statusBadge = '<span class="badge" style="background:#fef3c7;color:#d97706;border:1px solid #fcd34d;font-weight:700;font-size:11px;">🔄 Доопрацювати</span>' + formatBadge + grPills;
+            } else {
+                statusBadge = '<span class="badge" style="background:rgba(16,185,129,0.15);color:#059669;font-weight:800;font-size:13px;">🤖 ' + item.ai_grade + '</span>' + formatBadge + grPills;
+            }
+        } else if (item.ai_status === 'failed') {
+            statusBadge = '<span class="badge" style="background:rgba(239,68,68,0.15);color:#ef4444;font-size:11px;">❌ Помилка</span>';
+        } else if (item.ai_status === 'unsupported') {
+            statusBadge = '<span class="badge" style="background:rgba(245,158,11,0.15);color:#d97706;font-size:11px;">⚠️ Формат</span>';
+        } else if (item.ai_status === 'processing') {
+            statusBadge = '<span style="font-size:12px;color:var(--color-primary);font-weight:700;">⏳ Аналіз...</span>';
+        } else {
+            statusBadge = '<span class="badge" style="background:var(--color-bg-secondary);color:var(--color-text-muted);font-size:11px;">⏳ В черзі</span>';
+        }
+
+        var feedbackDisplay = item.ai_feedback ?
+            '<span title="' + item.ai_feedback.replace(/"/g, '&quot;') + '">' + item.ai_feedback.substring(0, 110) + '...</span>' :
+            (item.ai_error ? '<span style="color:#ef4444;font-size:12px;">' + item.ai_error + '</span>' : '—');
+
+        var isProcessingRow = (item.ai_status === 'processing');
+        var rowBg = isProcessingRow ? 'background:rgba(99,102,241,0.06);' : '';
+
+        html += '<tr id="queue-row-' + item.id + '" style="' + rowBg + '">' +
+            '<td style="text-align:center;color:var(--color-text-muted);font-size:11px;">' + globalIdx + '</td>' +
+            '<td style="font-weight:700;">' + item.student_name + '</td>' +
+            '<td style="text-align:center;"><span class="class-prominent-badge" style="font-size:11px;">' + item.class_name + '</span></td>' +
+            '<td style="font-size:13px;max-width:200px;text-overflow:ellipsis;overflow:hidden;white-space:nowrap;" title="' + item.assignment_title + '">' + item.assignment_title + '</td>' +
+            '<td style="text-align:center;" id="cell-grade-' + item.id + '">' + statusBadge + '</td>' +
+            '<td style="font-size:12px;color:var(--color-text-secondary);" id="cell-feedback-' + item.id + '">' + feedbackDisplay + '</td>' +
+            '<td style="text-align:center;">' +
+                '<a href="/teacher/view-file/' + item.id + '/" target="_blank" class="btn btn-secondary btn-sm" style="font-size:11px;padding:3px 8px;">' +
+                    '👁️ Переглянути ↗' +
+                '</a>' +
+            '</td>' +
+        '</tr>';
+    });
+
+    tbody.innerHTML = html;
+    renderPagination();
+}
+
+function startBatchProcessing() {
+    if (!currentQueue.length) {
+        alert('Черга робіт для обробки порожня.');
+        return;
+    }
+
+    isProcessing = true;
+    shouldStop = false;
+    processedCount = 0;
+    successCount = 0;
+    errorCount = 0;
+
+    document.getElementById('btn-start-batch').style.display = 'none';
+    document.getElementById('btn-stop-batch').style.display = 'inline-block';
+    document.getElementById('progress-container').style.display = 'block';
+
+    document.getElementById('stat-total').textContent = currentQueue.length;
+    document.getElementById('stat-success').textContent = '0';
+    document.getElementById('stat-errors').textContent = '0';
+
+    processQueueIndex(0);
+}
+
+function stopBatchProcessing() {
+    shouldStop = true;
+    document.getElementById('progress-status-text').textContent = 'Зупинка процесу...';
+}
+
+function processQueueIndex(idx) {
+    if (shouldStop || idx >= currentQueue.length) {
+        finishBatchProcessing();
+        return;
+    }
+
+    var item = currentQueue[idx];
+    item.ai_status = 'processing';
+
+    // Якщо оброблюваний учень на іншій сторінці, автоматично перемикаємо сторінку
+    var targetPage = Math.floor(idx / PAGE_SIZE) + 1;
+    if (targetPage !== currentPage) {
+        currentPage = targetPage;
+        renderQueueTable();
+    } else {
+        var row = document.getElementById('queue-row-' + item.id);
+        var gradeCell = document.getElementById('cell-grade-' + item.id);
+        if (row) row.style.background = 'rgba(99,102,241,0.06)';
+        if (gradeCell) gradeCell.innerHTML = '<span style="font-size:12px;color:var(--color-primary);font-weight:700;">⏳ Аналіз...</span>';
+    }
+
+    var delayMs = parseInt(document.getElementById('batch-delay').value, 10);
+    if (isNaN(delayMs)) delayMs = 4000;
+
+    var formData = new FormData();
+    formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+    var presetEl = document.getElementById('filter-preset');
+    if (presetEl && presetEl.value) {
+        formData.append('preset_id', presetEl.value);
+    }
+
+    // Збираємо обрані вчителем прапорці ГР
+    var checkedGrCodes = [];
+    document.querySelectorAll('#batch-gr-checkboxes input[type="checkbox"]:checked').forEach(function(cb) {
+        checkedGrCodes.push(cb.value);
+    });
+    if (checkedGrCodes.length > 0) {
+        formData.append('selected_gr_codes', JSON.stringify(checkedGrCodes));
+    }
+
+    fetch('/api/ai/process-item/' + item.id + '/', {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'Accept': 'application/json'
+        }
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(res) {
+        // Перевірка на помилку Rate Limit 429
+        if (res.status === 'failed' && res.error && (res.error.indexOf('429') !== -1 || res.error.indexOf('Rate Limit') !== -1)) {
+            var gradeCell = document.getElementById('cell-grade-' + item.id);
+            var feedbackCell = document.getElementById('cell-feedback-' + item.id);
+            if (gradeCell) {
+                gradeCell.innerHTML = '<span class="badge" style="background:#fef3c7;color:#d97706;border:1px solid #fcd34d;font-size:11px;">⏳ Ліміт API (чекаємо 10 сек)...</span>';
+            }
+            if (feedbackCell) {
+                feedbackCell.innerHTML = '<span style="color:#d97706;font-size:12px;">Тимчасовий ліміт запитів Gemini Free. Автоматичний повтор через 10 секунд...</span>';
+            }
+            document.getElementById('progress-status-text').textContent = '⏳ Пауза 10 секунд через ліміт запитів Gemini Free Tier...';
+            setTimeout(function() {
+                if (!shouldStop) processQueueIndex(idx);
+            }, 10000);
+            return;
+        }
+
+        processedCount++;
+        item.ai_status = res.status;
+        item.ai_grade = res.suggested_grade || '—';
+        item.ai_feedback = res.feedback || '';
+        item.gr_results = res.gr_results || [];
+        item.has_format_warning = Boolean(res.format_warning || (res.feedback && res.feedback.indexOf('Зауваження до формату файлу') !== -1));
+        item.ai_error = res.error || '';
+
+        if (res.status === 'success') {
+            successCount++;
+        } else {
+            errorCount++;
+        }
+
+        renderQueueTable();
+        updateProgressUI();
+
+        // Затримка перед наступним запитом
+        if (delayMs > 0 && idx + 1 < currentQueue.length) {
+            document.getElementById('progress-status-text').textContent = 'Очікування паузи ' + (delayMs / 1000) + ' сек... (' + (idx + 1) + '/' + currentQueue.length + ')';
+            setTimeout(function() {
+                processQueueIndex(idx + 1);
+            }, delayMs);
+        } else {
+            processQueueIndex(idx + 1);
+        }
+    })
+    .catch(function(err) {
+        processedCount++;
+        errorCount++;
+        item.ai_status = 'failed';
+        item.ai_error = String(err);
+
+        renderQueueTable();
+        updateProgressUI();
+
+        if (delayMs > 0 && idx + 1 < currentQueue.length) {
+            setTimeout(function() { processQueueIndex(idx + 1); }, delayMs);
+        } else {
+            processQueueIndex(idx + 1);
+        }
+    });
+}
+
+function updateProgressUI() {
+    var total = currentQueue.length;
+    var pct = Math.round((processedCount / total) * 100);
+
+    document.getElementById('progress-bar-fill').style.width = pct + '%';
+    document.getElementById('progress-percent-text').textContent = pct + '%';
+    document.getElementById('stat-success').textContent = successCount;
+    document.getElementById('stat-errors').textContent = errorCount;
+    document.getElementById('progress-status-text').textContent = 'Опрацьовано: ' + processedCount + ' з ' + total + ' робіт...';
+}
+
+function finishBatchProcessing() {
+    isProcessing = false;
+    document.getElementById('btn-start-batch').style.display = 'inline-block';
+    document.getElementById('btn-stop-batch').style.display = 'none';
+    document.getElementById('progress-status-text').textContent = shouldStop ? '⏹ Обробку зупинено користувачем.' : '🎉 Пакетну перевірку ШІ успішно завершено!';
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    onBatchPresetChanged();
+    loadQueuePreview();
+});
+</script>
+{% endblock %}

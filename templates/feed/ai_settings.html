@@ -1,0 +1,408 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Налаштування Google Gemini AI та Статистика — Шкільні Завдання{% endblock %}
+
+{% block content %}
+<div class="page-wrapper">
+
+    <!-- ── Двоколонковий layout сайту ────────────────────────────────────── -->
+    <div class="feed-layout">
+
+        <!-- ════ ЛІВИЙ САЙДБАР НАЛАШТУВАНЬ ТА АДМІНІСТРАТОРА ════════════════ -->
+        {% include 'feed/components/settings_sidebar.html' %}
+
+        <!-- ════ ЦЕНТРАЛЬНА ЧАСТИНА (НАЛАШТУВАННЯ ШІ) ═══════════════════════════ -->
+        <div class="feed-main-content">
+
+            <!-- Заголовок сторінки -->
+            <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:22px 26px;margin-bottom:24px;box-shadow:0 2px 10px rgba(0,0,0,0.03);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:14px;">
+                <div>
+                    <div style="font-size:11px;text-transform:uppercase;font-weight:800;color:var(--color-primary);letter-spacing:0.05em;">
+                        Інтелектуальні інструменти
+                    </div>
+                    <h1 style="font-size:1.45rem;font-weight:800;margin:2px 0 0;color:var(--color-text-primary);display:flex;align-items:center;gap:10px;">
+                        <span>🤖</span> <span>Налаштування модуля Google Gemini AI</span>
+                    </h1>
+
+                </div>
+
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                    <a href="{% url 'ai_batch_check' %}" class="btn btn-primary btn-sm" style="font-weight:700;">
+                        ⚡ Пакетна перевірка робіт
+                    </a>
+                    <a href="{% url 'all_submissions_dashboard' %}" class="btn btn-secondary btn-sm">
+                        📥 Здані роботи
+                    </a>
+                </div>
+            </div>
+
+            <!-- ════ БЛОК СТАТИСТИКИ ТА ВИКОРИСТАННЯ ШІ ════════════════════════ -->
+            <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:22px 24px;margin-bottom:24px;box-shadow:0 2px 8px rgba(0,0,0,0.02);">
+                <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:18px;">
+                    <h2 style="font-size:1.15rem;font-weight:800;margin:0;color:var(--color-text-primary);display:flex;align-items:center;gap:8px;">
+                        <span>📊</span> <span>Аналітика та статистика перевірок ШІ</span>
+                    </h2>
+                    <span class="badge" style="font-size:12px;font-weight:700;background:rgba(99,102,241,0.12);color:var(--color-primary);">
+                        Поточна модель: <strong>{{ ai_settings.model_name }}</strong>
+                    </span>
+                </div>
+
+                <!-- 4 Ключові картки статистики -->
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:22px;">
+                    <div class="sidebar-card" style="padding:16px;text-align:center;border-top:3px solid var(--color-primary);">
+                        <div style="font-size:26px;font-weight:900;color:var(--color-primary);">{{ total_ai_checks }}</div>
+                        <div class="text-muted text-sm" style="font-weight:700;margin-top:2px;">Всього перевірок ШІ</div>
+                    </div>
+
+                    <div class="sidebar-card" style="padding:16px;text-align:center;border-top:3px solid #10b981;">
+                        <div style="font-size:26px;font-weight:900;color:#059669;">{{ total_ai_success }}</div>
+                        <div class="text-muted text-sm" style="font-weight:700;margin-top:2px;">Успішно оцінено</div>
+                    </div>
+
+                    <div class="sidebar-card" style="padding:16px;text-align:center;border-top:3px solid #8b5cf6;">
+                        <div style="font-size:26px;font-weight:900;color:#7c3aed;">{{ total_applied_grades }}</div>
+                        <div class="text-muted text-sm" style="font-weight:700;margin-top:2px;">Прийнято в журнал</div>
+                    </div>
+
+                    <div class="sidebar-card" style="padding:16px;text-align:center;border-top:3px solid #f59e0b;">
+                        <div style="font-size:26px;font-weight:900;color:#d97706;">{{ level_rework }}</div>
+                        <div class="text-muted text-sm" style="font-weight:700;margin-top:2px;">🔄 На доопрацюванні</div>
+                    </div>
+                </div>
+
+                <!-- Розподіл оцінок за рівнями НУШ -->
+                <div style="background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:16px 18px;margin-bottom:20px;">
+                    <div style="font-size:12px;font-weight:800;color:var(--color-text-secondary);text-transform:uppercase;margin-bottom:10px;">
+                        Розподіл попередніх оцінок за рівнями НУШ:
+                    </div>
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;">
+                        <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:10px 12px;">
+                            <div style="font-size:11px;font-weight:700;color:#059669;">⭐ Високий (10-12)</div>
+                            <div style="font-size:18px;font-weight:800;color:var(--color-text-primary);margin-top:2px;">{{ level_high }} <span style="font-size:11px;color:var(--color-text-muted);font-weight:500;">робіт</span></div>
+                        </div>
+                        <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:10px 12px;">
+                            <div style="font-size:11px;font-weight:700;color:#2563eb;">🔷 Достатній (7-9)</div>
+                            <div style="font-size:18px;font-weight:800;color:var(--color-text-primary);margin-top:2px;">{{ level_sufficient }} <span style="font-size:11px;color:var(--color-text-muted);font-weight:500;">робіт</span></div>
+                        </div>
+                        <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:10px 12px;">
+                            <div style="font-size:11px;font-weight:700;color:#d97706;">🔶 Середній (4-6)</div>
+                            <div style="font-size:18px;font-weight:800;color:var(--color-text-primary);margin-top:2px;">{{ level_medium }} <span style="font-size:11px;color:var(--color-text-muted);font-weight:500;">робіт</span></div>
+                        </div>
+                        <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:10px 12px;">
+                            <div style="font-size:11px;font-weight:700;color:#dc2626;">🔻 Початковий (1-3)</div>
+                            <div style="font-size:18px;font-weight:800;color:var(--color-text-primary);margin-top:2px;">{{ level_initial }} <span style="font-size:11px;color:var(--color-text-muted);font-weight:500;">робіт</span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Таблиця статистики по моделях -->
+                <div style="font-size:13px;font-weight:800;color:var(--color-text-primary);margin-bottom:8px;">
+                    📈 Статистика перевірок у розрізі моделей Gemini:
+                </div>
+                <div style="overflow-x:auto;">
+                    <table class="submissions-table" style="width:100%;font-size:13px;">
+                        <thead>
+                            <tr>
+                                <th>Модель</th>
+                                <th style="text-align:center;">Статус</th>
+                                <th style="text-align:center;">Всього перевірок</th>
+                                <th style="text-align:center;">Успішних</th>
+                                <th style="text-align:center;">Помилок</th>
+                                <th style="text-align:center;">Останнє використання</th>
+                                <th style="text-align:center;">Дія</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for ms in model_stats %}
+                            <tr {% if ms.is_active %}style="background:rgba(99,102,241,0.06);font-weight:600;"{% endif %}>
+                                <td style="font-family:monospace;font-weight:700;color:var(--color-text-primary);">
+                                    {{ ms.name }}
+                                </td>
+                                <td style="text-align:center;">
+                                    {% if ms.is_active %}
+                                    <span class="badge" style="background:#10b981;color:#fff;font-size:11px;font-weight:800;">⭐ Активна</span>
+                                    {% else %}
+                                    <span class="badge" style="background:var(--color-bg-secondary);color:var(--color-text-muted);font-size:11px;">Збережена</span>
+                                    {% endif %}
+                                </td>
+                                <td style="text-align:center;font-weight:700;">{{ ms.total_checks }}</td>
+                                <td style="text-align:center;color:#059669;font-weight:700;">{{ ms.success_checks }}</td>
+                                <td style="text-align:center;color:#ef4444;font-weight:700;">{{ ms.failed_checks }}</td>
+                                <td style="text-align:center;font-size:12px;color:var(--color-text-muted);">
+                                    {% if ms.last_used %}{{ ms.last_used|date:"d.m.Y H:i" }}{% else %}—{% endif %}
+                                </td>
+                                <td style="text-align:center;">
+                                    <div style="display:inline-flex;gap:4px;align-items:center;">
+                                        {% if not ms.is_active %}
+                                        <form method="POST" style="display:inline;">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="action" value="switch_model">
+                                            <input type="hidden" name="switch_to_model" value="{{ ms.name }}">
+                                            <button type="submit" class="btn btn-secondary btn-sm" style="font-size:11px;padding:2px 8px;font-weight:700;" title="Зробити цю модель активною">
+                                                Перемкнути
+                                            </button>
+                                        </form>
+                                        {% endif %}
+                                        <button type="button" class="btn btn-secondary btn-sm" onclick="testModelDirect('{{ ms.name }}')" style="font-size:11px;padding:2px 6px;" title="Протестувати з'єднання з цією моделлю">
+                                            🧪 Тест
+                                        </button>
+                                        {% if ms.is_saved and not ms.is_active %}
+                                        <form method="POST" style="display:inline;" onsubmit="return confirm('Видалити модель {{ ms.name }} зі списку збережених?');">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="action" value="delete_model">
+                                            <input type="hidden" name="model_to_delete" value="{{ ms.name }}">
+                                            <button type="submit" class="btn btn-secondary btn-sm" style="font-size:11px;padding:2px 6px;color:#ef4444;" title="Видалити зі списку">
+                                                ×
+                                            </button>
+                                        </form>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="7" style="text-align:center;padding:16px;color:var(--color-text-muted);">
+                                    Немає збережених моделей.
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Швидке додавання нової моделі в список -->
+                <div style="margin-top:14px;padding:12px 16px;background:var(--color-bg-secondary);border-radius:var(--radius-md);border:1px dashed var(--color-border);">
+                    <form method="POST" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="add_custom_model">
+                        <label for="new_model_name" style="font-size:13px;font-weight:700;margin:0;color:var(--color-text-primary);white-space:nowrap;">
+                            ➕ Додати власну модель у список:
+                        </label>
+                        <input type="text" name="new_model_name" id="new_model_name" placeholder="наприклад: gemini-3.6-flash, gemini-1.5-pro..."
+                               class="form-input" list="gemini-suggestions" style="flex:1;min-width:200px;font-family:monospace;font-size:13px;font-weight:700;" required>
+                        <datalist id="gemini-suggestions">
+                            <option value="gemini-2.5-flash">gemini-2.5-flash</option>
+                            <option value="gemini-3.6-flash">gemini-3.6-flash</option>
+                            <option value="gemini-2.5-pro">gemini-2.5-pro</option>
+                            <option value="gemini-1.5-flash">gemini-1.5-flash</option>
+                            <option value="gemini-1.5-pro">gemini-1.5-pro</option>
+                        </datalist>
+                        <button type="submit" class="btn btn-secondary btn-sm" style="font-weight:700;padding:6px 14px;">
+                            ➕ Зберегти та активувати
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- ════ ФОРМА НАЛАШТУВАНЬ ПІДКЛЮЧЕННЯ ТА ПРОМТУ ═══════════════════ -->
+            <form method="POST" id="ai-settings-form">
+                {% csrf_token %}
+
+                <!-- Блок 1: API Ключ, Активна Модель та Креативність -->
+                <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:24px;margin-bottom:20px;box-shadow:0 2px 8px rgba(0,0,0,0.02);">
+                    <h2 style="font-size:1.15rem;font-weight:800;margin:0 0 16px;color:var(--color-text-primary);display:flex;align-items:center;gap:8px;">
+                        <span>🔑</span> <span>Параметри підключення Google Gemini API</span>
+                    </h2>
+
+                    <div style="display:grid;grid-template-columns:1fr;gap:16px;">
+                        
+                        <!-- Перемикач Увімкнення ШІ -->
+                        <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--color-bg-secondary);border-radius:var(--radius-md);border:1px solid var(--color-border);">
+                            <input type="checkbox" name="is_enabled" id="is_enabled" value="1" {% if ai_settings.is_enabled %}checked{% endif %} style="width:20px;height:20px;accent-color:var(--color-primary);cursor:pointer;">
+                            <label for="is_enabled" style="font-weight:700;font-size:14px;cursor:pointer;margin:0;color:var(--color-text-primary);">
+                                Увімкнути модуль автоматичного оцінювання та аналізу робіт ШІ
+                            </label>
+                        </div>
+
+                        <!-- Поле API ключа -->
+                        <div class="form-group" style="margin:0;">
+                            <label for="api_key" class="form-label" style="font-weight:700;display:flex;justify-content:space-between;align-items:center;">
+                                <span>Google Gemini API Key <span style="color:#ef4444">*</span></span>
+                                <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" style="font-size:12px;color:var(--color-primary);font-weight:600;text-decoration:none;">
+                                    Отримати безкоштовний ключ в Google AI Studio ↗
+                                </a>
+                            </label>
+                            <div style="position:relative;display:flex;gap:8px;">
+                                <input type="password" name="api_key" id="api_key" value="{{ ai_settings.api_key }}"
+                                       placeholder="AIzaSy..." class="form-input" style="flex:1;font-family:monospace;font-size:14px;">
+                                <button type="button" class="btn btn-secondary btn-sm" onclick="toggleKeyVisibility()" style="padding:0 12px;" title="Показати/приховати ключ">
+                                    👁️
+                                </button>
+                                <button type="button" class="btn btn-secondary btn-sm" id="btn-test-conn" onclick="testConnection()" style="font-weight:700;white-space:nowrap;padding:0 16px;">
+                                    🧪 Перевірити з'єднання
+                                </button>
+                            </div>
+                            <div id="conn-test-result" style="display:none;margin-top:8px;padding:8px 12px;border-radius:var(--radius-sm);font-size:13px;"></div>
+                        </div>
+
+                        <!-- Вибір моделі та температура -->
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+                            <div class="form-group" style="margin:0;">
+                                <label for="model_name" class="form-label" style="font-weight:700;">
+                                    Активна модель Gemini:
+                                </label>
+                                <div style="display:flex;gap:6px;">
+                                    <select name="model_name" id="model_name" class="form-input" style="font-family:monospace;font-weight:700;font-size:13px;">
+                                        {% for m in saved_models %}
+                                        <option value="{{ m }}" {% if ai_settings.model_name == m %}selected{% endif %}>{{ m }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div style="font-size:11px;color:var(--color-text-muted);margin-top:4px;">
+                                    Виберіть зі збережених або додайте нову в списку вище.
+                                </div>
+                            </div>
+
+                            <div class="form-group" style="margin:0;">
+                                <label for="temperature" class="form-label" style="font-weight:700;">
+                                    Креативність (Temperature: <span id="temp-val">{{ ai_settings.temperature|default:0.2 }}</span>):
+                                </label>
+                                <input type="range" name="temperature" id="temperature" min="0.0" max="1.0" step="0.05"
+                                       value="{{ ai_settings.temperature|default:0.2 }}" class="form-input" style="padding:0;cursor:pointer;"
+                                       oninput="document.getElementById('temp-val').textContent = this.value">
+                                <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--color-text-muted);margin-top:2px;">
+                                    <span>0.0 (Строга точність)</span>
+                                    <span>1.0 (Творча оцінка)</span>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+
+                <!-- Блок 2: Системний промт та критерії НУШ -->
+                <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:24px;margin-bottom:24px;box-shadow:0 2px 8px rgba(0,0,0,0.02);">
+                    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
+                        <div>
+                            <h2 style="font-size:1.15rem;font-weight:800;margin:0;color:var(--color-text-primary);display:flex;align-items:center;gap:8px;">
+                                <span>📜</span> <span>Системний промт та критерії оцінювання (НУШ)</span>
+                            </h2>
+                            <p style="font-size:12px;color:var(--color-text-muted);margin:2px 0 0;">
+                                Ця інструкція надсилається моделі при кожній перевірці. Ви можете адаптувати критерії під свій предмет чи заклад.
+                            </p>
+                        </div>
+
+                        <button type="button" class="btn btn-secondary btn-sm" onclick="resetDefaultPrompt()" style="font-size:12px;color:#d97706;">
+                            🔄 Відновити стандарт НУШ
+                        </button>
+                    </div>
+
+                    <div class="form-group" style="margin:0;">
+                        <textarea name="system_prompt" id="system_prompt" rows="16" class="form-input"
+                                  style="font-family:monospace;font-size:13px;line-height:1.5;resize:vertical;">{{ ai_settings.system_prompt }}</textarea>
+                    </div>
+                </div>
+
+                <!-- Кнопки збереження -->
+                <div style="display:flex;justify-content:flex-end;gap:12px;align-items:center;">
+                    <a href="{% url 'teacher_dashboard' %}" class="btn btn-secondary">
+                        Скасувати
+                    </a>
+                    <button type="submit" class="btn btn-primary" style="font-weight:800;padding:12px 28px;font-size:15px;box-shadow:0 4px 14px rgba(99,102,241,0.3);">
+                        💾 Зберегти налаштування ШІ
+                    </button>
+                </div>
+
+            </form>
+
+        </div>
+
+    </div>
+
+</div>
+
+<script id="def-prompt-data" type="application/json">
+{{ default_prompt|json_script:"def-prompt-inner" }}
+</script>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function toggleKeyVisibility() {
+    var inp = document.getElementById('api_key');
+    if (inp.type === 'password') {
+        inp.type = 'text';
+    } else {
+        inp.type = 'password';
+    }
+}
+
+function testModelDirect(modelName) {
+    var apiKey = document.getElementById('api_key').value.trim();
+    if (!apiKey) {
+        alert('Будь ласка, введіть Google Gemini API Key у формі для тестування.');
+        return;
+    }
+    runApiTest(apiKey, modelName);
+}
+
+function testConnection() {
+    var apiKey = document.getElementById('api_key').value.trim();
+    var modelName = document.getElementById('model_name').value;
+    if (!apiKey) {
+        alert('Будь ласка, введіть Google Gemini API Key перед тестуванням.');
+        return;
+    }
+    runApiTest(apiKey, modelName);
+}
+
+function runApiTest(apiKey, modelName) {
+    var btn = document.getElementById('btn-test-conn');
+    var resBox = document.getElementById('conn-test-result');
+
+    btn.disabled = true;
+    btn.textContent = '⏳ Перевірка (' + modelName + ')...';
+    resBox.style.display = 'block';
+    resBox.style.background = 'var(--color-bg-secondary)';
+    resBox.style.color = 'var(--color-text-primary)';
+    resBox.innerHTML = 'Запит до Google Gemini API (модель: ' + modelName + ')...';
+
+    var formData = new FormData();
+    formData.append('api_key', apiKey);
+    formData.append('model_name', modelName);
+    formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+
+    fetch('{% url "api_test_gemini_connection" %}', {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        btn.disabled = false;
+        btn.textContent = '🧪 Перевірити з\'єднання';
+
+        if (data.success) {
+            resBox.style.background = 'rgba(16, 185, 129, 0.12)';
+            resBox.style.border = '1px solid rgba(16, 185, 129, 0.3)';
+            resBox.style.color = '#059669';
+            resBox.innerHTML = '<strong>✅ Успішно [' + data.model + ']!</strong> ' + data.message;
+        } else {
+            resBox.style.background = 'rgba(239, 68, 68, 0.12)';
+            resBox.style.border = '1px solid rgba(239, 68, 68, 0.3)';
+            resBox.style.color = '#ef4444';
+            resBox.innerHTML = '<strong>❌ Помилка підключення [' + (data.model || modelName) + ']:</strong> ' + data.message;
+        }
+    })
+    .catch(function(err) {
+        btn.disabled = false;
+        btn.textContent = '🧪 Перевірити з\'єднання';
+        resBox.style.background = 'rgba(239, 68, 68, 0.12)';
+        resBox.style.color = '#ef4444';
+        resBox.innerHTML = '<strong>❌ Мережева помилка:</strong> ' + err;
+    });
+}
+
+function resetDefaultPrompt() {
+    if (confirm('Ви впевнені, що хочете скинути системний промт до офіційного стандарту НУШ?')) {
+        var scriptEl = document.getElementById('def-prompt-inner');
+        if (scriptEl) {
+            document.getElementById('system_prompt').value = JSON.parse(scriptEl.textContent);
+        }
+    }
+}
+</script>
+{% endblock %}

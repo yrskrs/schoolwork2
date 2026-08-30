@@ -1,0 +1,278 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Мої здані роботи — Шкільні Завдання{% endblock %}
+{% block meta_description %}Перегляд зданих робіт учнів, оцінок та коментарів вчителя{% endblock %}
+
+{% block content %}
+<div class="page-wrapper">
+
+    <!-- ── Двоколонковий layout однаковий з усім сайтом ────────────────────── -->
+    <div class="feed-layout">
+
+        <!-- ════ САЙДБАР (ФІЛЬТР ПО КЛАСАХ ТА ІНФО-БЛОКИ) ═════════════════════ -->
+        <aside class="sidebar" id="submissions-sidebar" aria-label="Фільтри та навігація">
+
+            <!-- 1. ФІЛЬТР ПО КЛАСАХ -->
+            <div class="sidebar-card">
+                <div class="sidebar-header">🏫 Класи</div>
+                <ul class="sidebar-list" role="list">
+                    <li {% if not selected_class_id %}class="active"{% endif %}>
+                        <a href="{% url 'student_submissions_portal' %}{% if search_query %}?search={{ search_query }}{% endif %}">
+                            <span>📋</span>
+                            <span>Всі класи</span>
+                        </a>
+                    </li>
+                    {% for cls in class_groups %}
+                    <li {% if selected_class_id == cls.id|stringformat:"s" %}class="active"{% endif %}>
+                        <a href="{% url 'student_submissions_portal' %}?class={{ cls.id }}{% if search_query %}&search={{ search_query }}{% endif %}">
+                            <span class="class-badge">{{ cls.grade }}{{ cls.letter }}</span>
+                            <span>{{ cls.name }}</span>
+                        </a>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+
+            <!-- 2. ДОВІДКА ДЛЯ УЧНЯ -->
+            <div class="sidebar-card" style="background:var(--color-bg-secondary);border-left:4px solid var(--color-primary);">
+                <div style="padding:14px 16px;font-size:12px;line-height:1.5;">
+                    <div style="font-weight:800;color:var(--color-primary);margin-bottom:6px;font-size:13px;">
+                        📌 Статуси перевірки:
+                    </div>
+                    <div style="display:flex;flex-direction:column;gap:8px;color:var(--color-text-secondary);">
+                        <div>
+                            <span style="font-weight:700;color:#b45309;">⏳ Очікує перевірки</span> — роботу збережено, вчитель незабаром її відкриє.
+                        </div>
+                        <div>
+                            <span style="font-weight:700;color:var(--color-success);">✅ Оцінено</span> — вчитель перевірив роботу і поставив оцінку.
+                        </div>
+                        <div>
+                            <span style="font-weight:700;color:var(--color-primary);">💬 Коментарі</span> — поради або похвала від вчителя.
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 3. НАВІГАЦІЯ -->
+            <div class="sidebar-card">
+                <div class="sidebar-header">🔗 Навігація</div>
+                <ul class="sidebar-list" role="list">
+                    <li>
+                        <a href="{% url 'index' %}">
+                            <span>🏠</span>
+                            <span>Стрічка навчальних завдань</span>
+                        </a>
+                    </li>
+                    {% if selected_class_id or search_query %}
+                    <li>
+                        <a href="{% url 'student_submissions_portal' %}">
+                            <span>✕</span>
+                            <span>Скинути всі фільтри</span>
+                        </a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </div>
+
+        </aside>
+
+
+        <!-- ════ ЦЕНТРАЛЬНА ЧАСТИНА (СПИСОК ЗДАНИХ РОБІТ) ═════════════════════ -->
+        <div class="feed-main-content">
+
+            <!-- Заголовок та пошук -->
+            <div class="page-hero">
+                <div class="page-hero-kicker">Кабінет учня</div>
+                <h1>Здані роботи та оцінки</h1>
+                <form method="GET" action="{% url 'student_submissions_portal' %}" style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px;">
+                    {% if selected_class_id %}
+                    <input type="hidden" name="class" value="{{ selected_class_id }}">
+                    {% endif %}
+                    <div style="flex:1;min-width:220px;">
+                        <input type="text"
+                               name="search"
+                               value="{{ search_query }}"
+                               class="form-input"
+                               placeholder="Ваше прізвище або ім'я"
+                               style="font-size:14px;padding:10px 14px;">
+                    </div>
+                    <button type="submit" class="btn btn-primary">Знайти</button>
+                    {% if search_query or selected_class_id %}
+                    <a href="{% url 'student_submissions_portal' %}" class="btn btn-secondary">Скинути</a>
+                    {% endif %}
+                </form>
+            </div>
+
+            <!-- Список зданих робіт -->
+            <div style="display:flex;flex-direction:column;gap:16px;">
+
+                {% for sub in page_obj %}
+                <article class="student-sub-card" style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:20px 24px;box-shadow:0 2px 12px rgba(0,0,0,0.04);">
+
+                    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:12px;">
+                        <div style="flex:1 1 auto;min-width:0;">
+                            <!-- Клас та учень -->
+                            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap;">
+                                <span class="class-prominent-badge" style="font-size:11px;">
+                                    <span class="class-icon">🏫</span>
+                                    <span class="class-text">{{ sub.class_group.name }}</span>
+                                </span>
+                                <span style="font-weight:800;font-size:15px;color:var(--color-text-primary);">
+                                    👤 {{ sub.last_name }} {{ sub.first_name }}
+                                </span>
+                                <span style="font-size:12px;color:var(--color-text-muted);">
+                                    · 📅 {{ sub.submitted_at|date:"d.m.Y H:i" }}
+                                </span>
+                            </div>
+
+                            <!-- Назва завдання -->
+                            <h3 style="font-size:1.15rem;font-weight:800;margin:0;color:var(--color-text-primary);line-height:1.35;word-break:break-word;">
+                                {% if sub.assignment %}
+                                <a href="{% url 'assignment_detail' sub.assignment.pk %}" style="color:var(--color-text-primary);text-decoration:none;">
+                                    {{ sub.assignment.title }}
+                                </a>
+                                {% else %}
+                                <span>Самостійна робота</span>
+                                {% endif %}
+                            </h3>
+
+                            {% if sub.assignment and sub.assignment.teacher %}
+                            <div style="font-size:12px;color:var(--color-text-muted);margin-top:4px;">
+                                Вчитель: <strong>{{ sub.assignment.teacher.full_name }}</strong>
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        <!-- Статус перевірки: закріплено справа блоку без перенесення під текст -->
+                        <div style="flex-shrink:0;text-align:right;white-space:nowrap;margin-left:auto;">
+                            {% if sub.grade == 'Доопрацювати' or sub.grade == 'доопрацювання' or sub.grade == 'д' or sub.grade == 'Д' %}
+                            <span class="badge" style="font-size:12px;padding:6px 14px;font-weight:800;background:#fef3c7;color:#b45309;border:1px solid #fcd34d;border-radius:20px;display:inline-flex;align-items:center;gap:4px;white-space:nowrap;" title="Роботу повернуто на доопрацювання">
+                                🔄 Доопрацювати
+                            </span>
+                            {% elif sub.grade %}
+                            <span class="badge badge-success" style="font-size:12px;padding:6px 14px;font-weight:800;background:rgba(16,185,129,0.15);color:#059669;border:1px solid rgba(16,185,129,0.3);border-radius:20px;display:inline-flex;align-items:center;gap:4px;white-space:nowrap;">
+                                ✅ Оцінено вчителем
+                            </span>
+                            {% else %}
+                            <span style="background:rgba(234,179,8,0.15);color:#b45309;border:1px solid rgba(234,179,8,0.3);border-radius:20px;padding:6px 14px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:4px;white-space:nowrap;">
+                                ⏳ Очікує перевірки
+                            </span>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <!-- Інформація про прикріплені файли роботи учня -->
+                    {% if sub.files.all %}
+                    <div style="padding:12px 16px;background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:var(--radius-md);margin-bottom:12px;display:flex;flex-direction:column;gap:8px;">
+                        <div style="font-size:11.5px;font-weight:700;color:var(--color-text-muted);display:flex;justify-content:space-between;">
+                            <span>📎 Прикріплені файли ({{ sub.files.all|length }}):</span>
+                            <span>{{ sub.get_total_files_size_display }}</span>
+                        </div>
+                        <div style="display:flex;flex-direction:column;gap:6px;">
+                            {% for sf in sub.files.all %}
+                            <div style="display:flex;align-items:center;gap:8px;font-size:13px;">
+                                <span style="font-size:16px;">{{ sf.get_file_icon }}</span>
+                                <span style="font-weight:700;color:var(--color-text-primary);word-break:break-all;">{{ sf.original_name|default:sf.file.name|slice:"-45:" }}</span>
+                                <span style="font-size:11px;color:var(--color-text-muted);">({{ sf.get_size_display }})</span>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% elif sub.file %}
+                    <div style="padding:12px 16px;background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:var(--radius-md);margin-bottom:12px;display:flex;align-items:center;gap:12px;">
+                        <span style="font-size:22px;">{{ sub.get_file_icon }}</span>
+                        <div style="overflow:hidden;">
+                            <div style="font-size:13px;font-weight:700;color:var(--color-text-primary);word-break:break-all;">
+                                {{ sub.file.name|slice:"-45:" }}
+                            </div>
+                            <div style="font-size:11px;color:var(--color-text-muted);margin-top:2px;">
+                                📎 Файл успішно збережено на сервері
+                            </div>
+                        </div>
+                    </div>
+                    {% elif sub.link %}
+                    <div style="padding:12px 16px;background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:var(--radius-md);margin-bottom:12px;display:flex;align-items:center;gap:12px;">
+                        <span style="font-size:20px;">🔗</span>
+                        <div style="overflow:hidden;">
+                            <div style="font-size:13px;font-weight:700;color:var(--color-text-primary);word-break:break-all;">
+                                {{ sub.link|truncatechars:50 }}
+                            </div>
+                            <div style="font-size:11px;color:var(--color-text-muted);margin-top:2px;">
+                                🔗 Посилання на виконану роботу
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+
+
+                    {% if sub.comment_student %}
+                    <div style="font-size:13px;color:var(--color-text-secondary);margin-bottom:12px;padding-left:4px;">
+                        💬 <strong>Ваш коментар при здачі:</strong> <em>«{{ sub.comment_student }}»</em>
+                    </div>
+                    {% endif %}
+
+                    <!-- 💬 Коментарі та відгук вчителя -->
+                    {% if sub.comments.all %}
+                    <div style="border-top:1px solid var(--color-border);padding-top:12px;margin-top:12px;">
+                        <div style="font-size:12px;font-weight:800;color:var(--color-primary);text-transform:uppercase;margin-bottom:8px;display:flex;align-items:center;gap:6px;">
+                            💬 Зауваження та коментарі вчителя ({{ sub.comments.all|length }})
+                        </div>
+
+                        <div style="display:flex;flex-direction:column;gap:8px;">
+                            {% for comment in sub.comments.all %}
+                            <div style="padding:10px 14px;background:rgba(99,102,241,0.06);border-left:3px solid var(--color-primary);border-radius:var(--radius-sm);font-size:13px;">
+                                <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+                                    <strong style="color:var(--color-primary);">{{ comment.get_author_name }}</strong>
+                                    <span style="font-size:11px;color:var(--color-text-muted);">{{ comment.created_at|date:"d.m.Y H:i" }}</span>
+                                </div>
+                                <div style="white-space:pre-wrap;color:var(--color-text-primary);line-height:1.5;">{{ comment.text }}</div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+
+                </article>
+                {% empty %}
+                <div class="sidebar-card" style="padding:48px 20px;text-align:center;">
+                    <div style="font-size:48px;margin-bottom:12px;">📭</div>
+                    <h3 style="font-size:1.2rem;font-weight:700;margin:0 0 6px;">Зданих робіт не знайдено</h3>
+                    <p style="color:var(--color-text-muted);font-size:14px;margin:0 0 20px;">
+                        {% if search_query %}
+                        За запитом «{{ search_query }}» нічого не знайдено. Перевірте правильність написання або оберіть свій клас у лівому меню.
+                        {% else %}
+                        Введіть ваше прізвище у поле пошуку вище, щоб переглянути свої здані завдання та оцінки.
+                        {% endif %}
+                    </p>
+                    <a href="{% url 'index' %}" class="btn btn-primary">← Переглянути завдання у стрічці</a>
+                </div>
+                {% endfor %}
+
+            </div>
+
+            <!-- Пагінація -->
+            {% if page_obj.has_other_pages %}
+            <div style="display:flex;justify-content:center;gap:6px;flex-wrap:wrap;margin-top:28px;">
+                {% if page_obj.has_previous %}
+                <a href="?page={{ page_obj.previous_page_number }}&class={{ selected_class_id|default:'' }}&search={{ search_query }}" class="btn btn-secondary btn-sm">« Попередня</a>
+                {% endif %}
+                {% for i in page_obj.paginator.page_range %}
+                {% if page_obj.number == i %}
+                <span class="btn btn-primary btn-sm">{{ i }}</span>
+                {% elif i > page_obj.number|add:"-3" and i < page_obj.number|add:"3" %}
+                <a href="?page={{ i }}&class={{ selected_class_id|default:'' }}&search={{ search_query }}" class="btn btn-secondary btn-sm">{{ i }}</a>
+                {% endif %}
+                {% endfor %}
+                {% if page_obj.has_next %}
+                <a href="?page={{ page_obj.next_page_number }}&class={{ selected_class_id|default:'' }}&search={{ search_query }}" class="btn btn-secondary btn-sm">Наступна »</a>
+                {% endif %}
+            </div>
+            {% endif %}
+
+        </div>
+
+    </div>
+
+</div>
+{% endblock %}

@@ -1,0 +1,64 @@
+{% load static %}
+<aside class="sidebar" id="teacher-main-sidebar" aria-label="Меню вчителя">
+
+    <div class="sidebar-card" style="padding:14px;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+            {% if request.user.teacher_profile.avatar_image %}
+            <img src="{{ request.user.teacher_profile.avatar_image.url }}" alt="" class="avatar-mini-img" style="width:40px;height:40px;border-radius:50%;object-fit:cover;">
+            {% else %}
+            <div class="avatar-mini" style="background:{{ request.user.teacher_profile.avatar_color|default:'#6366f1' }};width:40px;height:40px;font-size:15px;font-weight:700;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;">
+                {{ request.user.teacher_profile.get_initials|default:"В" }}
+            </div>
+            {% endif %}
+            <div style="overflow:hidden;">
+                <div style="font-weight:700;font-size:14px;line-height:1.2;text-overflow:ellipsis;overflow:hidden;white-space:nowrap;">
+                    {{ request.user.teacher_profile.full_name|default:request.user.username }}
+                </div>
+                <div style="font-size:11px;color:var(--color-text-muted);margin-top:2px;">
+                    {% if is_superadmin_mode %}Супер-адміністратор{% else %}Вчитель{% endif %}
+                </div>
+            </div>
+        </div>
+        <a href="{% url 'assignment_create' %}" class="btn btn-primary btn-block">＋ Нове завдання</a>
+    </div>
+
+    <div class="sidebar-card">
+        <div class="sidebar-header">Робота</div>
+        <ul class="sidebar-list" role="list">
+            <li {% if request.resolver_match.url_name == 'teacher_dashboard' %}class="active"{% endif %}>
+                <a href="{% url 'teacher_dashboard' %}"><span>📋</span><span>Мої завдання</span></a>
+            </li>
+            <li {% if request.resolver_match.url_name == 'all_submissions_dashboard' or request.resolver_match.url_name == 'assignment_submissions' %}class="active"{% endif %}>
+                <a href="{% url 'all_submissions_dashboard' %}">
+                    <span>📥</span>
+                    <span>Здані роботи</span>
+                    {% if pending_submissions_count and pending_submissions_count > 0 %}
+                    <span class="nav-badge" style="margin-left:auto;">{{ pending_submissions_count }}</span>
+                    {% endif %}
+                </a>
+            </li>
+            <li {% if request.resolver_match.url_name == 'gradebook' or request.resolver_match.url_name == 'gradebook_all' %}class="active"{% endif %}>
+                <a href="{% url 'gradebook' %}"><span>📊</span><span>Журнал</span></a>
+            </li>
+            <li {% if request.resolver_match.url_name == 'teacher_students' or request.resolver_match.url_name == 'teacher_student_edit' %}class="active"{% endif %}>
+                <a href="{% url 'teacher_students' %}"><span>👥</span><span>Учні та класи</span></a>
+            </li>
+            <li {% if request.resolver_match.url_name == 'ai_batch_check' %}class="active"{% endif %}>
+                <a href="{% url 'ai_batch_check' %}"><span>⚡</span><span>ШІ-перевірка</span></a>
+            </li>
+            <li {% if request.resolver_match.url_name == 'teacher_settings' or request.resolver_match.url_name == 'activity_log' %}class="active"{% endif %}>
+                <a href="{% url 'teacher_settings' %}"><span>⚙️</span><span>Налаштування</span></a>
+            </li>
+        </ul>
+    </div>
+
+    <div class="sidebar-card">
+        <div class="sidebar-header">Перегляд</div>
+        <ul class="sidebar-list" role="list">
+            <li>
+                <a href="{% url 'index' %}"><span>🏠</span><span>Стрічка учнів</span></a>
+            </li>
+        </ul>
+    </div>
+
+</aside>

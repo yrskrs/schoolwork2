@@ -1,0 +1,1516 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Центр налаштувань — Шкільні Завдання{% endblock %}
+
+{% block content %}
+<div class="page-wrapper">
+
+    <!-- ── Двоколонковий layout сайту ────────────────────────────────────── -->
+    <div class="feed-layout">
+
+        <!-- ════ ЛІВИЙ САЙДБАР НАЛАШТУВАНЬ ТА АДМІНІСТРАТОРА ════════════════ -->
+        {% include 'feed/components/settings_sidebar.html' %}
+
+        <!-- ════ ЦЕНТРАЛЬНА ЧАСТИНА: ЦЕНТР НАЛАШТУВАНЬ ════════════════════════ -->
+        <div class="feed-main-content">
+
+            <!-- ══ Заголовок Центру Налаштувань ═════════════════════════════════ -->
+            <div class="page-hero">
+                <div class="page-hero-kicker">Параметри системи</div>
+                <h1>Центр налаштувань</h1>
+                <div class="page-hero-sub">{{ teacher.full_name }} · {{ school.name }}</div>
+            </div>
+
+
+            <!-- ═══════════════════════════════════════════════════════════════════ -->
+            <!-- 1. ВКЛАДКА: ПРОФІЛЬ ВЧИТЕЛЯ                                         -->
+            <!-- ═══════════════════════════════════════════════════════════════════ -->
+            <div id="tab-section-profile" class="settings-tab-pane" style="{% if active_tab != 'profile' %}display:none;{% endif %}">
+
+                <!-- 1.1. Основні дані та фото аватара -->
+                <div class="form-card mb-4">
+                    <div class="form-card-header">
+                        <h2 class="form-card-title">✏️ Особисті дані та аватар</h2>
+                    </div>
+
+                    <div class="form-card-body">
+                        <div style="text-align:center;margin-bottom:24px">
+                            <div id="avatar-preview-container" style="width:88px;height:88px;margin:0 auto 12px;display:flex;align-items:center;justify-content:center">
+                                <img id="avatar-preview-img"
+                                     src="{% if teacher.avatar_image %}{{ teacher.avatar_image.url }}{% endif %}"
+                                     alt="{{ teacher.full_name|default:'Превʼю аватара' }}"
+                                     class="teacher-avatar-img"
+                                     style="width:88px;height:88px;border-radius:50%;object-fit:cover;{% if not teacher.avatar_image %}display:none;{% endif %}">
+                                <div id="avatar-initials-box"
+                                     class="teacher-avatar"
+                                     style="width:88px;height:88px;border-radius:50%;font-size:28px;font-weight:700;display:flex;align-items:center;justify-content:center;color:#fff;background:{{ teacher.avatar_color }};{% if teacher.avatar_image %}display:none;{% endif %}">
+                                    {{ teacher.get_initials }}
+                                </div>
+                            </div>
+
+                            <div style="font-size:14px;color:var(--color-text-muted)">
+                                Логін для входу: <strong>{{ teacher.user.username }}</strong>
+                            </div>
+
+                            {% if teacher.avatar_image %}
+                            <form method="POST" style="display:inline-block;margin-top:10px">
+                                {% csrf_token %}
+                                <input type="hidden" name="action" value="remove_avatar">
+                                <button type="submit" class="btn btn-secondary btn-sm" style="color:var(--color-danger);border-color:rgba(239,68,68,0.3);font-size:12px" data-confirm="Прибрати фото аватара та повернути кольорові ініціали?">
+                                    🗑️ Прибрати фото аватара
+                                </button>
+                            </form>
+                            {% endif %}
+                        </div>
+
+                        <form method="POST" enctype="multipart/form-data">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="update_profile">
+
+                            <div class="form-group">
+                                <label class="form-label required" for="id_full_name">ПІБ вчителя</label>
+                                {{ profile_form.full_name }}
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label" for="avatar-file-input">
+                                    📷 Змінити фото аватара
+                                    <span class="text-muted text-xs" style="font-weight:normal">(завантажте фото чи зображення)</span>
+                                </label>
+                                {{ profile_form.avatar_image }}
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label" for="id_avatar_color">
+                                    🎨 Колір фону ініціалів (якщо без фото)
+                                </label>
+                                <div style="display:flex;align-items:center;gap:10px">
+                                    {{ profile_form.avatar_color }}
+                                    <span class="text-muted text-xs">Використовується для кольорової плашки з ініціалами</span>
+                                </div>
+                            </div>
+
+                            <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px">
+                                <button type="submit" class="btn btn-primary" style="font-weight:700;">💾 Зберегти профіль</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- 1.2. Зміна власного пароля -->
+                <div class="form-card mb-4">
+                    <div class="form-card-header">
+                        <h2 class="form-card-title">🔐 Безпека та зміна пароля</h2>
+                    </div>
+                    <div class="form-card-body">
+                        <form method="POST" style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="change_own_password">
+                            <div class="form-group" style="margin:0;flex:1;min-width:220px;">
+                                <label class="form-label required">Новий пароль для вашого акаунта</label>
+                                <input type="password" name="new_password" class="form-input" placeholder="Введіть новий пароль" required minlength="4">
+                            </div>
+                            <button type="submit" class="btn btn-secondary" style="font-weight:700;">
+                                🔑 Змінити мій пароль
+                            </button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- 1.3. Мої предмети -->
+                <div class="form-card mb-4">
+                    <div class="form-card-header">
+                        <h2 class="form-card-title">📚 Мої предмети (які я викладаю)</h2>
+                    </div>
+                    <div class="form-card-body">
+                        <p class="text-muted text-sm mb-3">
+                            Предмети, прив'язані до вашого профілю, автоматично підставляються при створенні завдань.
+                        </p>
+
+                        <!-- Список активних предметів вчителя -->
+                        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px">
+                            {% for subject in teacher_subjects %}
+                            <div style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:var(--radius-full);background:var(--color-primary-light);border:1px solid var(--color-primary);font-size:13px">
+                                <span>{{ subject.icon }}</span>
+                                <span style="font-weight:700;color:var(--color-primary-text)">{{ subject.name }}</span>
+                                <form method="POST" style="display:inline;margin:0">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="action" value="remove_teacher_subject">
+                                    <input type="hidden" name="subject_id" value="{{ subject.id }}">
+                                    <button type="submit" class="btn-remove-chip" data-confirm="Прибрати предмет «{{ subject.name }}» з вашого профілю?" title="Прибрати з профілю">✕</button>
+                                </form>
+                            </div>
+                            {% empty %}
+                            <p class="text-muted text-sm">У вашому профілі ще не вказано жодного предмету.</p>
+                            {% endfor %}
+                        </div>
+
+                        <!-- Додати існуючий предмет -->
+                        {% if other_subjects %}
+                        <div class="divider"></div>
+                        <h3 style="font-size:13px;font-weight:700;margin-bottom:8px">➕ Додати предмет із загального каталогу:</h3>
+                        <form method="POST" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px;">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="add_teacher_subject">
+                            <select name="subject_id" class="form-select" style="max-width:280px" required>
+                                <option value="">— Оберіть предмет —</option>
+                                {% for subj in other_subjects %}
+                                <option value="{{ subj.id }}">{{ subj.icon }} {{ subj.name }}</option>
+                                {% endfor %}
+                            </select>
+                            <button type="submit" class="btn btn-secondary btn-sm" style="font-weight:700;">＋ Додати</button>
+                        </form>
+                        {% endif %}
+
+                        <!-- Створити абсолютно новий предмет -->
+                        <div class="divider"></div>
+                        <details>
+                            <summary style="font-size:13px;font-weight:700;cursor:pointer;color:var(--color-primary)">
+                                ＋ Створити новий предмет у базі закладу
+                            </summary>
+                            <form method="POST" style="margin-top:14px;background:var(--color-bg-secondary);padding:16px;border-radius:var(--radius-md);border:1px solid var(--color-border);">
+                                {% csrf_token %}
+                                <input type="hidden" name="action" value="create_subject">
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label class="form-label required">Назва предмету</label>
+                                        {{ subject_form.name }}
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="form-label">Іконка (емодзі)</label>
+                                        {{ subject_form.icon }}
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Колір мітки</label>
+                                    {{ subject_form.color }}
+                                </div>
+                                <button type="submit" class="btn btn-secondary btn-sm" style="font-weight:700;">Створити та закріпити за собою</button>
+                            </form>
+                        </details>
+                    </div>
+                </div>
+
+                <!-- 1.4. Мої класи -->
+                <div class="form-card mb-4">
+                    <div class="form-card-header">
+                        <h2 class="form-card-title">🏫 Мої класи (в яких я викладаю)</h2>
+                    </div>
+                    <div class="form-card-body">
+                        <p class="text-muted text-sm mb-3">
+                            Класи, де ви викладаєте або є класним керівником.
+                        </p>
+
+                        <!-- Список активних класів вчителя -->
+                        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px">
+                            {% for cgroup in teacher_classes %}
+                            <div style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:var(--radius-full);background:var(--color-bg-secondary);border:1px solid var(--color-border);font-size:13px">
+                                <span class="class-badge">{{ cgroup.grade }}{{ cgroup.letter }}</span>
+                                <span style="font-weight:700">{{ cgroup.name }}</span>
+                                <form method="POST" style="display:inline;margin:0">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="action" value="remove_teacher_class">
+                                    <input type="hidden" name="class_id" value="{{ cgroup.id }}">
+                                    <button type="submit" class="btn-remove-chip" data-confirm="Прибрати клас «{{ cgroup.name }}» з вашого профілю?" title="Прибрати з профілю">✕</button>
+                                </form>
+                            </div>
+                            {% empty %}
+                            <p class="text-muted text-sm">У вашому профілі ще не додано жодного класу.</p>
+                            {% endfor %}
+                        </div>
+
+                        <!-- Додати існуючий клас -->
+                        {% if other_classes %}
+                        <div class="divider"></div>
+                        <h3 style="font-size:13px;font-weight:700;margin-bottom:8px">➕ Додати клас зі списку закладу:</h3>
+                        <form method="POST" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px;">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="add_teacher_class">
+                            <select name="class_id" class="form-select" style="max-width:280px" required>
+                                <option value="">— Оберіть клас —</option>
+                                {% for cgroup in other_classes %}
+                                <option value="{{ cgroup.id }}">{{ cgroup.name }}</option>
+                                {% endfor %}
+                            </select>
+                            <button type="submit" class="btn btn-secondary btn-sm" style="font-weight:700;">＋ Додати</button>
+                        </form>
+                        {% endif %}
+
+                        <!-- Створити новий клас -->
+                        <div class="divider"></div>
+                        <details>
+                            <summary style="font-size:13px;font-weight:700;cursor:pointer;color:var(--color-primary)">
+                                ＋ Створити новий клас у базі закладу
+                            </summary>
+                            <form method="POST" style="margin-top:14px;background:var(--color-bg-secondary);padding:16px;border-radius:var(--radius-md);border:1px solid var(--color-border);">
+                                {% csrf_token %}
+                                <input type="hidden" name="action" value="create_class">
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label class="form-label required">Назва класу (наприклад: 9А)</label>
+                                        {{ class_form.name }}
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="form-label required">Паралель (цифра)</label>
+                                        {{ class_form.grade }}
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Літера класу</label>
+                                    {{ class_form.letter }}
+                                </div>
+                                <button type="submit" class="btn btn-secondary btn-sm" style="font-weight:700;">Створити та закріпити за собою</button>
+                            </form>
+                        </details>
+                    </div>
+                </div>
+
+            </div>
+
+
+            <!-- ═══════════════════════════════════════════════════════════════════ -->
+            <!-- 2. ВКЛАДКА: СЕРЕДОВИЩЕ ТА ЗАКЛАД                                    -->
+            <!-- ═══════════════════════════════════════════════════════════════════ -->
+            <div id="tab-section-environment" class="settings-tab-pane" style="{% if active_tab != 'environment' %}display:none;{% endif %}">
+
+                <!-- 2.1. Заклад та резервне копіювання -->
+                <div class="form-card mb-4">
+                    <div class="form-card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+                        <h2 class="form-card-title">🏫 Параметри закладу освіти</h2>
+                        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                            <a href="{% url 'activity_log' %}" class="btn btn-secondary btn-sm" style="font-weight:700;">
+                                🕒 Журнал дій (Логи)
+                            </a>
+                            <a href="{% url 'download_database_backup' %}" class="btn btn-secondary btn-sm" style="font-weight:700;color:var(--color-primary);">
+                                💾 Резервна копія БД (SQLite)
+                            </a>
+                        </div>
+                    </div>
+
+                    <div class="form-card-body">
+                        {% if is_superadmin_mode %}
+                        <form method="POST" style="margin-bottom:20px;">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="update_school_name">
+                            <label class="form-label required" style="font-weight:700;">Назва школи / навчального закладу:</label>
+                            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+                                <input type="text" name="school_name" value="{{ school.name }}" class="form-input" style="flex:1;min-width:220px;" required>
+                                <button type="submit" class="btn btn-primary" style="font-weight:700;">✓ Зберегти назву</button>
+                            </div>
+                        </form>
+                        {% else %}
+                        <div style="padding:12px 16px;background:var(--color-bg-secondary);border-radius:var(--radius-md);border:1px solid var(--color-border);margin-bottom:18px;">
+                            <div style="font-size:12px;color:var(--color-text-muted);text-transform:uppercase;font-weight:700;">Назва вашого закладу</div>
+                            <div style="font-size:18px;font-weight:800;margin-top:2px;">{{ school.name }}</div>
+                            {% if user.is_superuser and not is_superadmin_mode %}
+                            <p style="font-size:12px;color:var(--color-text-muted);margin-top:8px;">Щоб змінити назву, увімкніть адмін-режим у лівому меню.</p>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+
+                        <!-- Статистика середовища -->
+                        <div style="font-size:13px;font-weight:800;color:var(--color-text-primary);margin-bottom:10px;">
+                            📊 Стан шкільного середовища:
+                        </div>
+                        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;">
+                            <div class="sidebar-card" style="padding:12px;text-align:center;">
+                                <div style="font-size:22px;font-weight:900;color:var(--color-primary);">{{ env_stats.total_teachers }}</div>
+                                <div class="text-muted text-xs" style="font-weight:700;">👥 Вчителів</div>
+                            </div>
+                            <div class="sidebar-card" style="padding:12px;text-align:center;">
+                                <div style="font-size:22px;font-weight:900;color:#059669;">{{ env_stats.total_classes }}</div>
+                                <div class="text-muted text-xs" style="font-weight:700;">🏫 Класів</div>
+                            </div>
+                            <div class="sidebar-card" style="padding:12px;text-align:center;">
+                                <div style="font-size:22px;font-weight:900;color:#2563eb;">{{ env_stats.total_subjects }}</div>
+                                <div class="text-muted text-xs" style="font-weight:700;">📚 Предметів</div>
+                            </div>
+                            <div class="sidebar-card" style="padding:12px;text-align:center;">
+                                <div style="font-size:22px;font-weight:900;color:#7c3aed;">{{ env_stats.total_assignments }}</div>
+                                <div class="text-muted text-xs" style="font-weight:700;">📋 Завдань</div>
+                            </div>
+                            <div class="sidebar-card" style="padding:12px;text-align:center;">
+                                <div style="font-size:22px;font-weight:900;color:#d97706;">{{ env_stats.total_submissions }}</div>
+                                <div class="text-muted text-xs" style="font-weight:700;">📥 Зданих робіт</div>
+                            </div>
+                            <div class="sidebar-card" style="padding:12px;text-align:center;">
+                                <div style="font-size:22px;font-weight:900;color:var(--color-text-primary);">{{ env_stats.db_size }}</div>
+                                <div class="text-muted text-xs" style="font-weight:700;">💾 Розмір БД</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2.2. Адміністрування вчителів та доступів (Для Супер-Адміністратора) -->
+                {% if user.is_superuser %}
+                <div class="form-card mb-4" style="border-color:{% if is_superadmin_mode %}#f59e0b{% else %}var(--color-border){% endif %};">
+                    <div class="form-card-header">
+                        <h2 class="form-card-title">Керування вчителями закладу</h2>
+                    </div>
+
+                    <div class="form-card-body">
+                        {% if not is_superadmin_mode %}
+                        <div style="padding:14px 18px;background:var(--color-bg-secondary);border:1px dashed var(--color-border);border-radius:var(--radius-md);margin-bottom:20px;">
+                            <div style="font-weight:700;font-size:13.5px;">Перегляд списку вчителів</div>
+                            <div style="font-size:12px;color:var(--color-text-muted);margin-top:2px;">
+                                Для додавання, зміни паролів або видалення увімкніть адмін-режим у лівому меню.
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        <!-- Створення нового вчителя -->
+                        {% if is_superadmin_mode %}
+                        <h3 style="font-size:14px;font-weight:800;margin-bottom:10px;">➕ Створити новий обліковий запис вчителя</h3>
+                        <form method="POST" style="margin-bottom:24px;">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="create_teacher_account">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label class="form-label required">Логін (username)</label>
+                                    {{ teacher_create_form.username }}
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label required">Початковий пароль</label>
+                                    {{ teacher_create_form.password }}
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label required">ПІБ вчителя</label>
+                                {{ teacher_create_form.full_name }}
+                            </div>
+                            <div class="form-group">
+                                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:600;font-size:13px;">
+                                    {{ teacher_create_form.is_superuser }}
+                                    <span>👑 Надати статус Супер-Адміністратора</span>
+                                </label>
+                            </div>
+                            <button type="submit" class="btn btn-primary" style="font-weight:700;">➕ Створити акаунт</button>
+                        </form>
+
+                        <div class="divider"></div>
+                        {% endif %}
+
+                        <!-- Список зареєстрованих вчителів -->
+                        <h3 style="font-size:14px;font-weight:800;margin-bottom:12px;">👥 Зареєстровані вчителі закладу ({{ all_teachers|length }})</h3>
+                        <div style="display:flex;flex-direction:column;gap:10px;">
+                            {% for t in all_teachers %}
+                            <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border:1px solid var(--color-border);border-radius:var(--radius-md);background:var(--color-bg-secondary);flex-wrap:wrap;gap:10px;">
+                                <div class="d-flex align-center gap-2">
+                                    <div class="avatar-mini" style="background:{{ t.avatar_color }};width:36px;height:36px;font-size:13px;">{{ t.get_initials }}</div>
+                                    <div>
+                                        <div style="font-weight:700;font-size:14px;">{{ t.full_name }}</div>
+                                        <div class="text-muted text-xs">
+                                            Логін: <strong>{{ t.user.username }}</strong>
+                                            {% if t.user.is_superuser %}
+                                            <span class="status-badge status-published" style="font-size:9px;margin-left:4px;">👑 Супер-Адмін</span>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                                    {% if is_superadmin_mode %}
+                                    <!-- Скидання пароля -->
+                                    <form method="POST" style="display:inline-flex;gap:4px;align-items:center;margin:0;">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="action" value="reset_teacher_password">
+                                        <input type="hidden" name="user_id" value="{{ t.user.id }}">
+                                        <input type="password" name="new_password" placeholder="Новий пароль" class="form-input" style="padding:4px 8px;font-size:12px;width:120px;margin:0;" required>
+                                        <button type="submit" class="btn btn-secondary btn-sm" style="font-size:11px;font-weight:700;" data-confirm="Змінити пароль для «{{ t.full_name }}»?">
+                                            🔑 Пароль
+                                        </button>
+                                    </form>
+
+                                    {% if t.user != request.user %}
+                                    <!-- Перемикання супер-адміна -->
+                                    <form method="POST" style="display:inline;margin:0;">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="action" value="toggle_teacher_superadmin">
+                                        <input type="hidden" name="user_id" value="{{ t.user.id }}">
+                                        <button type="submit" class="btn btn-secondary btn-sm" style="font-size:11px;">
+                                            {% if t.user.is_superuser %}Зняти адміна{% else %}Зробити адміном{% endif %}
+                                        </button>
+                                    </form>
+
+                                    <!-- Видалення вчителя -->
+                                    <form method="POST" style="display:inline;margin:0;">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="action" value="delete_teacher">
+                                        <input type="hidden" name="teacher_id" value="{{ t.id }}">
+                                        <button type="submit" class="btn btn-danger btn-sm" style="font-size:11px;" data-confirm="Видалити вчителя «{{ t.full_name }}» та всі його матеріали?">
+                                            🗑️
+                                        </button>
+                                    </form>
+                                    {% endif %}
+
+                                    {% else %}
+                                    <!-- Режим перегляду -->
+                                    <a href="{% url 'enter_superadmin_mode' %}" class="btn btn-secondary btn-sm" style="font-size:11px;color:var(--color-text-muted);" title="Увімкніть режим адміна для редагування">
+                                        🔒 Редагувати
+                                    </a>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
+            </div>
+
+
+            <!-- ═══════════════════════════════════════════════════════════════════ -->
+            <!-- 3. ВКЛАДКА: НАЛАШТУВАННЯ ШІ (GEMINI AI & ПРІОРИТЕТИ МОДЕЛЕЙ)        -->
+            <!-- ═══════════════════════════════════════════════════════════════════ -->
+            <div id="tab-section-ai" class="settings-tab-pane" style="{% if active_tab != 'ai' %}display:none;{% endif %}">
+
+                <!-- 3.1. Параметри підключення API та глобальне ввімкнення -->
+                <div class="form-card mb-4">
+                    <div class="form-card-header">
+                        <h2 class="form-card-title">🤖 Налаштування модуля Google Gemini AI</h2>
+                    </div>
+
+                    <div class="form-card-body">
+                        <form method="POST" id="ai-global-config-form">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="save_ai_config">
+
+                            <!-- Чекбокс увімкнення модуля -->
+                            <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--color-bg-secondary);border-radius:var(--radius-md);border:1px solid var(--color-border);margin-bottom:16px;">
+                                <input type="checkbox" name="is_enabled" id="is_enabled" value="1" {% if ai_settings.is_enabled %}checked{% endif %} style="width:20px;height:20px;accent-color:var(--color-primary);cursor:pointer;">
+                                <label for="is_enabled" style="font-weight:700;font-size:14px;cursor:pointer;margin:0;color:var(--color-text-primary);">
+                                    Увімкнути модуль автоматичного педагогічного аналізу та оцінювання робіт учнів ШІ
+                                </label>
+                            </div>
+
+                            <!-- Поле API Key -->
+                            <div class="form-group">
+                                <label for="api_key" class="form-label" style="font-weight:700;display:flex;justify-content:space-between;align-items:center;">
+                                    <span>Google Gemini API Key <span style="color:#ef4444">*</span></span>
+                                    <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" style="font-size:12px;color:var(--color-primary);font-weight:600;text-decoration:none;">
+                                        Отримати безкоштовний ключ в Google AI Studio ↗
+                                    </a>
+                                </label>
+                                <div style="position:relative;display:flex;gap:8px;">
+                                    <input type="password" name="api_key" id="api_key" value="{{ ai_settings.api_key }}"
+                                           placeholder="AIzaSy..." class="form-input" style="flex:1;font-family:monospace;font-size:14px;">
+                                    <button type="button" class="btn btn-secondary btn-sm" onclick="toggleKeyVisibility()" style="padding:0 12px;" title="Показати/приховати ключ">
+                                        👁️
+                                    </button>
+                                    <button type="button" class="btn btn-secondary btn-sm" id="btn-test-conn" onclick="testConnection()" style="font-weight:700;white-space:nowrap;padding:0 16px;">
+                                        🧪 Тест з'єднання
+                                    </button>
+                                </div>
+                                <div id="conn-test-result" style="display:none;margin-top:8px;padding:8px 12px;border-radius:var(--radius-sm);font-size:13px;"></div>
+                            </div>
+
+                            <!-- Вибір активної моделі та регулятор креативності -->
+                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
+                                <div class="form-group" style="margin:0;">
+                                    <label for="model_name" class="form-label" style="font-weight:700;">
+                                        Основна активна модель (Пріоритет #1):
+                                    </label>
+                                    <select name="model_name" id="model_name" class="form-input" style="font-family:monospace;font-weight:700;font-size:13px;">
+                                        {% for m in saved_models %}
+                                        <option value="{{ m }}" {% if ai_settings.model_name == m %}selected{% endif %}>{{ m }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+
+                                <div class="form-group" style="margin:0;">
+                                    <label for="temperature" class="form-label" style="font-weight:700;">
+                                        Креативність (Temperature: <span id="temp-val">{{ ai_settings.temperature|default:0.2 }}</span>):
+                                    </label>
+                                    <input type="range" name="temperature" id="temperature" min="0.0" max="1.0" step="0.05"
+                                           value="{{ ai_settings.temperature|default:0.2 }}" class="form-input" style="padding:0;cursor:pointer;"
+                                           oninput="document.getElementById('temp-val').textContent = this.value">
+                                    <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--color-text-muted);margin-top:2px;">
+                                        <span>0.0 (Строга точність)</span>
+                                        <span>1.0 (Творча оцінка)</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Системний промт НУШ -->
+                            <div class="form-group">
+                                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                                    <label for="system_prompt" class="form-label" style="font-weight:700;margin:0;">
+                                        📜 Системний промт та критерії оцінювання (НУШ):
+                                    </label>
+                                    <button type="button" class="btn btn-secondary btn-sm" onclick="resetDefaultPrompt()" style="font-size:11px;color:#d97706;padding:2px 8px;">
+                                        🔄 Скинути до стандарту НУШ
+                                    </button>
+                                </div>
+                                <textarea name="system_prompt" id="system_prompt" rows="8" class="form-input"
+                                          style="font-family:monospace;font-size:12px;line-height:1.4;resize:vertical;">{{ ai_settings.system_prompt }}</textarea>
+                            </div>
+
+                            <div style="display:flex;justify-content:flex-end;">
+                                <button type="submit" class="btn btn-primary" style="font-weight:800;padding:10px 24px;">
+                                    💾 Зберегти конфігурацію ШІ
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- 3.2. Шаблони критеріїв оцінювання та документи МОН (Word / PDF / TXT) -->
+                <div class="form-card mb-4" style="border-color:var(--color-primary);">
+                    <div class="form-card-header" style="background:var(--color-primary-light);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+                        <div>
+                            <h2 class="form-card-title" style="color:var(--color-primary-text);display:flex;align-items:center;gap:6px;">
+                                <span>📋</span> <span>Шаблони критеріїв оцінювання та файли МОН</span>
+                            </h2>
+                            <div style="font-size:12px;color:var(--color-text-muted);margin-top:2px;">
+                                Обирайте між НУШ (ГР 1-4), традиційною 12-бальною системою або завантажуйте файли Word (.docx)/PDF з сайту МОН України.
+                            </div>
+                        </div>
+                        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                            <form method="POST" style="display:inline;margin:0;" onsubmit="return confirm('Відновити та оновити стандартні галузеві шаблони критеріїв МОН України (Інформатика ГР 1-4, Математика, Мова тощо)?');">
+                                {% csrf_token %}
+                                <input type="hidden" name="action" value="restore_default_presets">
+                                <button type="submit" class="btn btn-secondary btn-sm" style="font-weight:700;" title="Відновити або скинути до стандартних критеріїв МОН">
+                                    🔄 Відновити критерії МОН
+                                </button>
+                            </form>
+                            <button type="button" class="btn btn-primary btn-sm" onclick="toggleNewPresetForm()" style="font-weight:700;">
+                                ➕ Новий шаблон критеріїв
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="form-card-body">
+                        <!-- Список наявних шаблонів -->
+                        <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:20px;">
+                            {% for p in criteria_presets %}
+                            <div style="border:1px solid {% if p.is_default %}#10b981{% else %}var(--color-border){% endif %};border-radius:var(--radius-md);background:var(--color-surface);padding:14px 16px;box-shadow:0 1px 4px rgba(0,0,0,0.03);">
+                                <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;">
+                                    <div style="flex:1;min-width:240px;">
+                                        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                                            <span style="font-weight:800;font-size:15px;color:var(--color-text-primary);">{{ p.name }}</span>
+                                            {% if p.is_default %}
+                                             <span class="badge" style="background:#10b981;color:#fff;font-weight:800;font-size:11px;">⭐ Активний за замовчуванням</span>
+                                            {% endif %}
+                                            {% if p.evaluation_type == 'nus_gr' %}
+                                            <span class="badge" style="background:rgba(99,102,241,0.15);color:var(--color-primary);font-weight:800;font-size:11px;">🌟 Групи результатів (ГР)</span>
+                                            {% elif p.evaluation_type == 'traditional' %}
+                                            <span class="badge" style="background:rgba(245,158,11,0.15);color:#d97706;font-weight:800;font-size:11px;">📊 Традиційна 1-12</span>
+                                            {% endif %}
+                                            {% if p.is_system %}
+                                            <span class="badge" style="background:var(--color-bg-secondary);color:var(--color-text-muted);font-size:10px;font-weight:700;">Базовий системний</span>
+                                            {% endif %}
+                                        </div>
+
+                                        {% if p.description %}
+                                        <div style="font-size:12.5px;color:var(--color-text-secondary);margin-top:4px;">
+                                            {{ p.description }}
+                                        </div>
+                                        {% endif %}
+
+                                        <!-- Визначені групи результатів (ГР) -->
+                                        {% with gr_list=p.get_gr_list %}
+                                        {% if gr_list %}
+                                        <div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px;">
+                                            {% for gr in gr_list %}
+                                            <span class="badge" style="background:var(--color-bg-secondary);border:1px solid rgba(99,102,241,0.25);color:var(--color-text-primary);font-size:11px;font-weight:600;padding:3px 8px;" title="{{ gr.name }}">
+                                                <strong style="color:var(--color-primary);">{{ gr.code }}:</strong> {{ gr.name|truncatechars:38 }}
+                                            </span>
+                                            {% endfor %}
+                                        </div>
+                                        {% endif %}
+                                        {% endwith %}
+
+                                        <!-- Прикріплений документ МОН -->
+                                        {% if p.document_file or p.extracted_criteria_text %}
+                                        <div style="margin-top:8px;display:inline-flex;align-items:center;gap:6px;background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.3);border-radius:var(--radius-sm);padding:4px 10px;font-size:12px;">
+                                            <span>📄 Документ МОН / Інструкція ГР:</span>
+                                            {% if p.document_file %}
+                                            <a href="{{ p.document_file.url }}" download class="text-primary font-bold" style="text-decoration:none;" title="Завантажити оригінал файлу">
+                                                <strong>{{ p.document_name|default:p.document_file.name }}</strong> ⬇️
+                                            </a>
+                                            {% else %}
+                                            <strong>{{ p.document_name|default:"Файл критеріїв" }}</strong>
+                                            {% endif %}
+
+                                            <button type="button" class="btn btn-secondary btn-sm" onclick="toggleCriteriaText('{{ p.id }}')" style="font-size:10.5px;padding:1px 6px;margin-left:6px;">
+                                                👁️ Текст критеріїв
+                                            </button>
+                                        </div>
+                                        {% endif %}
+                                    </div>
+
+                                    <!-- Кнопки дій -->
+                                    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                                        {% if not p.is_default %}
+                                        <form method="POST" action="{% url 'teacher_settings' %}?tab=ai" style="display:inline;margin:0;">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="action" value="set_default_criteria_preset">
+                                            <input type="hidden" name="preset_id" value="{{ p.id }}">
+                                            <button type="submit" class="btn btn-secondary btn-sm" style="font-size:11.5px;font-weight:700;color:#059669;" title="Зробити цей шаблон основним за замовчуванням">
+                                                ⭐ Обрати основним
+                                            </button>
+                                        </form>
+                                        {% endif %}
+
+                                        <button type="button" class="btn btn-secondary btn-sm"
+                                                data-preset-id="{{ p.id }}"
+                                                data-preset-name="{{ p.name }}"
+                                                data-preset-type="{{ p.evaluation_type }}"
+                                                data-preset-desc="{{ p.description|default:'' }}"
+                                                data-preset-gr="{{ p.gr_definitions|default:'' }}"
+                                                data-preset-default="{{ p.is_default|yesno:'1,0' }}"
+                                                data-preset-system="{{ p.is_system|yesno:'1,0' }}"
+                                                data-preset-doc="{{ p.document_name|default:'' }}"
+                                                onclick="editPresetModalFromBtn(this)" style="font-size:11.5px;font-weight:700;">
+                                            ✏️ Редагувати
+                                        </button>
+
+                                        <button type="button" class="btn btn-danger btn-sm"
+                                                onclick="deleteCriteriaPreset('{{ p.id }}', '{{ p.name|escapejs }}')"
+                                                style="font-size:11.5px;padding:3px 8px;font-weight:700;"
+                                                title="Видалити цей шаблон критеріїв">
+                                            🗑️ Видалити
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- Розгорнутий блок розпізнаного тексту документа МОН -->
+                                {% if p.extracted_criteria_text %}
+                                <div id="criteria-text-{{ p.id }}" style="display:none;margin-top:10px;padding:10px 14px;background:var(--color-bg-secondary);border:1px dashed var(--color-border);border-radius:var(--radius-sm);font-size:11.5px;font-family:monospace;white-space:pre-wrap;max-height:220px;overflow-y:auto;line-height:1.4;">
+                                    <strong>Видобутий текст критеріїв із файлу «{{ p.document_name }}»:</strong>
+{{ p.extracted_criteria_text }}
+                                </div>
+                                {% endif %}
+
+                                <!-- Прихований блок системного промпту для JS копіювання -->
+                                <textarea id="preset-prompt-{{ p.id }}" style="display:none;">{{ p.system_prompt }}</textarea>
+                                <textarea id="preset-gr-{{ p.id }}" style="display:none;">{{ p.gr_definitions }}</textarea>
+                            </div>
+                            {% endfor %}
+                        </div>
+
+                        <!-- Форма додавання нового шаблону (прихована за замовчуванням або розгортається) -->
+                        <div id="new-preset-form-box" style="display:none;background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:18px;margin-top:12px;">
+                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+                                <h3 style="font-size:15px;font-weight:800;margin:0;color:var(--color-text-primary);">
+                                    ➕ Створити новий шаблон критеріїв оцінювання (НУШ / ГР)
+                                </h3>
+                                <button type="button" class="btn btn-secondary btn-sm" onclick="toggleNewPresetForm()">✕ Закрити</button>
+                            </div>
+
+                            <form method="POST" enctype="multipart/form-data">
+                                {% csrf_token %}
+                                <input type="hidden" name="action" value="create_criteria_preset">
+
+                                <div class="form-row">
+                                    <div class="form-group" style="flex:2;">
+                                        <label class="form-label required" style="font-weight:700;">Назва шаблону</label>
+                                        <input type="text" name="preset_name" id="new_preset_name" placeholder="наприклад: Критерії НУШ: Інформатика (ГР 1-3) або МОН наказ 1093" class="form-input" required>
+                                    </div>
+                                    <div class="form-group" style="flex:1;">
+                                        <label class="form-label required" style="font-weight:700;">Тип системи оцінювання</label>
+                                        <select name="evaluation_type" class="form-input" id="new_preset_eval_type" onchange="onEvalTypeChange(this.value, 'new_preset_prompt', 'new_gr_box')">
+                                            <option value="nus_gr" selected>🌟 Оцінювання за групами результатів (ГР 1-4)</option>
+                                            <option value="nus">🌟 Компетентнісне оцінювання НУШ</option>
+                                            <option value="traditional">📊 Класична 1-12 балів</option>
+                                            <option value="custom">📝 Власний шаблон / Методичні МОН</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div class="form-group">
+                                    <label class="form-label" style="font-weight:700;">Короткий опис для вчителів</label>
+                                    <input type="text" name="description" id="new_preset_desc" placeholder="Коротке пояснення коли застосовувати цей шаблон..." class="form-input">
+                                </div>
+
+                                <!-- Конфігурація груп результатів (ГР) -->
+                                <div class="form-group" id="new_gr_box" style="background:var(--color-surface);border:1px solid rgba(99,102,241,0.3);padding:14px;border-radius:var(--radius-md);">
+                                    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px;">
+                                        <label class="form-label" style="font-weight:800;color:var(--color-primary);margin:0;display:flex;align-items:center;gap:6px;">
+                                            <span>📊</span> <span>Групи результатів (ГР) для оцінювання:</span>
+                                        </label>
+                                        <div style="font-size:11px;color:var(--color-text-muted);">
+                                            Швидкі шаблони предметів:
+                                        </div>
+                                    </div>
+
+                                    <!-- Кнопки швидкого заповнення предметних ГР -->
+                                    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;">
+                                        <button type="button" class="btn btn-secondary btn-sm" onclick="fillGrTemplate('informatics', 'new_gr_defs', 'new_preset_name', 'new_preset_desc')" style="font-size:11px;padding:3px 7px;">💻 Інформатика (ГР 1-4)</button>
+                                        <button type="button" class="btn btn-secondary btn-sm" onclick="fillGrTemplate('math', 'new_gr_defs', 'new_preset_name', 'new_preset_desc')" style="font-size:11px;padding:3px 7px;">📐 Математика (ГР 1-3)</button>
+                                        <button type="button" class="btn btn-secondary btn-sm" onclick="fillGrTemplate('language', 'new_gr_defs', 'new_preset_name', 'new_preset_desc')" style="font-size:11px;padding:3px 7px;">📚 Мова/Література (ГР 1-4)</button>
+                                        <button type="button" class="btn btn-secondary btn-sm" onclick="fillGrTemplate('science', 'new_gr_defs', 'new_preset_name', 'new_preset_desc')" style="font-size:11px;padding:3px 7px;">🔬 Природничі (ГР 1-3)</button>
+                                        <button type="button" class="btn btn-secondary btn-sm" onclick="fillGrTemplate('history', 'new_gr_defs', 'new_preset_name', 'new_preset_desc')" style="font-size:11px;padding:3px 7px;">🏛️ Історія (ГР 1-3)</button>
+                                        <button type="button" class="btn btn-secondary btn-sm" onclick="fillGrTemplate('universal', 'new_gr_defs', 'new_preset_name', 'new_preset_desc')" style="font-size:11px;padding:3px 7px;">🌟 Універсальний НУШ (ГР 1-4)</button>
+                                    </div>
+
+                                    <textarea name="gr_definitions" id="new_gr_defs" rows="4" class="form-input" placeholder="ГР 1: Назва першої групи результатів&#10;ГР 2: Назва другої групи результатів&#10;ГР 3: Назва третьої групи результатів" style="font-size:12px;resize:vertical;">ГР 1: Опрацювання інформації та дослідження проблемних ситуацій
+ГР 2: Практична діяльність та виконання навчальних завдань
+ГР 3: Критичне осмислення, аргументація та міркування
+ГР 4: Академічна грамотність та дотримання правил предмету</textarea>
+                                    <div style="font-size:11.5px;color:var(--color-text-muted);margin-top:4px;">
+                                        Вкажіть кожну групу результатів з нового рядка у форматі: <code>ГР 1: Назва</code> або скористайтесь кнопками шаблонів вище.
+                                    </div>
+                                </div>
+
+                                <!-- Прикріплення файлу інструкції / критеріїв МОН -->
+                                <div class="form-group" style="background:var(--color-surface);border:1px dashed var(--color-primary);padding:14px;border-radius:var(--radius-md);">
+                                    <label class="form-label" style="font-weight:800;color:var(--color-primary);display:flex;align-items:center;gap:6px;">
+                                        <span>📎</span> <span>Прикріпити інструкцію / критерії МОН файлом (Word, Excel, PDF, Текст, OpenDocument):</span>
+                                    </label>
+                                    <input type="file" name="document_file" accept=".docx,.doc,.pdf,.xlsx,.xls,.txt,.md,.rtf,.odt,.ods,.csv" class="form-input" style="padding:6px;">
+                                    <div style="font-size:11.5px;color:var(--color-text-muted);margin-top:4px;">
+                                        💡 <strong>Підтримуються всі формати:</strong> Word (.docx, .doc), Таблиці Excel (.xlsx, .xls), PDF (.pdf), Текстові інструкції (.txt, .md, .rtf) та OpenDocument (.odt, .ods). Система автоматично витягне критерії та таблиці й врахує їх при оцінюванні.
+                                    </div>
+                                </div>
+
+                                <div class="form-group">
+                                    <label class="form-label" style="font-weight:700;">Системні інструкції ШІ (Промпт):</label>
+                                    <textarea name="system_prompt" id="new_preset_prompt" rows="6" class="form-input" style="font-family:monospace;font-size:12px;resize:vertical;">{{ default_nus_gr_prompt|default:default_prompt }}</textarea>
+                                </div>
+
+                                <div class="form-group" style="display:flex;align-items:center;gap:8px;">
+                                    <input type="checkbox" name="is_default" id="new_is_default" value="1" style="width:18px;height:18px;accent-color:var(--color-primary);cursor:pointer;">
+                                    <label for="new_is_default" style="font-weight:700;font-size:13px;cursor:pointer;margin:0;">
+                                        ⭐ Встановити цей шаблон як активний за замовчуванням
+                                    </label>
+                                </div>
+
+                                <div style="display:flex;justify-content:flex-end;gap:10px;">
+                                    <button type="button" class="btn btn-secondary" onclick="toggleNewPresetForm()">Скасувати</button>
+                                    <button type="submit" class="btn btn-primary" style="font-weight:800;padding:8px 22px;">
+                                        ➕ Створити шаблон
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+
+                    </div>
+                </div>
+
+                <!-- 3.3. Черга пріоритетів моделей та автоматичний Fallback -->
+                <div class="form-card mb-4">
+                    <div class="form-card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+                        <div>
+                            <h2 class="form-card-title">🔄 Пріоритети моделей та автоматичний перехід (Fallback)</h2>
+                            <div style="font-size:12px;color:var(--color-text-muted);margin-top:2px;">
+                                Якщо модель #1 не відповідає, перевантажена або перевищено ліміт (429 Rate Limit), запит автоматично переходить до наступної моделі.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-card-body">
+                        <!-- Таблиця моделей з пріоритетами -->
+                        <div style="overflow-x:auto;">
+                            <table class="submissions-table" style="width:100%;font-size:13px;">
+                                <thead>
+                                    <tr>
+                                        <th style="width:140px;text-align:center;">Пріоритет</th>
+                                        <th>Назва моделі</th>
+                                        <th style="text-align:center;">Резервний Fallback</th>
+                                        <th style="text-align:center;">Успішно / Помилок</th>
+                                        <th style="text-align:center;">Порядок черги</th>
+                                        <th style="text-align:center;">Дії</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for ms in model_stats %}
+                                    <tr {% if ms.is_active %}style="background:rgba(99,102,241,0.07);font-weight:600;"{% endif %}>
+                                        <!-- Пріоритетний бейдж -->
+                                        <td style="text-align:center;">
+                                            {% if ms.priority == 1 %}
+                                            <span class="badge" style="background:#10b981;color:#fff;font-weight:800;font-size:11px;">🥇 #1 Основна</span>
+                                            {% elif ms.priority == 2 %}
+                                            <span class="badge" style="background:#6366f1;color:#fff;font-weight:800;font-size:11px;">🥈 #2 Резерв 1</span>
+                                            {% elif ms.priority == 3 %}
+                                            <span class="badge" style="background:#f59e0b;color:#fff;font-weight:800;font-size:11px;">🥉 #3 Резерв 2</span>
+                                            {% else %}
+                                            <span class="badge" style="background:var(--color-bg-secondary);color:var(--color-text-muted);font-weight:700;font-size:11px;">#{{ ms.priority }} Резерв</span>
+                                            {% endif %}
+                                        </td>
+
+                                        <!-- Назва -->
+                                        <td style="font-family:monospace;font-weight:700;color:var(--color-text-primary);">
+                                            {{ ms.name }}
+                                            {% if ms.is_active %}
+                                            <span style="font-size:10px;color:var(--color-primary);font-weight:800;margin-left:4px;">(Поточна)</span>
+                                            {% endif %}
+                                        </td>
+
+                                        <!-- Чекбокс увімкнення у fallback -->
+                                        <td style="text-align:center;">
+                                            <form method="POST" style="display:inline;margin:0;">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="action" value="toggle_model_enabled">
+                                                <input type="hidden" name="model_name" value="{{ ms.name }}">
+                                                <button type="submit" class="btn btn-secondary btn-sm" style="font-size:11px;padding:3px 8px;{% if ms.enabled %}color:#059669;font-weight:700;{% else %}color:var(--color-text-muted);{% endif %}" title="Увімкнути/вимкнути автоматичний перехід на цю модель">
+                                                    {% if ms.enabled %}✅ Увімкнено{% else %}⚪ Вимкнено{% endif %}
+                                                </button>
+                                            </form>
+                                        </td>
+
+                                        <!-- Статистика -->
+                                        <td style="text-align:center;font-size:12px;">
+                                            <span style="color:#059669;font-weight:700;">{{ ms.success_checks }}</span>
+                                            <span style="color:var(--color-text-muted);">/</span>
+                                            <span style="color:#ef4444;font-weight:700;">{{ ms.failed_checks }}</span>
+                                        </td>
+
+                                        <!-- Кнопки вгору / вниз -->
+                                        <td style="text-align:center;">
+                                            <div style="display:inline-flex;gap:4px;">
+                                                <form method="POST" style="display:inline;margin:0;">
+                                                    {% csrf_token %}
+                                                    <input type="hidden" name="action" value="move_model_priority">
+                                                    <input type="hidden" name="model_name" value="{{ ms.name }}">
+                                                    <input type="hidden" name="direction" value="up">
+                                                    <button type="submit" class="btn btn-secondary btn-sm" style="padding:2px 6px;font-size:12px;" title="Підняти пріоритет вище" {% if forloop.first %}disabled{% endif %}>
+                                                        ⬆️
+                                                    </button>
+                                                </form>
+                                                <form method="POST" style="display:inline;margin:0;">
+                                                    {% csrf_token %}
+                                                    <input type="hidden" name="action" value="move_model_priority">
+                                                    <input type="hidden" name="model_name" value="{{ ms.name }}">
+                                                    <input type="hidden" name="direction" value="down">
+                                                    <button type="submit" class="btn btn-secondary btn-sm" style="padding:2px 6px;font-size:12px;" title="Опустити пріоритет нижче" {% if forloop.last %}disabled{% endif %}>
+                                                        ⬇️
+                                                    </button>
+                                                </form>
+                                            </div>
+                                        </td>
+
+                                        <!-- Додаткові дії (Тест / Видалити) -->
+                                        <td style="text-align:center;">
+                                            <div style="display:inline-flex;gap:4px;align-items:center;">
+                                                {% if not ms.is_active %}
+                                                <form method="POST" style="display:inline;margin:0;">
+                                                    {% csrf_token %}
+                                                    <input type="hidden" name="action" value="switch_model">
+                                                    <input type="hidden" name="switch_to_model" value="{{ ms.name }}">
+                                                    <button type="submit" class="btn btn-secondary btn-sm" style="font-size:11px;padding:2px 6px;font-weight:700;" title="Зробити основною (Пріоритет #1)">
+                                                        ⭐ Зробити #1
+                                                    </button>
+                                                </form>
+                                                {% endif %}
+
+                                                <button type="button" class="btn btn-secondary btn-sm" onclick="testModelDirect('{{ ms.name }}')" style="font-size:11px;padding:2px 6px;" title="Протестувати з'єднання з моделлю">
+                                                    🧪 Тест
+                                                </button>
+
+                                                <!-- Кнопка видалення моделі -->
+                                                <form method="POST" style="display:inline;margin:0;" onsubmit="return confirm('Видалити модель «{{ ms.name }}» зі списку?');">
+                                                    {% csrf_token %}
+                                                    <input type="hidden" name="action" value="delete_model">
+                                                    <input type="hidden" name="model_to_delete" value="{{ ms.name }}">
+                                                    <button type="submit" class="btn btn-danger btn-sm" style="font-size:11px;padding:2px 6px;" title="Видалити модель">
+                                                        🗑️
+                                                    </button>
+                                                </form>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    {% empty %}
+                                    <tr>
+                                        <td colspan="6" style="text-align:center;padding:16px;color:var(--color-text-muted);">
+                                            Немає збережених моделей.
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Форма додавання нової моделі із зазначенням пріоритету -->
+                        <div style="margin-top:16px;padding:14px 18px;background:var(--color-bg-secondary);border-radius:var(--radius-md);border:1px dashed var(--color-border);">
+                            <form method="POST" style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;">
+                                {% csrf_token %}
+                                <input type="hidden" name="action" value="add_custom_model">
+
+                                <div class="form-group" style="margin:0;flex:2;min-width:220px;">
+                                    <label class="form-label" style="font-weight:700;font-size:13px;">➕ Додати нову модель Gemini:</label>
+                                    <input type="text" name="new_model_name" id="new_model_name" placeholder="наприклад: gemini-3.6-flash, gemini-1.5-pro..."
+                                           class="form-input" list="gemini-model-suggestions" style="font-family:monospace;font-size:13px;font-weight:700;" required>
+                                    <datalist id="gemini-model-suggestions">
+                                        <option value="gemini-2.5-flash">gemini-2.5-flash</option>
+                                        <option value="gemini-3.6-flash">gemini-3.6-flash</option>
+                                        <option value="gemini-2.5-pro">gemini-2.5-pro</option>
+                                        <option value="gemini-1.5-flash">gemini-1.5-flash</option>
+                                        <option value="gemini-1.5-pro">gemini-1.5-pro</option>
+                                    </datalist>
+                                </div>
+
+                                <div class="form-group" style="margin:0;flex:1;min-width:140px;">
+                                    <label class="form-label" style="font-weight:700;font-size:13px;">Пріоритет у черзі:</label>
+                                    <select name="priority" class="form-input" style="font-size:13px;font-weight:700;">
+                                        <option value="1">🥇 Пріоритет #1 (Основна)</option>
+                                        <option value="2">🥈 Пріоритет #2 (Резервна)</option>
+                                        <option value="3">🥉 Пріоритет #3 (Резервна)</option>
+                                        <option value="99" selected>В кінець черги</option>
+                                    </select>
+                                </div>
+
+                                <div class="form-group" style="margin:0;">
+                                    <button type="submit" class="btn btn-primary" style="font-weight:700;padding:8px 18px;">
+                                        ➕ Додати модель
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+
+                    </div>
+                </div>
+
+                <!-- 3.3. Аналітика та статистика використання -->
+                <div class="form-card mb-4">
+                    <div class="form-card-header">
+                        <h2 class="form-card-title">📊 Загальна статистика перевірок ШІ</h2>
+                    </div>
+                    <div class="form-card-body">
+                        <!-- 4 картки метрик -->
+                        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:18px;">
+                            <div class="sidebar-card" style="padding:14px;text-align:center;border-top:3px solid var(--color-primary);">
+                                <div style="font-size:24px;font-weight:900;color:var(--color-primary);">{{ total_ai_checks }}</div>
+                                <div class="text-muted text-xs" style="font-weight:700;margin-top:2px;">Всього перевірок</div>
+                            </div>
+
+                            <div class="sidebar-card" style="padding:14px;text-align:center;border-top:3px solid #10b981;">
+                                <div style="font-size:24px;font-weight:900;color:#059669;">{{ total_ai_success }}</div>
+                                <div class="text-muted text-xs" style="font-weight:700;margin-top:2px;">Успішно оцінено</div>
+                            </div>
+
+                            <div class="sidebar-card" style="padding:14px;text-align:center;border-top:3px solid #8b5cf6;">
+                                <div style="font-size:24px;font-weight:900;color:#7c3aed;">{{ total_applied_grades }}</div>
+                                <div class="text-muted text-xs" style="font-weight:700;margin-top:2px;">Прийнято в журнал</div>
+                            </div>
+
+                            <div class="sidebar-card" style="padding:14px;text-align:center;border-top:3px solid #f59e0b;">
+                                <div style="font-size:24px;font-weight:900;color:#d97706;">{{ level_rework }}</div>
+                                <div class="text-muted text-xs" style="font-weight:700;margin-top:2px;">🔄 На доопрацюванні</div>
+                            </div>
+                        </div>
+
+                        <!-- Рівні НУШ -->
+                        <div style="background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:14px 16px;">
+                            <div style="font-size:12px;font-weight:800;color:var(--color-text-secondary);text-transform:uppercase;margin-bottom:10px;">
+                                Розподіл оцінок за рівнями НУШ:
+                            </div>
+                            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;">
+                                <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:8px 12px;">
+                                    <div style="font-size:11px;font-weight:700;color:#059669;">⭐ Високий (10-12)</div>
+                                    <div style="font-size:16px;font-weight:800;color:var(--color-text-primary);margin-top:2px;">{{ level_high }}</div>
+                                </div>
+                                <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:8px 12px;">
+                                    <div style="font-size:11px;font-weight:700;color:#2563eb;">🔷 Достатній (7-9)</div>
+                                    <div style="font-size:16px;font-weight:800;color:var(--color-text-primary);margin-top:2px;">{{ level_sufficient }}</div>
+                                </div>
+                                <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:8px 12px;">
+                                    <div style="font-size:11px;font-weight:700;color:#d97706;">🔶 Середній (4-6)</div>
+                                    <div style="font-size:16px;font-weight:800;color:var(--color-text-primary);margin-top:2px;">{{ level_medium }}</div>
+                                </div>
+                                <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:8px 12px;">
+                                    <div style="font-size:11px;font-weight:700;color:#dc2626;">🔻 Початковий (1-3)</div>
+                                    <div style="font-size:16px;font-weight:800;color:var(--color-text-primary);margin-top:2px;">{{ level_initial }}</div>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<!-- Модальне вікно редагування шаблону критеріїв -->
+<div id="modal-edit-preset" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:9999;align-items:center;justify-content:center;padding:16px;">
+    <div style="background:var(--color-surface);border-radius:var(--radius-lg);width:100%;max-width:700px;max-height:90vh;overflow-y:auto;padding:24px;box-shadow:0 10px 30px rgba(0,0,0,0.3);position:relative;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;">
+            <h3 style="font-size:17px;font-weight:800;margin:0;color:var(--color-text-primary);" id="edit-preset-title">
+                ✏️ Редагування шаблону критеріїв (НУШ / ГР)
+            </h3>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="closeEditPresetModal()">✕</button>
+        </div>
+
+        <form method="POST" enctype="multipart/form-data" id="edit-preset-form">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="update_criteria_preset">
+            <input type="hidden" name="preset_id" id="edit_preset_id">
+
+            <div class="form-row">
+                <div class="form-group" style="flex:2;">
+                    <label class="form-label required" style="font-weight:700;">Назва шаблону</label>
+                    <input type="text" name="preset_name" id="edit_preset_name" class="form-input" required>
+                </div>
+                <div class="form-group" style="flex:1;">
+                    <label class="form-label required" style="font-weight:700;">Тип системи</label>
+                    <select name="evaluation_type" id="edit_preset_eval_type" class="form-input" onchange="onEvalTypeChange(this.value, 'edit_preset_prompt', 'edit_gr_box')">
+                        <option value="nus_gr">🌟 Оцінювання за групами результатів (ГР 1-4)</option>
+                        <option value="nus">🌟 Компетентнісне оцінювання НУШ</option>
+                        <option value="traditional">📊 Класична 1-12 балів</option>
+                        <option value="custom">📝 Власний шаблон МОН</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" style="font-weight:700;">Короткий опис</label>
+                <input type="text" name="description" id="edit_preset_description" class="form-input">
+            </div>
+
+            <!-- Конфігурація груп результатів (ГР) -->
+            <div class="form-group" id="edit_gr_box" style="background:var(--color-bg-secondary);border:1px solid rgba(99,102,241,0.3);padding:14px;border-radius:var(--radius-md);">
+                <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px;">
+                    <label class="form-label" style="font-weight:800;color:var(--color-primary);margin:0;display:flex;align-items:center;gap:6px;">
+                        <span>📊</span> <span>Групи результатів (ГР) для оцінювання:</span>
+                    </label>
+                    <div style="font-size:11px;color:var(--color-text-muted);">
+                        Швидкі шаблони:
+                    </div>
+                </div>
+
+                <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;">
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="fillGrTemplate('informatics', 'edit_preset_gr_defs')" style="font-size:11px;padding:3px 7px;">💻 Інформатика (ГР 1-4)</button>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="fillGrTemplate('math', 'edit_preset_gr_defs')" style="font-size:11px;padding:3px 7px;">📐 Математика</button>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="fillGrTemplate('language', 'edit_preset_gr_defs')" style="font-size:11px;padding:3px 7px;">📚 Мова/Література</button>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="fillGrTemplate('science', 'edit_preset_gr_defs')" style="font-size:11px;padding:3px 7px;">🔬 Природничі</button>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="fillGrTemplate('history', 'edit_preset_gr_defs')" style="font-size:11px;padding:3px 7px;">🏛️ Історія</button>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="fillGrTemplate('universal', 'edit_preset_gr_defs')" style="font-size:11px;padding:3px 7px;">🌟 Універсальний</button>
+                </div>
+
+                <textarea name="gr_definitions" id="edit_preset_gr_defs" rows="4" class="form-input" placeholder="ГР 1: Назва першої групи результатів&#10;ГР 2: Назва другої групи результатів" style="font-size:12px;resize:vertical;"></textarea>
+                <div style="font-size:11.5px;color:var(--color-text-muted);margin-top:4px;">
+                    Вкажіть кожну групу результатів з нового рядка (наприклад <code>ГР 1: Дослідження інформації</code>).
+                </div>
+            </div>
+
+            <div class="form-group" style="background:var(--color-surface);border:1px dashed var(--color-primary);padding:14px;border-radius:var(--radius-md);">
+                <label class="form-label" style="font-weight:800;color:var(--color-primary);display:flex;align-items:center;gap:6px;">
+                    <span>📎</span> <span>Завантажити новий файл інструкції / критеріїв МОН (Word, Excel, PDF, Текст, ODT):</span>
+                </label>
+                <div id="edit-current-doc-info" style="font-size:12px;margin-bottom:8px;display:none;"></div>
+                <input type="file" name="document_file" accept=".docx,.doc,.pdf,.xlsx,.xls,.txt,.md,.rtf,.odt,.ods,.csv" class="form-input" style="padding:6px;">
+                <div id="edit-remove-doc-box" style="margin-top:6px;display:none;">
+                    <label style="font-size:12px;color:#ef4444;cursor:pointer;display:inline-flex;align-items:center;gap:4px;">
+                        <input type="checkbox" name="remove_document" value="1"> 🗑️ Видалити поточний прикріплений файл
+                    </label>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" style="font-weight:700;">Системні інструкції ШІ (Промпт):</label>
+                <textarea name="system_prompt" id="edit_preset_prompt" rows="6" class="form-input" style="font-family:monospace;font-size:12px;resize:vertical;"></textarea>
+            </div>
+
+            <div class="form-group" style="display:flex;align-items:center;gap:8px;">
+                <input type="checkbox" name="is_default" id="edit_is_default" value="1" style="width:18px;height:18px;accent-color:var(--color-primary);cursor:pointer;">
+                <label for="edit_is_default" style="font-weight:700;font-size:13px;cursor:pointer;margin:0;">
+                    ⭐ Встановити цей шаблон як активний за замовчуванням
+                </label>
+            </div>
+
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-top:20px;padding-top:14px;border-top:1px solid var(--color-border);">
+                <button type="button" class="btn btn-danger btn-sm" onclick="deleteCriteriaPresetFromModal()" style="font-weight:700;padding:8px 14px;">
+                    🗑️ Видалити цей шаблон
+                </button>
+                <div style="display:flex;gap:10px;">
+                    <button type="button" class="btn btn-secondary" onclick="closeEditPresetModal()">Скасувати</button>
+                    <button type="submit" class="btn btn-primary" style="font-weight:800;padding:8px 24px;">
+                        💾 Зберегти зміни
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script id="def-prompt-data" type="application/json">
+{{ default_prompt|json_script:"def-prompt-inner" }}
+</script>
+<script id="def-nus-gr-prompt-data" type="application/json">
+{{ default_nus_gr_prompt|json_script:"def-nus-gr-prompt-inner" }}
+</script>
+<script id="def-traditional-prompt-data" type="application/json">
+{{ default_traditional_prompt|json_script:"def-traditional-prompt-inner" }}
+</script>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// Видалення шаблону критеріїв (як зі списку, так і з модального вікна)
+function deleteCriteriaPreset(id, name) {
+    if (!id) return;
+    var displayName = name ? ' «' + name + '»' : '';
+    if (!confirm('Видалити шаблон критеріїв' + displayName + '?')) {
+        return;
+    }
+    var form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '{% url "teacher_settings" %}?tab=ai';
+    var csrf = document.createElement('input');
+    csrf.type = 'hidden';
+    csrf.name = 'csrfmiddlewaretoken';
+    csrf.value = '{{ csrf_token }}';
+    var actionInp = document.createElement('input');
+    actionInp.type = 'hidden';
+    actionInp.name = 'action';
+    actionInp.value = 'delete_criteria_preset';
+    var idInp = document.createElement('input');
+    idInp.type = 'hidden';
+    idInp.name = 'preset_id';
+    idInp.value = id;
+    form.appendChild(csrf);
+    form.appendChild(actionInp);
+    form.appendChild(idInp);
+    document.body.appendChild(form);
+    form.submit();
+}
+
+function deleteCriteriaPresetFromModal() {
+    var idInp = document.getElementById('edit_preset_id');
+    var nameInp = document.getElementById('edit_preset_name');
+    if (!idInp || !idInp.value) return;
+    deleteCriteriaPreset(idInp.value, nameInp ? nameInp.value : '');
+}
+// Шаблони груп результатів (ГР) за освітніми галузями НУШ
+var GR_SUBJECT_TEMPLATES = {
+    'informatics': {
+        name: '🌟 НУШ: Інформатична освітня галузь (ГР 1-4)',
+        desc: 'Офіційні методичні рекомендації МОН України «Як оцінювати в НУШ»: 4 обов\'язкові групи результатів (Інформація та моделі, Створення продуктів і код, Цифрове середовище, Безпека та етика).',
+        defs: 'ГР 1: Працює з інформацією, даними, моделями (теоретичні знання)\nГР 2: Створює інформаційні продукти (практичні уміння)\nГР 3: Працює в цифровому середовищі (технічні навички)\nГР 4: Безпечно та відповідально працює з інформаційними технологіями (етичне ставлення)'
+    },
+    'math': {
+        name: '🌟 НУШ: Математична освітня галузь (ГР 1-3)',
+        desc: 'Оцінювання з математики, алгебри та геометрії за групами результатів МОН: моделювання, розв\'язання завдань, критичне осмислення.',
+        defs: 'ГР 1: Дослідження проблемних ситуацій та математичне моделювання\nГР 2: Розв\'язання математичних завдань, вправ та рівнянь\nГР 3: Критичне осмислення та аргументація отриманих результатів'
+    },
+    'language': {
+        name: '🌟 НУШ: Мовно-літературна галузь (ГР 1-4)',
+        desc: 'Оцінювання з української мови, літератури та іноземних мов за 4 групами результатів (Усна взаємодія, Робота з текстом, Письмова продукція, Мовні явища).',
+        defs: 'ГР 1: Усна взаємодія (сприймання на слух, аудіювання, говоріння)\nГР 2: Письмова взаємодія / Робота з текстом (читання та аналіз)\nГР 3: Письмова продукція (створення власних текстів, висловлювань, есе)\nГР 4: Дослідження мовлення, орфографічна та пунктуаційна грамотність'
+    },
+    'science': {
+        name: '🌟 НУШ: Природнича освітня галузь (ГР 1-3)',
+        desc: 'Оцінювання з фізики, хімії, біології, географії та природничих наук за 3 групами результатів МОН.',
+        defs: 'ГР 1: Проведення природничих досліджень, спостережень та експериментів\nГР 2: Опрацювання, систематизація та критична оцінка наукової інформації\nГР 3: Наукове пояснення явищ природи та розв\'язання проблем'
+    },
+    'history': {
+        name: '🌟 НУШ: Громадянська та історична галузь (ГР 1-3)',
+        desc: 'Оцінювання з історії України, всесвітньої історії та громадянської освіти за 3 групами результатів МОН.',
+        defs: 'ГР 1: Орієнтування в історичному часі та просторі\nГР 2: Критична робота з історичними джерелами, фактами та інформацією\nГР 3: Встановлення причинно-наслідкових зв\'язків, пояснення та висновки'
+    },
+    'universal': {
+        name: '🌟 Оцінювання за групами результатів НУШ (ГР 1-4)',
+        desc: 'Універсальне комплексне оцінювання за 4 обов\'язковими групами результатів Держстандарту НУШ.',
+        defs: 'ГР 1: Опрацювання інформації та дослідження проблемних ситуацій\nГР 2: Практична діяльність та виконання навчальних завдань\nГР 3: Критичне осмислення, аргументація та міркування\nГР 4: Академічна грамотність та дотримання правил предмету'
+    }
+};
+
+function fillGrTemplate(subjKey, textareaId, nameInpId, descInpId) {
+    var tmpl = GR_SUBJECT_TEMPLATES[subjKey];
+    if (!tmpl) return;
+    var ta = document.getElementById(textareaId);
+    if (ta) ta.value = tmpl.defs;
+    if (nameInpId) {
+        var nInp = document.getElementById(nameInpId);
+        if (nInp && (!nInp.value || nInp.value.indexOf('Критерії НУШ') !== -1 || nInp.value.indexOf('🌟') !== -1)) {
+            nInp.value = tmpl.name;
+        }
+    }
+    if (descInpId) {
+        var dInp = document.getElementById(descInpId);
+        if (dInp && (!dInp.value || dInp.value.indexOf('Оцінювання') !== -1)) {
+            dInp.value = tmpl.desc;
+        }
+    }
+}
+
+// Перемикання форми створення шаблону
+function toggleNewPresetForm() {
+    var box = document.getElementById('new-preset-form-box');
+    if (box) {
+        var isHidden = (box.style.display === 'none' || !box.style.display);
+        box.style.display = isHidden ? 'block' : 'none';
+        if (isHidden) {
+            box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            var nameInp = box.querySelector('input[name="preset_name"]');
+            if (nameInp) nameInp.focus();
+        }
+    }
+}
+
+// Перемикання тексту критеріїв
+function toggleCriteriaText(presetId) {
+    var el = document.getElementById('criteria-text-' + presetId);
+    if (el) {
+        el.style.display = (el.style.display === 'none' || !el.style.display) ? 'block' : 'none';
+    }
+}
+
+// Обробка зміни типу системи (НУШ ГР / НУШ Загальний / Традиційна)
+function onEvalTypeChange(evalType, targetTextareaId, grBoxId) {
+    var ta = document.getElementById(targetTextareaId);
+    if (ta) {
+        if (evalType === 'traditional') {
+            var el = document.getElementById('def-traditional-prompt-inner');
+            if (el) ta.value = JSON.parse(el.textContent);
+        } else if (evalType === 'nus_gr') {
+            var el = document.getElementById('def-nus-gr-prompt-inner');
+            if (el) ta.value = JSON.parse(el.textContent);
+        } else {
+            var el = document.getElementById('def-prompt-inner');
+            if (el) ta.value = JSON.parse(el.textContent);
+        }
+    }
+    if (grBoxId) {
+        var grBox = document.getElementById(grBoxId);
+        if (grBox) {
+            grBox.style.display = (evalType === 'traditional') ? 'none' : 'block';
+        }
+    }
+}
+
+// Відкриття модального вікна редагування за даними з кнопки
+function editPresetModalFromBtn(btn) {
+    if (!btn) return;
+    var id = btn.getAttribute('data-preset-id');
+    var name = btn.getAttribute('data-preset-name') || '';
+    var evalType = btn.getAttribute('data-preset-type') || 'nus_gr';
+    var desc = btn.getAttribute('data-preset-desc') || '';
+    var grDefs = btn.getAttribute('data-preset-gr') || '';
+    var isDefault = btn.getAttribute('data-preset-default') || '0';
+    var isSystem = btn.getAttribute('data-preset-system') || '0';
+    var docName = btn.getAttribute('data-preset-doc') || '';
+    editPresetModal(id, name, evalType, desc, grDefs, isDefault, isSystem, docName);
+}
+
+// Модальне вікно редагування шаблону
+function editPresetModal(id, name, evalType, desc, grDefs, isDefault, isSystem, docName) {
+    var modal = document.getElementById('modal-edit-preset');
+    if (!modal) return;
+
+    var idInp = document.getElementById('edit_preset_id');
+    var nameInp = document.getElementById('edit_preset_name');
+    var typeInp = document.getElementById('edit_preset_eval_type');
+    var descInp = document.getElementById('edit_preset_description');
+    var grInp = document.getElementById('edit_preset_gr_defs');
+    var defaultInp = document.getElementById('edit_is_default');
+    var promptInp = document.getElementById('edit_preset_prompt');
+
+    if (idInp) idInp.value = id || '';
+    if (nameInp) nameInp.value = name || '';
+    if (typeInp) typeInp.value = evalType || 'nus_gr';
+    if (descInp) descInp.value = desc || '';
+    if (defaultInp) defaultInp.checked = (isDefault === '1');
+
+    var grSource = document.getElementById('preset-gr-' + id);
+    if (grInp) {
+        grInp.value = grSource ? grSource.value : (grDefs || '');
+    }
+
+    var promptSource = document.getElementById('preset-prompt-' + id);
+    if (promptInp) {
+        promptInp.value = promptSource ? promptSource.value : '';
+    }
+
+    var docInfo = document.getElementById('edit-current-doc-info');
+    var removeBox = document.getElementById('edit-remove-doc-box');
+    if (docName && docName.trim()) {
+        if (docInfo) {
+            docInfo.style.display = 'block';
+            docInfo.innerHTML = '📄 <strong>Поточний прикріплений файл:</strong> ' + docName;
+        }
+        if (removeBox) removeBox.style.display = 'block';
+    } else {
+        if (docInfo) docInfo.style.display = 'none';
+        if (removeBox) removeBox.style.display = 'none';
+    }
+
+    modal.style.display = 'flex';
+}
+
+function closeEditPresetModal() {
+    var modal = document.getElementById('modal-edit-preset');
+    if (modal) modal.style.display = 'none';
+}
+
+// Закриття модального вікна при кліку на затемнений фон
+document.addEventListener('click', function(e) {
+    var modal = document.getElementById('modal-edit-preset');
+    if (modal && e.target === modal) {
+        closeEditPresetModal();
+    }
+});
+
+// Перемикання вкладок
+function switchSettingsTab(tabName, linkEl) {
+    // Оновлюємо кнопки вкладок
+    var tabs = document.querySelectorAll('#settings-main-tabs .tab-btn');
+    tabs.forEach(function(t) { t.classList.remove('active'); });
+    if (linkEl && linkEl.classList.contains('tab-btn')) {
+        linkEl.classList.add('active');
+    } else {
+        var matchingTab = document.querySelector('#settings-main-tabs a[href*="tab=' + tabName + '"]');
+        if (matchingTab) matchingTab.classList.add('active');
+    }
+
+    // Оновлюємо посилання у сайдбарі налаштувань
+    var sidebarItems = document.querySelectorAll('#settings-sidebar-links .sidebar-tab-item');
+    sidebarItems.forEach(function(item) { item.classList.remove('active'); });
+    var matchingSidebar = document.querySelector('#settings-sidebar-links a[href*="tab=' + tabName + '"]');
+    if (matchingSidebar && matchingSidebar.parentElement) {
+        matchingSidebar.parentElement.classList.add('active');
+    }
+
+    // Оновлюємо відображення блоків
+    var panes = document.querySelectorAll('.settings-tab-pane');
+    panes.forEach(function(p) { p.style.display = 'none'; });
+
+    var target = document.getElementById('tab-section-' + tabName);
+    if (target) target.style.display = 'block';
+
+    // Оновлюємо URL без перезавантаження
+    if (history.pushState) {
+        var newUrl = window.location.pathname + '?tab=' + tabName;
+        history.pushState(null, '', newUrl);
+    }
+    return false;
+}
+
+function switchSettingsTabFromSidebar(tabName, linkEl) {
+    return switchSettingsTab(tabName, null);
+}
+
+// Показ/приховування ключа API
+function toggleKeyVisibility() {
+    var inp = document.getElementById('api_key');
+    if (!inp) return;
+    if (inp.type === 'password') {
+        inp.type = 'text';
+    } else {
+        inp.type = 'password';
+    }
+}
+
+// Тестування конкретної моделі зі списку
+function testModelDirect(modelName) {
+    var apiKeyEl = document.getElementById('api_key');
+    var apiKey = apiKeyEl ? apiKeyEl.value.trim() : '';
+    if (!apiKey) {
+        alert('Будь ласка, введіть Google Gemini API Key у формі для тестування.');
+        return;
+    }
+    runApiTest(apiKey, modelName);
+}
+
+// Загальний тест з'єднання
+function testConnection() {
+    var apiKeyEl = document.getElementById('api_key');
+    var modelEl = document.getElementById('model_name');
+    var apiKey = apiKeyEl ? apiKeyEl.value.trim() : '';
+    var modelName = modelEl ? modelEl.value : 'gemini-2.5-flash';
+    if (!apiKey) {
+        alert('Будь ласка, введіть Google Gemini API Key перед тестуванням.');
+        return;
+    }
+    runApiTest(apiKey, modelName);
+}
+
+function runApiTest(apiKey, modelName) {
+    var btn = document.getElementById('btn-test-conn');
+    var resBox = document.getElementById('conn-test-result');
+    if (!btn || !resBox) return;
+
+    btn.disabled = true;
+    btn.textContent = '⏳ Перевірка (' + modelName + ')...';
+    resBox.style.display = 'block';
+    resBox.style.background = 'var(--color-bg-secondary)';
+    resBox.style.color = 'var(--color-text-primary)';
+    resBox.innerHTML = 'Запит до Google Gemini API (модель: ' + modelName + ')...';
+
+    var formData = new FormData();
+    formData.append('api_key', apiKey);
+    formData.append('model_name', modelName);
+    formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+
+    fetch('{% url "api_test_gemini_connection" %}', {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        btn.disabled = false;
+        btn.textContent = '🧪 Тест з\'єднання';
+
+        if (data.success) {
+            resBox.style.background = 'rgba(16, 185, 129, 0.12)';
+            resBox.style.border = '1px solid rgba(16, 185, 129, 0.3)';
+            resBox.style.color = '#059669';
+            resBox.innerHTML = '<strong>✅ Успішно [' + data.model + ']!</strong> ' + data.message;
+        } else {
+            resBox.style.background = 'rgba(239, 68, 68, 0.12)';
+            resBox.style.border = '1px solid rgba(239, 68, 68, 0.3)';
+            resBox.style.color = '#ef4444';
+            resBox.innerHTML = '<strong>❌ Помилка підключення [' + (data.model || modelName) + ']:</strong> ' + data.message;
+        }
+    })
+    .catch(function(err) {
+        btn.disabled = false;
+        btn.textContent = '🧪 Тест з\'єднання';
+        resBox.style.background = 'rgba(239, 68, 68, 0.12)';
+        resBox.style.color = '#ef4444';
+        resBox.innerHTML = '<strong>❌ Мережева помилка:</strong> ' + err;
+    });
+}
+
+function resetDefaultPrompt() {
+    if (confirm('Ви впевнені, що хочете скинути системний промт до офіційного стандарту НУШ?')) {
+        var scriptEl = document.getElementById('def-prompt-inner');
+        if (scriptEl) {
+            var promptEl = document.getElementById('system_prompt');
+            if (promptEl) promptEl.value = JSON.parse(scriptEl.textContent);
+        }
+    }
+}
+
+// Прев'ю аватара
+document.addEventListener('DOMContentLoaded', function() {
+    var fileInput = document.getElementById('avatar-file-input');
+    var previewImg = document.getElementById('avatar-preview-img');
+    var initialsBox = document.getElementById('avatar-initials-box');
+    var colorInput = document.getElementById('id_avatar_color');
+
+    if (fileInput) {
+        fileInput.addEventListener('change', function() {
+            var file = fileInput.files[0];
+            if (file) {
+                var reader = new FileReader();
+                reader.onload = function(e) {
+                    if (previewImg) {
+                        previewImg.src = e.target.result;
+                        previewImg.style.display = 'block';
+                    }
+                    if (initialsBox) {
+                        initialsBox.style.display = 'none';
+                    }
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+    }
+
+    if (colorInput && initialsBox) {
+        colorInput.addEventListener('input', function() {
+            initialsBox.style.background = colorInput.value;
+        });
+    }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,198 @@
+{% load static %}
+
+{% comment %}
+  Фрагмент стрічки завдань — використовується для швидкої AJAX-фільтрації та фонового автооновлення.
+{% endcomment %}
+
+<div class="d-flex align-center justify-between mb-4 flex-wrap gap-2" id="feed-header">
+    <div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <h1 style="font-size:1.25rem;font-weight:700;color:var(--color-text-primary);margin:0;">
+                {% if selected_class and selected_date_display %}
+                    📋 {{ selected_class.name }} &bull; 📅 {{ selected_date_display }}
+                {% elif selected_class %}
+                    📋 Завдання — {{ selected_class.name }}
+                {% elif selected_date_display %}
+                    📅 Завдання — {{ selected_date_display }}
+                {% elif query %}
+                    🔍 Результати: "{{ query }}"
+                {% else %}
+                    📋 Всі завдання
+                {% endif %}
+            </h1>
+            <span style="font-size:11px;background:rgba(16,185,129,0.12);color:#059669;border:1px solid rgba(16,185,129,0.25);border-radius:20px;padding:2px 8px;display:inline-flex;align-items:center;gap:4px;" title="Стрічка автоматично оновлюється при появі нових завдань">
+                <span class="live-dot-pulse"></span>
+                Наживо
+            </span>
+        </div>
+        <p class="text-muted text-sm mt-1">
+            Знайдено: {{ assignments|length }} завдань
+        </p>
+    </div>
+    {% if selected_class_id or selected_subject_id or selected_date or query %}
+    <button type="button" class="btn btn-secondary btn-sm" onclick="applyFilter('all', 'all', 'all', '')">
+        ✕ Скинути всі фільтри
+    </button>
+    {% endif %}
+</div>
+
+<div class="assignments-feed" role="feed" aria-label="Стрічка навчальних завдань">
+
+    {% for assignment in assignments %}
+    <article class="assignment-card {{ assignment.age_card_class }}"
+             onclick="openAssignment({{ assignment.id }})"
+             role="button"
+             tabindex="0"
+             aria-label="Відкрити завдання: {{ assignment.title }}"
+             onkeydown="if(event.key==='Enter'){openAssignment({{ assignment.id }})}">
+
+        <div class="card-accent"
+             style="background:linear-gradient(90deg,{{ assignment.subject.color|default:'#6366f1' }},#8b5cf6)">
+        </div>
+
+        <div class="card-body">
+            <div class="card-meta">
+                <div class="card-meta-tags">
+                    <!-- Класи (зроблено виразно та чітко) -->
+                    {% for class in assignment.classes.all %}
+                    <span class="class-prominent-badge">
+                        <span class="class-icon">🏫</span>
+                        <span class="class-text">{{ class.name }}</span>
+                    </span>
+                    {% endfor %}
+
+                    <!-- Предмет (показується тільки якщо в системі більше ніж 1 предмет) -->
+                    {% if has_multiple_subjects and assignment.subject %}
+                    <span class="subject-tag"
+                          style="background-color:{{ assignment.subject.color }}22;color:{{ assignment.subject.color }}">
+                        {{ assignment.subject.icon }} {{ assignment.subject.name }}
+                    </span>
+                    {% endif %}
+
+                    {% if assignment.is_individual %}
+                    <span class="individual-tag">👤 {{ assignment.student_display }}</span>
+                    {% endif %}
+                </div>
+
+                <!-- Перегляди (зверху праворуч для вчителя) -->
+                {% if user.is_authenticated and user.teacher_profile %}
+                <span class="views-badge" title="Кількість переглядів учнями">
+                    <span class="views-icon">👁️</span> {{ assignment.views_count }}
+                </span>
+                {% endif %}
+            </div>
+
+            <h2 class="card-title">{{ assignment.title }}</h2>
+
+            {% if assignment.description %}
+            <p class="card-description">{{ assignment.description|truncatechars:160 }}</p>
+            {% endif %}
+        </div>
+
+        <div class="card-footer">
+            <div class="card-footer-left">
+                <div class="teacher-mini">
+                    {% if assignment.teacher.avatar_image %}
+                    <img src="{{ assignment.teacher.avatar_image.url }}" alt="{{ assignment.teacher.full_name }}" class="avatar-mini-img">
+                    {% else %}
+                    <div class="avatar-mini"
+                         style="background:{{ assignment.teacher.avatar_color }}">
+                        {{ assignment.teacher.get_initials }}
+                    </div>
+                    {% endif %}
+                    <span>{{ assignment.teacher.full_name }}</span>
+                </div>
+
+                <!-- Розумна дата публікації (Сьогодні / Вчора / День тижня + дата) -->
+                {% if assignment.published_at %}
+                <span class="publish-date-badge {% if assignment.is_published_today %}badge-today{% elif assignment.is_published_yesterday %}badge-yesterday{% else %}badge-earlier{% endif %}">
+                    {% if assignment.is_published_today %}
+                    <span class="live-dot-pulse"></span>
+                    {% endif %}
+                    📅 {{ assignment.relative_published_display }}
+                </span>
+                {% endif %}
+
+                {% if assignment.unarchived_at %}
+                <span class="unarchive-badge" title="Завдання відновлено з архіву">
+                    ♻️ Розархівовано {{ assignment.unarchived_at|date:"d.m" }}
+                </span>
+                {% endif %}
+
+                {% if assignment.files.all %}
+                <span class="attachment-count">
+                    📎 {{ assignment.files.count }}
+                </span>
+                {% endif %}
+
+                {% if assignment.due_date %}
+                <span class="due-badge">
+                    ⏰ до {{ assignment.due_date|date:"d.m" }}
+                </span>
+                {% endif %}
+            </div>
+
+            <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+                <a href="{% url 'assignment_detail' assignment.id %}" class="btn btn-secondary btn-sm" onclick="event.stopPropagation();" title="Відкрити завдання">
+                    📖 Переглянути
+                </a>
+                {% if not user.is_authenticated or not user.teacher_profile %}
+                <a href="{% url 'submit_assignment' assignment.id %}" class="btn btn-primary btn-sm" onclick="event.stopPropagation();" style="font-weight:700;" title="Здати виконану роботу">
+                    📤 Здати роботу
+                </a>
+                {% endif %}
+            </div>
+        </div>
+
+
+    </article>
+
+    {% empty %}
+    <div class="sidebar-card">
+        <div class="empty-state">
+            <div class="empty-icon">📭</div>
+            <h3>Завдань поки немає</h3>
+            <p>
+                {% if selected_class %}
+                    Для класу {{ selected_class.name }} ще не опубліковано жодного завдання.
+                {% elif query %}
+                    Нічого не знайдено за запитом "{{ query }}".
+                {% else %}
+                    Вчитель ще не додав жодного завдання.
+                {% endif %}
+            </p>
+            {% if selected_class_id or selected_subject_id or query %}
+            <button type="button" class="btn btn-secondary" onclick="applyFilter('all', 'all', 'all', '')">Показати всі</button>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+
+</div>
+
+{% if page_obj.has_other_pages %}
+<div class="pagination-wrapper" style="margin-top:24px;display:flex;justify-content:center;align-items:center;gap:6px;flex-wrap:wrap">
+    {% if page_obj.has_previous %}
+    <button type="button" class="btn btn-secondary btn-sm"
+            onclick="loadFeedPage({{ page_obj.previous_page_number }})">
+        « Попередня
+    </button>
+    {% endif %}
+
+    {% for i in page_obj.paginator.page_range %}
+        {% if page_obj.number == i %}
+        <span class="btn btn-primary btn-sm" style="pointer-events:none;font-weight:700">{{ i }}</span>
+        {% elif i > page_obj.number|add:"-3" and i < page_obj.number|add:"3" %}
+        <button type="button" class="btn btn-secondary btn-sm"
+                onclick="loadFeedPage({{ i }})">{{ i }}</button>
+        {% endif %}
+    {% endfor %}
+
+    {% if page_obj.has_next %}
+    <button type="button" class="btn btn-secondary btn-sm"
+            onclick="loadFeedPage({{ page_obj.next_page_number }})">
+        Наступна »
+    </button>
+    {% endif %}
+</div>
+{% endif %}

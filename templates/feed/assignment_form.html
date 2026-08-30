@@ -1,0 +1,598 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{% if is_edit %}Редагування завдання{% else %}Створення нового завдання{% endif %} — Шкільні Завдання{% endblock %}
+
+{% block content %}
+<div class="page-wrapper">
+
+    <!-- ── Двоколонковий layout сайту ────────────────────────────────────── -->
+    <div class="feed-layout">
+
+        <!-- ════ ЛІВИЙ САЙДБАР ВЧИТЕЛЯ ════════════════════════════════════════ -->
+        {% include 'feed/components/teacher_sidebar.html' %}
+
+        <!-- ════ ЦЕНТРАЛЬНА ЧАСТИНА (ФОРМА СТВОРЕННЯ / РЕДАГУВАННЯ) ═══════════ -->
+        <div class="feed-main-content">
+
+            <!-- ── Верхня панель / Хлібні крихти ───────────────────────────────── -->
+            <div class="page-hero">
+                <div class="page-hero-kicker">Кабінет викладача</div>
+                <h1>{% if is_edit %}Редагування завдання{% else %}Нове завдання{% endif %}</h1>
+            </div>
+
+            <!-- ── Головна картка форми ──────────────────────────────────────── -->
+            <form method="POST" enctype="multipart/form-data" novalidate id="assignment-form" autocomplete="off">
+                {% csrf_token %}
+
+                <div class="form-card" style="box-shadow:0 4px 24px rgba(0,0,0,0.04);">
+
+                    <div class="form-card-body" style="padding:28px 32px;">
+
+                        <!-- ════ РОЗДІЛ 1: ОСНОВНІ ДАНІ ══════════════════════════════ -->
+                        <div class="form-section">
+                            <div class="form-section-title">📋 1. Основна інформація про завдання</div>
+
+                            <div class="form-row" style="margin-bottom:16px;">
+                                <!-- Предмет -->
+                                <div class="form-group" style="margin:0;">
+                                    <label class="form-label required" for="{{ form.subject.id_for_label }}">
+                                        📚 Предмет <span style="color:var(--color-danger)">*</span>
+                                    </label>
+                                    {{ form.subject }}
+                                    {% if form.subject.errors %}
+                                    <p class="form-error">{{ form.subject.errors.0 }}</p>
+                                    {% endif %}
+                                </div>
+
+                                <!-- Дедлайн -->
+                                <div class="form-group" style="margin:0;">
+                                    <label class="form-label" for="{{ form.due_date.id_for_label }}">
+                                        ⏰ Термін виконання (Дедлайн)
+                                    </label>
+                                    {{ form.due_date }}
+                                    {% if form.due_date.errors %}
+                                    <p class="form-error">{{ form.due_date.errors.0 }}</p>
+                                    {% endif %}
+                                </div>
+                            </div>
+
+                            <!-- Тема -->
+                            <div class="form-group" style="margin-bottom:16px;">
+                                <label class="form-label required" for="{{ form.title.id_for_label }}">
+                                    📌 Тема / Заголовок завдання <span style="color:var(--color-danger)">*</span>
+                                </label>
+                                {{ form.title }}
+                                {% if form.title.errors %}
+                                <p class="form-error">{{ form.title.errors.0 }}</p>
+                                {% endif %}
+                                <p class="form-hint">Коротко і зрозуміло сформулюйте назву уроку або лабораторної роботи</p>
+                            </div>
+
+                            <!-- Опис -->
+                            <div class="form-group" style="margin:0;">
+                                <label class="form-label" for="{{ form.description.id_for_label }}">
+                                    📝 Опис завдання
+                                </label>
+                                {{ form.description }}
+                                {% if form.description.errors %}
+                                <p class="form-error">{{ form.description.errors.0 }}</p>
+                                {% endif %}
+                                <p class="form-hint">Вкажіть умову задачі, номери вправ з підручника, вимоги до оформлення тощо.</p>
+                            </div>
+                        </div>
+
+                        <!-- ════ РОЗДІЛ 2: АДРЕСАЦІЯ ТА КЛАСИ ═══════════════════════ -->
+                        <div class="form-section">
+                            <div class="form-section-title">🏫 2. Кому призначено завдання <span style="color:var(--color-danger)">*</span></div>
+
+                            <!-- Чекбокс "Індивідуальне" -->
+                            <div class="form-group" style="padding:12px 16px; background:var(--color-bg-secondary); border-radius:var(--radius-md); border:1px solid var(--color-border); margin-bottom:14px;">
+                                <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px;font-weight:700;color:var(--color-text-primary);margin:0;">
+                                    {{ form.is_individual }}
+                                    <span>👤 Індивідуальне завдання (для конкретного учня / учениці)</span>
+                                </label>
+                                <p class="form-hint" style="margin-top:4px; margin-bottom:0;">Увімкніть для конкретного учня. Ви також можете обрати клас учня нижче, щоб він автоматично підставився при здачі роботи.</p>
+                            </div>
+
+                            <!-- Ім'я учня (показується тільки при індивідуальному) -->
+                            <div id="student-name-section" style="display:none; margin-bottom:14px;">
+                                <div class="form-group">
+                                    <label class="form-label required" for="{{ form.student_name.id_for_label }}">
+                                        👤 Прізвище та ім'я учня / учениці <span style="color:var(--color-danger)">*</span>
+                                    </label>
+                                    {{ form.student_name }}
+                                    {% if form.student_name.errors %}
+                                    <p class="form-error">{{ form.student_name.errors.0 }}</p>
+                                    {% endif %}
+                                    <p class="form-hint">Вкажіть кому саме призначено це завдання (наприклад: Шевченко Тарас). Це ім'я автоматично підставиться у форму здачі роботи.</p>
+                                </div>
+                            </div>
+
+                            <!-- Вибір класів -->
+                            <div id="classes-section" class="form-group" style="margin:0;">
+                                <label class="form-label" style="font-weight:700;">
+                                    🏫 Оберіть класи (або клас учня)
+                                </label>
+                                <div class="class-checkbox-group" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;">
+                                    {% for widget in form.classes %}
+                                    <label class="class-check-pill" style="cursor:pointer;">
+                                        {{ widget.tag }}
+                                        <span class="class-pill-text">{{ widget.choice_label }}</span>
+                                    </label>
+                                    {% endfor %}
+                                </div>
+                                {% if form.classes.errors %}
+                                <p class="form-error">{{ form.classes.errors.0 }}</p>
+                                {% endif %}
+                                {% if not form.classes.field.queryset.count %}
+                                <p class="form-hint">⚠️ Класи ще не створені. Ви можете додати їх у налаштуваннях профілю вчителя.</p>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <!-- ════ РОЗДІЛ 3: НАВЧАЛЬНІ МАТЕРІАЛИ ТА ФАЙЛИ ═══════════════ -->
+                        <div class="form-section">
+                            <div class="form-section-title">📎 3. Навчальні матеріали та корисні посилання</div>
+
+                            <!-- Посилання -->
+                            <div class="form-row" style="margin-bottom:14px;">
+                                <div class="form-group" style="margin:0;">
+                                    <label class="form-label" for="{{ form.link_url.id_for_label }}">
+                                        🔗 Основне посилання (URL)
+                                    </label>
+                                    {{ form.link_url }}
+                                    {% if form.link_url.errors %}
+                                    <p class="form-error">{{ form.link_url.errors.0 }}</p>
+                                    {% endif %}
+                                </div>
+                                <div class="form-group" style="margin:0;">
+                                    <label class="form-label" for="{{ form.link_label.id_for_label }}">
+                                        Текст кнопки посилання
+                                    </label>
+                                    {{ form.link_label }}
+                                    <p class="form-hint">Наприклад: «Відкрити онлайн-підручник»</p>
+                                </div>
+                            </div>
+
+                            <!-- Додаткові посилання (динамічно) -->
+                            <div id="extra-links-container">
+                                {% if is_edit and existing_links %}
+                                    {% for link in existing_links %}
+                                    <div class="form-row extra-link-row" style="margin-top:8px;">
+                                        <div class="form-group">
+                                            <label class="form-label">🔗 Додаткове посилання</label>
+                                            <input type="url" name="extra_link_url" value="{{ link.url }}" class="form-input" placeholder="https://...">
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="form-label">Текст посилання</label>
+                                            <input type="text" name="extra_link_label" value="{{ link.label }}" class="form-input" placeholder="Назва посилання">
+                                        </div>
+                                        <button type="button" onclick="this.closest('.extra-link-row').remove()" style="align-self:flex-end; background:none; border:1px solid var(--color-danger); color:var(--color-danger); border-radius:var(--radius-md); padding:6px 10px; cursor:pointer; margin-bottom:1px; flex-shrink:0;">✕</button>
+                                    </div>
+                                    {% endfor %}
+                                {% endif %}
+                            </div>
+                            <div id="add-link-btn-container" style="margin-top:6px;margin-bottom:16px;">
+                                <button type="button" id="add-extra-link-btn" onclick="addExtraLinkRow()" style="background:none; border:1px dashed var(--color-border); color:var(--color-text-muted); border-radius:var(--radius-md); padding:6px 14px; cursor:pointer; font-size:13px; display:none;">➕ Додати ще посилання</button>
+                            </div>
+
+                            <!-- YouTube відео -->
+                            <div style="margin-bottom:20px; padding:18px; background:var(--color-bg-secondary); border-radius:var(--radius-md); border:1px solid var(--color-border);">
+                                <div class="form-group" style="margin-bottom:8px;">
+                                    <label class="form-label" for="{{ form.youtube_url.id_for_label }}" style="display:flex; align-items:center; gap:6px; font-weight:700;">
+                                        <span style="color:#ef4444;font-size:16px;">▶</span> YouTube відеоурок
+                                    </label>
+                                    {{ form.youtube_url }}
+                                    <p class="form-hint">Вставте посилання — відео можна буде переглядати прямо на сторінці уроку</p>
+                                    {% if form.youtube_url.errors %}
+                                    <p class="form-error">{{ form.youtube_url.errors.0 }}</p>
+                                    {% endif %}
+                                </div>
+
+                                <!-- Додаткові YouTube відео (динамічно) -->
+                                <div id="extra-youtube-container">
+                                    {% if is_edit and existing_youtube_links %}
+                                        {% for ylink in existing_youtube_links %}
+                                        <div class="form-row extra-youtube-row" style="margin-top:10px; gap:8px;">
+                                            <div class="form-group" style="flex:2;">
+                                                <label class="form-label">▶ Додаткове YouTube відео</label>
+                                                <input type="url" name="extra_youtube_url" value="{{ ylink.url }}" class="form-input" placeholder="https://www.youtube.com/watch?v=...">
+                                            </div>
+                                            <div class="form-group" style="flex:1;">
+                                                <label class="form-label">Підпис до відео (опціонально)</label>
+                                                <input type="text" name="extra_youtube_title" value="{{ ylink.title }}" class="form-input" placeholder="Наприклад: Частина 2">
+                                            </div>
+                                            <button type="button" onclick="this.closest('.extra-youtube-row').remove(); updateAddYouTubeBtn();" style="align-self:flex-end; background:none; border:1px solid var(--color-danger); color:var(--color-danger); border-radius:var(--radius-md); padding:7px 11px; cursor:pointer; margin-bottom:1px; flex-shrink:0;" title="Видалити це відео">✕</button>
+                                        </div>
+                                        {% endfor %}
+                                    {% endif %}
+                                </div>
+                                <div id="add-youtube-btn-container" style="margin-top:10px;">
+                                    <button type="button" id="add-extra-youtube-btn" onclick="addExtraYouTubeRow()" style="background:none; border:1px dashed var(--color-border); color:var(--color-text-muted); border-radius:var(--radius-md); padding:6px 14px; cursor:pointer; font-size:13px; display:none;">➕ Додати ще одне відео</button>
+                                </div>
+                            </div>
+
+                            <!-- Існуючі файли при редагуванні -->
+                            {% if is_edit and existing_files %}
+                            <div class="form-group" style="margin-bottom:16px;">
+                                <label class="form-label" style="font-weight:700;">Поточні прикріплені файли:</label>
+                                <div class="existing-files">
+                                    {% for file in existing_files %}
+                                    <div class="existing-file-item" style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:var(--radius-md);">
+                                        <div style="display:flex;align-items:center;gap:8px;">
+                                            <span>{{ file.get_file_icon }}</span>
+                                            <span class="file-name" style="font-weight:700;font-size:13px;">{{ file.original_name }}</span>
+                                            <span class="text-muted text-sm">{{ file.get_size_display }}</span>
+                                        </div>
+                                        <label class="delete-file-label" style="color:var(--color-danger);font-weight:700;font-size:12px;cursor:pointer;display:flex;align-items:center;gap:4px;">
+                                            <input type="checkbox" name="delete_files" value="{{ file.id }}" class="delete-file-checkbox">
+                                            🗑 Видалити
+                                        </label>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            {% endif %}
+
+                            <!-- Завантаження нових файлів -->
+                            <div class="form-group" style="margin:0;">
+                                <label class="form-label" style="font-weight:700;">
+                                    {% if is_edit %}Додати нові файли{% else %}Файли завдань (PDF, Word, Excel, презентації, фото, коди){% endif %}
+                                </label>
+                                <div class="file-upload-area" id="upload-area" role="button" tabindex="0"
+                                     aria-label="Натисніть або перетягніть файли для завантаження"
+                                     style="border:2px dashed var(--color-border);border-radius:var(--radius-lg);padding:24px;text-align:center;background:var(--color-bg-secondary);cursor:pointer;transition:all 0.2s;">
+                                    <div class="upload-icon" style="font-size:36px;margin-bottom:8px;">📁</div>
+                                    <div class="upload-text" style="font-weight:800;font-size:14px;color:var(--color-text-primary);">Натисніть або перетягніть файли сюди</div>
+                                    <div class="upload-hint" style="font-size:12px;color:var(--color-text-muted);margin-top:4px;">Будь-які типи файлів: PDF, DOCX, XLSX, PPTX, JPG, PNG, ZIP, PY, HTML тощо.</div>
+                                    <input type="file" id="id_files" name="files" multiple class="form-file-input">
+                                </div>
+                                <!-- Попередній перегляд файлів -->
+                                <div id="upload-preview" class="upload-preview" style="margin-top:10px;"></div>
+                            </div>
+
+                            <!-- Загальна помилка валідації -->
+                            {% if form.non_field_errors %}
+                            <div class="alert alert-error" style="margin-top:16px;">
+                                ❌ {{ form.non_field_errors.0 }}
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        <!-- ════ РОЗДІЛ 4: ПАРАМЕТРИ ПУБЛІКАЦІЇ ══════════════════════ -->
+                        <div class="form-section" style="border-bottom:none;margin-bottom:0;padding-bottom:0;">
+                            <div class="form-section-title">🚀 4. Публікація завдання</div>
+
+                            <div class="form-group" style="margin:0;">
+                                <div class="publish-radio-group" role="radiogroup" aria-label="Тип публікації" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;">
+                                    {% for radio in form.publish_choice %}
+                                    <label class="publish-option {% if form.publish_choice.value == radio.data.value %}selected{% endif %}" style="display:flex;align-items:center;gap:10px;padding:12px 16px;background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:var(--radius-md);cursor:pointer;">
+                                        {{ radio.tag }}
+                                        <div>
+                                            <div class="publish-option-label" style="font-weight:700;font-size:13px;color:var(--color-text-primary);">{{ radio.choice_label }}</div>
+                                        </div>
+                                    </label>
+                                    {% endfor %}
+                                </div>
+                                {% if form.publish_choice.errors %}
+                                <p class="form-error">{{ form.publish_choice.errors.0 }}</p>
+                                {% endif %}
+                            </div>
+
+                            <!-- Відкладена публікація (ховається/показується через JS) -->
+                            <div id="scheduled-section" style="display:none;margin-top:16px;">
+                                <div class="form-group" style="margin:0;">
+                                    <label class="form-label required" for="{{ form.scheduled_at.id_for_label }}">
+                                        📅 Дата та час публікації
+                                    </label>
+                                    {{ form.scheduled_at }}
+                                    {% if form.scheduled_at.errors %}
+                                    <p class="form-error">{{ form.scheduled_at.errors.0 }}</p>
+                                    {% endif %}
+                                    <p class="form-hint">Завдання стане видимим для учнів автоматично у вказаний час.</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- ════ РОЗДІЛ 5: НАЛАШТУВАННЯ ШІ-ОЦІНЮВАННЯ ══════════════════ -->
+                        <div class="form-section" style="border-bottom:none;margin-bottom:0;padding-bottom:0;margin-top:8px;">
+                            <div class="form-section-title">🤖 5. Налаштування ШІ-оцінювання</div>
+                            <p style="font-size:13px;color:var(--color-text-muted);margin:0 0 16px;">Оберіть шаблон та активні групи результатів (ГР) — при перевірці роботи ці параметри будуть обрані автоматично.</p>
+
+                            <!-- Вибір шаблону критеріїв -->
+                            <div class="form-group">
+                                <label class="form-label" for="id_default_ai_preset">📋 Шаблон критеріїв оцінювання за замовчуванням</label>
+                                <select id="id_default_ai_preset" name="default_ai_preset" class="form-select"
+                                        onchange="loadPresetGRs(this.value)"
+                                        style="max-width:420px; width:100%; cursor:pointer;">
+                                    <option value="">— Не обрано (буде обиратись вручну) —</option>
+                                    {% for preset in criteria_presets %}
+                                    <option value="{{ preset.id }}"
+                                        {% if assignment and assignment.default_ai_preset_id == preset.id %}selected{% endif %}>
+                                        {{ preset.name }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+
+                            <!-- Чекбокси ГР (підвантажуються динамічно) -->
+                            <div class="form-group" id="gr-checkboxes-section" style="{% if not assignment or not assignment.default_ai_preset %}display:none;{% endif %}">
+                                <label class="form-label">✅ Активні групи результатів (ГР)</label>
+                                <div id="gr-checkboxes-container" style="display:flex;flex-wrap:wrap;gap:10px;margin-top:6px;">
+                                    {% if assignment and assignment.default_ai_preset and assignment.default_ai_grs %}
+                                        {% comment %}Existing checkboxes will be re-generated by JS on page load{% endcomment %}
+                                    {% endif %}
+                                </div>
+                                <p class="form-hint">Якщо жодного не обрано — всі ГР шаблону будуть активними.</p>
+                            </div>
+
+                            <!-- Дозволити учням самоперевірку -->
+                            <div class="form-group" style="margin-bottom:12px;">
+                                <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:14px 16px;background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:var(--radius-md);width:fit-content;max-width:100%;">
+                                    <input type="checkbox" name="allow_student_ai_check" id="id_allow_student_ai_check"
+                                           value="1"
+                                           {% if assignment and assignment.allow_student_ai_check %}checked{% endif %}
+                                           style="width:18px;height:18px;accent-color:var(--color-primary);flex-shrink:0;">
+                                    <div>
+                                        <div style="font-weight:700;font-size:14px;color:var(--color-text-primary);">🤖 Дозволити учням самоперевірку ШІ після здачі</div>
+                                        <div style="font-size:12px;color:var(--color-text-muted);margin-top:2px;">Учень зможе 1 раз натиснути «Перевірити ШІ» у вікні успішної здачі й отримати попередню оцінку з ГР</div>
+                                    </div>
+                                </label>
+                            </div>
+
+                            <!-- Дозволити використання ШІ учнями -->
+                            <div class="form-group" style="margin-bottom:0;">
+                                <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:14px 16px;background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:var(--radius-md);width:fit-content;max-width:100%;">
+                                    <input type="checkbox" name="allow_ai_usage" id="id_allow_ai_usage"
+                                           value="1"
+                                           {% if assignment and assignment.allow_ai_usage %}checked{% endif %}
+                                           style="width:18px;height:18px;accent-color:var(--color-primary);flex-shrink:0;">
+                                    <div>
+                                        <div style="font-weight:700;font-size:14px;color:var(--color-text-primary);">💡 Дозволити використання ШІ учнями при виконанні</div>
+                                        <div style="font-size:12px;color:var(--color-text-muted);margin-top:2px;">Дозволяє учням застосовувати ШІ для виконання цього завдання. Роботи всерівно аналізуватимуться на ознаки ШІ, щоб ви завжди знали про це.</div>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+
+                    </div><!-- /.form-card-body -->
+
+                    <!-- ── Нижня панель кнопок дій ────────────────────────────── -->
+                    <div style="padding:20px 32px;background:var(--color-bg-secondary);border-top:1px solid var(--color-border);display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;">
+                        <span id="draft-autosave-status" style="font-size:12px; color:var(--color-text-muted);"></span>
+
+                        <div style="display:flex;gap:10px;align-items:center;">
+                            <a href="{% url 'teacher_dashboard' %}" class="btn btn-secondary">
+                                ✕ Скасувати
+                            </a>
+                            <button type="submit" class="btn btn-primary btn-lg" style="font-weight:800;padding:10px 24px;">
+                                {% if is_edit %}💾 Зберегти зміни{% else %}✅ Опублікувати завдання{% endif %}
+                            </button>
+                        </div>
+                    </div>
+
+                </div><!-- /.form-card -->
+
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+
+{% block extra_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // 1. Індивідуальне завдання
+    var cb = document.getElementById('id_is_individual');
+    var studentNameSection = document.getElementById('student-name-section');
+    function updateIndividualState() {
+        if (!cb || !studentNameSection) return;
+        studentNameSection.style.display = cb.checked ? 'block' : 'none';
+    }
+    if (cb) {
+        cb.addEventListener('change', updateIndividualState);
+        updateIndividualState();
+    }
+
+    // 2. Відкладена публікація
+    var publishRadios = document.querySelectorAll('input[name="publish_choice"]');
+    var scheduledSection = document.getElementById('scheduled-section');
+    function updateScheduledState() {
+        var checked = document.querySelector('input[name="publish_choice"]:checked');
+        if (checked && scheduledSection) {
+            scheduledSection.style.display = (checked.value === 'schedule') ? 'block' : 'none';
+        }
+    }
+    publishRadios.forEach(function(r) {
+        r.addEventListener('change', updateScheduledState);
+    });
+    updateScheduledState();
+
+    // 3. Завантаження файлів (Drag & Drop + preview)
+    var uploadArea = document.getElementById('upload-area');
+    var fileInput = document.getElementById('id_files');
+    var preview = document.getElementById('upload-preview');
+
+    if (uploadArea && fileInput) {
+        uploadArea.addEventListener('click', function() { fileInput.click(); });
+        ['dragenter', 'dragover'].forEach(function(e) {
+            uploadArea.addEventListener(e, function(evt) {
+                evt.preventDefault();
+                uploadArea.style.borderColor = 'var(--color-primary)';
+                uploadArea.style.background = 'rgba(99,102,241,0.06)';
+            });
+        });
+        ['dragleave', 'drop'].forEach(function(e) {
+            uploadArea.addEventListener(e, function(evt) {
+                evt.preventDefault();
+                uploadArea.style.borderColor = 'var(--color-border)';
+                uploadArea.style.background = 'var(--color-bg-secondary)';
+            });
+        });
+        uploadArea.addEventListener('drop', function(evt) {
+            if (evt.dataTransfer.files.length) {
+                fileInput.files = evt.dataTransfer.files;
+                renderFilePreview(fileInput.files);
+            }
+        });
+        fileInput.addEventListener('change', function() {
+            renderFilePreview(fileInput.files);
+        });
+    }
+
+    function renderFilePreview(files) {
+        if (!preview) return;
+        preview.innerHTML = '';
+        if (!files || !files.length) return;
+
+        var list = document.createElement('div');
+        list.style.cssText = 'display:flex;flex-direction:column;gap:6px;margin-top:8px;';
+        Array.from(files).forEach(function(f) {
+            var item = document.createElement('div');
+            item.style.cssText = 'display:flex;justify-content:space-between;padding:8px 12px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:6px;font-size:13px;';
+            item.innerHTML = '<span>📄 <strong>' + f.name + '</strong></span><span style="color:var(--color-text-muted);">' + (f.size / 1024).toFixed(1) + ' KB</span>';
+            list.appendChild(item);
+        });
+        preview.appendChild(list);
+    }
+});
+
+// Додавання рядка додаткового посилання
+function addExtraLinkRow() {
+    var container = document.getElementById('extra-links-container');
+    if (!container) return;
+    var row = document.createElement('div');
+    row.className = 'form-row extra-link-row';
+    row.style.marginTop = '8px';
+    row.innerHTML =
+        '<div class="form-group"><label class="form-label">🔗 Додаткове посилання</label>' +
+        '<input type="url" name="extra_link_url" class="form-input" placeholder="https://..."></div>' +
+        '<div class="form-group"><label class="form-label">Текст посилання</label>' +
+        '<input type="text" name="extra_link_label" class="form-input" placeholder="Назва посилання"></div>' +
+        '<button type="button" onclick="this.closest(\'.extra-link-row\').remove(); updateAddLinkBtn();" ' +
+        'style="align-self:flex-end; background:none; border:1px solid var(--color-danger); color:var(--color-danger); border-radius:var(--radius-md); padding:6px 10px; cursor:pointer; margin-bottom:1px; flex-shrink:0;">✕</button>';
+    container.appendChild(row);
+    updateAddLinkBtn();
+}
+
+function updateAddLinkBtn() {
+    var addBtn = document.getElementById('add-extra-link-btn');
+    var linkUrlInput = document.getElementById('id_link_url');
+    if (!addBtn) return;
+    var hasMain = linkUrlInput && linkUrlInput.value.trim().length > 0;
+    var hasExtra = document.querySelectorAll('.extra-link-row').length > 0;
+    addBtn.style.display = (hasMain || hasExtra) ? 'inline-block' : 'none';
+}
+
+// Додавання рядка додаткового YouTube відео
+function addExtraYouTubeRow() {
+    var container = document.getElementById('extra-youtube-container');
+    if (!container) return;
+    var row = document.createElement('div');
+    row.className = 'form-row extra-youtube-row';
+    row.style.marginTop = '10px';
+    row.style.gap = '8px';
+    row.innerHTML =
+        '<div class="form-group" style="flex:2;"><label class="form-label">▶ Додаткове YouTube відео</label>' +
+        '<input type="url" name="extra_youtube_url" class="form-input" placeholder="https://www.youtube.com/watch?v=..."></div>' +
+        '<div class="form-group" style="flex:1;"><label class="form-label">Підпис до відео (опціонально)</label>' +
+        '<input type="text" name="extra_youtube_title" class="form-input" placeholder="Наприклад: Частина 2"></div>' +
+        '<button type="button" onclick="this.closest(\'.extra-youtube-row\').remove(); updateAddYouTubeBtn();" ' +
+        'style="align-self:flex-end; background:none; border:1px solid var(--color-danger); color:var(--color-danger); border-radius:var(--radius-md); padding:7px 11px; cursor:pointer; margin-bottom:1px; flex-shrink:0;" title="Видалити це відео">✕</button>';
+    container.appendChild(row);
+    updateAddYouTubeBtn();
+}
+
+function updateAddYouTubeBtn() {
+    var addBtn = document.getElementById('add-extra-youtube-btn');
+    var ytInput = document.getElementById('id_youtube_url');
+    if (!addBtn) return;
+    var hasMain = ytInput && ytInput.value.trim().length > 0;
+    var hasExtra = document.querySelectorAll('.extra-youtube-row').length > 0;
+    addBtn.style.display = (hasMain || hasExtra) ? 'inline-block' : 'none';
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    var linkUrlInput = document.getElementById('id_link_url');
+    if (linkUrlInput) {
+        linkUrlInput.addEventListener('input', updateAddLinkBtn);
+    }
+    updateAddLinkBtn();
+
+    var ytInput = document.getElementById('id_youtube_url');
+    if (ytInput) {
+        ytInput.addEventListener('input', updateAddYouTubeBtn);
+    }
+    updateAddYouTubeBtn();
+
+    // Очищаємо залишки будь-яких збережених чернеток з localStorage, щоб форма завжди була чистою
+    try {
+        localStorage.removeItem('schoolnet_assignment_draft');
+    } catch(e) {}
+
+    // Автозавантаження ГР при редагуванні завдання з уже обраним preset
+    var presetSelect = document.getElementById('id_default_ai_preset');
+    if (presetSelect && presetSelect.value) {
+        loadPresetGRs(presetSelect.value, {{ assignment.default_ai_grs|default:"'[]'"|safe }});
+    }
+});
+
+// ── Пресети ШІ: завантаження ГР чекбоксів ────────────────────────────────────
+var PRESET_GR_DATA = {};
+(function() {
+    {% for preset in criteria_presets %}
+    PRESET_GR_DATA[{{ preset.id }}] = {
+        name: "{{ preset.name|escapejs }}",
+        grs: [{% for gr in preset.get_gr_list %}{"code": "{{ gr.code|escapejs }}", "name": "{{ gr.name|escapejs }}"}{% if not forloop.last %},{% endif %}{% endfor %}]
+    };
+    {% endfor %}
+})();
+
+function loadPresetGRs(presetId, existingGRs) {
+    var section = document.getElementById('gr-checkboxes-section');
+    var container = document.getElementById('gr-checkboxes-container');
+    if (!section || !container) return;
+
+    if (!presetId) {
+        section.style.display = 'none';
+        container.innerHTML = '';
+        return;
+    }
+
+    var presetData = PRESET_GR_DATA[presetId];
+    if (!presetData || !presetData.grs || presetData.grs.length === 0) {
+        section.style.display = 'none';
+        container.innerHTML = '';
+        return;
+    }
+
+    // Визначаємо які ГР вже були збережені
+    var savedGRs = [];
+    if (existingGRs) {
+        try {
+            savedGRs = typeof existingGRs === 'string' ? JSON.parse(existingGRs) : existingGRs;
+        } catch(e) { savedGRs = []; }
+    }
+
+    container.innerHTML = '';
+    presetData.grs.forEach(function(gr) {
+        var isChecked = savedGRs.length === 0 || savedGRs.indexOf(gr.code) !== -1;
+        var label = document.createElement('label');
+        label.style.cssText = 'display:flex;align-items:center;gap:8px;padding:8px 14px;background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:var(--radius-md);cursor:pointer;font-size:13px;font-weight:600;white-space:nowrap;';
+        label.innerHTML = '<input type="checkbox" name="default_ai_grs" value="' + gr.code + '"' +
+            (isChecked ? ' checked' : '') +
+            ' style="width:15px;height:15px;accent-color:var(--color-primary);"> ' +
+            '<span title="' + gr.name + '">' + gr.code + '</span>';
+        // tooltip on hover
+        label.title = gr.code + ': ' + gr.name;
+        container.appendChild(label);
+    });
+
+    section.style.display = 'block';
+}
+
+</script>
+{% endblock %}
+

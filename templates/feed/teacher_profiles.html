@@ -1,0 +1,242 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Керування закладом та вчителями — Шкільні Завдання{% endblock %}
+
+{% block content %}
+<div class="page-wrapper">
+
+    <!-- ── Двоколонковий layout сайту ────────────────────────────────────── -->
+    <div class="feed-layout">
+
+        <!-- ════ ЛІВИЙ САЙДБАР НАЛАШТУВАНЬ ТА АДМІНІСТРАТОРА ════════════════ -->
+        {% include 'feed/components/settings_sidebar.html' %}
+
+        <!-- ════ ЦЕНТРАЛЬНА ЧАСТИНА (КЕРУВАННЯ ВЧИТЕЛЯМИ ТА ЗАКЛАДОМ) ═════════ -->
+        <div class="feed-main-content">
+
+            <!-- Шапка закладу та режиму адміністрування -->
+            <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:20px 24px;margin-bottom:20px;box-shadow:0 2px 10px rgba(0,0,0,0.03);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:14px;">
+                <div>
+                    <div style="font-size:11px;text-transform:uppercase;font-weight:800;color:var(--color-primary);letter-spacing:0.05em;">
+                        Адміністрування закладу
+                    </div>
+                    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:4px 0 2px;">
+                        <h1 style="font-size:1.4rem;font-weight:800;margin:0;color:var(--color-text-primary);">
+                            🏫 {{ school.name }}
+                        </h1>
+                        {% if is_superadmin_mode %}
+                        <span style="background:rgba(234,179,8,0.15);color:#b45309;border:1px solid rgba(234,179,8,0.4);border-radius:20px;padding:2px 10px;font-size:12px;font-weight:700;">
+                            👑 Режим супер-адміністратора
+                        </span>
+                        {% elif is_superuser %}
+                        <span style="background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:20px;padding:2px 10px;font-size:12px;">
+                            👤 Звичайний режим вчителя
+                        </span>
+                        {% endif %}
+                    </div>
+                    <p style="font-size:13px;color:var(--color-text-muted);margin:2px 0 0;">
+                        Створення облікових записів вчителів, призначення предметів і класів та єдиний архів робіт.
+                    </p>
+                </div>
+
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                    {% if is_superuser %}
+                        {% if is_superadmin_mode %}
+                        <a href="{% url 'exit_superadmin_mode' %}" class="btn btn-secondary btn-sm" style="color:#ef4444;">
+                            🚪 Вийти з режиму супер-адміна
+                        </a>
+                        {% else %}
+                        <a href="{% url 'enter_superadmin_mode' %}" class="btn btn-primary btn-sm" style="background:linear-gradient(135deg,#f59e0b,#d97706);border:none;">
+                            👑 Увійти в режим супер-адміна
+                        </a>
+                        {% endif %}
+                    {% endif %}
+                    <a href="{% url 'teacher_dashboard' %}" class="btn btn-secondary btn-sm">← Панель вчителя</a>
+                </div>
+            </div>
+
+            {% if is_superadmin_mode %}
+            <!-- Зміна назви школи -->
+            <div class="submit-form-card" style="margin-bottom:20px;padding:16px 20px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);">
+                <form method="POST" action="{% url 'school_settings' %}" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+                    {% csrf_token %}
+                    <label style="font-weight:700;font-size:13px;white-space:nowrap;color:var(--color-text-primary);">Назва закладу освіти:</label>
+                    <input type="text" name="school_name" value="{{ school.name }}" class="form-input" style="flex:1;min-width:200px;" required>
+                    <button type="submit" class="btn btn-success btn-sm" style="font-weight:700;">✓ Зберегти назву</button>
+                </form>
+            </div>
+            {% endif %}
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;" id="profiles-grid">
+
+                <!-- ЛІВА КОЛОНКА: Створення вчителя та Архів школи -->
+                <div style="display:flex;flex-direction:column;gap:20px;">
+                    {% if is_superadmin_mode %}
+                    <div class="submit-form-card" style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:20px;">
+                        <h3 style="font-size:1.15rem;font-weight:800;margin:0 0 8px;color:var(--color-text-primary);">
+                            ➕ Створити акаунт вчителя
+                        </h3>
+                        <p style="font-size:13px;color:var(--color-text-muted);margin:0 0 16px;">
+                            Вкажіть ПІБ, логін і пароль для створення нового вчителя.
+                        </p>
+
+                        <form method="POST" action="{% url 'teacher_profiles' %}">
+                            {% csrf_token %}
+
+                            <div class="form-group" style="margin-bottom:12px;">
+                                <label class="form-label" style="font-size:13px;font-weight:600;">ПІБ вчителя <span style="color:#ef4444">*</span></label>
+                                {{ form.full_name }}
+                            </div>
+
+                            <div class="form-group" style="margin-bottom:12px;">
+                                <label class="form-label" style="font-size:13px;font-weight:600;">Логін для входу <span style="color:#ef4444">*</span></label>
+                                {{ form.username }}
+                            </div>
+
+                            <div class="form-group" style="margin-bottom:12px;">
+                                <label class="form-label" style="font-size:13px;font-weight:600;">Пароль <span style="color:#ef4444">*</span></label>
+                                {{ form.password }}
+                            </div>
+
+                            <div class="form-group" style="margin-bottom:12px;">
+                                <label class="form-label" style="font-size:13px;font-weight:600;">Класи (через кому, напр. 5-А, 7-Б):</label>
+                                {{ form.classes_text }}
+                            </div>
+
+                            <div class="form-group" style="margin-bottom:16px;">
+                                <label class="form-label" style="font-size:13px;font-weight:600;">Предмет (напр. Інформатика):</label>
+                                {{ form.subject_name }}
+                            </div>
+
+                            {% if form.errors %}
+                            <div style="color:#ef4444;font-size:12px;margin-bottom:12px;">
+                                {% for f, errs in form.errors.items %}
+                                    <div>{{ errs|join:", " }}</div>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+
+                            <button type="submit" class="btn btn-primary" style="width:100%;font-weight:700;padding:10px;">
+                                ➕ Створити вчителя
+                            </button>
+                        </form>
+                    </div>
+                    {% elif is_superuser %}
+                    <div class="submit-form-card" style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:20px;">
+                        <h4 style="color:#b45309;font-weight:800;margin:0 0 8px;">👑 Режим супер-адміністратора</h4>
+                        <p style="font-size:13px;color:var(--color-text-muted);margin:0 0 16px;">
+                            Щоб додавати нових вчителів або адмініструвати школу — увійдіть у режим супер-адміна.
+                        </p>
+                        <a href="{% url 'enter_superadmin_mode' %}" class="btn btn-primary" style="width:100%;background:linear-gradient(135deg,#f59e0b,#d97706);border:none;font-weight:700;padding:10px;text-align:center;">
+                            Увійти в режим супер-адміна
+                        </a>
+                    </div>
+                    {% endif %}
+
+                    <!-- Централізований Master ZIP архів школи на диску -->
+                    <div class="submit-form-card" style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:20px;">
+                        <h4 style="font-size:1.1rem;font-weight:800;margin:0 0 6px;color:var(--color-text-primary);">
+                            📦 Єдиний архів робіт школи на диску
+                        </h4>
+                        <p style="font-size:13px;color:var(--color-text-muted);margin:0 0 16px;">
+                            Усі роботи зберігаються в єдиному ZIP-архіві школи з сортуванням за папками <code>Вчитель/Клас/Учень</code> та зведеним CSV-файлом.
+                        </p>
+
+                        {% if master_archive %}
+                        <div style="padding:14px;background:var(--color-bg-secondary);border-radius:var(--radius-sm);margin-bottom:12px;">
+                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                                <strong>{{ master_archive.name }}</strong>
+                                <span class="status-badge status-published">{{ master_archive.size }}</span>
+                            </div>
+                            <div style="font-size:12px;color:var(--color-text-muted);">
+                                📅 Оновлено: {{ master_archive.date }} · 📎 Файлів: {{ master_archive.files_count }}
+                            </div>
+                        </div>
+                        <a href="{{ master_archive.url }}" download class="btn btn-success" style="width:100%;font-weight:700;padding:10px;text-align:center;">
+                            ⬇️ Завантажити архів робіт школи (ZIP)
+                        </a>
+                        {% else %}
+                        <div style="padding:14px;background:var(--color-bg-secondary);border-radius:var(--radius-sm);font-size:13px;color:var(--color-text-muted);">
+                            Архів ще формується. Роботи додаються автоматично.
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- ПРАВА КОЛОНКА: Список вчителів -->
+                <div>
+                    <div class="submit-form-card" style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:20px;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                            <h3 style="font-size:1.15rem;font-weight:800;margin:0;color:var(--color-text-primary);">
+                                👥 Вчителі закладу ({{ total_profiles_count }})
+                            </h3>
+                        </div>
+
+                        <div style="display:flex;flex-direction:column;gap:12px;">
+                            {% for p in profiles %}
+                            <div style="padding:14px;background:var(--color-bg-secondary);border-radius:var(--radius-sm);border:1px solid var(--color-border);">
+                                <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:8px;">
+                                    <div>
+                                        <div style="font-weight:800;font-size:15px;color:var(--color-text-primary);">
+                                            {{ p.full_name }}
+                                            {% if p.user and p.user.is_superuser %}
+                                            <span style="font-size:11px;background:rgba(234,179,8,0.2);color:#b45309;padding:1px 6px;border-radius:4px;margin-left:4px;">Супер-адмін</span>
+                                            {% endif %}
+                                        </div>
+                                        <div style="font-size:12px;color:var(--color-text-muted);margin-top:2px;">
+                                            Логін: <code>{{ p.user.username }}</code> · 📥 Зданих робіт: <strong>{{ p.submissions_count }}</strong>
+                                        </div>
+                                    </div>
+
+                                    <div style="display:flex;gap:6px;align-items:center;">
+                                        <a href="{% url 'teacher_profile_edit' p.id %}" class="btn btn-secondary btn-sm" title="Редагувати">✏️</a>
+                                        {% if is_superadmin_mode and p.user %}
+                                        <form method="POST" action="{% url 'toggle_superadmin' p.user.id %}" style="display:inline;">
+                                            {% csrf_token %}
+                                            <button type="submit" class="btn btn-secondary btn-sm" title="Перемкнути права супер-адміна">
+                                                {% if p.user.is_superuser %}👑{% else %}👤{% endif %}
+                                            </button>
+                                        </form>
+                                        <form method="POST" action="{% url 'teacher_profile_delete' p.id %}" style="display:inline;"
+                                              onsubmit="return confirm('Видалити вчителя «{{ p.full_name }}»? Роботи буде заархівовано у Master ZIP.')">
+                                            {% csrf_token %}
+                                            <button type="submit" class="btn btn-danger btn-sm" title="Видалити">🗑️</button>
+                                        </form>
+                                        {% endif %}
+                                    </div>
+                                </div>
+
+                                <!-- Класи та предмети вчителя -->
+                                <div style="display:flex;gap:4px;flex-wrap:wrap;">
+                                    {% for c in p.classes.all %}
+                                    <span class="class-tag" style="font-size:11px;">{{ c.name }}</span>
+                                    {% empty %}
+                                    <span style="font-size:11px;color:var(--color-text-muted);">Класи не призначено</span>
+                                    {% endfor %}
+                                    {% for s in p.subjects.all %}
+                                    <span style="font-size:11px;background:{{ s.color }}22;color:{{ s.color }};padding:2px 8px;border-radius:12px;">{{ s.name }}</span>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+<style>
+@media (max-width: 900px) {
+    #profiles-grid {
+        grid-template-columns: 1fr !important;
+    }
+}
+</style>
+{% endblock %}

@@ -1,0 +1,351 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Здані роботи учнів — Шкільні Завдання{% endblock %}
+
+{% block content %}
+<div class="page-wrapper">
+
+    <!-- ── Двоколонковий layout сайту ────────────────────────────────────── -->
+    <div class="feed-layout">
+
+        <!-- ════ ЛІВИЙ САЙДБАР ВЧИТЕЛЯ ════════════════════════════════════════ -->
+        {% include 'feed/components/teacher_sidebar.html' %}
+
+        <!-- ════ ЦЕНТРАЛЬНА ЧАСТИНА (ВСІ ЗДАЧІ РОБІТ УЧНІВ) ═══════════════════ -->
+        <div class="feed-main-content">
+
+            <!-- ── Шапка сторінки ────────────────────────────────────────────── -->
+            <div class="page-hero" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+                <div>
+                    <div class="page-hero-kicker">Перевірка робіт</div>
+                    <h1>Здані роботи учнів</h1>
+                </div>
+                <a href="{% url 'export_grades' %}" class="btn btn-secondary btn-sm">Експорт CSV</a>
+            </div>
+
+            <!-- ── Статистика здач ───────────────────────────────────────────── -->
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:20px;">
+                <a href="?grade_filter=all" style="text-decoration:none;">
+                    <div class="sidebar-card" style="padding:14px;text-align:center;border-top:3px solid var(--color-primary);transition:transform 0.15s;cursor:pointer;">
+                        <div style="font-size:24px;font-weight:800;color:var(--color-primary);">{{ total_count }}</div>
+                        <div class="text-muted text-sm" style="font-weight:600;">Всього здач</div>
+                    </div>
+                </a>
+                <a href="?grade_filter=ungraded" style="text-decoration:none;">
+                    <div class="sidebar-card" style="padding:14px;text-align:center;border-top:3px solid var(--color-warning);transition:transform 0.15s;cursor:pointer;">
+                        <div style="font-size:24px;font-weight:800;color:var(--color-warning);">{{ ungraded_count }}</div>
+                        <div class="text-muted text-sm" style="font-weight:600;">⏳ Очікують перевірки</div>
+                    </div>
+                </a>
+                <a href="?grade_filter=graded" style="text-decoration:none;">
+                    <div class="sidebar-card" style="padding:14px;text-align:center;border-top:3px solid var(--color-success);transition:transform 0.15s;cursor:pointer;">
+                        <div style="font-size:24px;font-weight:800;color:var(--color-success);">{{ graded_count }}</div>
+                        <div class="text-muted text-sm" style="font-weight:600;">✅ Оцінено</div>
+                    </div>
+                </a>
+            </div>
+
+            <!-- ── Оптимізована панель фільтрації та пошуку ──────────────────── -->
+            <div class="submissions-filters" style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:18px 20px;margin-bottom:20px;box-shadow:0 2px 8px rgba(0,0,0,0.02);">
+                <form method="GET" id="filter-form" style="display:flex;flex-direction:column;gap:14px;width:100%;">
+
+                    <!-- Рядок 1: Пошук з іконкою та швидким очищенням -->
+                    <div style="display:flex;gap:10px;align-items:center;">
+                        <div style="position:relative;flex:1;">
+                            <span style="position:absolute;left:14px;top:50%;transform:translateY(-50%);font-size:15px;color:var(--color-text-muted);">🔍</span>
+                            <input type="text" name="search" value="{{ search_query }}"
+                                   class="form-input" placeholder="Швидкий пошук за прізвищем, іменем, класом або назвою завдання..."
+                                   style="padding-left:38px;padding-right:12px;font-size:14px;width:100%;">
+                        </div>
+                        <button type="submit" class="btn btn-primary" style="padding:10px 18px;font-weight:700;white-space:nowrap;">
+                            Знайти
+                        </button>
+                    </div>
+
+                    <!-- Рядок 2: Швидкі фільтри-вкладки статусу -->
+                    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;border-top:1px solid var(--color-border);padding-top:12px;">
+                        
+                        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+                            <span style="font-size:12px;font-weight:700;color:var(--color-text-muted);margin-right:4px;">Статус:</span>
+                            <a href="?grade_filter=all&search={{ search_query }}&class={{ selected_class_id|default:'' }}&assignment={{ selected_assignment_id|default:'' }}&date={{ date_filter }}"
+                               class="btn {% if grade_filter == 'all' or not grade_filter %}btn-primary{% else %}btn-secondary{% endif %} btn-sm" style="border-radius:20px;padding:4px 12px;font-size:12px;">
+                                Всі ({{ total_count }})
+                            </a>
+                            <a href="?grade_filter=ungraded&search={{ search_query }}&class={{ selected_class_id|default:'' }}&assignment={{ selected_assignment_id|default:'' }}&date={{ date_filter }}"
+                               class="btn {% if grade_filter == 'ungraded' %}btn-primary{% else %}btn-secondary{% endif %} btn-sm" style="border-radius:20px;padding:4px 12px;font-size:12px;{% if grade_filter == 'ungraded' %}background:#f59e0b;border-color:#f59e0b;{% endif %}">
+                                ⏳ Без оцінки ({{ ungraded_count }})
+                            </a>
+                            <a href="?grade_filter=graded&search={{ search_query }}&class={{ selected_class_id|default:'' }}&assignment={{ selected_assignment_id|default:'' }}&date={{ date_filter }}"
+                               class="btn {% if grade_filter == 'graded' %}btn-primary{% else %}btn-secondary{% endif %} btn-sm" style="border-radius:20px;padding:4px 12px;font-size:12px;{% if grade_filter == 'graded' %}background:#10b981;border-color:#10b981;{% endif %}">
+                                ✅ Оцінені ({{ graded_count }})
+                            </a>
+                        </div>
+
+                        <!-- Спадаючі списки класів та завдань -->
+                        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                            <input type="hidden" name="grade_filter" value="{{ grade_filter }}">
+
+                            <!-- Клас -->
+                            <select name="class" class="form-input" style="min-width:110px;max-width:150px;font-size:12px;padding:6px 10px;" onchange="this.form.submit()">
+                                <option value="">🏫 Всі класи</option>
+                                {% for class in all_classes %}
+                                <option value="{{ class.id }}" {% if class.id == selected_class_id %}selected{% endif %}>{{ class.name }}</option>
+                                {% endfor %}
+                            </select>
+
+                            <!-- Завдання -->
+                            <select name="assignment" class="form-input" style="min-width:140px;max-width:240px;font-size:12px;padding:6px 10px;" onchange="this.form.submit()">
+                                <option value="">📋 Всі завдання</option>
+                                {% for a in all_assignments %}
+                                <option value="{{ a.id }}" {% if a.id == selected_assignment_id %}selected{% endif %}>
+                                    {{ a.title|truncatechars:35 }}
+                                </option>
+                                {% endfor %}
+                            </select>
+
+                            <!-- Дата -->
+                            <input type="date" name="date" value="{{ date_filter }}" class="form-input"
+                                   style="font-size:12px;padding:5px 8px;max-width:140px;" onchange="this.form.submit()" title="Фільтр за конкретною датою">
+
+                            {% if search_query or selected_class_id or selected_assignment_id or grade_filter != 'all' or date_filter %}
+                            <a href="{% url 'all_submissions_dashboard' %}" class="btn btn-secondary btn-sm" style="font-size:12px;padding:6px 10px;color:#ef4444;" title="Скинути всі фільтри">
+                                ✕ Скинути
+                            </a>
+                            {% endif %}
+                        </div>
+
+                    </div>
+
+                </form>
+            </div>
+
+            <!-- ── Таблиця зданих робіт (Компактний формат без горизонтального скролу) ── -->
+            <div class="submissions-table-wrapper" style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);overflow-x:auto;box-shadow:0 2px 10px rgba(0,0,0,0.03);width:100%;">
+                <table class="submissions-table" style="width:100%;font-size:12px;">
+                    <thead>
+                        <tr>
+                            <th style="width:18%;padding:8px 8px;">
+                                <a href="?sort=student&order={% if sort_by == 'student' and sort_order == 'asc' %}desc{% else %}asc{% endif %}&search={{ search_query }}&class={{ selected_class_id|default:'' }}&assignment={{ selected_assignment_id|default:'' }}&grade_filter={{ grade_filter }}&date={{ date_filter }}">
+                                    Учень
+                                    {% if sort_by == 'student' %}{% if sort_order == 'asc' %}↑{% else %}↓{% endif %}{% endif %}
+                                </a>
+                            </th>
+                            <th style="width:8%;text-align:center;padding:8px 4px;">
+                                <a href="?sort=class&order={% if sort_by == 'class' and sort_order == 'asc' %}desc{% else %}asc{% endif %}&search={{ search_query }}&class={{ selected_class_id|default:'' }}&assignment={{ selected_assignment_id|default:'' }}&grade_filter={{ grade_filter }}&date={{ date_filter }}">
+                                    Клас
+                                    {% if sort_by == 'class' %}{% if sort_order == 'asc' %}↑{% else %}↓{% endif %}{% endif %}
+                                </a>
+                            </th>
+                            <th style="width:26%;padding:8px 8px;">
+                                <a href="?sort=assignment&order={% if sort_by == 'assignment' and sort_order == 'asc' %}desc{% else %}asc{% endif %}&search={{ search_query }}&class={{ selected_class_id|default:'' }}&assignment={{ selected_assignment_id|default:'' }}&grade_filter={{ grade_filter }}&date={{ date_filter }}">
+                                    Завдання
+                                    {% if sort_by == 'assignment' %}{% if sort_order == 'asc' %}↑{% else %}↓{% endif %}{% endif %}
+                                </a>
+                            </th>
+                            <th style="width:10%;text-align:center;padding:8px 4px;white-space:nowrap;">Робота</th>
+                            <th style="width:12%;padding:8px 6px;white-space:nowrap;">
+                                <a href="?sort=date&order={% if sort_by == 'date' and sort_order == 'asc' %}desc{% else %}asc{% endif %}&search={{ search_query }}&class={{ selected_class_id|default:'' }}&assignment={{ selected_assignment_id|default:'' }}&grade_filter={{ grade_filter }}&date={{ date_filter }}">
+                                    Дата здачі
+                                    {% if sort_by == 'date' %}{% if sort_order == 'asc' %}↑{% else %}↓{% endif %}{% endif %}
+                                </a>
+                            </th>
+                            <th style="width:13%;padding:8px 6px;white-space:nowrap;">
+                                <a href="?sort=grade&order={% if sort_by == 'grade' and sort_order == 'asc' %}desc{% else %}asc{% endif %}&search={{ search_query }}&class={{ selected_class_id|default:'' }}&assignment={{ selected_assignment_id|default:'' }}&grade_filter={{ grade_filter }}&date={{ date_filter }}">
+                                    Оцінка
+                                    {% if sort_by == 'grade' %}{% if sort_order == 'asc' %}↑{% else %}↓{% endif %}{% endif %}
+                                </a>
+                            </th>
+                            <th style="width:13%;text-align:center;padding:8px 6px;white-space:nowrap;">Дії</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for submission in page_obj %}
+                        <tr id="row-{{ submission.id }}" {% if submission.is_graded %}style="border-left:3px solid var(--color-success)"{% else %}style="border-left:3px solid var(--color-warning)"{% endif %}>
+                            <td style="padding:6px 8px;white-space:nowrap;">
+                                <div style="display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap;">
+                                    <a href="{% url 'student_detail' student_name=submission.last_name|add:'_'|add:submission.first_name %}"
+                                       style="font-weight:700;color:var(--color-primary);text-decoration:none;display:inline-flex;align-items:center;gap:4px;font-size:12px;"
+                                       title="{{ submission.last_name }} {{ submission.first_name }}">
+                                        <span>👤</span> <span>{{ submission.last_name }} {{ submission.first_name }}</span>
+                                    </a>
+                                    {% if submission.is_resubmission or submission.resubmission_attempt > 1 %}
+                                        {% if submission.is_latest_attempt %}
+                                        <span class="badge" style="background:#d1fae5;color:#065f46;border:1px solid #a7f3d0;font-size:9.5px;padding:1px 4px;font-weight:800;" title="Повторна здача (робота над помилками, спроба #{{ submission.resubmission_attempt }})">🔄 Спроба #{{ submission.resubmission_attempt }}</span>
+                                        {% else %}
+                                        <span class="badge" style="background:#fef3c7;color:#92400e;border:1px solid #fde68a;font-size:9px;padding:1px 4px;font-weight:700;" title="Попередня спроба #{{ submission.resubmission_attempt }} (є новіша здача)">📦 Спроба #{{ submission.resubmission_attempt }}</span>
+                                        {% endif %}
+                                    {% endif %}
+                                    {% if submission.ai_generated_detected %}
+                                    <span class="badge" style="background:{% if submission.is_ai_allowed %}#ecfdf5;color:#065f46;border:1px solid #a7f3d0;{% else %}#fef2f2;color:#991b1b;border:1px solid #fecaca;{% endif %}font-size:9.5px;padding:1px 4px;font-weight:700;" title="{% if submission.is_ai_allowed %}Ознаки ШІ (дозволено вчителем){% else %}Ознаки ШІ (самостійна робота, заборонено){% endif %}: {{ submission.ai_generated_details }}">🤖 ШІ</span>
+                                    {% endif %}
+                                </div>
+                            </td>
+                            <td style="padding:6px 4px;text-align:center;white-space:nowrap;">
+                                <span class="class-prominent-badge" style="font-size:10px;padding:2px 5px;font-weight:800;">{{ submission.class_group.name }}</span>
+                            </td>
+                            <td style="padding:6px 8px;line-height:1.25;">
+                                {% if submission.assignment %}
+                                <a href="{% url 'assignment_submissions' submission.assignment.pk %}"
+                                   style="color:var(--color-text-primary);text-decoration:none;font-size:11.5px;font-weight:600;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;"
+                                   title="{{ submission.assignment.title }}">
+                                    {{ submission.assignment.title }}
+                                </a>
+                                {% else %}
+                                <span style="color:var(--color-text-muted);font-size:11px;">—</span>
+                                {% endif %}
+                            </td>
+                            <td style="padding:6px 4px;text-align:center;white-space:nowrap;">
+                                {% if submission.files.all %}
+                                    {% if submission.files.all|length > 1 %}
+                                    <a href="{% url 'view_file' submission.id %}"
+                                       class="btn btn-secondary btn-sm" style="font-size:11px;padding:2px 6px;gap:2px;font-weight:700;" title="Прикріплено {{ submission.files.all|length }} файли ({{ submission.get_total_files_size_display }})">
+                                        📎 <span style="font-size:10px;">{{ submission.files.all|length }} файли</span>
+                                    </a>
+                                    {% else %}
+                                    {% with sf=submission.files.first %}
+                                    <a href="{% url 'view_file' submission.id %}?file_id={{ sf.id }}"
+                                       class="btn btn-secondary btn-sm" style="font-size:11px;padding:2px 6px;gap:2px;" title="{{ sf.original_name|default:sf.file.name }}">
+                                        {{ sf.get_file_icon }} <span style="font-size:10px;">Файл</span>
+                                    </a>
+                                    {% endwith %}
+                                    {% endif %}
+                                {% elif submission.file %}
+                                <a href="{% url 'view_file' submission.id %}"
+                                   class="btn btn-secondary btn-sm" style="font-size:11px;padding:2px 6px;gap:2px;" title="{{ submission.file.name }}">
+                                    {{ submission.get_file_icon }} <span style="font-size:10px;">Файл</span>
+                                </a>
+                                {% elif submission.link %}
+                                <a href="{% url 'view_file' submission.id %}" class="btn btn-secondary btn-sm" style="font-size:11px;padding:2px 6px;gap:2px;" title="{{ submission.link }}">
+                                    🔗 <span style="font-size:10px;">Лінк</span>
+                                </a>
+                                {% else %}
+                                <span style="color:var(--color-text-muted);font-size:11px;">—</span>
+                                {% endif %}
+                            </td>
+                            <td style="padding:6px 6px;font-size:11px;white-space:nowrap;line-height:1.2;">
+                                <div>{{ submission.submitted_at|date:"d.m.y" }}</div>
+                                <div style="color:var(--color-text-muted);font-size:10px;">{{ submission.submitted_at|date:"H:i" }}</div>
+                            </td>
+                            <td style="padding:6px 6px;white-space:nowrap;">
+                                <div style="display:flex;align-items:center;gap:3px;">
+                                    {% if submission.grade == 'Доопрацювати' %}
+                                    <span id="grade-disp-{{ submission.id }}" class="grade-badge" style="background:#fef3c7;color:#d97706;border:1px solid #fcd34d;font-size:10px;padding:1px 4px;font-weight:700;" title="Повернуто на доопрацювання">
+                                        🔄
+                                    </span>
+                                    {% else %}
+                                    <span id="grade-disp-{{ submission.id }}" class="grade-badge {% if not submission.grade %}no-grade{% endif %}" style="min-width:24px;font-size:11.5px;padding:1px 4px;font-weight:800;">
+                                        {{ submission.grade|default:"—" }}
+                                    </span>
+                                    {% endif %}
+                                    <div style="display:inline-flex;align-items:center;gap:2px;">
+                                        <input type="text"
+                                               id="grade-inp-{{ submission.id }}"
+                                               class="grade-input-inline"
+                                               style="width:34px;font-size:11px;padding:2px 2px;text-align:center;"
+                                               value="{% if submission.grade != 'Доопрацювати' %}{{ submission.grade|default:'' }}{% endif %}"
+                                               placeholder="1-12"
+                                               maxlength="12"
+                                               title="Швидка оцінка"
+                                               onkeydown="if(event.key==='Enter'){quickGrade({{ submission.id }})}">
+                                        <button class="btn btn-success btn-sm" style="padding:2px 5px;font-size:10px;" onclick="quickGrade({{ submission.id }})" title="Зберегти оцінку">✓</button>
+                                    </div>
+                                </div>
+                                {% if submission.ai_status == 'success' %}
+                                <div style="margin-top:2px;font-size:10px;color:#059669;display:flex;align-items:center;gap:2px;" title="Оцінка ШІ: {{ submission.ai_suggested_grade }}">
+                                    <span>🤖</span> <strong>{{ submission.ai_suggested_grade }}</strong>
+                                </div>
+                                {% elif submission.ai_status == 'failed' or submission.ai_status == 'unsupported' %}
+                                <div style="margin-top:2px;font-size:9.5px;color:#ef4444;" title="{{ submission.ai_error_reason }}">
+                                    <span>⚠️ ШІ</span>
+                                </div>
+                                {% endif %}
+                                <div id="qg-status-{{ submission.id }}" style="font-size:9.5px;color:var(--color-text-muted);margin-top:1px;"></div>
+                            </td>
+
+                            <td style="padding:6px 6px;text-align:center;white-space:nowrap;">
+                                <div style="display:inline-flex;gap:3px;align-items:center;justify-content:center;">
+                                    <a href="{% url 'view_file' submission.id %}"
+                                       class="btn btn-primary btn-sm" style="font-size:11px;font-weight:700;padding:3px 7px;gap:2px;" title="Відкрити перевірку роботи">
+                                        👁️ Перевірити
+                                    </a>
+                                    <form method="POST" action="{% url 'delete_submission' submission.id %}" style="display:inline;margin:0;"
+                                          onsubmit="return confirm('Видалити цю здачу?')">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn btn-danger btn-sm" style="font-size:10.5px;padding:3px 5px;" title="Видалити">🗑️</button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="7" style="text-align:center;padding:40px;color:var(--color-text-muted);">
+                                <div style="font-size:48px;margin-bottom:12px;">📭</div>
+                                <div style="font-size:15px;font-weight:700;">Здач не знайдено</div>
+                                <p style="font-size:13px;margin-top:4px;">Спробуйте змінити фільтри або пошуковий запит.</p>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- ── Пагінація ─────────────────────────────────────────────────── -->
+            {% if page_obj.has_other_pages %}
+            <div style="display:flex;justify-content:center;gap:6px;flex-wrap:wrap;margin-top:20px;">
+                {% if page_obj.has_previous %}
+                <a href="?page={{ page_obj.previous_page_number }}&search={{ search_query }}&class={{ selected_class_id|default:'' }}&assignment={{ selected_assignment_id|default:'' }}&grade_filter={{ grade_filter }}&date={{ date_filter }}&sort={{ sort_by }}&order={{ sort_order }}"
+                   class="btn btn-secondary btn-sm">« Попередня</a>
+                {% endif %}
+                {% for i in page_obj.paginator.page_range %}
+                {% if page_obj.number == i %}
+                <span class="btn btn-primary btn-sm">{{ i }}</span>
+                {% elif i > page_obj.number|add:"-4" and i < page_obj.number|add:"4" %}
+                <a href="?page={{ i }}&search={{ search_query }}&class={{ selected_class_id|default:'' }}&assignment={{ selected_assignment_id|default:'' }}&grade_filter={{ grade_filter }}&date={{ date_filter }}&sort={{ sort_by }}&order={{ sort_order }}"
+                   class="btn btn-secondary btn-sm">{{ i }}</a>
+                {% endif %}
+                {% endfor %}
+                {% if page_obj.has_next %}
+                <a href="?page={{ page_obj.next_page_number }}&search={{ search_query }}&class={{ selected_class_id|default:'' }}&assignment={{ selected_assignment_id|default:'' }}&grade_filter={{ grade_filter }}&date={{ date_filter }}&sort={{ sort_by }}&order={{ sort_order }}"
+                   class="btn btn-secondary btn-sm">Наступна »</a>
+                {% endif %}
+            </div>
+            {% endif %}
+
+        </div>
+
+    </div>
+
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+const CSRF_TOKEN = '{{ csrf_token }}';
+
+function quickGrade(subId) {
+    const inp = document.getElementById('grade-inp-' + subId);
+    const grade = inp.value.trim();
+    const disp = document.getElementById('grade-disp-' + subId);
+    const status = document.getElementById('qg-status-' + subId);
+    status.textContent = '⏳';
+
+    fetch('/teacher/submission/' + subId + '/grade/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRFToken': CSRF_TOKEN },
+        body: 'grade=' + encodeURIComponent(grade)
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.status === 'success') {
+            disp.textContent = data.grade || '—';
+            disp.className = 'grade-badge' + (data.grade ? '' : ' no-grade');
+            status.textContent = '✓ Збережено';
+            status.style.color = 'var(--color-success)';
+            setTimeout(() => status.textContent = '', 2000);
+        }
+    })
+    .catch(() => { status.textContent = '❌ Помилка'; });
+}
+</script>
+{% endblock %}

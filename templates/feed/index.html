@@ -1,0 +1,572 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Стрічка завдань{% endblock %}
+{% block meta_description %}Навчальні завдання школи — перегляд за класами та предметами{% endblock %}
+
+{% block content %}
+<div class="page-wrapper">
+
+    <!-- ── Мобільна смуга фільтрів ──────────────────────────────────────── -->
+    <div class="mobile-filter-bar" role="navigation" aria-label="Фільтр по класах">
+        <a href="#" data-class="all"
+           class="filter-chip {% if not selected_class_id %}active{% endif %}"
+           onclick="return applyFilter('all', null)">
+            🏠 Всі класи
+        </a>
+        {% for class in all_classes %}
+        <a href="#" data-class="{{ class.id }}"
+           class="filter-chip {% if selected_class_id == class.id %}active{% endif %}"
+           onclick="return applyFilter('{{ class.id }}', null)">
+            {{ class.name }}
+        </a>
+        {% endfor %}
+    </div>
+
+    <!-- ── Двоколонковий layout ──────────────────────────────────────────── -->
+    <div class="feed-layout">
+
+        <!-- ════ САЙДБАР ════════════════════════════════════════════════════ -->
+        <aside class="sidebar" id="main-sidebar" aria-label="Фільтри">
+
+            <!-- Фільтр по класах -->
+            <div class="sidebar-card">
+                <div class="sidebar-header">🏫 Класи</div>
+                <ul class="sidebar-list" role="list">
+                    <li {% if not selected_class_id %}class="active"{% endif %} id="filter-class-all">
+                        <a href="#" onclick="return applyFilter('all', null)">
+                            <span>📋</span>
+                            <span>Всі класи</span>
+                        </a>
+                    </li>
+                    {% for class in all_classes %}
+                    <li {% if selected_class_id == class.id %}class="active"{% endif %} id="filter-class-{{ class.id }}">
+                        <a href="#" onclick="return applyFilter('{{ class.id }}', null)">
+                            <span class="class-badge">{{ class.grade }}{{ class.letter }}</span>
+                            <span>{{ class.name }}</span>
+                        </a>
+                    </li>
+                    {% empty %}
+                    <li>
+                        <span style="padding:10px 16px;color:var(--color-text-muted);font-size:13px;display:block">
+                            Класи ще не додані
+                        </span>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+
+            <!-- 2. Календар завдань (Google Calendar стиль) -->
+            <div class="sidebar-card calendar-card" id="calendar-widget">
+                {% include 'feed/calendar_widget.html' %}
+            </div>
+
+            <!-- 3. Фільтр по предметах (відображається тільки якщо є більше ніж 1 предмет) -->
+            {% if has_multiple_subjects and all_subjects|length > 1 %}
+            <div class="sidebar-card">
+                <div class="sidebar-header">📚 Предмети</div>
+                <ul class="sidebar-list" role="list">
+                    <li {% if not selected_subject_id %}class="active"{% endif %} id="filter-subject-all">
+                        <a href="#" onclick="return applyFilter(null, 'all')">
+                            <span>🗂️</span>
+                            <span>Всі предмети</span>
+                        </a>
+                    </li>
+                    {% for subject in all_subjects %}
+                    <li {% if selected_subject_id == subject.id|stringformat:"s" %}class="active"{% endif %} id="filter-subject-{{ subject.id }}">
+                        <a href="#" onclick="return applyFilter(null, '{{ subject.id }}')">
+                            <span>{{ subject.icon }}</span>
+                            <span>{{ subject.name }}</span>
+                        </a>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+        </aside>
+
+        <!-- ════ СТРІЧКА ЗАВДАНЬ ═════════════════════════════════════════════ -->
+        <section aria-label="Стрічка завдань">
+
+            <!-- Зона що оновлюється через AJAX -->
+            <div id="feed-zone">
+
+                <!-- Заголовок стрічки -->
+                <div class="d-flex align-center justify-between mb-4 flex-wrap gap-2" id="feed-header">
+                    <div>
+                        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                            <h1 style="font-size:1.25rem;font-weight:700;color:var(--color-text-primary);margin:0;">
+                                {% if selected_class and selected_date_display %}
+                                    📋 {{ selected_class.name }} &bull; 📅 {{ selected_date_display }}
+                                {% elif selected_class %}
+                                    📋 Завдання — {{ selected_class.name }}
+                                {% elif selected_date_display %}
+                                    📅 Завдання — {{ selected_date_display }}
+                                {% elif query %}
+                                    🔍 Результати: "{{ query }}"
+                                {% else %}
+                                    📋 Всі завдання
+                                {% endif %}
+                            </h1>
+                            <span style="font-size:11px;background:rgba(16,185,129,0.12);color:#059669;border:1px solid rgba(16,185,129,0.25);border-radius:20px;padding:2px 8px;display:inline-flex;align-items:center;gap:4px;" title="Стрічка автоматично оновлюється при появі нових завдань">
+                                <span class="live-dot-pulse"></span>
+                                Наживо
+                            </span>
+                        </div>
+                        <p class="text-muted text-sm mt-1">
+                            Знайдено: {{ assignments|length }} завдань
+                        </p>
+                    </div>
+                    {% if selected_class_id or selected_subject_id or selected_date or query %}
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="applyFilter('all', 'all', 'all', '')">
+                        ✕ Скинути всі фільтри
+                    </button>
+                    {% endif %}
+                </div>
+
+                <!-- Картки завдань -->
+                <div class="assignments-feed" role="feed" aria-label="Стрічка навчальних завдань">
+
+                    {% for assignment in assignments %}
+                    <article class="assignment-card {{ assignment.age_card_class }}"
+                             onclick="openAssignment({{ assignment.id }})"
+                             role="button"
+                             tabindex="0"
+                             aria-label="Відкрити завдання: {{ assignment.title }}"
+                             onkeydown="if(event.key==='Enter'){openAssignment({{ assignment.id }})}">
+
+                        <div class="card-accent"
+                             style="background:linear-gradient(90deg,{{ assignment.subject.color|default:'#6366f1' }},#8b5cf6)">
+                        </div>
+
+                        <div class="card-body">
+                            <div class="card-meta">
+                                <div class="card-meta-tags">
+                                    <!-- Класи (виразно та чітко) -->
+                                    {% for class in assignment.classes.all %}
+                                    <span class="class-prominent-badge">
+                                        <span class="class-icon">🏫</span>
+                                        <span class="class-text">{{ class.name }}</span>
+                                    </span>
+                                    {% endfor %}
+
+                                    <!-- Предмет (показується тільки якщо в системі більше ніж 1 предмет) -->
+                                    {% if has_multiple_subjects and assignment.subject %}
+                                    <span class="subject-tag"
+                                          style="background-color:{{ assignment.subject.color }}22;color:{{ assignment.subject.color }}">
+                                        {{ assignment.subject.icon }} {{ assignment.subject.name }}
+                                    </span>
+                                    {% endif %}
+
+                                    {% if assignment.is_individual %}
+                                    <span class="individual-tag">👤 {{ assignment.student_display }}</span>
+                                    {% endif %}
+                                </div>
+
+                                <!-- Перегляди (зверху праворуч для вчителя) -->
+                                {% if user.is_authenticated and user.teacher_profile %}
+                                <span class="views-badge" title="Кількість переглядів учнями">
+                                    <span class="views-icon">👁️</span> {{ assignment.views_count }}
+                                </span>
+                                {% endif %}
+                            </div>
+
+                            <h2 class="card-title">{{ assignment.title }}</h2>
+
+                            {% if assignment.description %}
+                            <p class="card-description">{{ assignment.description|truncatechars:160 }}</p>
+                            {% endif %}
+                        </div>
+
+                        <div class="card-footer">
+                            <div class="card-footer-left">
+                                <div class="teacher-mini">
+                                    {% if assignment.teacher.avatar_image %}
+                                    <img src="{{ assignment.teacher.avatar_image.url }}" alt="{{ assignment.teacher.full_name }}" class="avatar-mini-img">
+                                    {% else %}
+                                    <div class="avatar-mini"
+                                         style="background:{{ assignment.teacher.avatar_color }}">
+                                        {{ assignment.teacher.get_initials }}
+                                    </div>
+                                    {% endif %}
+                                    <span>{{ assignment.teacher.full_name }}</span>
+                                </div>
+
+                                <!-- Розумна дата публікації (Сьогодні / Вчора / День тижня + дата) -->
+                                {% if assignment.published_at %}
+                                <span class="publish-date-badge {% if assignment.is_published_today %}badge-today{% elif assignment.is_published_yesterday %}badge-yesterday{% else %}badge-earlier{% endif %}">
+                                    {% if assignment.is_published_today %}
+                                    <span class="live-dot-pulse"></span>
+                                    {% endif %}
+                                    📅 {{ assignment.relative_published_display }}
+                                </span>
+                                {% endif %}
+
+                                {% if assignment.unarchived_at %}
+                                <span class="unarchive-badge" title="Завдання відновлено з архіву">
+                                    ♻️ Розархівовано {{ assignment.unarchived_at|date:"d.m" }}
+                                </span>
+                                {% endif %}
+
+                                {% if assignment.files.all %}
+                                <span class="attachment-count">
+                                    📎 {{ assignment.files.count }}
+                                </span>
+                                {% endif %}
+
+                                {% if assignment.due_date %}
+                                <span class="due-badge">
+                                    ⏰ до {{ assignment.due_date|date:"d.m" }}
+                                </span>
+                                {% endif %}
+                            </div>
+
+                            <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+                                <a href="{% url 'assignment_detail' assignment.id %}"
+                                   class="btn btn-secondary btn-sm"
+                                   onclick="event.stopPropagation();"
+                                   title="Відкрити завдання">
+                                    📖 Переглянути
+                                </a>
+                                {% if not user.is_authenticated or not user.teacher_profile %}
+                                <a href="{% url 'submit_assignment' assignment.id %}"
+                                   class="btn btn-submit-work btn-sm"
+                                   onclick="event.stopPropagation();"
+                                   title="Здати виконану роботу">
+                                    📤 Здати роботу
+                                </a>
+                                {% endif %}
+                                {% if user.is_authenticated and user.teacher_profile %}
+                                <a href="{% url 'assignment_submissions' assignment.id %}"
+                                   class="btn btn-submissions btn-sm"
+                                   onclick="event.stopPropagation();"
+                                   title="Переглянути здачі учнів">
+                                    📥 Здачі
+                                    {% if assignment.submissions_count %}
+                                    <span class="submissions-count-badge {% if assignment.ungraded_count %}badge-ungraded{% endif %}">
+                                        {{ assignment.submissions_count }}{% if assignment.ungraded_count %} ({{ assignment.ungraded_count }}!){% endif %}
+                                    </span>
+                                    {% endif %}
+                                </a>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                    </article>
+                    {% empty %}
+                    <div class="sidebar-card">
+                        <div class="empty-state">
+                            <div class="empty-icon">📭</div>
+                            <h3>Завдань поки немає</h3>
+                            <p>
+                                {% if selected_class %}
+                                    Для класу {{ selected_class.name }} ще не опубліковано жодного завдання.
+                                {% elif query %}
+                                    Нічого не знайдено за запитом "{{ query }}".
+                                {% else %}
+                                    Вчитель ще не додав жодного завдання.
+                                {% endif %}
+                            </p>
+                            {% if selected_class_id or selected_subject_id or query %}
+                            <button type="button" class="btn btn-secondary" onclick="applyFilter('all', 'all', 'all', '')">Показати всі</button>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+
+                </div><!-- /.assignments-feed -->
+
+                <!-- ── Пагінація ───────────────────────────────────────────── -->
+                {% if page_obj.has_other_pages %}
+                <div class="pagination-wrapper" style="margin-top:24px;display:flex;justify-content:center;align-items:center;gap:6px;flex-wrap:wrap">
+                    {% if page_obj.has_previous %}
+                    <button type="button" class="btn btn-secondary btn-sm"
+                            onclick="loadFeedPage({{ page_obj.previous_page_number }})">« Попередня</button>
+                    {% endif %}
+
+                    {% for i in page_obj.paginator.page_range %}
+                        {% if page_obj.number == i %}
+                        <span class="btn btn-primary btn-sm" style="pointer-events:none;font-weight:700">{{ i }}</span>
+                        {% elif i > page_obj.number|add:"-3" and i < page_obj.number|add:"3" %}
+                        <button type="button" class="btn btn-secondary btn-sm"
+                                onclick="loadFeedPage({{ i }})">{{ i }}</button>
+                        {% endif %}
+                    {% endfor %}
+
+                    {% if page_obj.has_next %}
+                    <button type="button" class="btn btn-secondary btn-sm"
+                            onclick="loadFeedPage({{ page_obj.next_page_number }})">Наступна »</button>
+                    {% endif %}
+                </div>
+                {% endif %}
+
+            </div><!-- /#feed-zone -->
+
+        </section>
+
+    </div><!-- /.feed-layout -->
+</div><!-- /.page-wrapper -->
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+/* ─── AJAX фільтрація та динамічне автооновлення стрічки ─────────────────────── */
+var _currentClass       = '{{ selected_class_id|default:"all" }}';
+var _currentSubject     = '{{ selected_subject_id|default:"all" }}';
+var _currentDate        = '{{ selected_date|default:"" }}';
+var _currentQuery       = '{{ query|default:""|escapejs }}';
+var _currentPage        = 1;
+var _feedAbort          = null;
+var _lastFingerprint    = '';
+var _liveTimer          = null;
+
+function applyFilter(classVal, subjectVal, dateVal, queryVal) {
+    if (classVal !== null && classVal !== undefined) {
+        var cStr = String(classVal).trim();
+        _currentClass = (cStr === '' || cStr === 'all' || cStr === 'null') ? 'all' : cStr;
+    }
+    if (subjectVal !== null && subjectVal !== undefined) {
+        var sStr = String(subjectVal).trim();
+        _currentSubject = (sStr === '' || sStr === 'all' || sStr === 'null') ? 'all' : sStr;
+    }
+    if (dateVal !== null && dateVal !== undefined) {
+        var dStr = String(dateVal).trim();
+        _currentDate = (dStr === '' || dStr === 'all' || dStr === 'null') ? '' : dStr;
+    }
+    if (queryVal !== null && queryVal !== undefined) {
+        var qStr = String(queryVal).trim();
+        _currentQuery = (qStr === 'null') ? '' : qStr;
+        var searchInput = document.getElementById('navbar-search');
+        if (searchInput && document.activeElement !== searchInput) searchInput.value = _currentQuery;
+    } else if (classVal === 'all' && subjectVal === 'all' && (dateVal === 'all' || !dateVal) && queryVal === '') {
+        _currentQuery = '';
+        var searchInput = document.getElementById('navbar-search');
+        if (searchInput && document.activeElement !== searchInput) searchInput.value = '';
+    }
+    _currentPage = 1;
+
+    /* — Оновити стан активності у сайдбарі — */
+    document.querySelectorAll('[id^="filter-class-"]').forEach(function(li) {
+        li.classList.remove('active');
+    });
+    document.querySelectorAll('[id^="filter-subject-"]').forEach(function(li) {
+        li.classList.remove('active');
+    });
+
+    var clTarget  = (_currentClass && _currentClass !== 'all') ? 'filter-class-' + _currentClass : 'filter-class-all';
+    var subTarget = (_currentSubject && _currentSubject !== 'all') ? 'filter-subject-' + _currentSubject : 'filter-subject-all';
+
+    var clEl  = document.getElementById(clTarget);
+    var subEl = document.getElementById(subTarget);
+    if (clEl)  clEl.classList.add('active');
+    if (subEl) subEl.classList.add('active');
+
+    /* — Оновити мобільні чіпси — */
+    document.querySelectorAll('.filter-chip').forEach(function(chip) {
+        var cid = chip.dataset.class || 'all';
+        chip.classList.toggle('active',
+            (_currentClass === 'all' && cid === 'all') || (cid === _currentClass)
+        );
+    });
+
+    /* — Оновити URL в адресному рядку браузера — */
+    var urlParams = new URLSearchParams();
+    if (_currentClass && _currentClass !== 'all') urlParams.set('class', _currentClass);
+    if (_currentSubject && _currentSubject !== 'all') urlParams.set('subject', _currentSubject);
+    if (_currentDate) urlParams.set('date', _currentDate);
+    if (_currentQuery) urlParams.set('q', _currentQuery);
+    var newQueryStr = urlParams.toString();
+    var newUrl = window.location.pathname + (newQueryStr ? '?' + newQueryStr : '');
+    try {
+        window.history.replaceState({}, '', newUrl);
+    } catch(e) {}
+
+    loadFeed(false);
+    refreshCalendar();
+    return false;
+}
+
+function selectCalendarDate(dateStr) {
+    if (dateStr === 'all' || dateStr === _currentDate) {
+        _currentDate = '';
+    } else {
+        _currentDate = dateStr;
+    }
+    applyFilter(null, null, _currentDate || 'all');
+}
+
+function navigateCalendar(year, month) {
+    var params = new URLSearchParams();
+    params.set('cal_year', year);
+    params.set('cal_month', month);
+    params.set('class', _currentClass || 'all');
+    params.set('subject', _currentSubject || 'all');
+    if (_currentDate) params.set('date', _currentDate);
+
+    fetch('/feed/calendar/?' + params.toString(), {
+        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    })
+    .then(function(r) { return r.text(); })
+    .then(function(html) {
+        var w = document.getElementById('calendar-widget');
+        if (w) w.innerHTML = html;
+    });
+}
+
+function refreshCalendar() {
+    var params = new URLSearchParams();
+    params.set('class', _currentClass || 'all');
+    params.set('subject', _currentSubject || 'all');
+    if (_currentDate) params.set('date', _currentDate);
+
+    fetch('/feed/calendar/?' + params.toString(), {
+        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    })
+    .then(function(r) { return r.text(); })
+    .then(function(html) {
+        var w = document.getElementById('calendar-widget');
+        if (w) w.innerHTML = html;
+    })
+    .catch(function(){});
+}
+
+function loadFeedPage(page) {
+    _currentPage = page;
+    loadFeed(false);
+}
+
+function buildParams() {
+    var params = new URLSearchParams();
+    params.set('class', _currentClass || 'all');
+    params.set('subject', _currentSubject || 'all');
+    if (_currentDate) params.set('date', _currentDate);
+    if (_currentQuery) params.set('q', _currentQuery);
+    if (_currentPage > 1) params.set('page', _currentPage);
+    return params;
+}
+
+function loadFeed(isSilent, isSearch) {
+    var zone = document.getElementById('feed-zone');
+    if (!zone) return;
+
+    if (!isSilent && !isSearch) {
+        if (window.startProgressBar) window.startProgressBar();
+        zone.style.opacity = '0.92';
+        zone.style.transition = 'opacity 0.12s ease';
+    }
+
+    if (_feedAbort) {
+        try { _feedAbort.abort(); } catch(e){}
+    }
+    _feedAbort = new AbortController();
+
+    var params = buildParams();
+
+    fetch('/feed/fragment/?' + params.toString(), { signal: _feedAbort.signal })
+        .then(function(r) { return r.text(); })
+        .then(function(html) {
+            zone.innerHTML = html;
+            zone.style.opacity = '1';
+            if (window.finishProgressBar && !isSearch) window.finishProgressBar();
+
+            // Ніколи не скролити сторінку під час набору тексту в пошуку
+            if (!isSilent && !isSearch) {
+                var top = zone.getBoundingClientRect().top;
+                if (top < 0) zone.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+
+            updateFingerprint();
+        })
+        .catch(function(e) {
+            if (window.finishProgressBar && !isSearch) window.finishProgressBar();
+            if (e.name !== 'AbortError') {
+                zone.style.opacity = '1';
+            }
+        });
+}
+
+/* ─── Легке автооновлення наживо (Live polling кожні 12 сек) ───────────────── */
+function updateFingerprint() {
+    var params = buildParams();
+    fetch('/feed/check-updates/?' + params.toString())
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data && data.fingerprint) {
+                _lastFingerprint = data.fingerprint;
+            }
+        })
+        .catch(function() {});
+}
+
+function checkLiveUpdates() {
+    if (document.hidden || document.visibilityState !== 'visible') return;
+
+    var searchInput = document.getElementById('navbar-search');
+    if (searchInput && document.activeElement === searchInput) {
+        // Користувач зараз активно взаємодіє з пошуком — не перезавантажувати
+        return;
+    }
+
+    var isModalOpen = document.querySelector('.modal-overlay.active') ||
+                      (document.getElementById('file-preview-modal-overlay') &&
+                       document.getElementById('file-preview-modal-overlay').style.display === 'flex');
+    if (isModalOpen) return;
+
+    var params = buildParams();
+    fetch('/feed/check-updates/?' + params.toString())
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data && data.fingerprint) {
+                if (_lastFingerprint && data.fingerprint !== _lastFingerprint) {
+                    _lastFingerprint = data.fingerprint;
+                    loadFeed(true, false);
+                } else {
+                    _lastFingerprint = data.fingerprint;
+                }
+            }
+        })
+        .catch(function() {});
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    updateFingerprint();
+    if (!_liveTimer) {
+        _liveTimer = setInterval(checkLiveUpdates, 12000);
+    }
+
+    /* ── Живий пошук з комфортним збереженням курсору та фокусу ── */
+    var searchInput = document.getElementById('navbar-search');
+    var searchTimer = null;
+    if (searchInput) {
+        searchInput.addEventListener('input', function() {
+            clearTimeout(searchTimer);
+            var val = searchInput.value;
+            searchTimer = setTimeout(function() {
+                _currentQuery = val.trim();
+                _currentPage = 1;
+                var urlParams = new URLSearchParams();
+                if (_currentClass && _currentClass !== 'all') urlParams.set('class', _currentClass);
+                if (_currentSubject && _currentSubject !== 'all') urlParams.set('subject', _currentSubject);
+                if (_currentDate) urlParams.set('date', _currentDate);
+                if (_currentQuery) urlParams.set('q', _currentQuery);
+                var newUrl = window.location.pathname + (urlParams.toString() ? '?' + urlParams.toString() : '');
+                try { window.history.replaceState({}, '', newUrl); } catch(e) {}
+                loadFeed(false, true);
+            }, 380); // Комфортний час очікування завершення введення слова
+        });
+
+        var searchForm = searchInput.closest('form');
+        if (searchForm) {
+            searchForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                clearTimeout(searchTimer);
+                _currentQuery = searchInput.value.trim();
+                _currentPage = 1;
+                loadFeed(false, false);
+            });
+        }
+    }
+});
+</script>
+{% endblock %}

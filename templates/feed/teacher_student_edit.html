@@ -1,0 +1,86 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Редагування профілю учня — {{ student.get_full_name }} | Шкільні Завдання{% endblock %}
+
+{% block content %}
+<div class="page-wrapper">
+    <div class="feed-layout">
+
+        <!-- ════ ЛІВИЙ САЙДБАР ВЧИТЕЛЯ ════════════════════════════════════════ -->
+        {% include 'feed/components/teacher_sidebar.html' %}
+
+        <!-- ════ ЦЕНТРАЛЬНА ЧАСТИНА: РЕДАГУВАННЯ УЧНЯ ═══════════════════════════ -->
+        <div class="feed-main-content">
+
+            <div style="margin-bottom:16px;">
+                <a href="{% url 'teacher_students' %}?class_group={{ student.class_group_id }}" class="btn btn-secondary btn-sm">
+                    ← До списку учнів
+                </a>
+            </div>
+
+            <div class="submit-form-card" style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:24px 28px;box-shadow:0 4px 20px rgba(0,0,0,0.05);max-width:680px;">
+                
+                <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px;">
+                    <div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,var(--color-primary),#8b5cf6);color:#fff;font-weight:800;font-size:16px;display:flex;align-items:center;justify-content:center;">
+                        {{ student.get_initials }}
+                    </div>
+                    <div>
+                        <h2 style="font-size:1.3rem;font-weight:800;margin:0;color:var(--color-text-primary);">
+                            ✏️ Редагування учня: {{ student.get_full_name }}
+                        </h2>
+                        <div style="font-size:12px;color:var(--color-text-muted);">
+                            Поточний клас: <strong>{{ student.class_group.name }}</strong>
+                        </div>
+                    </div>
+                </div>
+
+                <form method="POST">
+                    {% csrf_token %}
+
+                    <div class="form-group" style="margin-bottom:14px;">
+                        <label class="form-label" style="font-weight:700;">Прізвище учня <span style="color:#ef4444">*</span></label>
+                        {{ form.last_name }}
+                    </div>
+
+                    <div class="form-group" style="margin-bottom:14px;">
+                        <label class="form-label" style="font-weight:700;">Ім'я учня <span style="color:#ef4444">*</span></label>
+                        {{ form.first_name }}
+                    </div>
+
+                    <div class="form-group" style="margin-bottom:14px;">
+                        <label class="form-label" style="font-weight:700;">Клас учня <span style="color:#ef4444">*</span></label>
+                        {{ form.class_group }}
+                        <div style="font-size:11.5px;color:var(--color-text-muted);margin-top:3px;">
+                            Якщо учень обрав неправильний клас при здачі або перейшов до іншого класу, змініть його тут.
+                        </div>
+                    </div>
+
+                    <div class="form-group" style="margin-bottom:14px;">
+                        <label class="form-label" style="font-weight:700;">Нотатки вчителя</label>
+                        {{ form.notes }}
+                    </div>
+
+                    <div style="margin-bottom:20px;background:rgba(99,102,241,0.06);padding:14px;border-radius:var(--radius-md);border:1px solid rgba(99,102,241,0.2);">
+                        <label style="display:flex;align-items:flex-start;gap:10px;font-size:13px;cursor:pointer;font-weight:600;color:var(--color-text-primary);">
+                            {{ form.sync_submissions }}
+                            <span>🔄 <strong>Синхронізувати всі здані роботи учня</strong>: оновити ім'я, прізвище та перенести всі попередні оцінки і здачі в обраний клас.</span>
+                        </label>
+                    </div>
+
+                    <div style="display:flex;gap:10px;justify-content:flex-end;">
+                        <a href="{% url 'teacher_students' %}?class_group={{ student.class_group_id }}" class="btn btn-secondary">
+                            Скасувати
+                        </a>
+                        <button type="submit" class="btn btn-primary" style="font-weight:700;padding:10px 24px;">
+                            ✓ Зберегти зміни
+                        </button>
+                    </div>
+                </form>
+
+            </div>
+
+        </div>
+    </div>
+</div>
+{% endblock %}

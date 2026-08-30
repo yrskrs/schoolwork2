@@ -1,0 +1,385 @@
+{% extends 'base.html' %}
+
+{% block title %}Профіль та налаштування{% endblock %}
+
+{% block content %}
+<div id="profile-content-wrapper" class="page-wrapper">
+
+    <!-- ── Двоколонковий layout сайту ────────────────────────────────────── -->
+    <div class="feed-layout">
+
+        <!-- ════ ЛІВИЙ САЙДБАР НАЛАШТУВАНЬ ТА АДМІНІСТРАТОРА ════════════════ -->
+        {% include 'feed/components/settings_sidebar.html' %}
+
+        <!-- ════ ЦЕНТРАЛЬНА ЧАСТИНА (ПРОФІЛЬ ТА НАЛАШТУВАННЯ) ═════════════════ -->
+        <div class="feed-main-content">
+
+            <nav style="margin-bottom:16px;font-size:13px;color:var(--color-text-muted)">
+                <a href="{% url 'teacher_dashboard' %}" style="color:var(--color-primary)">Панель вчителя</a>
+                <span style="margin:0 6px">›</span>
+                <span>Профіль та налаштування</span>
+            </nav>
+
+
+    <!-- ══ 1. ПРОФІЛЬ ВЧИТЕЛЯ ══════════════════════════════════════════════════ -->
+    <div class="form-card mb-4">
+        <div class="form-card-header">
+            <h1 class="form-card-title">✏️ Основна інформація</h1>
+        </div>
+
+        <div class="form-card-body">
+            <div style="text-align:center;margin-bottom:24px">
+                <div id="avatar-preview-container" style="width:88px;height:88px;margin:0 auto 12px;display:flex;align-items:center;justify-content:center">
+                    <img id="avatar-preview-img"
+                         src="{% if teacher.avatar_image %}{{ teacher.avatar_image.url }}{% endif %}"
+                         alt="{{ teacher.full_name|default:'Превʼю аватара' }}"
+                         class="teacher-avatar-img"
+                         style="width:88px;height:88px;{% if not teacher.avatar_image %}display:none;{% endif %}">
+                    <div id="avatar-initials-box"
+                         class="teacher-avatar"
+                         style="width:88px;height:88px;font-size:28px;background:{{ teacher.avatar_color }};{% if teacher.avatar_image %}display:none;{% endif %}">
+                        {{ teacher.get_initials }}
+                    </div>
+                </div>
+
+                <div style="font-size:14px;color:var(--color-text-muted)">
+                    Логін: <strong>{{ teacher.user.username }}</strong>
+                    {% if user.is_superuser %}
+                    <span class="status-badge status-published" style="margin-left:6px">👑 Супер-Адмін</span>
+                    {% endif %}
+                </div>
+
+                {% if teacher.avatar_image %}
+                <form method="POST" style="display:inline-block;margin-top:10px">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="remove_avatar">
+                    <button type="submit" class="btn btn-secondary btn-sm" style="color:var(--color-danger);border-color:rgba(239,68,68,0.3);font-size:12px" data-confirm="Прибрати фото аватара та повернути кольорові ініціали?">
+                        🗑️ Прибрати фото аватара
+                    </button>
+                </form>
+                {% endif %}
+            </div>
+
+            <form method="POST" enctype="multipart/form-data">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="update_profile">
+
+                <div class="form-group">
+                    <label class="form-label required" for="{{ form.full_name.id_for_label }}">ПІБ вчителя</label>
+                    {{ form.full_name }}
+                    {% if form.full_name.errors %}<p class="form-error">{{ form.full_name.errors.0 }}</p>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="avatar-file-input">
+                        📷 Змінити фото аватара
+                        <span class="text-muted text-xs" style="font-weight:normal">(завантажте власне фото або квадратну картинку)</span>
+                    </label>
+                    {{ form.avatar_image }}
+                    {% if form.avatar_image.errors %}<p class="form-error">{{ form.avatar_image.errors.0 }}</p>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.avatar_color.id_for_label }}">
+                        🎨 Колір фону (якщо без фото)
+                    </label>
+                    <div style="display:flex;align-items:center;gap:10px">
+                        {{ form.avatar_color }}
+                        <span class="text-muted text-xs">Використовується для ініціалів за відсутності фото</span>
+                    </div>
+                </div>
+
+                <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px">
+                    <a href="{% url 'teacher_dashboard' %}" class="btn btn-secondary">← Назад</a>
+                    <button type="submit" class="btn btn-primary">💾 Зберегти зміни</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ══ 2. МОЇ ПРЕДМЕТИ (Персональні предмети вчителя) ═══════════════════════ -->
+    <div class="form-card mb-4">
+        <div class="form-card-header">
+            <h2 class="form-card-title">📚 Мої предмети (які я викладаю)</h2>
+        </div>
+
+        <div class="form-card-body">
+            <p class="text-muted text-sm mb-3">
+                Тут вказано предмети, які ви викладаєте. Вони автоматично підставляються при створенні завдань.
+            </p>
+
+            <!-- Список предметів вчителя -->
+            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px">
+                {% for subject in teacher_subjects %}
+                <div style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:var(--radius-full);background:var(--color-primary-light);border:1px solid var(--color-primary);font-size:13px">
+                    <span>{{ subject.icon }}</span>
+                    <span style="font-weight:600;color:var(--color-primary-text)">{{ subject.name }}</span>
+                    <form method="POST" style="display:inline;margin:0">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="remove_teacher_subject">
+                        <input type="hidden" name="subject_id" value="{{ subject.id }}">
+                        <button type="submit" class="btn-remove-chip" data-confirm="Прибрати предмет «{{ subject.name }}» з вашого профілю?" title="Прибрати з мого профілю">✕</button>
+                    </form>
+                </div>
+                {% empty %}
+                <p class="text-muted text-sm">У вашому профілі ще не вказано жодного предмету.</p>
+                {% endfor %}
+            </div>
+
+            <!-- Додати існуючий предмет до профілю -->
+            {% if other_subjects %}
+            <div class="divider"></div>
+            <h3 style="font-size:14px;font-weight:600;margin-bottom:10px">➕ Додати предмет з каталогу до мого профілю</h3>
+            <form method="POST" class="d-flex gap-2 flex-wrap align-center" style="margin-bottom:16px">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="add_teacher_subject">
+                <select name="subject_id" class="form-select" style="max-width:280px" required>
+                    <option value="">— Оберіть предмет —</option>
+                    {% for subj in other_subjects %}
+                    <option value="{{ subj.id }}">{{ subj.icon }} {{ subj.name }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit" class="btn btn-secondary btn-sm">＋ Додати до профілю</button>
+            </form>
+            {% endif %}
+
+            <!-- Створити абсолютно новий предмет -->
+            <div class="divider"></div>
+            <details>
+                <summary style="font-size:13px;font-weight:600;cursor:pointer;color:var(--color-primary)">
+                    ＋ Немає вашого предмету? Створити новий предмет у базі
+                </summary>
+                <form method="POST" style="margin-top:16px">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="create_subject">
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label required">Назва предмету</label>
+                            {{ subject_form.name }}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Іконка (емодзі)</label>
+                            {{ subject_form.icon }}
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Колір мітки</label>
+                        {{ subject_form.color }}
+                    </div>
+                    <button type="submit" class="btn btn-secondary btn-sm">Створити та додати до профілю</button>
+                </form>
+            </details>
+        </div>
+    </div>
+
+    <!-- ══ 3. МОЇ КЛАСИ (Персональні класи вчителя) ═════════════════════════════ -->
+    <div class="form-card mb-4">
+        <div class="form-card-header">
+            <h2 class="form-card-title">🏫 Мої класи (в яких я викладаю)</h2>
+        </div>
+
+        <div class="form-card-body">
+            <p class="text-muted text-sm mb-3">
+                Класи, якими ви керуєте або де викладаєте. Вони доступні при призначенні завдань.
+            </p>
+
+            <!-- Список класів вчителя -->
+            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px">
+                {% for cgroup in teacher_classes %}
+                <div style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:var(--radius-full);background:var(--color-bg-secondary);border:1px solid var(--color-border);font-size:13px">
+                    <span class="class-badge">{{ cgroup.grade }}{{ cgroup.letter }}</span>
+                    <span style="font-weight:600">{{ cgroup.name }}</span>
+                    <form method="POST" style="display:inline;margin:0">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="remove_teacher_class">
+                        <input type="hidden" name="class_id" value="{{ cgroup.id }}">
+                        <button type="submit" class="btn-remove-chip" data-confirm="Прибрати клас «{{ cgroup.name }}» з вашого профілю?" title="Прибрати з мого профілю">✕</button>
+                    </form>
+                </div>
+                {% empty %}
+                <p class="text-muted text-sm">У вашому профілі ще не вказано жодного класу.</p>
+                {% endfor %}
+            </div>
+
+            <!-- Додати існуючий клас до профілю -->
+            {% if other_classes %}
+            <div class="divider"></div>
+            <h3 style="font-size:14px;font-weight:600;margin-bottom:10px">➕ Додати клас з базі до мого профілю</h3>
+            <form method="POST" class="d-flex gap-2 flex-wrap align-center" style="margin-bottom:16px">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="add_teacher_class">
+                <select name="class_id" class="form-select" style="max-width:280px" required>
+                    <option value="">— Оберіть клас —</option>
+                    {% for cgroup in other_classes %}
+                    <option value="{{ cgroup.id }}">{{ cgroup.name }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit" class="btn btn-secondary btn-sm">＋ Додати до профілю</button>
+            </form>
+            {% endif %}
+
+            <!-- Створити абсолютно новий клас -->
+            <div class="divider"></div>
+            <details>
+                <summary style="font-size:13px;font-weight:600;cursor:pointer;color:var(--color-primary)">
+                    ＋ Немає потрібного класу? Створити новий клас у базі
+                </summary>
+                <form method="POST" style="margin-top:16px">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="create_class">
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label required">Назва класу (наприклад: 9А)</label>
+                            {{ class_form.name }}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label required">Паралель (цифра)</label>
+                            {{ class_form.grade }}
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Літера класу</label>
+                        {{ class_form.letter }}
+                    </div>
+                    <button type="submit" class="btn btn-secondary btn-sm">Створити та додати до профілю</button>
+                </form>
+            </details>
+        </div>
+    </div>
+
+    <!-- ══ 4. ПАНЕЛЬ СУПЕР-АДМІНІСТРАТОРА (Тільки для is_superuser) ═══════════════ -->
+    {% if user.is_superuser %}
+    <div class="form-card" style="border-color:var(--color-primary)">
+        <div class="form-card-header" style="background:var(--color-primary-light)">
+            <h2 class="form-card-title" style="color:var(--color-primary-text)">👑 Панель Супер-Адміністратора</h2>
+        </div>
+
+        <div class="form-card-body">
+
+            <!-- 1. Створення акаунта нового вчителя -->
+            <h3 style="font-size:15px;font-weight:700;margin-bottom:12px">👤 Створити новий акаунт вчителя</h3>
+
+            <form method="POST" style="margin-bottom:28px">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="create_teacher_account">
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label required">Логін (для входу)</label>
+                        {{ teacher_create_form.username }}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label required">Початковий пароль</label>
+                        {{ teacher_create_form.password }}
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label required">ПІБ вчителя</label>
+                    {{ teacher_create_form.full_name }}
+                </div>
+
+                <div class="form-group">
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                        {{ teacher_create_form.is_superuser }}
+                        <span>👑 Надати права Супер-Адміністратора</span>
+                    </label>
+                </div>
+
+                <button type="submit" class="btn btn-primary">➕ Створити акаунт вчителя</button>
+            </form>
+
+            <div class="divider"></div>
+
+            <!-- 2. Список вчителів та скидання паролів -->
+            <h3 style="font-size:15px;font-weight:700;margin-bottom:12px">🔑 Список вчителів та скидання паролів</h3>
+
+            <div style="display:flex;flex-direction:column;gap:10px">
+                {% for t in all_teachers %}
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border:1px solid var(--color-border);border-radius:var(--radius-md);background:var(--color-bg-secondary);flex-wrap:wrap;gap:10px">
+                    <div class="d-flex align-center gap-2">
+                        <div class="avatar-mini" style="background:{{ t.avatar_color }}">{{ t.get_initials }}</div>
+                        <div>
+                            <div style="font-weight:600;font-size:14px">{{ t.full_name }}</div>
+                            <div class="text-muted text-sm">
+                                Логін: <strong>{{ t.user.username }}</strong>
+                                {% if t.user.is_superuser %}
+                                <span class="status-badge status-published" style="font-size:10px">👑 Супер-Адмін</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Дії (Скидання пароля та видалення вчителя) -->
+                    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+                        <!-- Форма скидання пароля -->
+                        <form method="POST" class="d-flex align-center gap-2" style="margin:0">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="reset_teacher_password">
+                            <input type="hidden" name="user_id" value="{{ t.user.id }}">
+                            <input type="password" name="new_password" placeholder="Новий пароль" class="form-input" style="padding:4px 10px;font-size:12px;max-width:140px;margin:0" required>
+                            <button type="submit" class="btn btn-secondary btn-sm" style="font-size:12px;padding:5px 10px" data-confirm="Змінити пароль для вчителя «{{ t.full_name }}»?">🔑 Скинути пароль</button>
+                        </form>
+
+                        {% if t.user != request.user %}
+                        <!-- Форма видалення вчителя -->
+                        <form method="POST" style="margin:0">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="delete_teacher">
+                            <input type="hidden" name="teacher_id" value="{{ t.id }}">
+                            <button type="submit" class="btn btn-danger btn-sm" style="font-size:12px;padding:5px 10px" data-confirm="УВАГА! Видалити вчителя «{{ t.full_name }}» та ВСІ його завдання та прикріплені матеріали? Цю дію неможливо скасувати.">🗑️ Видалити</button>
+                        </form>
+                        {% endif %}
+                    </div>
+                </div>
+                {% empty %}
+                <p class="text-muted text-sm">Інших вчителів не знайдено.</p>
+                {% endfor %}
+            </div>
+
+        </div>
+    {% endif %}
+
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+
+{% block extra_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var fileInput = document.getElementById('avatar-file-input');
+    var previewImg = document.getElementById('avatar-preview-img');
+    var initialsBox = document.getElementById('avatar-initials-box');
+    var colorInput = document.getElementById('id_avatar_color');
+
+    if (fileInput) {
+        fileInput.addEventListener('change', function() {
+            var file = fileInput.files[0];
+            if (file) {
+                var reader = new FileReader();
+                reader.onload = function(e) {
+                    if (previewImg) {
+                        previewImg.src = e.target.result;
+                        previewImg.style.display = 'block';
+                    }
+                    if (initialsBox) {
+                        initialsBox.style.display = 'none';
+                    }
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+    }
+
+    if (colorInput && initialsBox) {
+        colorInput.addEventListener('input', function() {
+            initialsBox.style.background = colorInput.value;
+        });
+    }
+});
+</script>
+{% endblock %}
