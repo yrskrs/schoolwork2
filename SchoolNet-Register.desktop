@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=SchoolNet — Реєстрація користувачів
+Comment=Реєстрація та адміністрування облікових записів SchoolNet
+Exec=/home/flinux/Документи/socialschoolwork/start_register.sh
+Path=/home/flinux/Документи/socialschoolwork
+Icon=system-users
+Terminal=false
+Categories=Education;Development;System;

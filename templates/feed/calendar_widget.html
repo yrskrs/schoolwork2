@@ -1,0 +1,59 @@
+{% load static %}
+
+<div class="cal-header">
+    <div class="cal-title">
+        <span>📅</span>
+        <span>{{ calendar.month_name }} {{ calendar.year }}</span>
+    </div>
+    <div class="cal-nav">
+        <button type="button" class="cal-today-btn" onclick="navigateCalendar({{ calendar.today_str|slice:':4' }}, {{ calendar.today_str|slice:'5:7' }})" title="Поточний місяць (Сьогодні)">
+            Сьогодні
+        </button>
+        <button type="button" class="cal-nav-btn" onclick="navigateCalendar({{ calendar.prev_year }}, {{ calendar.prev_month }})" title="Попередній місяць" aria-label="Попередній місяць">
+            ‹
+        </button>
+        <button type="button" class="cal-nav-btn" onclick="navigateCalendar({{ calendar.next_year }}, {{ calendar.next_month }})" title="Наступний місяць" aria-label="Наступний місяць">
+            ›
+        </button>
+    </div>
+</div>
+
+<!-- Дні тижня -->
+<div class="cal-weekdays" aria-hidden="true">
+    <span>Пн</span>
+    <span>Вт</span>
+    <span>Ср</span>
+    <span>Чт</span>
+    <span>Пт</span>
+    <span>Сб</span>
+    <span>Нд</span>
+</div>
+
+<!-- Сітка днів -->
+<div class="cal-grid" role="grid" aria-label="Календар завдань">
+    {% for week in calendar.weeks %}
+        {% for day in week %}
+        <button type="button"
+                class="cal-day {% if not day.is_current_month %}cal-other-month{% endif %} {% if day.is_today %}cal-today{% endif %} {% if day.is_selected %}cal-selected{% endif %} {% if day.has_tasks %}cal-has-tasks{% endif %}"
+                data-date="{{ day.date_str }}"
+                title="{% if day.has_tasks %}{{ day.tasks_count }} завдань на {{ day.date|date:'d.m.Y' }}{% else %}{{ day.date|date:'d.m.Y' }}{% endif %}"
+                onclick="selectCalendarDate('{{ day.date_str }}')">
+            <span class="cal-day-number">{{ day.day_num }}</span>
+            {% if day.has_tasks %}
+            <span class="cal-task-badge" aria-label="{{ day.tasks_count }} завдань">{{ day.tasks_count }}</span>
+            {% else %}
+            <span class="cal-task-spacer" aria-hidden="true"></span>
+            {% endif %}
+        </button>
+        {% endfor %}
+    {% endfor %}
+</div>
+
+{% if calendar.selected_date %}
+<div class="cal-selected-bar">
+    <span>📅 {{ calendar.selected_date_display }}</span>
+    <button type="button" class="cal-clear-btn" onclick="selectCalendarDate('all')" title="Скинути фільтр дати">
+        ✕ Всі дати
+    </button>
+</div>
+{% endif %}

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Шкільні Завдання (SchoolNet)
+Comment=Локальний сервер шкільних завдань
+Exec=/home/flinux/Документи/socialschoolwork/start.sh
+Path=/home/flinux/Документи/socialschoolwork
+Icon=applications-internet
+Terminal=false
+Categories=Education;Development;
