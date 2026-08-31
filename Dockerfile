@@ -32,5 +32,5 @@ COPY . /app/
 RUN mkdir -p /app/media /app/staticfiles /app/logs
 RUN chmod -R 755 /app/media /app/staticfiles /app/logs
 
-# Команда запуску через gunicorn
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "3", "schoolnet.wsgi:application"]
+# Команда запуску через gunicorn з попереднім збором статики
+CMD ["sh", "-c", "python manage.py collectstatic --noinput && gunicorn --bind 0.0.0.0:8000 --workers 3 schoolnet.wsgi:application"]

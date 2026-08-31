@@ -73,3 +73,6 @@ coverage.xml
 # Backups & Dumps
 datadump.json
 backups/
+
+# Docker Local Data Volumes
+docker_data/
