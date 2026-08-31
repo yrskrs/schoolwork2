@@ -27,6 +27,8 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-schoolnet_password}
     volumes:
       - ./docker_data/postgres:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-schoolnet_user} -d ${POSTGRES_DB:-schoolnet_db}"]
       interval: 5s

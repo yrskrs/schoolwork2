@@ -5,6 +5,15 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
+if [ -f ".env" ]; then
+    # Завантажуємо змінні з .env
+    set -a
+    source .env
+    set +a
+    # Замінюємо хост postgres на localhost:5433 для локального підключення (уникаючи конфліктів)
+    export DATABASE_URL="${DATABASE_URL/@postgres:5432/@localhost:5433}"
+fi
+
 # Вимикаємо попередження пісочниці Qt/Chromium та Wayland у Linux
 export QTWEBENGINE_DISABLE_SANDBOX=1
 export QTWEBENGINE_CHROMIUM_FLAGS="--no-sandbox --disable-gpu-sandbox --disable-logging"

@@ -24,3 +24,8 @@ pillow>=10.0.0
 # Archive Processing (.zip is built-in; .rar, .7z)
 rarfile>=4.1
 py7zr>=0.21.0
+
+# Database & Environment (for PostgreSQL support)
+psycopg[binary]>=3.1.18
+dj-database-url>=2.1.0
+python-dotenv>=1.0.1
