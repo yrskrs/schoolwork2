@@ -5,12 +5,17 @@
 
 from pathlib import Path
 import os
+import dj_database_url
+from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Завантажуємо змінні середовища з .env, якщо файл існує
+load_dotenv(BASE_DIR / '.env')
+
 # ─── Безпека ───────────────────────────────────────────────────────────────────
-SECRET_KEY = 'schoolnet-local-secret-key-change-in-production-2026'
-DEBUG = True
+SECRET_KEY = os.environ.get('SECRET_KEY', 'schoolnet-local-secret-key-change-in-production-2026')
+DEBUG = os.environ.get('DEBUG', 'True') == 'True'
 ALLOWED_HOSTS = ['*']  # Локальна мережа — дозволяємо всі хости
 
 # ─── Застосунки ────────────────────────────────────────────────────────────────
@@ -57,12 +62,14 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'schoolnet.wsgi.application'
 
-# ─── База даних (SQLite — ідеально для офлайн-розгортання) ─────────────────────
+# ─── База даних ────────────────────────────────────────────────────────────────
+# Використовуємо DATABASE_URL з .env, або за замовчуванням локальний SQLite
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'schoolnet.sqlite3',
-    }
+    'default': dj_database_url.config(
+        default=f"sqlite:///{BASE_DIR / 'schoolnet.sqlite3'}",
+        conn_max_age=600,
+        conn_health_checks=True,
+    )
 }
 
 # ─── Пароль ────────────────────────────────────────────────────────────────────

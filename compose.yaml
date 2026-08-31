@@ -1,0 +1,40 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: schoolnet_app
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    volumes:
+      - app_media:/app/media
+      - app_static:/app/staticfiles
+      - app_logs:/app/logs
+
+  postgres:
+    image: postgres:16
+    container_name: schoolnet_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-schoolnet_db}
+      POSTGRES_USER: ${POSTGRES_USER:-schoolnet_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-schoolnet_password}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-schoolnet_user} -d ${POSTGRES_DB:-schoolnet_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+  app_media:
+  app_static:
+  app_logs:

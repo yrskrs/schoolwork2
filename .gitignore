@@ -69,3 +69,7 @@ coverage.xml
 
 # pytest
 .pytest_cache/
+
+# Backups & Dumps
+datadump.json
+backups/
