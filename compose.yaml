@@ -13,10 +13,8 @@ services:
     ports:
       - "${APP_PORT:-8000}:8000"
     volumes:
-      - .:/app
-      - ./docker_data/media:/app/media
-      - ./docker_data/staticfiles:/app/staticfiles
-      - ./docker_data/logs:/app/logs
+      - app_media:/app/media
+      - app_logs:/app/logs
 
   postgres:
     image: postgres:16
@@ -27,7 +25,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-schoolnet_user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-schoolnet_password}
     volumes:
-      - ./docker_data/postgres:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
     ports:
       - "5433:5432"
     healthcheck:
@@ -35,4 +33,9 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+
+volumes:
+  postgres_data:
+  app_media:
+  app_logs:
 
