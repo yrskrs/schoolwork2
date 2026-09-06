@@ -22,7 +22,8 @@ urlpatterns = [
     path('my-submissions/', views.student_submissions_portal, name='student_submissions_portal'),
 
 
-    # ── Авторизація вчителя ───────────────────────────────────────────────────
+    # ── Майстер першого запуску та авторизація вчителя ───────────────────────
+    path('setup/', views.first_run_setup, name='first_run_setup'),
     path('teacher/login/', views.teacher_login, name='teacher_login'),
     path('teacher/logout/', views.teacher_logout, name='teacher_logout'),
 
@@ -84,6 +85,7 @@ urlpatterns = [
     # ── Перегляд файлів завдання (матеріалів вчителя) ─────────────────────────
     path('assignment/file/<int:file_id>/preview/', views.file_preview, name='file_preview'),
     path('assignment/file/<int:file_id>/view/', views.file_view, name='file_view'),
+    path('assignment/file/<int:file_id>/download/', views.file_download, name='file_download'),
 
     # ── Сервісні інструменти та оптимізації ────────────────────────────────────
     path('api/students-autocomplete/', views.api_students_autocomplete, name='api_students_autocomplete'),
@@ -103,4 +105,14 @@ urlpatterns = [
     # ── Самоперевірка учня (ШІ) ──────────────────────────────────────────────────────
     path('submission/<int:submission_id>/student-ai-check/', views.student_ai_self_check, name='student_ai_self_check'),
     path('teacher/submission/<int:sub_id>/accept-student-ai/', views.accept_student_ai_grade, name='accept_student_ai_grade'),
+
+    # ── Перенесення уроків, 30-денний календар, розклад та експорт/імпорт ────────
+    path('teacher/assignment/<int:pk>/reschedule/', views.reschedule_assignment, name='reschedule_assignment'),
+    path('api/next-lesson-slot/', views.api_next_lesson_slot, name='api_next_lesson_slot'),
+    path('teacher/rescheduled-calendar/', views.teacher_rescheduled_calendar, name='teacher_rescheduled_calendar'),
+    path('api/today-schedule/', views.api_today_schedule, name='api_today_schedule'),
+    path('teacher/conducted-lessons/update/', views.update_conducted_lessons, name='update_conducted_lessons'),
+    path('teacher/assignment/<int:pk>/export-zip/', views.export_assignment_zip, name='export_assignment_zip'),
+    path('teacher/assignments/export-day-zip/', views.export_assignments_day_zip, name='export_assignments_day_zip'),
+    path('teacher/assignments/import-zip/', views.import_assignments_zip, name='import_assignments_zip'),
 ]

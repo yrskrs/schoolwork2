@@ -21,7 +21,21 @@
                     <div class="page-hero-kicker">Робочий кабінет</div>
                     <h1>Управління завданнями</h1>
                 </div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                    <a href="{% url 'teacher_rescheduled_calendar' %}" class="btn btn-secondary btn-sm" style="font-weight:700;display:inline-flex;align-items:center;gap:4px;" title="Окремий 30-денний календар перенесених занять">
+                        <span>📅</span> <span>Календар перенесень (30 днів)</span>
+                    </a>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="openImportZipModal()" style="font-weight:700;display:inline-flex;align-items:center;gap:4px;" title="Імпортувати завдання та файли, створені вдома на флешці">
+                        <span>📥</span> <span>Імпорт з флешки (ZIP)</span>
+                    </button>
+                    <a href="{% url 'export_assignments_day_zip' %}" class="btn btn-secondary btn-sm" style="font-weight:700;display:inline-flex;align-items:center;gap:4px;" title="Експортувати завдання на день у ZIP-пакет">
+                        <span>💾</span> <span>Експорт завдань (ZIP)</span>
+                    </a>
+                </div>
             </div>
+
+            <!-- Інформер поточного уроку вчителя -->
+            {% include 'feed/components/live_lesson_widget.html' %}
 
             <div class="stat-grid">
                 <div class="stat-card">
@@ -88,6 +102,11 @@
     </div>
 
 </div>
+
+<!-- Модальні вікна перенесення уроку та імпорту з флешки -->
+{% include 'feed/components/reschedule_modal.html' %}
+{% include 'feed/components/import_zip_modal.html' %}
+
 {% endblock %}
 
 {% block extra_scripts %}

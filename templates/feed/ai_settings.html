@@ -268,6 +268,32 @@
                             </div>
                         </div>
 
+                        <!-- Допустимий поріг збігів для ШІ-детектора -->
+                        <div style="background:var(--color-background);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:14px 16px;margin-top:16px;">
+                            <div class="form-group" style="margin:0;">
+                                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+                                    <label for="ai_detector_tolerance_percent" class="form-label" style="font-weight:700;margin:0;display:flex;align-items:center;gap:6px;">
+                                        <span>🛡️</span>
+                                        <span>Допустимий поріг збігів для ШІ-детектора:</span>
+                                        <span class="badge" style="background:#6366f1;color:#fff;font-size:12px;font-weight:800;padding:2px 8px;border-radius:10px;">
+                                            <span id="ai-tol-val">{{ ai_settings.ai_detector_tolerance_percent|default:25 }}</span>%
+                                        </span>
+                                    </label>
+                                </div>
+                                <input type="range" name="ai_detector_tolerance_percent" id="ai_detector_tolerance_percent" min="5" max="60" step="5"
+                                       value="{{ ai_settings.ai_detector_tolerance_percent|default:25 }}" class="form-input" style="padding:0;cursor:pointer;"
+                                       oninput="document.getElementById('ai-tol-val').textContent = this.value">
+                                <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--color-text-muted);margin-top:2px;">
+                                    <span>5% (Строга перевірка)</span>
+                                    <span style="font-weight:700;color:var(--color-primary);">25% (Рекомендовано: захист від хибних спрацьовувань)</span>
+                                    <span>60% (Висока толерантність)</span>
+                                </div>
+                                <div style="font-size:11.5px;color:var(--color-text-muted);margin-top:6px;line-height:1.4;">
+                                    💡 Якщо учень скопіював окремі терміни, формули чи 1-2 стандартні фрази (в межах цього відсотка), робота вважається самостійною і <strong>не</strong> маркується як згенерована ШІ.
+                                </div>
+                            </div>
+                        </div>
+
                     </div>
                 </div>
 

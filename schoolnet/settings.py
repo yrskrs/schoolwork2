@@ -39,6 +39,7 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'feed.middleware.OnlineClientsMiddleware',
+    'feed.middleware.FirstRunSetupMiddleware',
 ]
 
 ROOT_URLCONF = 'schoolnet.urls'
@@ -86,6 +87,7 @@ USE_TZ = True
 STATIC_URL = '/static/'
 STATICFILES_DIRS = [BASE_DIR / 'static']
 STATIC_ROOT = BASE_DIR / 'staticfiles'
+WHITENOISE_USE_FINDERS = True
 
 # ─── Медіа-файли (завантажені вчителем) ────────────────────────────────────────
 MEDIA_URL = '/media/'

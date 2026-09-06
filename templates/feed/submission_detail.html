@@ -200,7 +200,7 @@
                 <div style="margin-bottom:20px;padding:16px 20px;background:{% if submission.is_ai_allowed %}rgba(16,185,129,0.08){% else %}rgba(239,68,68,0.08){% endif %};border:1.5px solid {% if submission.is_ai_allowed %}#10b981{% else %}#ef4444{% endif %};border-radius:var(--radius-md);">
                     <div style="display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;color:{% if submission.is_ai_allowed %}#065f46{% else %}#b91c1c{% endif %};margin-bottom:4px;">
                         <span>🤖</span>
-                        <span>{% if submission.is_ai_allowed %}У роботі зафіксовано використання генеративного ШІ (дозволено вчителем){% else %}У роботі виявлено ознаки використання штучного інтелекту (ШІ){% endif %}</span>
+                        <span>{% if submission.is_ai_allowed %}У роботі зафіксовано використання генеративного ШІ{% if submission.ai_generated_percent is not None %} (~{{ submission.ai_generated_percent }}%){% endif %} (дозволено вчителем){% else %}У роботі виявлено ознаки використання штучного інтелекту (ШІ){% if submission.ai_generated_percent is not None %} (~{{ submission.ai_generated_percent }}%){% endif %}{% endif %}</span>
                     </div>
                     {% if submission.ai_generated_details %}
                     <div style="font-size:12.5px;color:var(--color-text-secondary);line-height:1.4;margin-bottom:6px;">

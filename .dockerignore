@@ -20,3 +20,4 @@ logs/
 Thumbs.db
 backups/
 scripts/
+docker_data/

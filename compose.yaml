@@ -13,6 +13,7 @@ services:
     ports:
       - "${APP_PORT:-8000}:8000"
     volumes:
+      - .:/app
       - ./docker_data/media:/app/media
       - ./docker_data/staticfiles:/app/staticfiles
       - ./docker_data/logs:/app/logs

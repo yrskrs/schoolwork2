@@ -44,6 +44,7 @@ from datetime import datetime, timedelta
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
 from django.contrib import messages
 from django.http import JsonResponse, HttpResponse, FileResponse
@@ -59,14 +60,16 @@ from .models import (
     Assignment, AssignmentFile, AssignmentLink, AssignmentYouTubeLink,
     Teacher, ClassGroup, Student, Subject,
     Submission, SubmissionComment, SubmissionActivityLog, School, log_submission_activity,
-    AISettings, DEFAULT_NUS_SYSTEM_PROMPT, DEFAULT_NUS_GR_SYSTEM_PROMPT, AICriteriaPreset, DEFAULT_TRADITIONAL_SYSTEM_PROMPT
+    AISettings, DEFAULT_NUS_SYSTEM_PROMPT, DEFAULT_NUS_GR_SYSTEM_PROMPT, AICriteriaPreset, DEFAULT_TRADITIONAL_SYSTEM_PROMPT,
+    BellSchedule, TeacherLessonSchedule, AssignmentScheduleTarget, SystemNotification,
+    AssignmentRescheduleLog
 )
 
 from .forms import (
     AssignmentForm, TeacherLoginForm, ClassSelectForm,
     TeacherProfileForm, SubjectForm, ClassGroupForm,
     TeacherCreateForm, PasswordResetForm, SubmissionForm,
-    StudentForm, StudentImportForm
+    StudentForm, StudentImportForm, FirstRunSetupForm
 )
 from .search import search_assignments
 from .fuzzy_search import fuzzy_search_submissions
@@ -410,6 +413,10 @@ def assignment_detail(request, pk):
         request.user.is_authenticated and
         (hasattr(request.user, 'teacher_profile') or request.user.is_superuser)
     )
+    can_edit = bool(
+        is_teacher and
+        (request.user.is_superuser or (hasattr(request.user, 'teacher_profile') and request.user.teacher_profile == assignment.teacher))
+    )
 
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
         # AJAX-відповідь для модального вікна
@@ -419,6 +426,7 @@ def assignment_detail(request, pk):
                 'id': f.id,
                 'name': f.original_name,
                 'url': f.file.url,
+                'download_url': f'/assignment/file/{f.id}/download/',
                 'type': f.get_file_type(),
                 'icon': f.get_file_icon(),
                 'size': f.get_size_display(),
@@ -497,6 +505,8 @@ def assignment_detail(request, pk):
         text_preview = None
         error_preview = None
         archive_items = None
+        slide_urls = None
+        pdf_preview_url = None
 
         if file_path and os.path.exists(file_path):
             if ext in ['.docx', '.doc']:
@@ -505,18 +515,16 @@ def assignment_detail(request, pk):
             elif ext in ['.xlsx', '.xls']:
                 preview_type = 'office'
                 html_preview, error_preview = convert_xlsx_to_html(file_path)
-            elif ext in ['.pptx', '.ppt']:
+            elif ext in ['.pptx', '.ppt', '.odp']:
                 preview_type = 'office'
                 html_preview, error_preview = convert_pptx_to_html(file_path)
+                slide_urls, pdf_preview_url = get_presentation_slides(af.id, file_path)
             elif ext == '.odt':
                 preview_type = 'office'
                 html_preview, error_preview = convert_odt_to_html(file_path)
             elif ext == '.ods':
                 preview_type = 'office'
                 html_preview, error_preview = convert_ods_to_html(file_path)
-            elif ext == '.odp':
-                preview_type = 'office'
-                html_preview, error_preview = convert_odp_to_html(file_path)
             elif ext in ['.txt', '.text', '.log', '.csv']:
                 preview_type = 'text'
                 # Читання з мультикодуванням
@@ -576,11 +584,15 @@ def assignment_detail(request, pk):
             'text_preview': text_preview,
             'archive_items': archive_items,
             'error_preview': error_preview,
+            'slide_urls': slide_urls,
+            'slide_count': len(slide_urls) if slide_urls else 0,
+            'pdf_preview_url': pdf_preview_url,
         })
 
     context = {
         'assignment': assignment,
         'is_teacher': is_teacher,
+        'can_edit': can_edit,
         'related_assignments': related_assignments,
         'submissions_count': submissions_count,
         'all_classes': ClassGroup.objects.all().order_by('grade', 'letter'),
@@ -597,7 +609,7 @@ def student_submissions_portal(request):
     - Переглянути статус (Очікує перевірки / Оцінено).
     - Прочитати коментарі та зауваження вчителя.
     """
-    class_groups = ClassGroup.objects.all().order_by('grade', 'letter')
+    class_groups = ClassGroup.objects.all().order_by('grade', 'letter', 'name')
     selected_class_id = request.GET.get('class')
     search_query = request.GET.get('search', '').strip()
 
@@ -752,6 +764,151 @@ def feed_check_updates(request):
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# МАЙСТЕР ПЕРШОГО ЗАПУСКУ (FIRST-RUN SETUP WIZARD)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def first_run_setup(request):
+    """
+    Майстер первинного налаштування системи.
+    Доступний ТІЛЬКИ якщо в системі немає жодного суперкористувача.
+    Створює першого адміністратора, прив'язує профіль вчителя та,
+    за вибором користувача, ініціалізує стандартні предмети, класи та критерії НУШ.
+    """
+    from .middleware import set_has_admin, check_has_admin
+
+    # Безпека: якщо суперкористувач уже є в системі — не дозволяємо доступ
+    if check_has_admin():
+        if get_teacher_or_none(request):
+            return redirect('teacher_dashboard')
+        messages.info(request, 'Систему вже налаштовано. Будь ласка, увійдіть зі своїм логіном та паролем.')
+        return redirect('teacher_login')
+
+    form = FirstRunSetupForm()
+
+    if request.method == 'POST':
+        form = FirstRunSetupForm(request.POST)
+        if form.is_valid():
+            username = form.cleaned_data['username']
+            full_name = form.cleaned_data['full_name']
+            email = form.cleaned_data.get('email', '')
+            password = form.cleaned_data['password']
+            seed_default_data = form.cleaned_data.get('seed_default_data', True)
+
+            # 1. Створюємо суперкористувача Django
+            user = User.objects.create_superuser(
+                username=username,
+                email=email,
+                password=password
+            )
+            name_parts = full_name.strip().split()
+            if len(name_parts) >= 2:
+                user.last_name = name_parts[0]
+                user.first_name = " ".join(name_parts[1:])
+            else:
+                user.first_name = full_name
+            user.save()
+
+            # 2. Створюємо профіль Teacher
+            teacher = Teacher.objects.create(
+                user=user,
+                full_name=full_name,
+                avatar_color='#6366f1'
+            )
+
+            # 3. Прив'язуємо або створюємо установу (School)
+            try:
+                school, created_s = School.objects.get_or_create(id=1, defaults={'name': 'Школа', 'admin': user})
+                if not school.admin:
+                    school.admin = user
+                    school.save(update_fields=['admin'])
+            except Exception:
+                pass
+
+            # 4. Якщо увімкнено — створюємо стандартні предмети, класи та критерії НУШ
+            if seed_default_data:
+                default_subjects = [
+                    {'name': 'Інформатика', 'icon': '💻', 'color': '#6366f1'},
+                    {'name': 'Математика', 'icon': '📐', 'color': '#3b82f6'},
+                    {'name': 'Фізика', 'icon': '⚡', 'color': '#8b5cf6'},
+                    {'name': 'Хімія', 'icon': '🧪', 'color': '#10b981'},
+                    {'name': 'Біологія', 'icon': '🧬', 'color': '#06b6d4'},
+                    {'name': 'Українська мова', 'icon': '📖', 'color': '#f59e0b'},
+                    {'name': 'Українська література', 'icon': '📚', 'color': '#ef4444'},
+                    {'name': 'Англійська мова', 'icon': '🌍', 'color': '#ec4899'},
+                    {'name': 'Географія', 'icon': '🗺️', 'color': '#84cc16'},
+                    {'name': 'Історія', 'icon': '🏛️', 'color': '#f97316'},
+                    {'name': 'Мистецтво', 'icon': '🎨', 'color': '#e879f9'},
+                    {'name': 'Фізична культура', 'icon': '⚽', 'color': '#14b8a6'},
+                ]
+                created_subs = []
+                for sub_info in default_subjects:
+                    s, _ = Subject.objects.get_or_create(
+                        name=sub_info['name'],
+                        defaults={
+                            'icon': sub_info['icon'],
+                            'color': sub_info['color'],
+                            'created_by': teacher
+                        }
+                    )
+                    created_subs.append(s)
+
+                default_classes = [
+                    {'name': '5А', 'grade': 5, 'letter': 'А'},
+                    {'name': '6А', 'grade': 6, 'letter': 'А'},
+                    {'name': '7А', 'grade': 7, 'letter': 'А'},
+                    {'name': '8А', 'grade': 8, 'letter': 'А'},
+                    {'name': '9А', 'grade': 9, 'letter': 'А'},
+                    {'name': '9Б', 'grade': 9, 'letter': 'Б'},
+                    {'name': '10А', 'grade': 10, 'letter': 'А'},
+                    {'name': '11А', 'grade': 11, 'letter': 'А'},
+                ]
+                created_classes = []
+                for cls_info in default_classes:
+                    c, _ = ClassGroup.objects.get_or_create(
+                        name=cls_info['name'],
+                        defaults={
+                            'grade': cls_info['grade'],
+                            'letter': cls_info['letter'],
+                            'created_by': teacher
+                        }
+                    )
+                    created_classes.append(c)
+
+                # Пов'язуємо вчителя з усіма створеними предметами та класами
+                teacher.subjects.set(created_subs)
+                teacher.classes.set(created_classes)
+
+                # Ініціалізуємо пресети критеріїв НУШ
+                try:
+                    AICriteriaPreset.ensure_default_presets()
+                except Exception:
+                    pass
+
+                # Ініціалізуємо базові налаштування ШІ
+                try:
+                    from .models import AISettings
+                    AISettings.get_settings()
+                except Exception:
+                    pass
+
+            # 5. Оновлюємо прапорець наявності адміністратора в пам'яті
+            set_has_admin(True)
+
+            # 6. Виконуємо автоматичний вхід під новим обліковим записом
+            login(request, user)
+            log_submission_activity(user, 'setup', f"Перший запуск: створено адміністратора {full_name}")
+
+            messages.success(
+                request,
+                f'🎉 Вітаємо, {full_name}! Систему SchoolNet успішно ініціалізовано. '
+                f'Ваш обліковий запис адміністратора активовано!'
+            )
+            return redirect('teacher_dashboard')
+
+    return render(request, 'feed/first_run_setup.html', {'form': form})
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # АВТОРИЗАЦІЯ ВЧИТЕЛЯ
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -774,6 +931,7 @@ def teacher_login(request):
                 try:
                     teacher = user.teacher_profile
                     login(request, user)
+                    log_submission_activity(user, 'login', f"Вчитель {teacher.full_name} увійшов в систему")
                     messages.success(request, f'Вітаємо, {teacher.full_name}! 👋')
                     return redirect('teacher_dashboard')
                 except Teacher.DoesNotExist:
@@ -786,6 +944,7 @@ def teacher_login(request):
 
 def teacher_logout(request):
     """Вихід вчителя."""
+    log_submission_activity(request.user, 'logout', f"Вчитель {request.user.get_full_name() or request.user.username} вийшов із системи")
     logout(request)
     messages.info(request, 'Ви вийшли з системи.')
     return redirect('index')
@@ -888,6 +1047,7 @@ def assignment_create(request):
             # ── Зберігаємо дефолтні налаштування ШІ для завдання
             ai_preset_id = request.POST.get('default_ai_preset')
             if ai_preset_id:
+                request.session['last_ai_preset_id'] = ai_preset_id
                 from .models import AICriteriaPreset
                 try:
                     assignment.default_ai_preset = AICriteriaPreset.objects.get(pk=ai_preset_id)
@@ -926,6 +1086,35 @@ def assignment_create(request):
                         title=ytitle.strip()
                     )
 
+            # ── Зберігаємо прив'язку до розкладу уроків для класів
+            teacher_lesson_schedules = TeacherLessonSchedule.objects.filter(teacher=teacher).select_related('bell_slot', 'class_group')
+            for class_obj in assignment.classes.all():
+                target_val = request.POST.get(f"class_schedule_target_{class_obj.id}", 'auto')
+                if target_val and target_val.startswith('slot_'):
+                    parts = target_val.split('_')
+                    if len(parts) == 3:
+                        day_num = int(parts[1])
+                        slot_id = int(parts[2])
+                        AssignmentScheduleTarget.objects.update_or_create(
+                            assignment=assignment,
+                            class_group=class_obj,
+                            defaults={
+                                'target_day_of_week': day_num,
+                                'bell_slot_id': slot_id
+                            }
+                        )
+                elif target_val == 'auto':
+                    cls_sch = teacher_lesson_schedules.filter(class_group=class_obj).first()
+                    if cls_sch:
+                        AssignmentScheduleTarget.objects.update_or_create(
+                            assignment=assignment,
+                            class_group=class_obj,
+                            defaults={
+                                'target_day_of_week': cls_sch.day_of_week,
+                                'bell_slot_id': cls_sch.bell_slot_id
+                            }
+                        )
+
             status_labels = {
                 Assignment.STATUS_PUBLISHED: 'опубліковано',
                 Assignment.STATUS_DRAFT: 'збережено як чернетку',
@@ -938,11 +1127,29 @@ def assignment_create(request):
     from .models import AICriteriaPreset
     AICriteriaPreset.ensure_default_presets()
     criteria_presets = AICriteriaPreset.objects.all()
+
+    teacher_lesson_schedules = list(TeacherLessonSchedule.objects.filter(teacher=teacher).select_related('bell_slot', 'class_group').order_by('day_of_week', 'bell_slot__lesson_number'))
+
+    last_preset_id = request.session.get('last_ai_preset_id')
+    last_grs_json = '[]'
+    if not last_preset_id:
+        last_asg = Assignment.objects.filter(teacher=teacher, default_ai_preset__isnull=False).order_by('-created_at').first()
+        if last_asg:
+            last_preset_id = str(last_asg.default_ai_preset_id)
+            last_grs_json = last_asg.default_ai_grs or '[]'
+    else:
+        last_asg = Assignment.objects.filter(teacher=teacher, default_ai_preset_id=last_preset_id).order_by('-created_at').first()
+        if last_asg and last_asg.default_ai_grs:
+            last_grs_json = last_asg.default_ai_grs
+
     context = {
         'teacher': teacher,
         'form': form,
         'is_edit': False,
         'criteria_presets': criteria_presets,
+        'last_ai_preset_id': int(last_preset_id) if last_preset_id and str(last_preset_id).isdigit() else None,
+        'last_ai_grs': last_grs_json,
+        'teacher_lesson_schedules': teacher_lesson_schedules,
     }
     return render(request, 'feed/assignment_form.html', context)
 
@@ -951,7 +1158,12 @@ def assignment_create(request):
 def assignment_edit(request, pk):
     """Редагування існуючого завдання."""
     teacher = request.user.teacher_profile
-    assignment = get_object_or_404(Assignment, pk=pk, teacher=teacher)
+    # Суперадмін може редагувати будь-яке завдання, звичайний вчитель — лише власні
+    if request.user.is_superuser or request.session.get('superadmin_mode'):
+        assignment = get_object_or_404(Assignment, pk=pk)
+    else:
+        assignment = get_object_or_404(Assignment, pk=pk, teacher=teacher)
+
 
     form = AssignmentForm(teacher=teacher, instance=assignment)
     existing_files = assignment.files.all()
@@ -981,6 +1193,7 @@ def assignment_edit(request, pk):
             # ── Зберігаємо дефолтні налаштування ШІ
             ai_preset_id = request.POST.get('default_ai_preset')
             if ai_preset_id:
+                request.session['last_ai_preset_id'] = ai_preset_id
                 try:
                     assignment.default_ai_preset = AICriteriaPreset.objects.get(pk=ai_preset_id)
                 except AICriteriaPreset.DoesNotExist:
@@ -1022,11 +1235,48 @@ def assignment_edit(request, pk):
                         title=ytitle.strip()
                     )
 
+            # ── Оновлюємо прив'язку до розкладу уроків
+            teacher_lesson_schedules_all = TeacherLessonSchedule.objects.filter(teacher=teacher).select_related('bell_slot', 'class_group')
+            for class_obj in assignment.classes.all():
+                target_val = request.POST.get(f"class_schedule_target_{class_obj.id}", 'auto')
+                if target_val and target_val.startswith('slot_'):
+                    parts = target_val.split('_')
+                    if len(parts) == 3:
+                        day_num = int(parts[1])
+                        slot_id = int(parts[2])
+                        AssignmentScheduleTarget.objects.update_or_create(
+                            assignment=assignment,
+                            class_group=class_obj,
+                            defaults={
+                                'target_day_of_week': day_num,
+                                'bell_slot_id': slot_id
+                            }
+                        )
+                elif target_val == 'auto':
+                    cls_sch = teacher_lesson_schedules_all.filter(class_group=class_obj).first()
+                    if cls_sch:
+                        AssignmentScheduleTarget.objects.update_or_create(
+                            assignment=assignment,
+                            class_group=class_obj,
+                            defaults={
+                                'target_day_of_week': cls_sch.day_of_week,
+                                'bell_slot_id': cls_sch.bell_slot_id
+                            }
+                        )
+                elif target_val == 'none':
+                    AssignmentScheduleTarget.objects.filter(assignment=assignment, class_group=class_obj).delete()
+
             messages.success(request, f'Завдання "{assignment.title}" оновлено! ✅')
             return redirect('teacher_dashboard')
 
     AICriteriaPreset.ensure_default_presets()
     criteria_presets = AICriteriaPreset.objects.all()
+
+    teacher_lesson_schedules = list(TeacherLessonSchedule.objects.filter(teacher=teacher).select_related('bell_slot', 'class_group').order_by('day_of_week', 'bell_slot__lesson_number'))
+    existing_targets = {t.class_group_id: (t.target_day_of_week, t.bell_slot_id) for t in assignment.schedule_targets.all()}
+    for sch in teacher_lesson_schedules:
+        sch.is_selected_for_assignment = (existing_targets.get(sch.class_group_id) == (sch.day_of_week, sch.bell_slot_id))
+
     context = {
         'teacher': teacher,
         'form': form,
@@ -1036,6 +1286,7 @@ def assignment_edit(request, pk):
         'existing_youtube_links': existing_youtube_links,
         'is_edit': True,
         'criteria_presets': criteria_presets,
+        'teacher_lesson_schedules': teacher_lesson_schedules,
     }
     return render(request, 'feed/assignment_form.html', context)
 
@@ -1044,13 +1295,19 @@ def assignment_edit(request, pk):
 def assignment_delete(request, pk):
     """Видалення завдання (POST-запит)."""
     teacher = request.user.teacher_profile
-    assignment = get_object_or_404(Assignment, pk=pk, teacher=teacher)
+    if request.user.is_superuser or request.session.get('superadmin_mode'):
+        assignment = get_object_or_404(Assignment, pk=pk)
+    else:
+        assignment = get_object_or_404(Assignment, pk=pk, teacher=teacher)
 
     if request.method == 'POST':
         title = assignment.title
         assignment.delete()
         messages.success(request, f'Завдання "{title}" видалено.')
 
+    referer = request.META.get('HTTP_REFERER')
+    if referer and request.get_host() in referer:
+        return redirect(referer)
     return redirect('teacher_dashboard')
 
 
@@ -1075,6 +1332,9 @@ def assignment_unarchive(request, pk):
         assignment.save(update_fields=['status', 'unarchived_at', 'updated_at'])
         messages.success(request, f'Завдання «{assignment.title}» успішно розархівовано (первинну дату збережено)! ♻️')
 
+    referer = request.META.get('HTTP_REFERER')
+    if referer and request.get_host() in referer:
+        return redirect(referer)
     return redirect(f"{reverse('teacher_dashboard')}?tab=published")
 
 
@@ -1082,16 +1342,25 @@ def assignment_unarchive(request, pk):
 def assignment_duplicate(request, pk):
     """
     Дублювання завдання.
-    Створює нову чернетку на основі обраного завдання.
+    Створює нову чернетку на основі обраного завдання без слова [Копія].
     """
     teacher = request.user.teacher_profile
-    original = get_object_or_404(Assignment, pk=pk, teacher=teacher)
+    if request.user.is_superuser or request.session.get('superadmin_mode'):
+        original = get_object_or_404(Assignment, pk=pk)
+    else:
+        original = get_object_or_404(Assignment, pk=pk, teacher=teacher)
+
+    clean_title = original.title
+    if clean_title.startswith('[Копія] '):
+        clean_title = clean_title[len('[Копія] '):]
+    elif clean_title.startswith('Копія '):
+        clean_title = clean_title[len('Копія '):]
 
     # Створюємо дублікат
     duplicate = Assignment.objects.create(
         teacher=teacher,
         subject=original.subject,
-        title=f"[Копія] {original.title}",
+        title=clean_title,
         description=original.description,
         is_individual=original.is_individual,
         student_name=original.student_name,
@@ -1100,6 +1369,11 @@ def assignment_duplicate(request, pk):
         due_date=original.due_date,
         status=Assignment.STATUS_DRAFT,
         duplicated_from=original,
+        published_at=None,
+        default_ai_preset=original.default_ai_preset,
+        default_ai_grs=original.default_ai_grs,
+        allow_student_ai_check=original.allow_student_ai_check,
+        allow_ai_usage=original.allow_ai_usage,
     )
     duplicate.classes.set(original.classes.all())
 
@@ -1111,7 +1385,23 @@ def assignment_duplicate(request, pk):
             original_name=f.original_name,
         )
 
-    messages.success(request, f'Чернетку "{duplicate.title}" створено. Можна редагувати.')
+    # Копіюємо додаткові посилання
+    for lnk in original.additional_links.all():
+        AssignmentLink.objects.create(
+            assignment=duplicate,
+            url=lnk.url,
+            label=lnk.label,
+        )
+
+    # Копіюємо відео YouTube
+    for ytb in original.youtube_links.all():
+        AssignmentYouTubeLink.objects.create(
+            assignment=duplicate,
+            url=ytb.url,
+            title=ytb.title,
+        )
+
+    messages.success(request, f'Створено дублікат завдання "{duplicate.title}". Можна відредагувати та опублікувати.')
     return redirect('assignment_edit', pk=duplicate.pk)
 
 
@@ -1119,13 +1409,19 @@ def assignment_duplicate(request, pk):
 def assignment_archive(request, pk):
     """Переміщення завдання до архіву."""
     teacher = request.user.teacher_profile
-    assignment = get_object_or_404(Assignment, pk=pk, teacher=teacher)
+    if request.user.is_superuser or request.session.get('superadmin_mode'):
+        assignment = get_object_or_404(Assignment, pk=pk)
+    else:
+        assignment = get_object_or_404(Assignment, pk=pk, teacher=teacher)
 
     if request.method == 'POST':
         assignment.status = Assignment.STATUS_ARCHIVED
         assignment.save()
         messages.info(request, f'Завдання "{assignment.title}" переміщено до архіву.')
 
+    referer = request.META.get('HTTP_REFERER')
+    if referer and request.get_host() in referer:
+        return redirect(referer)
     return redirect('teacher_dashboard')
 
 
@@ -1133,15 +1429,21 @@ def assignment_archive(request, pk):
 def assignment_publish(request, pk):
     """Миттєва публікація чернетки або відкладеного завдання."""
     teacher = request.user.teacher_profile
-    assignment = get_object_or_404(Assignment, pk=pk, teacher=teacher)
+    if request.user.is_superuser or request.session.get('superadmin_mode'):
+        assignment = get_object_or_404(Assignment, pk=pk)
+    else:
+        assignment = get_object_or_404(Assignment, pk=pk, teacher=teacher)
 
     if request.method == 'POST':
         assignment.status = Assignment.STATUS_PUBLISHED
-        if not assignment.published_at:
+        if not assignment.published_at or assignment.duplicated_from_id is not None:
             assignment.published_at = timezone.now()
         assignment.save()
         messages.success(request, f'Завдання "{assignment.title}" опубліковано! ✅')
 
+    referer = request.META.get('HTTP_REFERER')
+    if referer and request.get_host() in referer:
+        return redirect(referer)
     return redirect('teacher_dashboard')
 
 
@@ -1359,6 +1661,64 @@ def teacher_profile(request):
 from django.views.decorators.clickjacking import xframe_options_exempt
 
 
+def get_presentation_slides(file_id, file_path):
+    """
+    Генерує або дістає з кешу високоякісні зображення слайдів презентації (.pptx, .ppt, .odp)
+    та PDF версію через headless LibreOffice + pdftoppm.
+    Повертає (slide_urls, pdf_url).
+    """
+    import os
+    import glob
+    import shutil
+    import subprocess
+    from django.conf import settings
+    
+    cache_dir = os.path.join(settings.MEDIA_ROOT, 'previews', str(file_id))
+    os.makedirs(cache_dir, exist_ok=True)
+    pdf_path = os.path.join(cache_dir, 'presentation.pdf')
+    
+    # 1. Перевіряємо чи є вже PDF
+    if not os.path.exists(pdf_path):
+        try:
+            if shutil.which('libreoffice') or shutil.which('soffice'):
+                cmd = ['libreoffice', '--headless', '--convert-to', 'pdf', '--outdir', cache_dir, file_path]
+                subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=40)
+                base_name = os.path.splitext(os.path.basename(file_path))[0]
+                gen_pdf = os.path.join(cache_dir, base_name + '.pdf')
+                if os.path.exists(gen_pdf) and gen_pdf != pdf_path:
+                    os.rename(gen_pdf, pdf_path)
+        except Exception:
+            pass
+            
+    if not os.path.exists(pdf_path):
+        return [], None
+
+    # Також створюємо прямий PDF для перегляду у previews/<file_id>.pdf
+    direct_pdf = os.path.join(settings.MEDIA_ROOT, 'previews', f"{file_id}.pdf")
+    if not os.path.exists(direct_pdf):
+        try:
+            shutil.copyfile(pdf_path, direct_pdf)
+        except Exception:
+            pass
+        
+    # 2. Перевіряємо чи є вже зображення слайдів
+    slide_files = sorted(glob.glob(os.path.join(cache_dir, 'slide-*.jpg')))
+    if not slide_files:
+        try:
+            if shutil.which('pdftoppm'):
+                prefix = os.path.join(cache_dir, 'slide')
+                cmd = ['pdftoppm', '-jpeg', '-r', '130', pdf_path, prefix]
+                subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=40)
+                slide_files = sorted(glob.glob(os.path.join(cache_dir, 'slide-*.jpg')))
+        except Exception:
+            pass
+            
+    media_url = settings.MEDIA_URL.rstrip('/')
+    slide_urls = [f'{media_url}/previews/{file_id}/{os.path.basename(p)}' for p in slide_files]
+    pdf_url = f'{media_url}/previews/{file_id}/presentation.pdf'
+    return slide_urls, pdf_url
+
+
 def get_pdf_preview_url(file_obj):
     """
     Конвертує pptx, docx, або xlsx у PDF за допомогою headless LibreOffice, якщо його ще немає в кеші.
@@ -1463,8 +1823,9 @@ def file_view(request, file_id):
             with open(path, 'rb') as f:
                 response = HttpResponse(f.read(), content_type=mime_type)
             
-            # Насильно змушуємо браузер рендерити inline (у фреймі)
-            response['Content-Disposition'] = f'inline; filename="{file_obj.original_name}"'
+            # Завжди передаємо чистий ASCII 'inline', щоб уникнути помилкового MIME-кодування заголовка
+            # з кириличними літерами (через що браузери сприймають це як 'attachment' і примусово завантажують файл)
+            response['Content-Disposition'] = 'inline'
             response['X-Frame-Options'] = 'SAMEORIGIN'
             return response
     except Exception as e:
@@ -1472,11 +1833,41 @@ def file_view(request, file_id):
     return HttpResponse("Файл не знайдено", status=404)
 
 
+def file_download(request, file_id):
+    """Завантажує файл завдання (матеріали вчителя) з правильним ім'ям та розширенням.
+    Завжди повертає Content-Disposition: attachment, щоб браузер пропонував зберегти файл.
+    """
+    import mimetypes
+    import os
+    from django.http import FileResponse
+
+    file_obj = get_object_or_404(AssignmentFile, pk=file_id)
+    try:
+        path = file_obj.file.path
+        if not os.path.exists(path):
+            return HttpResponse("Файл не знайдено на сервері", status=404)
+
+        original_name = file_obj.original_name or os.path.basename(path)
+        mime_type, _ = mimetypes.guess_type(path)
+        if not mime_type:
+            mime_type = 'application/octet-stream'
+
+        response = FileResponse(
+            open(path, 'rb'),
+            content_type=mime_type,
+            as_attachment=True,
+            filename=original_name,
+        )
+        return response
+    except Exception as e:
+        return HttpResponse(f"Помилка завантаження: {str(e)}", status=500)
+
 
 def file_preview(request, file_id):
     """Служба для генерації інлайнового прев'ю файлу (docx, xlsx, pptx, python та інших код-файлів)."""
     file_obj = get_object_or_404(AssignmentFile, pk=file_id)
     ext = file_obj.get_extension()
+
     
     # Спочатку пробуємо якісну конвертацію у PDF через LibreOffice
     if ext in {'.pptx', '.ppt', '.docx', '.doc', '.xlsx', '.xls'}:
@@ -1544,131 +1935,27 @@ def file_preview(request, file_id):
                 'message': f'Помилка конвертації таблиці Excel: {str(e)}'
             })
 
-    elif ext == '.pptx':
+    elif ext in ['.pptx', '.ppt', '.odp']:
         try:
-            import base64
-            from pptx import Presentation
-            from pptx.enum.shapes import MSO_SHAPE_TYPE
-            from pptx.util import Emu
-
-            prs = Presentation(file_obj.file.path)
-            slide_w = prs.slide_width or Emu(9144000)
-            slide_h = prs.slide_height or Emu(5143500)
-            aspect = (slide_h / slide_w * 100) if slide_w else 56.25
-
-            html = ["<div class='pptx-preview-wrapper' style='display:flex; flex-direction:column; gap:24px; width:100%;'>"]
-
-            for idx, slide in enumerate(prs.slides):
-                # ─── Background colour / gradient ───────────────────────────────
-                bg_css = "background: #f0f0f0;"
-                try:
-                    bg = slide.background
-                    fill = bg.fill
-                    fill_type = fill.type
-                    if fill_type is not None:
-                        if hasattr(fill, 'fore_color') and fill.fore_color.type is not None:
-                            try:
-                                rgb = fill.fore_color.rgb
-                                bg_css = f"background: #{rgb};"
-                            except Exception:
-                                pass
-                except Exception:
-                    pass
-
-                # ─── Slide container ─────────────────────────────────────────────
-                html.append(
-                    f"<div class='pptx-slide' style='position:relative; width:100%; padding-bottom:{aspect:.2f}%; "
-                    f"border-radius:8px; {bg_css} box-shadow:0 2px 12px rgba(0,0,0,.15); overflow:hidden;'>"
-                )
-                html.append("<div style='position:absolute; top:0; left:0; width:100%; height:100%; overflow:hidden;'>")
-                html.append(f"<div style='position:absolute; top:6px; left:8px; font-size:10px; opacity:.5; z-index:10;'>Слайд {idx+1}</div>")
-
-                # ─── Shapes ───────────────────────────────────────────────────────
-                shapes = sorted(slide.shapes, key=lambda s: (s.top or 0))
-                for shape in shapes:
-                    try:
-                        left_pct  = (shape.left  or 0) / slide_w * 100
-                        top_pct   = (shape.top   or 0) / slide_h * 100
-                        width_pct = (shape.width or 0) / slide_w * 100
-                        height_pct= (shape.height or 0) / slide_h * 100
-                    except Exception:
-                        continue
-
-                    pos_style = (
-                        f"position:absolute; left:{left_pct:.2f}%; top:{top_pct:.2f}%; "
-                        f"width:{width_pct:.2f}%; min-height:{height_pct:.2f}%; overflow:hidden; box-sizing:border-box;"
-                    )
-
-                    # -- Images / pictures --
-                    if shape.shape_type == MSO_SHAPE_TYPE.PICTURE:
-                        try:
-                            img_bytes = shape.image.blob
-                            img_b64 = base64.b64encode(img_bytes).decode('utf-8')
-                            mime = shape.image.content_type or 'image/png'
-                            html.append(
-                                f"<img src='data:{mime};base64,{img_b64}' "
-                                f"style='{pos_style} object-fit:contain; max-width:100%; max-height:100%;' alt=''>"
-                            )
-                        except Exception:
-                            pass
-                        continue
-
-                    # -- Text frames --
-                    if shape.has_text_frame:
-                        tf = shape.text_frame
-                        text_css = pos_style + " display:flex; flex-direction:column; justify-content:center; padding:2%;"
-
-                        # Try to detect fill colour for text boxes
-                        try:
-                            sfill = shape.fill
-                            if sfill.type is not None:
-                                srgb = sfill.fore_color.rgb
-                                text_css += f" background:#{srgb}CC;"
-                        except Exception:
-                            pass
-
-                        is_title = (shape.is_placeholder and
-                                    hasattr(shape, 'placeholder_format') and
-                                    shape.placeholder_format.idx == 0)
-
-                        inner_html = []
-                        for para in tf.paragraphs:
-                            para_text = para.text.strip()
-                            if not para_text:
-                                continue
-                            colour = "#333"
-                            font_size = "3"
-                            bold = False
-                            try:
-                                run = para.runs[0] if para.runs else None
-                                if run:
-                                    if run.font.size:
-                                        pts = run.font.size.pt
-                                        font_size = f"{max(1, min(int(pts * 0.6), 8))}"
-                                    if run.font.color.type is not None:
-                                        colour = f"#{run.font.color.rgb}"
-                                    bold = run.font.bold or False
-                            except Exception:
-                                pass
-
-                            bw = "700" if (is_title or bold) else "400"
-                            inner_html.append(
-                                f"<p style='margin:0 0 2px; font-size:{font_size}cqw; font-weight:{bw}; "
-                                f"color:{colour}; line-height:1.3; white-space:pre-wrap;'>{para_text}</p>"
-                            )
-
-                        if inner_html:
-                            html.append(f"<div style='{text_css} container-type:inline-size;'>{''.join(inner_html)}</div>")
-
-                html.append("</div>")  # inner absolute
-                html.append("</div>")  # slide container
-
-            html.append("</div>")  # wrapper
-            return JsonResponse({'type': 'html', 'content': ''.join(html)})
+            slide_urls, pdf_url = get_presentation_slides(file_obj.id, file_obj.file.path)
+            if slide_urls:
+                return JsonResponse({
+                    'type': 'slides',
+                    'slides': slide_urls,
+                    'count': len(slide_urls),
+                    'pdf_url': pdf_url
+                })
+            else:
+                from .utils import convert_pptx_to_html
+                h, err = convert_pptx_to_html(file_obj.file.path)
+                return JsonResponse({
+                    'type': 'html',
+                    'content': h or f"Помилка конвертації: {err}"
+                })
         except Exception as e:
             return JsonResponse({
                 'type': 'error',
-                'message': f'Помилка конвертації презентації PowerPoint: {str(e)}'
+                'message': f'Помилка обробки презентації: {str(e)}'
             })
 
     # 4. Обробка Scratch 3 (.sb3) проєктів
@@ -1845,7 +2132,7 @@ def submit_assignment(request, pk):
         except (ClassGroup.DoesNotExist, ValueError):
             pass
     elif assignment.classes.exists():
-        initial_data['class_group'] = assignment.classes.first()
+        initial_data['class_group'] = assignment.classes.all().order_by('grade', 'letter', 'name').first()
 
     form = SubmissionForm(assignment=assignment, initial=initial_data)
 
@@ -2783,9 +3070,88 @@ def all_submissions_dashboard(request):
     return render(request, 'feed/all_submissions_dashboard.html', context)
 
 
+def sync_grades_to_coauthors(submission, grade, graded_by_user):
+    """
+    Автоматично проставляє оцінку всім співавторам групової роботи без повторень.
+    Повертає список імен оновлених/створених робіт співавторів.
+    """
+    from .student_matcher import extract_coauthors_from_comment, is_same_student_identity
+    from .models import Submission, Student
+
+    if not submission.assignment or not grade:
+        return []
+
+    coauthors = extract_coauthors_from_comment(
+        submission.comment_student,
+        class_group=submission.class_group,
+        exclude_last_name=submission.last_name,
+        exclude_first_name=submission.first_name,
+    )
+
+    graded_names = []
+    processed_identities = set()
+
+    for co in coauthors:
+        co_st = co.get('student')
+        co_ln = co['last_name']
+        co_fn = co['first_name']
+
+        ident_key = f"{co_ln.lower()}_{co_fn.lower()}"
+        if ident_key in processed_identities:
+            continue
+        processed_identities.add(ident_key)
+
+        # Шукаємо чи є вже здача від цього співавтора на це завдання
+        existing_sub = None
+        if co_st:
+            existing_sub = Submission.objects.filter(
+                assignment=submission.assignment,
+                class_group=submission.class_group,
+                student=co_st
+            ).exclude(pk=submission.pk).first()
+
+        if not existing_sub:
+            for s in Submission.objects.filter(assignment=submission.assignment, class_group=submission.class_group).exclude(pk=submission.pk):
+                if is_same_student_identity(co_ln, co_fn, s.last_name, s.first_name):
+                    existing_sub = s
+                    break
+
+        if existing_sub:
+            existing_sub.grade = grade
+            existing_sub.graded_by = graded_by_user
+            existing_sub.graded_at = timezone.now()
+            if submission.teacher_comment:
+                existing_sub.teacher_comment = submission.teacher_comment
+            existing_sub.save(update_fields=['grade', 'graded_by', 'graded_at', 'teacher_comment'])
+            graded_names.append(existing_sub.get_student_full_name())
+        else:
+            new_sub = Submission.objects.create(
+                assignment=submission.assignment,
+                student=co_st,
+                first_name=co_fn,
+                last_name=co_ln,
+                class_group=submission.class_group,
+                teacher=submission.teacher,
+                file=submission.file,
+                link=submission.link,
+                comment_student=f"Групова робота (спільно з {submission.get_student_full_name()})",
+                teacher_comment=submission.teacher_comment,
+                grade=grade,
+                graded_by=graded_by_user,
+                graded_at=timezone.now(),
+                ai_suggested_grade=submission.ai_suggested_grade,
+                ai_score_level=submission.ai_score_level,
+                ai_feedback=submission.ai_feedback,
+                ai_status=submission.ai_status,
+            )
+            graded_names.append(new_sub.get_student_full_name())
+
+    return graded_names
+
+
 @teacher_required
 def grade_submission(request, sub_id):
-    """AJAX: виставлення або зміна оцінки здачі роботи."""
+    """AJAX: виставлення або зміна оцінки здачі роботи з підтримкою співавторів."""
     if request.method != 'POST':
         return JsonResponse({'status': 'error', 'message': 'Method not allowed'}, status=405)
 
@@ -2802,10 +3168,18 @@ def grade_submission(request, sub_id):
         submission.graded_at = timezone.now()
     submission.save(update_fields=['grade', 'graded_by', 'graded_at'])
 
+    coauthors_graded = []
+    if grade:
+        coauthors_graded = sync_grades_to_coauthors(submission, grade, request.user)
+
+    log_msg = f"Оцінено роботу {submission.get_student_full_name()} -> {grade or 'оцінку знято'}"
+    if coauthors_graded:
+        log_msg += f" (також виставлено оцінку співавторам: {', '.join(coauthors_graded)})"
+
     log_submission_activity(
         request.user,
         'grading',
-        f"Оцінено роботу {submission.get_student_full_name()} -> {grade or 'оцінку знято'}",
+        log_msg,
         submission=submission
     )
 
@@ -2813,6 +3187,8 @@ def grade_submission(request, sub_id):
         'status': 'success',
         'grade': submission.grade or '',
         'is_graded': bool(submission.grade),
+        'coauthors_graded': coauthors_graded,
+        'message': log_msg,
     })
 
 
@@ -2986,20 +3362,115 @@ def teacher_students(request):
     add_form = StudentForm(initial={'class_group': selected_class} if selected_class else None)
     import_form = StudentImportForm(initial={'default_class': selected_class} if selected_class else None)
 
-    # Обробка швидкого створення учня через POST
-    if request.method == 'POST' and request.POST.get('action') == 'add_student':
-        add_form = StudentForm(request.POST)
-        if add_form.is_valid():
-            new_st = add_form.save()
-            if add_form.cleaned_data.get('sync_submissions', True):
-                new_st.sync_submissions()
-            log_submission_activity(
-                request.user,
-                'student_created',
-                f"Додано нового учня «{new_st.get_full_name()}» до класу {new_st.class_group.name}"
-            )
-            messages.success(request, f"Учня «{new_st.get_full_name()}» успішно додано до класу {new_st.class_group.name}!")
-            return redirect(f"{reverse('teacher_students')}?class_group={new_st.class_group_id}")
+    current_tab = request.GET.get('tab', 'students')
+
+    # Обробка дій через POST
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        if action == 'add_student':
+            add_form = StudentForm(request.POST)
+            if add_form.is_valid():
+                new_st = add_form.save()
+                if add_form.cleaned_data.get('sync_submissions', True):
+                    new_st.sync_submissions()
+                log_submission_activity(
+                    request.user,
+                    'student_created',
+                    f"Додано нового учня «{new_st.get_full_name()}» до класу {new_st.class_group.name}"
+                )
+                messages.success(request, f"Учня «{new_st.get_full_name()}» успішно додано до класу {new_st.class_group.name}!")
+                return redirect(f"{reverse('teacher_students')}?class_group={new_st.class_group_id}")
+
+        elif action == 'save_teacher_schedule' and teacher:
+            bell_slots_all = BellSchedule.objects.all().order_by('order', 'lesson_number')
+            days_list = [1, 2, 3, 4, 5, 6]
+            saved_count = 0
+            cleared_count = 0
+
+            for day_num in days_list:
+                for slot in bell_slots_all:
+                    class_key = f"cell_{day_num}_{slot.id}_class"
+                    subject_key = f"cell_{day_num}_{slot.id}_subject"
+
+                    class_id_str = request.POST.get(class_key, '').strip()
+                    subject_id_str = request.POST.get(subject_key, '').strip()
+
+                    if class_id_str and class_id_str.isdigit():
+                        class_id = int(class_id_str)
+                        subject_id = int(subject_id_str) if (subject_id_str and subject_id_str.isdigit()) else None
+                        TeacherLessonSchedule.objects.update_or_create(
+                            teacher=teacher,
+                            day_of_week=day_num,
+                            bell_slot=slot,
+                            defaults={
+                                'class_group_id': class_id,
+                                'subject_id': subject_id
+                            }
+                        )
+                        saved_count += 1
+                    else:
+                        deleted, _ = TeacherLessonSchedule.objects.filter(
+                            teacher=teacher,
+                            day_of_week=day_num,
+                            bell_slot=slot
+                        ).delete()
+                        if deleted:
+                            cleared_count += 1
+
+            messages.success(request, f"Тижневий розклад уроків збережено! Зафіксовано {saved_count} уроків на тиждень.")
+            return redirect(f"{reverse('teacher_students')}?tab=schedule")
+
+        elif action == 'clear_teacher_schedule' and teacher:
+            TeacherLessonSchedule.objects.filter(teacher=teacher).delete()
+            messages.success(request, "Ваш тижневий розклад уроків успішно очищено.")
+            return redirect(f"{reverse('teacher_students')}?tab=schedule")
+
+    # Дані для розкладу уроків вчителя
+    bell_slots = BellSchedule.objects.all().order_by('order', 'lesson_number')
+    days_of_week = [
+        (1, 'Понеділок'),
+        (2, 'Вівторок'),
+        (3, 'Середа'),
+        (4, 'Четвер'),
+        (5, "П'ятниця"),
+    ]
+    # Якщо у вчителя призначено уроки на суботу або обрано суботу
+    if teacher and TeacherLessonSchedule.objects.filter(teacher=teacher, day_of_week=6).exists():
+        days_of_week.append((6, 'Субота'))
+
+    teacher_classes = []
+    if teacher and teacher.classes.exists():
+        teacher_classes = list(teacher.classes.all().order_by('grade', 'letter'))
+    else:
+        teacher_classes = all_class_groups
+
+    teacher_subjects = []
+    if teacher and teacher.subjects.exists():
+        teacher_subjects = list(teacher.subjects.all().order_by('name'))
+    else:
+        teacher_subjects = list(Subject.objects.all().order_by('name'))
+
+    schedule_rows = []
+    total_scheduled_lessons = 0
+    if teacher:
+        schedules = TeacherLessonSchedule.objects.filter(teacher=teacher).select_related('bell_slot', 'class_group', 'subject')
+        total_scheduled_lessons = schedules.count()
+        schedule_map = {(s.day_of_week, s.bell_slot_id): s for s in schedules}
+        for slot in bell_slots:
+            row_days = []
+            for day_num, day_name in days_of_week:
+                entry = schedule_map.get((day_num, slot.id))
+                row_days.append({
+                    'day_num': day_num,
+                    'day_name': day_name,
+                    'entry': entry,
+                    'class_id': entry.class_group_id if entry else None,
+                    'subject_id': entry.subject_id if entry else None,
+                })
+            schedule_rows.append({
+                'slot': slot,
+                'days': row_days,
+            })
 
     return render(request, 'feed/teacher_students.html', {
         'page_obj': page_obj,
@@ -3013,6 +3484,13 @@ def teacher_students(request):
         'total_submissions_count': total_submissions_count,
         'add_form': add_form,
         'import_form': import_form,
+        'current_tab': current_tab,
+        'bell_slots': bell_slots,
+        'days_of_week': days_of_week,
+        'teacher_classes': teacher_classes,
+        'teacher_subjects': teacher_subjects,
+        'schedule_rows': schedule_rows,
+        'total_scheduled_lessons': total_scheduled_lessons,
     })
 
 
@@ -4389,16 +4867,68 @@ def teacher_settings_view(request):
                         t_name = t_del.full_name
                         t_del.delete()
                         u_del.delete()
-                        messages.success(request, f"Вчителя «{t_name}» видалено з системи.")
+        # ── 2.2. ДІЇ РОЗКЛАДУ ДЗВІНКІВ ──────────────────────────────────────
+        elif action == 'save_bell_slot':
+            slot_id = request.POST.get('slot_id')
+            lesson_number = request.POST.get('lesson_number')
+            start_time_str = request.POST.get('start_time', '').strip()
+            end_time_str = request.POST.get('end_time', '').strip()
+
+            if lesson_number and start_time_str and end_time_str:
+                import datetime
+                try:
+                    num = int(lesson_number)
+                    sh, sm = map(int, start_time_str.split(':'))
+                    eh, em = map(int, end_time_str.split(':'))
+                    s_time = datetime.time(sh, sm)
+                    e_time = datetime.time(eh, em)
+
+                    if s_time >= e_time:
+                        messages.error(request, "Час завершення уроку має бути пізніше за час початку.")
+                    else:
+                        if slot_id:
+                            slot = get_object_or_404(BellSchedule, pk=slot_id)
+                            slot.lesson_number = num
+                            slot.start_time = s_time
+                            slot.end_time = e_time
+                            slot.order = num
+                            slot.save()
+                            messages.success(request, f"Урок №{num} успішно оновлено! 🔔")
+                        else:
+                            BellSchedule.objects.update_or_create(
+                                lesson_number=num,
+                                defaults={'start_time': s_time, 'end_time': e_time, 'order': num}
+                            )
+                            messages.success(request, f"Урок №{num} ({start_time_str} – {end_time_str}) успішно збережено в розкладі дзвінків! 🔔")
+                except Exception as ex:
+                    messages.error(request, f"Помилка формату часу: {ex}")
+            else:
+                messages.error(request, "Будь ласка, вкажіть номер уроку, час початку та час закінчення.")
+            return redirect(f"{reverse('teacher_settings')}?tab=environment")
+
+        elif action == 'delete_bell_slot':
+            slot_id = request.POST.get('slot_id')
+            if slot_id:
+                slot = get_object_or_404(BellSchedule, pk=slot_id)
+                num = slot.lesson_number
+                slot.delete()
+                messages.success(request, f"Урок №{num} видалено з розкладу дзвінків.")
+            return redirect(f"{reverse('teacher_settings')}?tab=environment")
+
+        elif action == 'reset_default_bells':
+            BellSchedule.objects.all().delete()
+            BellSchedule.seed_default_schedule()
+            messages.success(request, "Відновлено стандартний розклад дзвінків (1–8 уроки)! 🔔")
             return redirect(f"{reverse('teacher_settings')}?tab=environment")
 
         # ── 3. ДІЇ ШТУЧНОГО ІНТЕЛЕКТУ ТА ПРІОРИТЕТІВ МОДЕЛЕЙ ─────────────────
-        elif action == 'save_ai_config' or (not action and ('api_key' in request.POST or 'temperature' in request.POST or 'system_prompt' in request.POST)):
+        elif action == 'save_ai_config' or (not action and ('api_key' in request.POST or 'temperature' in request.POST or 'system_prompt' in request.POST or 'ai_detector_tolerance_percent' in request.POST)):
             api_key = request.POST.get('api_key', '').strip()
             model_name = request.POST.get('model_name', '').strip()
             system_prompt = request.POST.get('system_prompt', DEFAULT_NUS_SYSTEM_PROMPT).strip()
             temperature_val = float(request.POST.get('temperature', 0.2))
             is_enabled = bool(request.POST.get('is_enabled'))
+            tolerance_val = request.POST.get('ai_detector_tolerance_percent')
 
             ai_settings.api_key = api_key
             if model_name:
@@ -4407,6 +4937,11 @@ def teacher_settings_view(request):
             ai_settings.system_prompt = system_prompt
             ai_settings.temperature = temperature_val
             ai_settings.is_enabled = is_enabled
+            if tolerance_val is not None:
+                try:
+                    ai_settings.ai_detector_tolerance_percent = max(0, min(100, int(tolerance_val)))
+                except (ValueError, TypeError):
+                    pass
             ai_settings.save()
             messages.success(request, "Параметри Google Gemini AI успішно збережено! 🤖")
             if request.path == reverse('ai_settings'):
@@ -4573,10 +5108,10 @@ def teacher_settings_view(request):
             return redirect(f"{reverse('teacher_settings')}?tab=ai")
 
     # Підготовка даних контексту для сторінки налаштувань
-    teacher_subjects = teacher.subjects.all()
-    teacher_classes = teacher.classes.all()
-    other_subjects = Subject.objects.exclude(id__in=teacher_subjects.values_list('id', flat=True))
-    other_classes = ClassGroup.objects.exclude(id__in=teacher_classes.values_list('id', flat=True))
+    teacher_subjects = teacher.subjects.all().order_by('name')
+    teacher_classes = teacher.classes.all().order_by('grade', 'letter', 'name')
+    other_subjects = Subject.objects.exclude(id__in=teacher_subjects.values_list('id', flat=True)).order_by('name')
+    other_classes = ClassGroup.objects.exclude(id__in=teacher_classes.values_list('id', flat=True)).order_by('grade', 'letter', 'name')
     all_teachers = Teacher.objects.select_related('user').all()
 
     # Гарантуємо наявність базових шаблонів критеріїв оцінювання
@@ -4589,11 +5124,33 @@ def teacher_settings_view(request):
     saved_models = [m['name'] for m in models_with_priority]
     active_fallback_chain = ai_settings.get_active_fallback_chain()
 
-    total_ai_checks = Submission.objects.exclude(ai_status='none').count()
+    # Перевірки ШІ: рахуємо і вчительські (ai_status != 'none') і самоперевірки учнів (student_ai_checked=True)
+    teacher_ai_checks = Submission.objects.exclude(ai_status__in=['none', '']).count()
+    student_ai_checks = Submission.objects.filter(student_ai_checked=True).count()
+    total_ai_checks = teacher_ai_checks + student_ai_checks
+
     total_ai_success = Submission.objects.filter(ai_status='success').count()
     total_ai_failed = Submission.objects.filter(ai_status='failed').count()
     total_ai_unsupported = Submission.objects.filter(ai_status='unsupported').count()
-    total_applied_grades = Submission.objects.filter(graded_by__isnull=False, ai_status='success').count()
+
+    # Оцінки застосовані (або через AI, або напряму)
+    total_applied_grades = Submission.objects.filter(
+        Q(graded_by__isnull=False) | Q(grade__isnull=False)
+    ).count()
+
+    # Середній відсоток ШІ-генерованості (де є дані)
+    from django.db.models import Avg
+    avg_ai_percent_result = Submission.objects.filter(
+        ai_generated_percent__isnull=False
+    ).aggregate(avg=Avg('ai_generated_percent'))
+    avg_ai_percent = round(avg_ai_percent_result['avg'] or 0, 1)
+
+    # Підозрілі (ai_generated_percent > порогового значення)
+    tolerance = getattr(ai_settings, 'ai_detector_tolerance_percent', 70) or 70
+    total_ai_detected = Submission.objects.filter(
+        ai_generated_percent__isnull=False,
+        ai_generated_percent__gte=tolerance,
+    ).count()
 
     db_models = list(Submission.objects.exclude(ai_model_used='').values_list('ai_model_used', flat=True).distinct())
     all_known_models = list(dict.fromkeys(saved_models + db_models))
@@ -4654,6 +5211,7 @@ def teacher_settings_view(request):
         'all_teachers': all_teachers,
         'is_superuser': request.user.is_superuser,
         'is_superadmin_mode': request.session.get('superadmin_mode', False),
+        'bell_schedules': BellSchedule.objects.all().order_by('lesson_number'),
         'env_stats': env_stats,
         'ai_settings': ai_settings,
         'saved_models': saved_models,
@@ -4666,10 +5224,14 @@ def teacher_settings_view(request):
         'criteria_presets': criteria_presets,
         'default_preset': default_preset,
         'total_ai_checks': total_ai_checks,
+        'teacher_ai_checks': teacher_ai_checks,
+        'student_ai_checks': student_ai_checks,
         'total_ai_success': total_ai_success,
         'total_ai_failed': total_ai_failed,
         'total_ai_unsupported': total_ai_unsupported,
         'total_applied_grades': total_applied_grades,
+        'avg_ai_percent': avg_ai_percent,
+        'total_ai_detected': total_ai_detected,
         'level_high': level_high,
         'level_sufficient': level_sufficient,
         'level_medium': level_medium,
@@ -4899,10 +5461,17 @@ def ai_apply_suggested_grade(request, submission_id):
                 text=f"{ai_tag}\n{clean_feedback}"
             )
 
+    # Синхронізуємо оцінку зі співавторами
+    coauthors_graded = sync_grades_to_coauthors(submission, submission.grade, request.user)
+
+    log_msg = f"Вчитель прийняв оцінку ШІ «{submission.grade}» для учня {submission.get_student_full_name()}"
+    if coauthors_graded:
+        log_msg += f" (також виставлено оцінку співавторам: {', '.join(coauthors_graded)})"
+
     log_submission_activity(
         request.user,
         'grade_submission',
-        f"Вчитель прийняв оцінку ШІ «{submission.grade}» для учня {submission.get_student_full_name()}",
+        log_msg,
         submission=submission
     )
 
@@ -4916,11 +5485,819 @@ def ai_apply_suggested_grade(request, submission_id):
         return JsonResponse({
             'status': 'success',
             'grade': submission.grade,
-            'message': f"Оцінку «{submission.grade}» успішно встановлено!"
+            'coauthors_graded': coauthors_graded,
+            'message': f"Оцінку «{submission.grade}» успішно встановлено!" + (f" (також співавторам: {', '.join(coauthors_graded)})" if coauthors_graded else "")
         })
 
-    messages.success(request, f"Оцінку «{submission.grade}» успішно застосовано до роботи учня {submission.get_student_full_name()}!")
+    succ_msg = f"Оцінку «{submission.grade}» успішно застосовано до роботи учня {submission.get_student_full_name()}!"
+    if coauthors_graded:
+        succ_msg += f" Оцінку також виставлено співавторам: {', '.join(coauthors_graded)}."
+    messages.success(request, succ_msg)
     return redirect('view_file', submission_id=submission.id)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ПЕРЕНЕСЕННЯ УРОКІВ, 30-ДЕННИЙ КАЛЕНДАР, РОЗКЛАД ТА ZIP ІМПОРТ/ЕКСПОРТ
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@teacher_required
+def reschedule_assignment(request, pk):
+    """
+    Перенесення уроку/завдання на іншу дату та урок із фіксацією причини.
+    Оновлює цільовий розклад (AssignmentScheduleTarget) та за потреби дедлайн.
+    """
+    from datetime import datetime, timedelta, date
+    from django.http import JsonResponse
+    teacher = request.user.teacher_profile
+    if request.user.is_superuser or request.session.get('superadmin_mode'):
+        assignment = get_object_or_404(Assignment, pk=pk)
+    else:
+        assignment = get_object_or_404(Assignment, pk=pk, teacher=teacher)
+
+    if request.method == 'POST':
+        is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.POST.get('is_ajax')
+
+        class_id = request.POST.get('class_group')
+        new_date_str = request.POST.get('new_date')
+        new_slot_id = request.POST.get('new_bell_slot')
+        reason_type = request.POST.get('reason_type', AssignmentRescheduleLog.REASON_AIR_RAID)
+        reason_comment = request.POST.get('reason_comment', '').strip()
+        update_due_date = request.POST.get('update_due_date') in ['1', 'true', 'on', True]
+
+        if not new_date_str:
+            if is_ajax:
+                return JsonResponse({'success': False, 'error': 'Вкажіть нову дату уроку.'}, status=400)
+            messages.error(request, 'Помилка: обов\'язково вкажіть нову дату уроку.')
+            return redirect(request.META.get('HTTP_REFERER') or 'teacher_dashboard')
+
+        try:
+            new_date = datetime.strptime(new_date_str, '%Y-%m-%d').date()
+        except ValueError:
+            if is_ajax:
+                return JsonResponse({'success': False, 'error': 'Некоректний формат дати.'}, status=400)
+            messages.error(request, 'Помилка: некоректний формат дати.')
+            return redirect(request.META.get('HTTP_REFERER') or 'teacher_dashboard')
+
+        class_group = None
+        if class_id:
+            class_group = ClassGroup.objects.filter(id=class_id).first()
+
+        new_slot = None
+        if new_slot_id:
+            new_slot = BellSchedule.objects.filter(id=new_slot_id).first()
+
+        # Визначаємо початкову дату та урок
+        existing_target = None
+        if class_group:
+            existing_target = assignment.schedule_targets.filter(class_group=class_group).first()
+        if not existing_target:
+            existing_target = assignment.schedule_targets.first()
+
+        if existing_target and existing_target.target_date:
+            orig_date = existing_target.target_date
+            orig_slot = existing_target.bell_slot
+        else:
+            orig_date = assignment.published_at.date() if assignment.published_at else timezone.now().date()
+            orig_slot = None
+
+        # Фіксуємо перенесення в базі даних
+        reschedule_log = AssignmentRescheduleLog.objects.create(
+            assignment=assignment,
+            teacher=teacher,
+            class_group=class_group,
+            original_date=orig_date,
+            original_bell_slot=orig_slot,
+            new_date=new_date,
+            new_bell_slot=new_slot,
+            reason_type=reason_type,
+            reason_comment=reason_comment
+        )
+
+        # Оновлюємо цільову дату для класів
+        target_dow = new_date.weekday() + 1
+        targets_to_update = []
+        if class_group:
+            t, _ = AssignmentScheduleTarget.objects.get_or_create(
+                assignment=assignment,
+                class_group=class_group
+            )
+            targets_to_update.append(t)
+        else:
+            assigned_classes = list(assignment.classes.all())
+            if assigned_classes:
+                for cg in assigned_classes:
+                    t, _ = AssignmentScheduleTarget.objects.get_or_create(
+                        assignment=assignment,
+                        class_group=cg
+                    )
+                    targets_to_update.append(t)
+            else:
+                t, _ = AssignmentScheduleTarget.objects.get_or_create(
+                    assignment=assignment,
+                    class_group=None
+                )
+                targets_to_update.append(t)
+
+        for t in targets_to_update:
+            t.target_date = new_date
+            t.target_day_of_week = target_dow
+            t.bell_slot = new_slot
+            t.save()
+
+        if update_due_date:
+            assignment.due_date = new_date
+            assignment.save(update_fields=['due_date'])
+
+        reason_label = reschedule_log.get_reason_type_display()
+        log_submission_activity(
+            request.user,
+            'rescheduled',
+            f"Урок «{assignment.title}» перенесено з {orig_date.strftime('%d.%m.%Y')} на {new_date.strftime('%d.%m.%Y')} ({reason_label})"
+        )
+
+        slot_text = f" ({new_slot.lesson_number}-й урок)" if new_slot else ""
+        msg = f"Урок «{assignment.title}» успішно перенесено на {new_date.strftime('%d.%m.%Y')}{slot_text}! Причина: {reason_label}."
+        messages.success(request, msg)
+
+        if is_ajax:
+            return JsonResponse({
+                'success': True,
+                'message': msg,
+                'new_date': new_date.strftime('%d.%m.%Y'),
+                'reason_display': reason_label,
+                'reason_icon': reschedule_log.reason_icon,
+                'new_slot_text': slot_text
+            })
+
+    referer = request.META.get('HTTP_REFERER')
+    if referer and request.get_host() in referer:
+        return redirect(referer)
+    return redirect('teacher_dashboard')
+
+
+@teacher_required
+def api_next_lesson_slot(request):
+    """
+    API для авто-визначення наступного уроку за розкладом вчителя для обраного класу.
+    """
+    from datetime import datetime, timedelta, date
+    from django.http import JsonResponse
+    from django.utils import timezone
+
+    teacher = request.user.teacher_profile
+    class_id = request.GET.get('class_id')
+    if not class_id:
+        return JsonResponse({'success': False, 'error': 'Не вказано клас'}, status=400)
+
+    now = timezone.localtime(timezone.now())
+    today = now.date()
+    today_dow = today.weekday() + 1
+    now_min = now.time().hour * 60 + now.time().minute
+
+    schedules = list(TeacherLessonSchedule.objects.filter(
+        teacher=teacher,
+        class_group_id=class_id
+    ).select_related('bell_slot').order_by('day_of_week', 'bell_slot__lesson_number'))
+
+    if not schedules:
+        # Немає розкладу для цього класу — пропонуємо завтра, 1-й урок
+        tomorrow = today + timedelta(days=1)
+        first_slot = BellSchedule.objects.order_by('lesson_number').first()
+        return JsonResponse({
+            'success': True,
+            'has_schedule': False,
+            'next_date': tomorrow.strftime('%Y-%m-%d'),
+            'next_date_display': tomorrow.strftime('%d.%m.%Y'),
+            'bell_slot_id': first_slot.id if first_slot else None,
+            'lesson_number': first_slot.lesson_number if first_slot else 1,
+            'info': 'Розклад для цього класу не налаштовано. Запропоновано наступний день.'
+        })
+
+    # Шукаємо уроки сьогодні пізніше поточного часу
+    for s in schedules:
+        if s.day_of_week == today_dow:
+            s_min = s.bell_slot.start_time.hour * 60 + s.bell_slot.start_time.minute
+            if s_min > now_min:
+                return JsonResponse({
+                    'success': True,
+                    'has_schedule': True,
+                    'next_date': today.strftime('%Y-%m-%d'),
+                    'next_date_display': today.strftime('%d.%m.%Y'),
+                    'bell_slot_id': s.bell_slot.id,
+                    'lesson_number': s.bell_slot.lesson_number,
+                    'start_time': s.bell_slot.start_time.strftime('%H:%M'),
+                    'info': f"Сьогодні, {s.bell_slot.lesson_number}-й урок о {s.bell_slot.start_time.strftime('%H:%M')}"
+                })
+
+    # Шукаємо уроки в майбутні дні поточного тижня
+    for s in schedules:
+        if s.day_of_week > today_dow:
+            delta_days = s.day_of_week - today_dow
+            target_d = today + timedelta(days=delta_days)
+            return JsonResponse({
+                'success': True,
+                'has_schedule': True,
+                'next_date': target_d.strftime('%Y-%m-%d'),
+                'next_date_display': target_d.strftime('%d.%m.%Y'),
+                'bell_slot_id': s.bell_slot.id,
+                'lesson_number': s.bell_slot.lesson_number,
+                'start_time': s.bell_slot.start_time.strftime('%H:%M'),
+                'info': f"{s.get_day_of_week_display()}, {s.bell_slot.lesson_number}-й урок ({target_d.strftime('%d.%m')})"
+            })
+
+    # Якщо на цьому тижні немає — беремо найперший урок на наступному тижні
+    first_sch = schedules[0]
+    days_ahead = (7 - today_dow) + first_sch.day_of_week
+    next_week_d = today + timedelta(days=days_ahead)
+    return JsonResponse({
+        'success': True,
+        'has_schedule': True,
+        'next_date': next_week_d.strftime('%Y-%m-%d'),
+        'next_date_display': next_week_d.strftime('%d.%m.%Y'),
+        'bell_slot_id': first_sch.bell_slot.id,
+        'lesson_number': first_sch.bell_slot.lesson_number,
+        'start_time': first_sch.bell_slot.start_time.strftime('%H:%M'),
+        'info': f"{first_sch.get_day_of_week_display()}, {first_sch.bell_slot.lesson_number}-й урок ({next_week_d.strftime('%d.%m')})"
+    })
+
+
+@teacher_required
+def teacher_rescheduled_calendar(request):
+    """
+    Окремий 30-денний календар перенесених уроків для вчителя.
+    Відображає 30-денну сітку з відмітками причин перенесень, детальну таблицю
+    та статистику за типами причин (повітряна тривога, хвороба тощо).
+    """
+    from datetime import datetime, timedelta, date
+    from django.utils import timezone
+    teacher = request.user.teacher_profile
+    is_super = request.user.is_superuser or request.session.get('superadmin_mode')
+
+    now = timezone.localtime(timezone.now())
+    today = now.date()
+
+    # Вікно на 30 днів (від -14 днів до +15 днів)
+    center_date_str = request.GET.get('date')
+    if center_date_str:
+        try:
+            center_date = datetime.strptime(center_date_str, '%Y-%m-%d').date()
+        except ValueError:
+            center_date = today
+    else:
+        center_date = today
+
+    start_date = center_date - timedelta(days=14)
+    end_date = center_date + timedelta(days=15)  # 30 днів
+
+    qs = AssignmentRescheduleLog.objects.all().select_related(
+        'assignment', 'teacher', 'class_group', 'original_bell_slot', 'new_bell_slot', 'assignment__subject'
+    )
+    if not is_super:
+        qs = qs.filter(teacher=teacher)
+
+    selected_class_id = request.GET.get('class_group')
+    if selected_class_id:
+        qs = qs.filter(class_group_id=selected_class_id)
+
+    selected_reason = request.GET.get('reason_type')
+    if selected_reason:
+        qs = qs.filter(reason_type=selected_reason)
+
+    logs_30_days = list(qs.filter(
+        Q(new_date__range=[start_date, end_date]) | Q(original_date__range=[start_date, end_date])
+    ).order_by('-new_date', '-rescheduled_at'))
+
+    days_grid = []
+    uk_weekdays_short = {1: 'Пн', 2: 'Вт', 3: 'Ср', 4: 'Чт', 5: 'Пт', 6: 'Сб', 7: 'Нд'}
+
+    logs_by_new_date = {}
+    logs_by_orig_date = {}
+    for log in logs_30_days:
+        logs_by_new_date.setdefault(log.new_date, []).append(log)
+        logs_by_orig_date.setdefault(log.original_date, []).append(log)
+
+    uk_months_short = {1: 'Січ', 2: 'Лют', 3: 'Бер', 4: 'Кві', 5: 'Тра', 6: 'Чер',
+                       7: 'Лип', 8: 'Сер', 9: 'Вер', 10: 'Жов', 11: 'Лис', 12: 'Гру'}
+    curr = start_date
+    while curr <= end_date:
+        new_logs = logs_by_new_date.get(curr, [])
+        orig_logs = logs_by_orig_date.get(curr, [])
+        days_grid.append({
+            'date': curr,
+            'date_str': curr.strftime('%Y-%m-%d'),
+            'is_today': (curr == today),
+            'is_weekend': (curr.weekday() >= 5),
+            'weekday_name': uk_weekdays_short.get(curr.weekday() + 1, ''),
+            'day_number': curr.day,
+            'month_name': uk_months_short.get(curr.month, ''),
+            'new_logs': new_logs,
+            'orig_logs': orig_logs,
+            'has_events': bool(new_logs or orig_logs),
+            'count': len(new_logs) + len(orig_logs),
+        })
+        curr += timedelta(days=1)
+
+    # Статистика за типами причин
+    reason_stats = {}
+    for choice_code, choice_title in AssignmentRescheduleLog.REASON_CHOICES:
+        count = sum(1 for log in logs_30_days if log.reason_type == choice_code)
+        if count > 0:
+            reason_stats[choice_code] = {
+                'title': choice_title,
+                'count': count,
+                'percent': int((count / len(logs_30_days)) * 100) if logs_30_days else 0,
+            }
+
+    teacher_classes = teacher.classes.all().order_by('grade', 'letter', 'name') if teacher else ClassGroup.objects.all().order_by('grade', 'letter', 'name')
+
+    context = {
+        'today': today,
+        'center_date': center_date,
+        'start_date': start_date,
+        'end_date': end_date,
+        'prev_date': (center_date - timedelta(days=30)).strftime('%Y-%m-%d'),
+        'next_date': (center_date + timedelta(days=30)).strftime('%Y-%m-%d'),
+        'days_grid': days_grid,
+        'logs_list': logs_30_days,
+        'total_rescheduled_count': len(logs_30_days),
+        'reason_stats': reason_stats,
+        'reason_choices': AssignmentRescheduleLog.REASON_CHOICES,
+        'teacher_classes': teacher_classes,
+        'selected_class_id': int(selected_class_id) if selected_class_id and selected_class_id.isdigit() else None,
+        'selected_reason': selected_reason,
+    }
+    return render(request, 'feed/teacher_rescheduled_calendar.html', context)
+
+
+@login_required
+def api_today_schedule(request):
+    """
+    Повертає детальний JSON із розкладом на сьогодні, живим статусом поточного уроку
+    та тривалістю перерв для модального вікна «Розклад на сьогодні».
+    """
+    from django.http import JsonResponse
+    from django.utils import timezone
+
+    teacher = getattr(request.user, 'teacher_profile', None)
+    now = timezone.localtime(timezone.now())
+    today_date = now.date()
+    today_weekday = today_date.weekday() + 1
+    now_minutes = now.time().hour * 60 + now.time().minute
+
+    uk_weekdays = {1: 'Понеділок', 2: 'Вівторок', 3: 'Середа', 4: 'Четвер', 5: "П'ятниця", 6: 'Субота', 7: 'Неділя'}
+    uk_months = {1: 'січня', 2: 'лютого', 3: 'березня', 4: 'квітня', 5: 'травня', 6: 'червня', 7: 'липня', 8: 'серпня', 9: 'вересня', 10: 'жовтня', 11: 'листопада', 12: 'грудня'}
+
+    date_str = f"{today_date.day} {uk_months.get(today_date.month, '')} {today_date.year}"
+    weekday_str = uk_weekdays.get(today_weekday, '')
+
+    bell_slots = list(BellSchedule.objects.all().order_by('lesson_number'))
+    lessons = []
+
+    teacher_schedule_map = {}
+    if teacher:
+        for sch in TeacherLessonSchedule.objects.filter(teacher=teacher, day_of_week=today_weekday).select_related('bell_slot', 'class_group', 'subject'):
+            teacher_schedule_map[sch.bell_slot_id] = sch
+
+    active_status = 'free'
+    current_lesson_num = None
+
+    for i, slot in enumerate(bell_slots):
+        s_min = slot.start_time.hour * 60 + slot.start_time.minute
+        e_min = slot.end_time.hour * 60 + slot.end_time.minute
+
+        is_current = (s_min <= now_minutes < e_min)
+        is_past = (now_minutes >= e_min)
+        is_future = (now_minutes < s_min)
+
+        sch_entry = teacher_schedule_map.get(slot.id)
+        class_name = sch_entry.class_group.name if sch_entry and sch_entry.class_group else None
+        subject_name = sch_entry.subject.name if sch_entry and sch_entry.subject else None
+        subject_icon = sch_entry.subject.icon if sch_entry and sch_entry.subject else '📚'
+        subject_color = sch_entry.subject.color if sch_entry and sch_entry.subject else '#4f46e5'
+
+        break_min = slot.get_break_after()
+        is_break_now = False
+        break_rem = 0
+        if break_min and i + 1 < len(bell_slots):
+            next_s_min = bell_slots[i + 1].start_time.hour * 60 + bell_slots[i + 1].start_time.minute
+            if e_min <= now_minutes < next_s_min:
+                is_break_now = True
+                break_rem = next_s_min - now_minutes
+                active_status = 'in_break'
+
+        if is_current:
+            active_status = 'in_lesson'
+            current_lesson_num = slot.lesson_number
+
+        rem_minutes = max(0, e_min - now_minutes) if is_current else 0
+
+        lessons.append({
+            'slot_id': slot.id,
+            'lesson_number': slot.lesson_number,
+            'start_time': slot.start_time.strftime('%H:%M'),
+            'end_time': slot.end_time.strftime('%H:%M'),
+            'duration_minutes': slot.duration_minutes,
+            'has_class': bool(class_name),
+            'class_name': class_name,
+            'subject_name': subject_name,
+            'subject_icon': subject_icon,
+            'subject_color': subject_color,
+            'is_current': is_current,
+            'is_past': is_past,
+            'is_future': is_future,
+            'rem_minutes': rem_minutes,
+            'break_after': break_min,
+            'is_break_now': is_break_now,
+            'break_rem_minutes': break_rem,
+        })
+
+    conducted_info = teacher.get_conducted_lessons_info() if teacher else None
+
+    return JsonResponse({
+        'success': True,
+        'date_display': date_str,
+        'weekday_display': weekday_str,
+        'is_teacher': bool(teacher),
+        'active_status': active_status,
+        'current_lesson_num': current_lesson_num,
+        'lessons': lessons,
+        'conducted_info': conducted_info,
+    })
+
+
+@teacher_required
+def update_conducted_lessons(request):
+    """
+    Оновлює кількість фактично проведених уроків вчителем
+    або скидає її до автоматичного підрахунку системи.
+    """
+    from django.http import JsonResponse
+    teacher = request.user.teacher_profile
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        if action == 'reset':
+            teacher.conducted_lessons_manual_count = None
+            teacher.conducted_lessons_last_modified = timezone.now()
+            teacher.save(update_fields=['conducted_lessons_manual_count', 'conducted_lessons_last_modified'])
+            messages.success(request, 'Лічильник проведених уроків скинуто до автоматичного розрахунку системи! 🔄')
+        else:
+            count_val = request.POST.get('count')
+            if count_val is not None and str(count_val).strip().isdigit():
+                teacher.conducted_lessons_manual_count = int(count_val)
+                teacher.conducted_lessons_last_modified = timezone.now()
+                teacher.save(update_fields=['conducted_lessons_manual_count', 'conducted_lessons_last_modified'])
+                messages.success(request, f'Кількість проведених уроків встановлено: {teacher.conducted_lessons_manual_count}! ✅')
+            else:
+                messages.error(request, 'Введіть коректне додатне число проведених уроків.')
+
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            info = teacher.get_conducted_lessons_info()
+            return JsonResponse({'success': True, 'info': info})
+
+    referer = request.META.get('HTTP_REFERER')
+    if referer and request.get_host() in referer:
+        return redirect(referer)
+    return redirect('teacher_students')
+
+
+@teacher_required
+def export_assignment_zip(request, pk):
+    """
+    Експорт конкретного завдання з усіма його файлами у структурований ZIP-пакет для флешки.
+    """
+    import zipfile
+    import io
+    import json
+    from django.http import HttpResponse
+
+    teacher = request.user.teacher_profile
+    if request.user.is_superuser or request.session.get('superadmin_mode'):
+        assignment = get_object_or_404(Assignment, pk=pk)
+    else:
+        assignment = get_object_or_404(Assignment, pk=pk, teacher=teacher)
+
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+        files_metadata = []
+        for idx, af in enumerate(assignment.files.all()):
+            if af.file and os.path.exists(af.file.path):
+                ext = af.get_extension() or ''
+                safe_name = os.path.basename(af.original_name or af.file.name)
+                arc_name = f"files/{idx+1}_{safe_name}"
+                zip_file.write(af.file.path, arc_name)
+                files_metadata.append({
+                    'original_name': af.original_name or safe_name,
+                    'zip_path': arc_name,
+                    'file_type': af.get_file_type(),
+                })
+
+        # Прив'язки до розкладу
+        st_list = []
+        for st in assignment.schedule_targets.all():
+            st_list.append({
+                'class_name': st.class_group.name if st.class_group else '',
+                'target_date': st.target_date.strftime('%Y-%m-%d') if st.target_date else None,
+                'target_day_of_week': st.target_day_of_week,
+                'lesson_number': st.bell_slot.lesson_number if st.bell_slot else None,
+            })
+
+        assignment_data = {
+            'title': assignment.title,
+            'description': assignment.description,
+            'subject_name': assignment.subject.name if assignment.subject else None,
+            'subject_color': assignment.subject.color if assignment.subject else '#2563eb',
+            'subject_icon': assignment.subject.icon if assignment.subject else '📚',
+            'class_names': [c.name for c in assignment.classes.all()],
+            'is_individual': assignment.is_individual,
+            'student_name': assignment.student_name,
+            'link_url': assignment.link_url,
+            'link_label': assignment.link_label,
+            'youtube_url': assignment.youtube_url,
+            'status': assignment.status,
+            'due_date': assignment.due_date.strftime('%Y-%m-%d') if assignment.due_date else None,
+            'allow_student_ai_check': assignment.allow_student_ai_check,
+            'allow_ai_usage': assignment.allow_ai_usage,
+            'additional_links': [{'url': l.url, 'label': l.label} for l in assignment.additional_links.all()],
+            'youtube_links': [{'url': y.url, 'title': y.title} for y in assignment.youtube_links.all()],
+            'schedule_targets': st_list,
+            'files': files_metadata,
+        }
+
+        manifest = {
+            'version': '1.0',
+            'exported_at': timezone.now().isoformat(),
+            'teacher_name': teacher.full_name,
+            'assignments': [assignment_data]
+        }
+
+        zip_file.writestr('manifest.json', json.dumps(manifest, ensure_ascii=False, indent=2))
+
+    zip_buffer.seek(0)
+    safe_title = "".join(c for c in assignment.title if c.isalnum() or c in (' ', '_', '-')).strip()[:40] or "task"
+    filename = f"schoolnet_task_{assignment.id}_{safe_title}.zip"
+
+    response = HttpResponse(zip_buffer.read(), content_type='application/zip')
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response
+
+
+@teacher_required
+def export_assignments_day_zip(request):
+    """
+    Масовий експорт завдань на обраний день або всіх активних завдань вчителя у ZIP-пакет для флешки.
+    """
+    import zipfile
+    import io
+    import json
+    from django.http import HttpResponse
+
+    teacher = request.user.teacher_profile
+    date_str = request.GET.get('date')
+    if date_str:
+        try:
+            target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+        except ValueError:
+            target_date = timezone.localtime(timezone.now()).date()
+    else:
+        target_date = timezone.localtime(timezone.now()).date()
+
+    # Завдання, прив'язані до цієї дати уроку або створені/опубліковані в цей день
+    assignments = list(Assignment.objects.filter(
+        Q(schedule_targets__target_date=target_date) | Q(published_at__date=target_date),
+        teacher=teacher
+    ).distinct())
+
+    if not assignments:
+        # Якщо немає на дату, експортуємо останні активні опубліковані завдання
+        assignments = list(Assignment.objects.filter(
+            teacher=teacher,
+            status=Assignment.STATUS_PUBLISHED
+        ).order_by('-published_at')[:10])
+
+    if not assignments:
+        messages.warning(request, "Не знайдено завдань для експорту на цю дату.")
+        return redirect('teacher_dashboard')
+
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+        assignments_meta = []
+        for a_idx, assignment in enumerate(assignments):
+            files_metadata = []
+            for f_idx, af in enumerate(assignment.files.all()):
+                if af.file and os.path.exists(af.file.path):
+                    safe_name = os.path.basename(af.original_name or af.file.name)
+                    arc_name = f"files/task_{a_idx+1}_{f_idx+1}_{safe_name}"
+                    zip_file.write(af.file.path, arc_name)
+                    files_metadata.append({
+                        'original_name': af.original_name or safe_name,
+                        'zip_path': arc_name,
+                        'file_type': af.get_file_type(),
+                    })
+
+            st_list = []
+            for st in assignment.schedule_targets.all():
+                st_list.append({
+                    'class_name': st.class_group.name if st.class_group else '',
+                    'target_date': st.target_date.strftime('%Y-%m-%d') if st.target_date else None,
+                    'target_day_of_week': st.target_day_of_week,
+                    'lesson_number': st.bell_slot.lesson_number if st.bell_slot else None,
+                })
+
+            assignments_meta.append({
+                'title': assignment.title,
+                'description': assignment.description,
+                'subject_name': assignment.subject.name if assignment.subject else None,
+                'subject_color': assignment.subject.color if assignment.subject else '#2563eb',
+                'subject_icon': assignment.subject.icon if assignment.subject else '📚',
+                'class_names': [c.name for c in assignment.classes.all()],
+                'is_individual': assignment.is_individual,
+                'student_name': assignment.student_name,
+                'link_url': assignment.link_url,
+                'link_label': assignment.link_label,
+                'youtube_url': assignment.youtube_url,
+                'status': assignment.status,
+                'due_date': assignment.due_date.strftime('%Y-%m-%d') if assignment.due_date else None,
+                'allow_student_ai_check': assignment.allow_student_ai_check,
+                'allow_ai_usage': assignment.allow_ai_usage,
+                'additional_links': [{'url': l.url, 'label': l.label} for l in assignment.additional_links.all()],
+                'youtube_links': [{'url': y.url, 'title': y.title} for y in assignment.youtube_links.all()],
+                'schedule_targets': st_list,
+                'files': files_metadata,
+            })
+
+        manifest = {
+            'version': '1.0',
+            'exported_at': timezone.now().isoformat(),
+            'teacher_name': teacher.full_name,
+            'target_date': target_date.strftime('%Y-%m-%d'),
+            'assignments': assignments_meta,
+        }
+        zip_file.writestr('manifest.json', json.dumps(manifest, ensure_ascii=False, indent=2))
+
+    zip_buffer.seek(0)
+    filename = f"schoolnet_export_{target_date.strftime('%Y%m%d')}_{len(assignments)}_tasks.zip"
+    response = HttpResponse(zip_buffer.read(), content_type='application/zip')
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response
+
+
+@teacher_required
+def import_assignments_zip(request):
+    """
+    Імпорт завдань із ZIP-пакету з флешки (відновлює завдання, налаштування та бінарні файли).
+    """
+    import zipfile
+    import json
+    from django.core.files.base import ContentFile
+
+    teacher = request.user.teacher_profile
+
+    if request.method == 'POST':
+        zip_file = request.FILES.get('archive')
+        if not zip_file:
+            messages.error(request, 'Будь ласка, оберіть ZIP-архів із завданнями для завантаження.')
+            return redirect('teacher_dashboard')
+
+        try:
+            with zipfile.ZipFile(zip_file, 'r') as zf:
+                if 'manifest.json' not in zf.namelist():
+                    messages.error(request, 'Некоректний ZIP-архів: відсутній файл опису manifest.json.')
+                    return redirect('teacher_dashboard')
+
+                manifest_content = zf.read('manifest.json').decode('utf-8')
+                manifest = json.loads(manifest_content)
+
+                assignments_data = manifest.get('assignments', [])
+                if not assignments_data:
+                    messages.warning(request, 'В архіві не знайдено жодного завдання для імпорту.')
+                    return redirect('teacher_dashboard')
+
+                imported_count = 0
+                imported_files_count = 0
+
+                for a_data in assignments_data:
+                    # 1. Предмет
+                    subject = None
+                    s_name = a_data.get('subject_name')
+                    if s_name and str(s_name).strip():
+                        subject, _ = Subject.objects.get_or_create(
+                            name=str(s_name).strip(),
+                            defaults={
+                                'color': a_data.get('subject_color', '#2563eb'),
+                                'icon': a_data.get('subject_icon', '📚')
+                            }
+                        )
+                        teacher.subjects.add(subject)
+
+                    # 2. Термін виконання
+                    due_d = None
+                    if a_data.get('due_date'):
+                        try:
+                            due_d = datetime.strptime(a_data['due_date'], '%Y-%m-%d').date()
+                        except ValueError:
+                            pass
+
+                    # 3. Створюємо завдання
+                    assignment = Assignment.objects.create(
+                        teacher=teacher,
+                        subject=subject,
+                        title=a_data.get('title', 'Імпортоване завдання'),
+                        description=a_data.get('description', ''),
+                        is_individual=bool(a_data.get('is_individual', False)),
+                        student_name=a_data.get('student_name', ''),
+                        link_url=a_data.get('link_url', ''),
+                        link_label=a_data.get('link_label', ''),
+                        youtube_url=a_data.get('youtube_url', ''),
+                        status=a_data.get('status', Assignment.STATUS_PUBLISHED),
+                        due_date=due_d,
+                        published_at=timezone.now(),
+                        allow_student_ai_check=bool(a_data.get('allow_student_ai_check', False)),
+                        allow_ai_usage=bool(a_data.get('allow_ai_usage', False)),
+                    )
+
+                    # 4. Прив'язка класів
+                    for c_name in a_data.get('class_names', []):
+                        if c_name and str(c_name).strip():
+                            cg, _ = ClassGroup.objects.get_or_create(name=str(c_name).strip())
+                            assignment.classes.add(cg)
+                            teacher.classes.add(cg)
+
+                    # 5. Додаткові посилання
+                    for link_item in a_data.get('additional_links', []):
+                        if link_item.get('url'):
+                            AssignmentLink.objects.create(
+                                assignment=assignment,
+                                url=link_item['url'],
+                                label=link_item.get('label', '')
+                            )
+
+                    # 6. YouTube відео
+                    for y_item in a_data.get('youtube_links', []):
+                        if y_item.get('url'):
+                            AssignmentYouTubeLink.objects.create(
+                                assignment=assignment,
+                                url=y_item['url'],
+                                title=y_item.get('title', '')
+                            )
+
+                    # 7. Файли завдання
+                    for f_info in a_data.get('files', []):
+                        zpath = f_info.get('zip_path')
+                        orig_name = f_info.get('original_name', 'document')
+                        if zpath and zpath in zf.namelist():
+                            file_bytes = zf.read(zpath)
+                            af = AssignmentFile(
+                                assignment=assignment,
+                                original_name=orig_name
+                            )
+                            af.file.save(orig_name, ContentFile(file_bytes), save=True)
+                            imported_files_count += 1
+
+                    # 8. Прив'язки до розкладу уроків
+                    for st_item in a_data.get('schedule_targets', []):
+                        c_name = st_item.get('class_name')
+                        t_date_str = st_item.get('target_date')
+                        l_num = st_item.get('lesson_number')
+
+                        cg = ClassGroup.objects.filter(name=c_name).first() if c_name else None
+                        t_date = None
+                        if t_date_str:
+                            try:
+                                t_date = datetime.strptime(t_date_str, '%Y-%m-%d').date()
+                            except ValueError:
+                                pass
+
+                        bell_slot = BellSchedule.objects.filter(lesson_number=l_num).first() if l_num else None
+
+                        if cg or t_date:
+                            AssignmentScheduleTarget.objects.update_or_create(
+                                assignment=assignment,
+                                class_group=cg,
+                                defaults={
+                                    'target_date': t_date,
+                                    'target_day_of_week': (t_date.weekday() + 1) if t_date else None,
+                                    'bell_slot': bell_slot,
+                                }
+                            )
+
+                    imported_count += 1
+
+                log_submission_activity(
+                    request.user,
+                    'assignment_imported',
+                    f"Вчитель імпортував {imported_count} завдань та {imported_files_count} файлів з флешки"
+                )
+
+                messages.success(
+                    request,
+                    f"🎉 Успішно імпортовано з флешки {imported_count} завдань та {imported_files_count} навчальних файлів! Всі матеріали повністю готові до роботи."
+                )
+
+        except Exception as e:
+            messages.error(request, f"Помилка під час обробки ZIP-архіву: {e}")
+
+    return redirect('teacher_dashboard')
+
 
 
 

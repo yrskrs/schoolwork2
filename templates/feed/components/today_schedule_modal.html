@@ -1,0 +1,157 @@
+<!-- ── Модальне вікно «Розклад на сьогодні» з живим підсвічуванням ── -->
+<div id="today-schedule-modal" style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(15,23,42,0.65);z-index:99999;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(4px);">
+    <div class="custom-modal-content" style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);width:100%;max-width:560px;box-shadow:0 20px 40px rgba(0,0,0,0.22);overflow:hidden;animation:rescheduleModalIn 0.2s ease-out;max-height:90vh;display:flex;flex-direction:column;">
+        
+        <!-- Заголовок -->
+        <div style="padding:16px 20px;background:var(--color-bg-secondary);border-bottom:1px solid var(--color-border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+            <div>
+                <div style="display:flex;align-items:center;gap:8px;font-weight:800;font-size:15px;color:var(--color-text-primary);">
+                    <span style="font-size:18px;">📅</span>
+                    <span>Розклад на сьогодні</span>
+                </div>
+                <div id="today-schedule-date-subtitle" style="font-size:12px;color:var(--color-text-muted);margin-top:2px;">
+                    Завантаження розкладу...
+                </div>
+            </div>
+            <button type="button" onclick="closeTodayScheduleModal()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--color-text-muted);line-height:1;padding:4px;" aria-label="Закрити">✕</button>
+        </div>
+
+        <!-- Контент списку уроків -->
+        <div style="padding:18px 20px;overflow-y:auto;flex:1;" id="today-schedule-modal-body">
+            <div style="text-align:center;padding:30px;color:var(--color-text-muted);">
+                <div style="font-size:28px;margin-bottom:8px;">⏳</div>
+                <div>Оновлення даних поточного уроку...</div>
+            </div>
+        </div>
+
+        <!-- Футер з лічильником та швидкими переходами -->
+        <div style="padding:12px 20px;background:var(--color-bg-secondary);border-top:1px solid var(--color-border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;flex-shrink:0;">
+            <div style="font-size:12px;color:var(--color-text-secondary);display:flex;align-items:center;gap:6px;">
+                <span>🎓 Проведено уроків:</span>
+                <strong id="modal-conducted-count" style="color:var(--color-primary);font-size:13px;">—</strong>
+                <button type="button" onclick="openConductedLessonsModal()" class="btn btn-secondary btn-sm" style="font-size:10.5px;padding:2px 6px;margin-left:2px;" title="Змінити вручну">✏️</button>
+            </div>
+
+            <div style="display:flex;gap:8px;">
+                <a href="{% url 'teacher_students' %}?tab=schedule" class="btn btn-secondary btn-sm" style="font-weight:700;font-size:12px;">
+                    🗓️ Повний розклад
+                </a>
+                <button type="button" class="btn btn-primary btn-sm" onclick="closeTodayScheduleModal()" style="font-weight:700;font-size:12px;">
+                    Зрозуміло
+                </button>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<script>
+function openTodayScheduleModal() {
+    var modal = document.getElementById('today-schedule-modal');
+    if (!modal) return;
+    modal.style.display = 'flex';
+    loadTodayScheduleData();
+}
+
+function closeTodayScheduleModal() {
+    var modal = document.getElementById('today-schedule-modal');
+    if (modal) modal.style.display = 'none';
+}
+
+function loadTodayScheduleData() {
+    var body = document.getElementById('today-schedule-modal-body');
+    var subtitle = document.getElementById('today-schedule-date-subtitle');
+    var conductedEl = document.getElementById('modal-conducted-count');
+
+    fetch('/api/today-schedule/')
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+            if (!data.success) {
+                body.innerHTML = '<div style="color:#ef4444;text-align:center;padding:20px;">Не вдалося завантажити розклад.</div>';
+                return;
+            }
+
+            subtitle.textContent = data.weekday_display + ', ' + data.date_display;
+
+            if (data.conducted_info && conductedEl) {
+                var manualBadge = data.conducted_info.is_manual ? ' (вручну)' : '';
+                conductedEl.textContent = data.conducted_info.count + manualBadge;
+            }
+
+            var lessons = data.lessons || [];
+            if (lessons.length === 0) {
+                body.innerHTML = '<div style="text-align:center;padding:30px;color:var(--color-text-muted);"><div style="font-size:32px;margin-bottom:6px;">🔔</div><div>Розклад дзвінків ще не створено у системі.</div></div>';
+                return;
+            }
+
+            var html = '<div style="display:flex;flex-direction:column;gap:10px;">';
+
+            for (var i = 0; i < lessons.length; i++) {
+                var l = lessons[i];
+                var cardBorder = 'var(--color-border)';
+                var cardBg = 'var(--color-surface)';
+                var statusBadge = '';
+
+                if (l.is_current) {
+                    cardBorder = '#10b981';
+                    cardBg = 'rgba(16, 185, 129, 0.08)';
+                    statusBadge = '<span style="background:#10b981;color:#fff;font-size:11px;font-weight:800;padding:2px 8px;border-radius:12px;display:inline-flex;align-items:center;gap:4px;box-shadow:0 2px 6px rgba(16,185,129,0.3);"><span style="width:6px;height:6px;border-radius:50%;background:#fff;animation:livePulse 1s infinite alternate;"></span> ЗАРАЗ ІДЕ УРОК (' + l.rem_minutes + ' хв)</span>';
+                } else if (l.is_past) {
+                    cardBg = 'var(--color-bg-secondary)';
+                    statusBadge = '<span style="font-size:11px;font-weight:700;color:var(--color-text-muted);">✓ Завершено</span>';
+                } else if (l.is_future) {
+                    statusBadge = '<span style="font-size:11px;font-weight:600;color:var(--color-text-muted);">Попереду</span>';
+                }
+
+                html += '<div style="border:1px solid ' + cardBorder + ';background:' + cardBg + ';border-radius:var(--radius-md);padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:12px;transition:all 0.15s ease;' + (l.is_current ? 'box-shadow:0 0 0 2px rgba(16,185,129,0.25);' : '') + '">';
+                
+                // Ліва колонка: номер уроку та час
+                html += '<div style="display:flex;align-items:center;gap:12px;">';
+                html += '<div style="width:36px;height:36px;border-radius:8px;background:' + (l.is_current ? '#10b981;color:#fff;' : 'rgba(99,102,241,0.1);color:var(--color-primary);') + 'display:flex;align-items:center;justify-content:center;font-weight:900;font-size:15px;flex-shrink:0;">' + l.lesson_number + '</div>';
+                html += '<div>';
+                html += '<div style="font-weight:800;font-size:13.5px;color:var(--color-text-primary);">' + l.lesson_number + '-й урок <span style="font-weight:600;font-size:12px;color:var(--color-text-muted);">(' + l.start_time + ' – ' + l.end_time + ')</span></div>';
+
+                if (l.has_class) {
+                    html += '<div style="display:flex;align-items:center;gap:6px;margin-top:3px;">';
+                    html += '<span class="class-tag" style="font-size:11.5px;font-weight:800;">' + l.class_name + '</span>';
+                    if (l.subject_name) {
+                        html += '<span style="font-size:12px;color:' + l.subject_color + ';font-weight:700;">' + l.subject_icon + ' ' + l.subject_name + '</span>';
+                    }
+                    html += '</div>';
+                } else {
+                    html += '<div style="font-size:12px;color:var(--color-text-muted);margin-top:2px;">— вікно (немає уроку за розкладом) —</div>';
+                }
+                html += '</div>';
+                html += '</div>';
+
+                // Права колонка: статус
+                html += '<div style="text-align:right;flex-shrink:0;">' + statusBadge + '</div>';
+                html += '</div>';
+
+                // Якщо зараз перерва після цього уроку
+                if (l.is_break_now) {
+                    html += '<div style="background:rgba(245,158,11,0.12);border:1px dashed #f59e0b;border-radius:var(--radius-md);padding:8px 12px;display:flex;align-items:center;justify-content:space-between;color:#d97706;font-size:12px;font-weight:700;margin:2px 0;">';
+                    html += '<span style="display:inline-flex;align-items:center;gap:6px;"><span>☕</span> <span>ЗАРАЗ ПЕРЕРВА (' + l.break_after + ' хв)</span></span>';
+                    html += '<span>до уроку: ' + l.break_rem_minutes + ' хв</span>';
+                    html += '</div>';
+                } else if (l.break_after && l.break_after > 0 && i + 1 < lessons.length) {
+                    html += '<div style="text-align:center;font-size:11px;color:var(--color-text-muted);padding:2px 0;">';
+                    html += '☕ Перерва ' + l.break_after + ' хв';
+                    html += '</div>';
+                }
+            }
+
+            html += '</div>';
+            body.innerHTML = html;
+        })
+        .catch(function(err) {
+            console.error('Error fetching today schedule:', err);
+            body.innerHTML = '<div style="color:#ef4444;text-align:center;padding:20px;">Помилка завантаження даних.</div>';
+        });
+}
+
+document.addEventListener('click', function(e) {
+    var modal = document.getElementById('today-schedule-modal');
+    if (modal && e.target === modal) closeTodayScheduleModal();
+});
+</script>

@@ -71,10 +71,28 @@ class ClassGroup(models.Model):
     class Meta:
         verbose_name = 'Клас'
         verbose_name_plural = 'Класи'
-        ordering = ['grade', 'letter']
+        ordering = ['grade', 'letter', 'name']
 
     def __str__(self):
         return self.name
+
+    def save(self, *args, **kwargs):
+        if self.name:
+            import re
+            m = re.search(r'(\d+)', str(self.name))
+            if m:
+                try:
+                    self.grade = int(m.group(1))
+                except (ValueError, TypeError):
+                    pass
+            m_letter = re.search(r'\d+[\s\-_]*([A-Za-zА-Яа-яІіЇїЄєҐґ]+)', str(self.name))
+            if m_letter:
+                self.letter = m_letter.group(1).upper()
+            else:
+                letters = re.findall(r'[A-Za-zА-Яа-яІіЇїЄєҐґ]', str(self.name))
+                if letters:
+                    self.letter = letters[-1].upper()
+        super().save(*args, **kwargs)
 
 
 
@@ -191,6 +209,17 @@ class Teacher(models.Model):
         blank=True,
         help_text='Завантажте квадратне фото або зображення для аватара'
     )
+    conducted_lessons_manual_count = models.PositiveIntegerField(
+        'Встановлена вручну кількість проведених уроків',
+        null=True,
+        blank=True,
+        help_text='Якщо вказано вчителем, використовується це число замість системного авто-розрахунку'
+    )
+    conducted_lessons_last_modified = models.DateTimeField(
+        'Час останньої зміни лічильника',
+        null=True,
+        blank=True
+    )
 
     class Meta:
         verbose_name = 'Вчитель'
@@ -212,6 +241,208 @@ class Teacher(models.Model):
         if subjects.count() == 1:
             return subjects.first()
         return None
+
+    def get_calculated_conducted_lessons(self, semester_start_date=None):
+        """
+        Автоматично підраховує кількість проведених уроків вчителем:
+        Проходить по всіх навчальних днях від початку навчального року (за замовчуванням 1 вересня)
+        до сьогодні, враховуючи уроки за розкладом TeacherLessonSchedule, час завершення яких вже минув.
+        """
+        import datetime
+        from django.utils import timezone
+        now = timezone.localtime(timezone.now())
+        today = now.date()
+        now_minutes = now.time().hour * 60 + now.time().minute
+
+        if not semester_start_date:
+            if today.month >= 9:
+                semester_start_date = datetime.date(today.year, 9, 1)
+            else:
+                semester_start_date = datetime.date(today.year - 1, 9, 1)
+
+        if semester_start_date > today:
+            semester_start_date = today
+
+        schedules = list(self.lesson_schedules.select_related('bell_slot').all())
+        if not schedules:
+            return 0
+
+        day_slots = {}
+        for s in schedules:
+            if s.bell_slot and s.bell_slot.end_time:
+                day_slots.setdefault(s.day_of_week, []).append(s.bell_slot)
+
+        total_count = 0
+        curr = semester_start_date
+        while curr <= today:
+            weekday = curr.weekday() + 1  # 1..7
+            slots = day_slots.get(weekday, [])
+            if curr < today:
+                total_count += len(slots)
+            elif curr == today:
+                for slot in slots:
+                    end_min = slot.end_time.hour * 60 + slot.end_time.minute
+                    if now_minutes >= end_min:
+                        total_count += 1
+            curr += datetime.timedelta(days=1)
+
+        return total_count
+
+    def get_conducted_lessons_info(self):
+        """
+        Повертає словник з даними лічильника проведених уроків:
+        count: актуальне число (ручне або авто),
+        is_manual: чи число змінене вчителем вручну,
+        calculated_count: системно розраховане число,
+        manual_count: ручне число (якщо встановлено).
+        """
+        calc = self.get_calculated_conducted_lessons()
+        if self.conducted_lessons_manual_count is not None:
+            return {
+                'count': self.conducted_lessons_manual_count,
+                'is_manual': True,
+                'calculated_count': calc,
+                'manual_count': self.conducted_lessons_manual_count,
+            }
+        return {
+            'count': calc,
+            'is_manual': False,
+            'calculated_count': calc,
+            'manual_count': None,
+        }
+
+
+# ─── Розклад дзвінків ────────────────────────────────────────────────────────
+class BellSchedule(models.Model):
+    """
+    Загальношкільний розклад дзвінків (час уроків та перерв).
+    """
+    lesson_number = models.PositiveSmallIntegerField('Номер уроку', unique=True)
+    start_time = models.TimeField('Початок уроку')
+    end_time = models.TimeField('Кінець уроку')
+    order = models.PositiveSmallIntegerField('Порядок', default=1)
+
+    class Meta:
+        verbose_name = 'Дзвінок / урок'
+        verbose_name_plural = 'Розклад дзвінків'
+        ordering = ['lesson_number']
+
+    def __str__(self):
+        st = self.start_time.strftime('%H:%M') if self.start_time else '—'
+        et = self.end_time.strftime('%H:%M') if self.end_time else '—'
+        return f"{self.lesson_number} урок ({st} – {et})"
+
+    @property
+    def duration_minutes(self):
+        """Тривалість уроку у хвилинах."""
+        if not self.start_time or not self.end_time:
+            return 45
+        s = self.start_time.hour * 60 + self.start_time.minute
+        e = self.end_time.hour * 60 + self.end_time.minute
+        return max(0, e - s)
+
+    def get_break_after(self):
+        """
+        Автоматично розраховує час перерви до наступного уроку (у хвилинах).
+        Наприклад: 1-й урок завершується о 09:15, 2-й починається о 09:25 -> 10 хв.
+        """
+        next_slot = BellSchedule.objects.filter(lesson_number__gt=self.lesson_number).order_by('lesson_number').first()
+        if not next_slot or not next_slot.start_time or not self.end_time:
+            return None
+        e = self.end_time.hour * 60 + self.end_time.minute
+        s = next_slot.start_time.hour * 60 + next_slot.start_time.minute
+        diff = s - e
+        return diff if diff > 0 else 0
+
+    @classmethod
+    def seed_default_schedule(cls):
+        """Створює типовий розклад дзвінків (1-8 уроки), якщо таблиця порожня."""
+        if cls.objects.exists():
+            return
+        import datetime
+        default_slots = [
+            (1, '08:30', '09:15'),
+            (2, '09:25', '10:10'),
+            (3, '10:25', '11:10'),
+            (4, '11:25', '12:10'),
+            (5, '12:20', '13:05'),
+            (6, '13:15', '14:00'),
+            (7, '14:10', '14:55'),
+            (8, '15:05', '15:50'),
+        ]
+        for num, st, et in default_slots:
+            sh, sm = map(int, st.split(':'))
+            eh, em = map(int, et.split(':'))
+            cls.objects.create(
+                lesson_number=num,
+                start_time=datetime.time(sh, sm),
+                end_time=datetime.time(eh, em),
+                order=num
+            )
+
+
+# ─── Розклад уроків вчителя ───────────────────────────────────────────────────
+class TeacherLessonSchedule(models.Model):
+    """
+    Розклад уроків вчителя по днях тижня та класах.
+    """
+    DAY_MONDAY = 1
+    DAY_TUESDAY = 2
+    DAY_WEDNESDAY = 3
+    DAY_THURSDAY = 4
+    DAY_FRIDAY = 5
+    DAY_SATURDAY = 6
+
+    DAY_CHOICES = [
+        (DAY_MONDAY, 'Понеділок'),
+        (DAY_TUESDAY, 'Вівторок'),
+        (DAY_WEDNESDAY, 'Середа'),
+        (DAY_THURSDAY, 'Четвер'),
+        (DAY_FRIDAY, "П'ятниця"),
+        (DAY_SATURDAY, 'Субота'),
+    ]
+
+    teacher = models.ForeignKey(
+        Teacher,
+        on_delete=models.CASCADE,
+        related_name='lesson_schedules',
+        verbose_name='Вчитель'
+    )
+    day_of_week = models.PositiveSmallIntegerField(
+        'День тижня',
+        choices=DAY_CHOICES,
+        default=DAY_MONDAY
+    )
+    bell_slot = models.ForeignKey(
+        BellSchedule,
+        on_delete=models.CASCADE,
+        related_name='teacher_lessons',
+        verbose_name='Урок / дзвінок'
+    )
+    class_group = models.ForeignKey(
+        ClassGroup,
+        on_delete=models.CASCADE,
+        related_name='lesson_schedules',
+        verbose_name='Клас'
+    )
+    subject = models.ForeignKey(
+        Subject,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='lesson_schedules',
+        verbose_name='Предмет'
+    )
+
+    class Meta:
+        verbose_name = 'Урок вчителя за розкладом'
+        verbose_name_plural = 'Розклад уроків вчителів'
+        ordering = ['day_of_week', 'bell_slot__lesson_number']
+        unique_together = [('teacher', 'day_of_week', 'bell_slot')]
+
+    def __str__(self):
+        day_name = dict(self.DAY_CHOICES).get(self.day_of_week, '')
+        return f"{day_name} • {self.bell_slot.lesson_number} ур. • {self.class_group.name} ({self.teacher.full_name})"
 
 
 # ─── Завдання ─────────────────────────────────────────────────────────────────
@@ -508,6 +739,173 @@ class Assignment(models.Model):
         """Чи опубліковано вчора."""
         return self.days_ago == 1
 
+    def get_relevance_badge(self, for_class=None):
+        """
+        Визначає контекстну актуальність завдання для учня/класу:
+        Повертає словник:
+        - badge_text: '🟢 Сьогодні на уроці' | '⚡ Зараз на уроці (3-й ур.)' | '📅 На четвер (4-й ур.)' | '✓ Пройдений урок'
+        - badge_class: 'badge-relevance-now' | 'badge-relevance-today' | 'badge-relevance-upcoming' | 'badge-relevance-past'
+        - is_now: bool
+        - is_today: bool
+        - target_info: рядок з детальною інформацією
+        """
+        from django.utils import timezone
+        now = timezone.localtime(timezone.now())
+        today = now.date()
+        today_weekday = today.weekday() + 1  # 1 = Monday ... 7 = Sunday
+        current_time = now.time()
+
+        # 1. Перевіряємо явну прив'язку через AssignmentScheduleTarget
+        targets = self.schedule_targets.all()
+        target = None
+        if for_class:
+            target = targets.filter(class_group=for_class).first()
+        if not target and targets.exists():
+            target = targets.first()
+
+        if target:
+            if target.target_date:
+                t_date = target.target_date
+                slot = target.bell_slot
+                slot_info = f" ({slot.lesson_number}-й ур.)" if slot else ""
+                if t_date == today:
+                    if slot and slot.start_time and slot.end_time and slot.start_time <= current_time <= slot.end_time:
+                        return {
+                            'badge_text': f"⚡ Зараз на уроці{slot_info}",
+                            'badge_class': 'badge-relevance-now',
+                            'is_now': True,
+                            'is_today': True,
+                            'target_info': f"Сьогодні{slot_info}"
+                        }
+                    return {
+                        'badge_text': f"🟢 Сьогодні на уроці{slot_info}",
+                        'badge_class': 'badge-relevance-today',
+                        'is_now': False,
+                        'is_today': True,
+                        'target_info': f"Сьогодні{slot_info}"
+                    }
+                elif t_date > today:
+                    delta_days = (t_date - today).days
+                    if delta_days == 1:
+                        day_title = "на завтра"
+                    else:
+                        uk_weekdays = {1: 'Понеділок', 2: 'Вівторок', 3: 'Середу', 4: 'Четвер', 5: "П'ятницю", 6: 'Суботу', 7: 'Неділю'}
+                        day_title = f"на {uk_weekdays.get(t_date.weekday() + 1, '')}"
+                    return {
+                        'badge_text': f"📅 {day_title.capitalize()}{slot_info}",
+                        'badge_class': 'badge-relevance-upcoming',
+                        'is_now': False,
+                        'is_today': False,
+                        'target_info': f"{t_date.strftime('%d.%m')}{slot_info}"
+                    }
+                else:
+                    return {
+                        'badge_text': "✓ Пройдений урок",
+                        'badge_class': 'badge-relevance-past',
+                        'is_now': False,
+                        'is_today': False,
+                        'target_info': f"Урок відбувся {t_date.strftime('%d.%m')}"
+                    }
+            elif target.target_day_of_week:
+                t_day = target.target_day_of_week
+                slot = target.bell_slot
+                slot_info = f" ({slot.lesson_number}-й ур.)" if slot else ""
+                if t_day == today_weekday:
+                    if slot and slot.start_time and slot.end_time and slot.start_time <= current_time <= slot.end_time:
+                        return {
+                            'badge_text': f"⚡ Зараз на уроці{slot_info}",
+                            'badge_class': 'badge-relevance-now',
+                            'is_now': True,
+                            'is_today': True,
+                            'target_info': f"Сьогодні{slot_info}"
+                        }
+                    return {
+                        'badge_text': f"🟢 Сьогодні на уроці{slot_info}",
+                        'badge_class': 'badge-relevance-today',
+                        'is_now': False,
+                        'is_today': True,
+                        'target_info': f"Сьогодні{slot_info}"
+                    }
+                else:
+                    uk_weekdays = {1: 'Понеділок', 2: 'Вівторок', 3: 'Середу', 4: 'Четвер', 5: "П'ятницю", 6: 'Суботу'}
+                    day_name = uk_weekdays.get(t_day, 'розклад')
+                    return {
+                        'badge_text': f"📅 На {day_name}{slot_info}",
+                        'badge_class': 'badge-relevance-upcoming',
+                        'is_now': False,
+                        'is_today': False,
+                        'target_info': f"{day_name}{slot_info}"
+                    }
+
+        # 2. Якщо явної прив'язки немає, перевіряємо розклад вчителя для цих класів
+        classes_to_check = [for_class] if for_class else list(self.classes.all())
+        if self.teacher and classes_to_check:
+            teacher_lessons = TeacherLessonSchedule.objects.filter(
+                teacher=self.teacher,
+                class_group__in=classes_to_check
+            ).select_related('bell_slot', 'class_group').order_by('day_of_week', 'bell_slot__lesson_number')
+
+            if teacher_lessons.exists():
+                today_lesson = teacher_lessons.filter(day_of_week=today_weekday).first()
+                if today_lesson:
+                    slot = today_lesson.bell_slot
+                    slot_info = f" ({slot.lesson_number}-й ур.)" if slot else ""
+                    if slot and slot.start_time and slot.end_time and slot.start_time <= current_time <= slot.end_time:
+                        return {
+                            'badge_text': f"⚡ Зараз на уроці{slot_info}",
+                            'badge_class': 'badge-relevance-now',
+                            'is_now': True,
+                            'is_today': True,
+                            'target_info': f"Сьогодні{slot_info}"
+                        }
+                    if self.days_ago <= 2:
+                        return {
+                            'badge_text': f"🟢 Сьогодні на уроці{slot_info}",
+                            'badge_class': 'badge-relevance-today',
+                            'is_now': False,
+                            'is_today': True,
+                            'target_info': f"Сьогодні{slot_info}"
+                        }
+                future_lessons = teacher_lessons.filter(day_of_week__gt=today_weekday)
+                next_lesson = future_lessons.first() or teacher_lessons.first()
+                if next_lesson and self.days_ago <= 6:
+                    uk_weekdays = {1: 'Понеділок', 2: 'Вівторок', 3: 'Середу', 4: 'Четвер', 5: "П'ятницю", 6: 'Суботу'}
+                    day_name = uk_weekdays.get(next_lesson.day_of_week, '')
+                    slot_info = f" ({next_lesson.bell_slot.lesson_number}-й ур.)" if next_lesson.bell_slot else ""
+                    return {
+                        'badge_text': f"📅 На {day_name}{slot_info}",
+                        'badge_class': 'badge-relevance-upcoming',
+                        'is_now': False,
+                        'is_today': False,
+                        'target_info': f"{day_name}{slot_info}"
+                    }
+
+        # 3. Дефолтний варіант без розкладу
+        if self.is_published_today:
+            return {
+                'badge_text': '🟢 Сьогодні на уроці',
+                'badge_class': 'badge-relevance-today',
+                'is_now': False,
+                'is_today': True,
+                'target_info': self.relative_published_display
+            }
+        elif self.is_published_yesterday:
+            return {
+                'badge_text': '📌 Актуальне завдання',
+                'badge_class': 'badge-relevance-default',
+                'is_now': False,
+                'is_today': False,
+                'target_info': self.relative_published_display
+            }
+        else:
+            return {
+                'badge_text': self.relative_published_display or 'Опубліковано',
+                'badge_class': 'badge-relevance-default',
+                'is_now': False,
+                'is_today': False,
+                'target_info': self.relative_published_display
+            }
+
     @property
     def unarchived_display(self):
         """Форматований підпис розархівації."""
@@ -641,8 +1039,31 @@ class Assignment(models.Model):
         self.refresh_from_db(fields=['views_count'])
         return True
 
+    @property
+    def get_link_display_title(self) -> str:
+        """Повертає підпис або автоматично видобутий заголовок вебсторінки."""
+        if self.link_label and self.link_label.strip():
+            return self.link_label.strip()
+        if self.link_url:
+            from feed.utils import fetch_url_title
+            title = fetch_url_title(self.link_url)
+            if title:
+                return title
+            return self.link_url
+        return ""
+
     def save(self, *args, **kwargs):
-        """Автоматично встановлює час публікації та перевіряє відкладені."""
+        """Автоматично встановлює час публікації, заголовок посилання та перевіряє відкладені."""
+        # Автоматичне визначення заголовка посилання, якщо підпис не вказано вчителем
+        if self.link_url and not (self.link_label and self.link_label.strip()):
+            try:
+                from feed.utils import fetch_url_title
+                auto_title = fetch_url_title(self.link_url)
+                if auto_title:
+                    self.link_label = auto_title
+            except Exception:
+                pass
+
         # Якщо статус змінився на "опубліковано" — фіксуємо час
         if self.status == self.STATUS_PUBLISHED and not self.published_at:
             self.published_at = timezone.now()
@@ -691,6 +1112,31 @@ class AssignmentLink(models.Model):
 
     def __str__(self):
         return self.label or self.url
+
+    @property
+    def get_link_display_title(self) -> str:
+        """Повертає підпис або автоматично видобутий заголовок вебсторінки."""
+        if self.label and self.label.strip():
+            return self.label.strip()
+        if self.url:
+            from feed.utils import fetch_url_title
+            title = fetch_url_title(self.url)
+            if title:
+                return title
+            return self.url
+        return ""
+
+    def save(self, *args, **kwargs):
+        """Автоматично видобуває заголовок сайту, якщо підпис порожній."""
+        if self.url and not (self.label and self.label.strip()):
+            try:
+                from feed.utils import fetch_url_title
+                auto_title = fetch_url_title(self.url)
+                if auto_title:
+                    self.label = auto_title
+            except Exception:
+                pass
+        super().save(*args, **kwargs)
 
 
 class AssignmentYouTubeLink(models.Model):
@@ -886,6 +1332,195 @@ class AssignmentFile(models.Model):
             return ''
 
 
+# ─── Прив'язка завдання до розкладу уроків ─────────────────────────────────────
+class AssignmentScheduleTarget(models.Model):
+    """
+    Прив'язка завдання до конкретного дня/уроку розкладу для класу.
+    Дозволяє одному завданню мати різні цільові уроки для різних класів.
+    """
+    assignment = models.ForeignKey(
+        Assignment,
+        on_delete=models.CASCADE,
+        related_name='schedule_targets',
+        verbose_name='Завдання'
+    )
+    class_group = models.ForeignKey(
+        ClassGroup,
+        on_delete=models.CASCADE,
+        related_name='assignment_schedule_targets',
+        verbose_name='Клас'
+    )
+    target_date = models.DateField(
+        'Цільова дата уроку',
+        null=True,
+        blank=True,
+        help_text='Дата, коли цей клас опрацьовує завдання на уроці'
+    )
+    target_day_of_week = models.PositiveSmallIntegerField(
+        'День тижня за розкладом',
+        choices=TeacherLessonSchedule.DAY_CHOICES,
+        null=True,
+        blank=True
+    )
+    bell_slot = models.ForeignKey(
+        BellSchedule,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='assignment_targets',
+        verbose_name='Урок за розкладом'
+    )
+
+    class Meta:
+        verbose_name = 'Прив\'язка завдання до розкладу'
+        verbose_name_plural = 'Прив\'язки завдань до розкладу'
+        unique_together = [('assignment', 'class_group')]
+
+    def __str__(self):
+        day_str = dict(TeacherLessonSchedule.DAY_CHOICES).get(self.target_day_of_week, '')
+        date_str = self.target_date.strftime('%d.%m') if self.target_date else ''
+        slot_str = f", {self.bell_slot.lesson_number} ур." if self.bell_slot else ''
+        info = date_str or day_str or 'Без дати'
+        return f"{self.assignment.title} -> {self.class_group.name} ({info}{slot_str})"
+
+
+# ─── Журнал перенесення уроків / завдань ──────────────────────────────────────
+class AssignmentRescheduleLog(models.Model):
+    """
+    Історія та облік перенесення уроків/завдань вчителем із зазначенням причини.
+    Використовується для 30-денного календаря перенесень та звітності.
+    """
+    REASON_AIR_RAID = 'air_raid'
+    REASON_ILLNESS = 'illness'
+    REASON_QUARANTINE = 'quarantine'
+    REASON_CURRICULUM = 'curriculum'
+    REASON_HOLIDAY = 'holiday'
+    REASON_TECHNICAL = 'technical'
+    REASON_OTHER = 'other'
+
+    REASON_CHOICES = [
+        (REASON_AIR_RAID, '🚨 Повітряна тривога'),
+        (REASON_ILLNESS, '🏥 Хвороба вчителя / лікарняний'),
+        (REASON_QUARANTINE, '😷 Дистанційне навчання / карантин'),
+        (REASON_CURRICULUM, '📚 Коригування навчальної програми'),
+        (REASON_HOLIDAY, '🎉 Свято / перенесення вихідного дня'),
+        (REASON_TECHNICAL, '⚡ Технічні причини / аварія / відключення світла'),
+        (REASON_OTHER, '✍️ Інша причина'),
+    ]
+
+    assignment = models.ForeignKey(
+        Assignment,
+        on_delete=models.CASCADE,
+        related_name='reschedule_logs',
+        verbose_name='Завдання'
+    )
+    teacher = models.ForeignKey(
+        Teacher,
+        on_delete=models.CASCADE,
+        related_name='reschedule_logs',
+        verbose_name='Вчитель'
+    )
+    class_group = models.ForeignKey(
+        ClassGroup,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='reschedule_logs',
+        verbose_name='Клас'
+    )
+    original_date = models.DateField('Початкова дата уроку')
+    original_bell_slot = models.ForeignKey(
+        BellSchedule,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='+',
+        verbose_name='Початковий урок'
+    )
+    new_date = models.DateField('Нова дата уроку')
+    new_bell_slot = models.ForeignKey(
+        BellSchedule,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='+',
+        verbose_name='Новий урок'
+    )
+    reason_type = models.CharField(
+        'Тип причини',
+        max_length=40,
+        choices=REASON_CHOICES,
+        default=REASON_AIR_RAID
+    )
+    reason_comment = models.TextField('Коментар / деталі перенесення', blank=True)
+    rescheduled_at = models.DateTimeField('Дата перенесення', auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Запис перенесення уроку'
+        verbose_name_plural = 'Журнал перенесення уроків'
+        ordering = ['-rescheduled_at']
+
+    def __str__(self):
+        c_name = self.class_group.name if self.class_group else 'Всі класи'
+        return f"{self.assignment.title} ({c_name}): {self.original_date} -> {self.new_date} [{self.get_reason_type_display()}]"
+
+    @property
+    def reason_icon(self):
+        icons = {
+            self.REASON_AIR_RAID: '🚨',
+            self.REASON_ILLNESS: '🏥',
+            self.REASON_QUARANTINE: '😷',
+            self.REASON_CURRICULUM: '📚',
+            self.REASON_HOLIDAY: '🎉',
+            self.REASON_TECHNICAL: '⚡',
+            self.REASON_OTHER: '✍️',
+        }
+        return icons.get(self.reason_type, '🔄')
+
+
+# ─── Системні сповіщення (Центр сповіщень) ──────────────────────────────────────
+class SystemNotification(models.Model):
+    """
+    Сповіщення вчителя про уроки без завдань, здані роботи тощо.
+    """
+    TYPE_MISSING_TASK = 'missing_task'
+    TYPE_NEW_SUBMISSION = 'new_submission'
+    TYPE_INFO = 'info'
+
+    TYPE_CHOICES = [
+        (TYPE_MISSING_TASK, '⚠️ Немає завдання до уроку'),
+        (TYPE_NEW_SUBMISSION, '📥 Нова здана робота'),
+        (TYPE_INFO, 'ℹ️ Інформація'),
+    ]
+
+    teacher = models.ForeignKey(
+        Teacher,
+        on_delete=models.CASCADE,
+        related_name='notifications',
+        verbose_name='Вчитель'
+    )
+    notification_type = models.CharField(
+        'Тип сповіщення',
+        max_length=30,
+        choices=TYPE_CHOICES,
+        default=TYPE_INFO
+    )
+    title = models.CharField('Заголовок', max_length=255)
+    message = models.TextField('Повідомлення')
+    action_url = models.CharField('Посилання для дії', max_length=500, blank=True)
+    action_label = models.CharField('Підпис дії', max_length=100, blank=True)
+    is_read = models.BooleanField('Прочитано', default=False)
+    created_at = models.DateTimeField('Створено', auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Сповіщення'
+        verbose_name_plural = 'Сповіщення'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.teacher.full_name}: {self.title}"
+
+
 # ─── Здача роботи учнем ───────────────────────────────────────────────────────
 
 def submission_upload_path(instance, filename):
@@ -954,7 +1589,7 @@ class Submission(models.Model):
         help_text="Необов'язковий коментар до здачі"
     )
     submitted_at = models.DateTimeField('Час здачі', auto_now_add=True)
-    grade = models.CharField('Оцінка', max_length=10, blank=True, null=True)
+    grade = models.CharField('Оцінка', max_length=32, blank=True, null=True)
     teacher_comment = models.TextField('Коментар вчителя', blank=True, null=True)
     graded_by = models.ForeignKey(
         'auth.User',
@@ -967,7 +1602,7 @@ class Submission(models.Model):
     graded_at = models.DateTimeField('Час оцінювання', null=True, blank=True)
 
     # ── Поля ШІ (Google Gemini) для попереднього оцінювання за системою НУШ ──
-    ai_suggested_grade = models.CharField('Попередня оцінка ШІ', max_length=20, blank=True, null=True)
+    ai_suggested_grade = models.CharField('Попередня оцінка ШІ', max_length=32, blank=True, null=True)
     ai_score_level = models.CharField('Рівень оцінки ШІ', max_length=40, blank=True, default='')
     ai_feedback = models.TextField('Педагогічний відгук ШІ', blank=True, default='')
     ai_gr_results = models.TextField('Оцінки за групами результатів (ГР)', blank=True, default='')
@@ -994,7 +1629,7 @@ class Submission(models.Model):
         'Час самоперевірки учнем', null=True, blank=True
     )
     student_ai_grade = models.CharField(
-        'Чернова оцінка ШІ (від учня)', max_length=20, blank=True, null=True
+        'Чернова оцінка ШІ (від учня)', max_length=32, blank=True, null=True
     )
     student_ai_level = models.CharField(
         'Рівень чернової оцінки (від учня)', max_length=40, blank=True, default=''
@@ -1029,6 +1664,9 @@ class Submission(models.Model):
     )
     ai_generated_details = models.TextField(
         'Деталі та ознаки використання ШІ', blank=True, default=''
+    )
+    ai_generated_percent = models.IntegerField(
+        'Розрахунковий відсоток генерації ШІ (%)', default=0, blank=True
     )
 
     # ── Повторна здача (робота над помилками / перездача) ────────────────────
@@ -1489,10 +2127,17 @@ class SubmissionActivityLog(models.Model):
     """Журнал дій із здачами робіт."""
     ACTION_CHOICES = [
         ('login', 'Вхід в систему'),
+        ('logout', 'Вихід із системи'),
         ('submission', 'Здача роботи'),
         ('grading', 'Оцінювання'),
+        ('grade', 'Оцінювання'),
+        ('grade_submission', 'Оцінювання здачі'),
         ('comment', 'Коментар'),
         ('delete', 'Видалення'),
+        ('student_created', 'Додавання учня'),
+        ('student_updated', 'Оновлення учня'),
+        ('student_deleted', 'Видалення учня'),
+        ('students_imported', 'Імпорт учнів'),
     ]
 
     actor = models.ForeignKey(
@@ -1566,6 +2211,13 @@ DEFAULT_NUS_SYSTEM_PROMPT = """Ти — висококваліфікований
 4. Високий рівень (10-12 балів):
    - 10-12 балів: глибоке засвоєння теми, бездоганне виконання, логічність, творчий підхід, обґрунтованість висновків та охайність.
 
+ПРІОРИТЕТ ВИМОГ ВЧИТЕЛЯ ТА ОБСЯГ ЗАВДАННЯ (SCOPE OF WORK):
+- Текст у полі «ЗАВДАННЯ ДО ВИКОНАННЯ» від вчителя має АБСОЛЮТНИЙ ПРІОРИТЕТ над прикріпленими файлами чи матеріалами.
+- Прикріплений файл — це лише допоміжний роздатковий матеріал уроку. Якщо у файлі є кілька завдань (наприклад, 5 завдань чи вправ), але вчитель вказав виконати тільки одне конкретне (наприклад, завдання 3):
+  * Оцінюй ВИКЛЮЧНО вказане вчителем завдання.
+  * КАТЕГОРИЧНО ЗАБОРОНЕНО знижувати бал або писати зауваження про «невиконання решти завдань» — вони вважаються незаданими!
+  * Робота вважається виконаною у повному обсязі (100%), якщо якісно виконано саме задане вчителем завдання.
+
 ТЕХНІЧНІ ВИМОГИ ТА ПРАВИЛА ДЛЯ ПОЛЯ "format_warning":
 - Поле "format_warning" призначене ВИКЛЮЧНО ДЛЯ ТЕХНІЧНИХ ДЕФЕКТІВ РОЗШИРЕННЯ ЧИ ТИПУ ФАЙЛУ (а НЕ для змісту роботи чи зображених об'єктів!):
   1. Якщо завдання з програмування (наприклад, Python, JS, C++ тощо), код повинен бути збережений у файлі з належним розширенням (наприклад, .py для Python, .html для веб, .cpp для C++).
@@ -1603,6 +2255,11 @@ class AISettings(models.Model):
     saved_models_list = models.TextField('Збережені моделі з пріоритетами', blank=True, default='[{"name": "gemini-2.5-flash", "priority": 1, "enabled": true}, {"name": "gemini-1.5-flash", "priority": 2, "enabled": true}, {"name": "gemini-2.5-pro", "priority": 3, "enabled": true}, {"name": "gemini-3.6-flash", "priority": 4, "enabled": true}]')
     system_prompt = models.TextField('Системний промт (Критерії НУШ)', default=DEFAULT_NUS_SYSTEM_PROMPT)
     temperature = models.FloatField('Температура (креативність)', default=0.2)
+    ai_detector_tolerance_percent = models.IntegerField(
+        'Допустимий відсоток запозичень/збігів без звинувачення в ШІ (%)',
+        default=25,
+        help_text="Поріг збігів або окремих слів (за замовчуванням 25%), нижче якого контент вважається самостійною роботою, а не ШІ"
+    )
     is_enabled = models.BooleanField('Модуль ШІ увімкнено', default=False)
     updated_at = models.DateTimeField('Останнє оновлення', auto_now=True)
 
@@ -1835,6 +2492,13 @@ DEFAULT_TRADITIONAL_SYSTEM_PROMPT = """Ти — суворий та об'єкт�
    - 11 балів: глибоке системне розуміння, обґрунтованість, розв'язання нестандартних завдань або раціональний спосіб виконання.
    - 12 балів: бездоганна робота найвищої складності (100%), самостійні висновки, бездоганне академічне оформлення.
 
+ПРІОРИТЕТ ВИМОГ ВЧИТЕЛЯ ТА ОБСЯГ ЗАВДАННЯ (SCOPE OF WORK):
+- Текст у полі «ЗАВДАННЯ ДО ВИКОНАННЯ» від вчителя має АБСОЛЮТНИЙ ПРІОРИТЕТ над прикріпленими файлами чи матеріалами.
+- Прикріплений файл — це лише допоміжний роздатковий матеріал уроку. Якщо у файлі є кілька завдань (наприклад, 5 завдань чи вправ), але вчитель вказав виконати тільки одне конкретне (наприклад, завдання 3):
+  * Оцінюй ВИКЛЮЧНО вказане вчителем завдання.
+  * КАТЕГОРИЧНО ЗАБОРОНЕНО знижувати бал або писати зауваження про «невиконання решти завдань» — вони вважаються незаданими!
+  * Робота вважається виконаною у повному обсязі (100%), якщо якісно виконано саме задане вчителем завдання.
+
 ТЕХНІЧНІ ВИМОГИ ТА ПРАВИЛА ДЛЯ ПОЛЯ "format_warning":
 - Поле "format_warning" стосується ВИКЛЮЧНО технічного розширення або типу файлу (відсутнє розширення, .txt замість коду .py чи таблиці .xlsx). Якщо є технічний дефект файлу — зафіксуй у "format_warning", додай у "weaknesses" та знизь оцінку на 1-2 бали.
 - СУВОРЕ ПРАВИЛО: Якщо формат файлу технічно коректний (наприклад, валідне фото .jpg/.png, документ .docx/.pdf тощо), але є помилки у змісті роботи (наприклад, на фото не той об'єкт, чужа тема або неправильний розв'язок) — "format_warning": null. Усі змістовні зауваження вказуй у "weaknesses" та "feedback_comment".
@@ -1866,6 +2530,13 @@ DEFAULT_NUS_GR_SYSTEM_PROMPT = """Ти — висококваліфікован�
 2. Середній рівень (4-6 балів): відтворення навчального матеріалу за зразком, типові розрахункові неточності, базова структура збережена.
 3. Достатній рівень (7-9 балів): самостійне застосування знань у типових ситуаціях, правильно розв'язано більшість завдань, робота охайна.
 4. Високий рівень (10-12 балів): глибоке системне засвоєння теми, бездоганне виконання, логічність, творчий підхід, обґрунтованість висновків.
+
+ПРІОРИТЕТ ВИМОГ ВЧИТЕЛЯ ТА ОБСЯГ ЗАВДАННЯ (SCOPE OF WORK):
+- Текст у полі «ЗАВДАННЯ ДО ВИКОНАННЯ» від вчителя має АБСОЛЮТНИЙ ПРІОРИТЕТ над прикріпленими файлами чи матеріалами.
+- Прикріплений файл — це лише допоміжний роздатковий матеріал уроку. Якщо у файлі є кілька завдань (наприклад, 5 завдань чи вправ), але вчитель вказав виконати тільки одне конкретне (наприклад, завдання 3):
+  * Оцінюй ВИКЛЮЧНО вказане вчителем завдання.
+  * КАТЕГОРИЧНО ЗАБОРОНЕНО знижувати бал або писати зауваження про «невиконання решти завдань» — вони вважаються незаданими!
+  * Робота вважається виконаною у повному обсязі (100%), якщо якісно виконано саме задане вчителем завдання.
 
 ТЕХНІЧНІ ВИМОГИ ТА ПРАВИЛА ДЛЯ ПОЛЯ "format_warning":
 - Поле "format_warning" стосується ВИКЛЮЧНО технічного дефекту розширення чи типу файлу (файл без розширення, здано .txt замість коду .py чи таблиці .xlsx). Якщо є технічний дефект — зафіксуй у "format_warning", додай у "weaknesses" та знизь оцінку на 1-2 бали.
@@ -2104,6 +2775,18 @@ class AICriteriaPreset(models.Model):
         Системний промпт + опис Груп Результатів (ГР) + додаткові критерії МОН із прикріпленого документа (якщо є).
         """
         prompt = (self.system_prompt or DEFAULT_NUS_GR_SYSTEM_PROMPT).strip()
+
+        # Гарантуємо наявність обов'язкового правила щодо обсягу завдання (Scope of Work),
+        # навіть якщо пресет було створено раніше або вчитель використовує власний промпт
+        if "SCOPE OF WORK" not in prompt:
+            prompt += (
+                "\n\nПРІОРИТЕТ ВИМОГ ВЧИТЕЛЯ ТА ОБСЯГ ЗАВДАННЯ (SCOPE OF WORK):\n"
+                "- Текст у полі «ЗАВДАННЯ ДО ВИКОНАННЯ» від вчителя має АБСОЛЮТНИЙ ПРІОРИТЕТ над прикріпленими файлами чи матеріалами.\n"
+                "- Прикріплений файл — це лише допоміжний роздатковий матеріал уроку. Якщо у файлі є кілька завдань (наприклад, 5 завдань чи вправ), але вчитель вказав виконати тільки одне конкретне (наприклад, завдання 3):\n"
+                "  * Оцінюй ВИКЛЮЧНО вказане вчителем завдання.\n"
+                "  * КАТЕГОРИЧНО ЗАБОРОНЕНО знижувати бал або писати зауваження про «невиконання решти завдань» — вони вважаються незаданими!\n"
+                "  * Робота вважається виконаною у повному обсязі (100%), якщо якісно виконано саме задане вчителем завдання.\n"
+            )
 
         gr_list = self.get_gr_list()
         if gr_list and len(gr_list) > 0:

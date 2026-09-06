@@ -1,0 +1,210 @@
+<!-- ── Модальне вікно перенесення уроку / завдання ── -->
+<div id="reschedule-modal" style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(15,23,42,0.65);z-index:99999;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(4px);">
+    <div class="custom-modal-content" style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);width:100%;max-width:540px;box-shadow:0 20px 40px rgba(0,0,0,0.22);overflow:hidden;animation:rescheduleModalIn 0.2s ease-out;">
+        
+        <!-- Заголовок -->
+        <div style="padding:16px 20px;background:var(--color-bg-secondary);border-bottom:1px solid var(--color-border);display:flex;align-items:center;justify-content:space-between;">
+            <div style="display:flex;align-items:center;gap:8px;font-weight:800;font-size:15px;color:var(--color-text-primary);">
+                <span style="font-size:18px;">🔄</span>
+                <span>Перенесення уроку / завдання</span>
+            </div>
+            <button type="button" onclick="closeRescheduleModal()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--color-text-muted);line-height:1;padding:4px;" aria-label="Закрити">✕</button>
+        </div>
+
+        <!-- Тіло форми -->
+        <form id="reschedule-assignment-form" method="POST" action="" style="margin:0;padding:20px;">
+            {% csrf_token %}
+            <input type="hidden" name="class_group" id="reschedule-class-group-input" value="">
+            
+            <!-- Інформація про завдання -->
+            <div style="background:rgba(99,102,241,0.06);border:1px solid rgba(99,102,241,0.18);border-radius:var(--radius-md);padding:10px 14px;margin-bottom:16px;">
+                <div style="font-size:11px;font-weight:700;color:var(--color-primary);text-transform:uppercase;letter-spacing:0.04em;">
+                    Завдання для перенесення:
+                </div>
+                <div id="reschedule-modal-title" style="font-weight:800;font-size:14px;color:var(--color-text-primary);margin-top:2px;line-height:1.3;">
+                    —
+                </div>
+            </div>
+
+            <!-- Швидка кнопка авто-визначення наступного уроку -->
+            <div style="margin-bottom:16px;">
+                <button type="button" id="btn-auto-next-lesson" class="btn btn-secondary btn-sm" onclick="fetchAndFillNextLesson()" style="width:100%;display:flex;align-items:center;justify-content:center;gap:6px;font-weight:700;padding:8px 12px;border-radius:var(--radius-md);background:var(--color-bg-secondary);border:1px dashed var(--color-primary);color:var(--color-primary);">
+                    <span>⚡</span> <span>Підставити наступний урок за розкладом</span>
+                </button>
+                <div id="auto-next-lesson-hint" style="font-size:11.5px;color:var(--color-text-muted);margin-top:4px;text-align:center;display:none;"></div>
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
+                <!-- Нова дата уроку -->
+                <div>
+                    <label style="display:block;font-size:12.5px;font-weight:700;margin-bottom:5px;color:var(--color-text-primary);">
+                        📅 Нова дата уроку *
+                    </label>
+                    <input type="date" name="new_date" id="reschedule-new-date" class="form-input" required style="width:100%;font-size:13.5px;padding:8px 10px;border-radius:var(--radius-md);">
+                </div>
+
+                <!-- Новий номер уроку / дзвінок -->
+                <div>
+                    <label style="display:block;font-size:12.5px;font-weight:700;margin-bottom:5px;color:var(--color-text-primary);">
+                        🔔 Номер уроку
+                    </label>
+                    <select name="new_bell_slot" id="reschedule-new-bell-slot" class="form-select" style="width:100%;font-size:13px;padding:8px 10px;border-radius:var(--radius-md);">
+                        <option value="">(За розкладом)</option>
+                        {% for slot in all_bell_slots %}
+                        <option value="{{ slot.id }}">
+                            {{ slot.lesson_number }}-й урок ({{ slot.start_time|time:"H:i" }})
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <!-- Причина перенесення -->
+            <div style="margin-bottom:14px;">
+                <label style="display:block;font-size:12.5px;font-weight:700;margin-bottom:5px;color:var(--color-text-primary);">
+                    🎯 Причина перенесення *
+                </label>
+                <select name="reason_type" id="reschedule-reason-type" class="form-select" required style="width:100%;font-size:13.5px;padding:8px 10px;border-radius:var(--radius-md);font-weight:600;">
+                    {% for r_code, r_label in reschedule_reason_choices %}
+                    <option value="{{ r_code }}" {% if r_code == 'air_raid' %}selected{% endif %}>{{ r_label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- Коментар / деталі -->
+            <div style="margin-bottom:14px;">
+                <label style="display:block;font-size:12.5px;font-weight:700;margin-bottom:5px;color:var(--color-text-primary);">
+                    ✍️ Додаткова примітка / коментар (опціонально)
+                </label>
+                <textarea name="reason_comment" id="reschedule-reason-comment" class="form-input" rows="2" placeholder="Наприклад: сигнал тривоги з 10:15 до 11:20, перенесено на четвер" style="width:100%;font-size:12.5px;padding:8px 10px;border-radius:var(--radius-md);resize:vertical;"></textarea>
+            </div>
+
+            <!-- Чекбокс оновлення дедлайну -->
+            <div style="margin-bottom:20px;display:flex;align-items:center;gap:8px;">
+                <input type="checkbox" name="update_due_date" id="reschedule-update-due-date" value="1" checked style="width:16px;height:16px;cursor:pointer;">
+                <label for="reschedule-update-due-date" style="font-size:13px;font-weight:600;color:var(--color-text-primary);cursor:pointer;user-select:none;">
+                    Також перенести термін здачі (дедлайн) на нову дату
+                </label>
+            </div>
+
+            <!-- Кнопки дій -->
+            <div style="display:flex;justify-content:flex-end;gap:10px;border-top:1px solid var(--color-border);padding-top:16px;">
+                <button type="button" class="btn btn-secondary" onclick="closeRescheduleModal()" style="font-weight:600;">
+                    Скасувати
+                </button>
+                <button type="submit" class="btn btn-primary" style="font-weight:700;padding:8px 20px;">
+                    💾 Зберегти перенесення
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<style>
+@keyframes rescheduleModalIn {
+    from { opacity: 0; transform: scale(0.96) translateY(-10px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
+}
+</style>
+
+<script>
+var _rescheduleCurrentAssignmentId = null;
+var _rescheduleCurrentClassId = null;
+
+function openRescheduleModalDirect(assignmentId, title, classId, defaultDate, defaultSlotId) {
+    _rescheduleCurrentAssignmentId = assignmentId;
+    _rescheduleCurrentClassId = classId || '';
+
+    var modal = document.getElementById('reschedule-modal');
+    var form = document.getElementById('reschedule-assignment-form');
+    var titleEl = document.getElementById('reschedule-modal-title');
+    var classInput = document.getElementById('reschedule-class-group-input');
+    var dateInput = document.getElementById('reschedule-new-date');
+    var slotSelect = document.getElementById('reschedule-new-bell-slot');
+    var hintEl = document.getElementById('auto-next-lesson-hint');
+
+    form.action = '/teacher/assignment/' + assignmentId + '/reschedule/';
+    titleEl.textContent = title || 'Завдання #' + assignmentId;
+    classInput.value = classId || '';
+
+    // Встановлюємо дату
+    if (defaultDate) {
+        dateInput.value = defaultDate;
+    } else {
+        // За замовчуванням завтра
+        var tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        var yyyy = tomorrow.getFullYear();
+        var mm = String(tomorrow.getMonth() + 1).padStart(2, '0');
+        var dd = String(tomorrow.getDate()).padStart(2, '0');
+        dateInput.value = yyyy + '-' + mm + '-' + dd;
+    }
+
+    if (defaultSlotId && slotSelect) {
+        slotSelect.value = defaultSlotId;
+    }
+
+    if (hintEl) {
+        hintEl.style.display = 'none';
+        hintEl.textContent = '';
+    }
+
+    modal.style.display = 'flex';
+}
+
+function closeRescheduleModal() {
+    var modal = document.getElementById('reschedule-modal');
+    if (modal) modal.style.display = 'none';
+}
+
+function fetchAndFillNextLesson() {
+    if (!_rescheduleCurrentClassId) {
+        // Якщо клас не закріплений, ставимо наступний робочий день
+        var d = new Date();
+        d.setDate(d.getDate() + 1);
+        if (d.getDay() === 0) d.setDate(d.getDate() + 1);
+        if (d.getDay() === 6) d.setDate(d.getDate() + 2);
+        var yyyy = d.getFullYear();
+        var mm = String(d.getMonth() + 1).padStart(2, '0');
+        var dd = String(d.getDate()).padStart(2, '0');
+        document.getElementById('reschedule-new-date').value = yyyy + '-' + mm + '-' + dd;
+        var hintEl = document.getElementById('auto-next-lesson-hint');
+        hintEl.style.display = 'block';
+        hintEl.textContent = 'Встановлено наступний робочий день: ' + dd + '.' + mm + '.' + yyyy;
+        return;
+    }
+
+    var btn = document.getElementById('btn-auto-next-lesson');
+    var origText = btn.innerHTML;
+    btn.innerHTML = '<span>⏳</span> <span>Пошук у розкладі...</span>';
+
+    fetch('/api/next-lesson-slot/?class_id=' + encodeURIComponent(_rescheduleCurrentClassId))
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+            btn.innerHTML = origText;
+            if (data.success && data.next_date) {
+                document.getElementById('reschedule-new-date').value = data.next_date;
+                if (data.bell_slot_id) {
+                    document.getElementById('reschedule-new-bell-slot').value = data.bell_slot_id;
+                }
+                var hintEl = document.getElementById('auto-next-lesson-hint');
+                hintEl.style.display = 'block';
+                hintEl.style.color = '#10b981';
+                hintEl.textContent = '✅ ' + (data.info || ('Наступний урок: ' + data.next_date_display));
+            }
+        })
+        .catch(function(err) {
+            btn.innerHTML = origText;
+            console.error('Error fetching next lesson slot:', err);
+        });
+}
+
+// Закриття по кліку за межі вікна або по Esc
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closeRescheduleModal();
+});
+document.addEventListener('click', function(e) {
+    var modal = document.getElementById('reschedule-modal');
+    if (modal && e.target === modal) closeRescheduleModal();
+});
+</script>

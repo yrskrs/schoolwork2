@@ -7,31 +7,50 @@
 {% block content %}
 <div class="page-wrapper">
 
+    <!-- ── Мобільна смуга фільтрів по класах ──────────────────────────── -->
+    <div class="mobile-filter-bar" role="navigation" aria-label="Фільтр по класах">
+        <a href="{% url 'student_submissions_portal' %}{% if search_query %}?search={{ search_query }}{% endif %}"
+           class="filter-chip {% if not selected_class_id %}active{% endif %}">
+            🏠 Всі класи
+        </a>
+        {% for cls in class_groups %}
+        <a href="{% url 'student_submissions_portal' %}?class={{ cls.id }}{% if search_query %}&search={{ search_query }}{% endif %}"
+           class="filter-chip {% if selected_class_id == cls.id|stringformat:'s' %}active{% endif %}">
+            {{ cls.name }}
+        </a>
+        {% endfor %}
+    </div>
+
     <!-- ── Двоколонковий layout однаковий з усім сайтом ────────────────────── -->
     <div class="feed-layout">
 
         <!-- ════ САЙДБАР (ФІЛЬТР ПО КЛАСАХ ТА ІНФО-БЛОКИ) ═════════════════════ -->
         <aside class="sidebar" id="submissions-sidebar" aria-label="Фільтри та навігація">
 
-            <!-- 1. ФІЛЬТР ПО КЛАСАХ -->
+            <!-- 1. ФІЛЬТР ПО КЛАСАХ (ВІДОБРАЖЕННЯ СІТКОЮ) -->
             <div class="sidebar-card">
                 <div class="sidebar-header">🏫 Класи</div>
-                <ul class="sidebar-list" role="list">
-                    <li {% if not selected_class_id %}class="active"{% endif %}>
+                <div class="sidebar-classes-container">
+                    <div class="class-grid-all-btn {% if not selected_class_id %}active{% endif %}" id="filter-class-all">
                         <a href="{% url 'student_submissions_portal' %}{% if search_query %}?search={{ search_query }}{% endif %}">
                             <span>📋</span>
                             <span>Всі класи</span>
                         </a>
-                    </li>
-                    {% for cls in class_groups %}
-                    <li {% if selected_class_id == cls.id|stringformat:"s" %}class="active"{% endif %}>
-                        <a href="{% url 'student_submissions_portal' %}?class={{ cls.id }}{% if search_query %}&search={{ search_query }}{% endif %}">
-                            <span class="class-badge">{{ cls.grade }}{{ cls.letter }}</span>
-                            <span>{{ cls.name }}</span>
-                        </a>
-                    </li>
-                    {% endfor %}
-                </ul>
+                    </div>
+                    <div class="sidebar-class-grid" role="group" aria-label="Вибір класу">
+                        {% for cls in class_groups %}
+                        <div class="class-grid-item {% if selected_class_id == cls.id|stringformat:'s' %}active{% endif %}" id="filter-class-{{ cls.id }}">
+                            <a href="{% url 'student_submissions_portal' %}?class={{ cls.id }}{% if search_query %}&search={{ search_query }}{% endif %}" title="{{ cls.name }}">
+                                <span>{{ cls.name }}</span>
+                            </a>
+                        </div>
+                        {% empty %}
+                        <div style="grid-column:1/-1;padding:8px;color:var(--color-text-muted);font-size:12px;text-align:center;">
+                            Класи ще не додані
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
             </div>
 
             <!-- 2. ДОВІДКА ДЛЯ УЧНЯ -->

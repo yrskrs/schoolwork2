@@ -364,26 +364,173 @@ def extract_text_from_excel(file_path, max_rows=50, max_cols=20):
         return f"[Помилка читання Excel таблиці: {str(e)}]"
 
 
-def extract_text_from_powerpoint(file_path, max_slides=30):
+def extract_text_from_binary_presentation(file_path, max_chars=40000):
     """
-    Видобуває текст слайдів із презентації PowerPoint (.pptx).
+    Резервне видобування тексту зі застарілих бінарних файлів PowerPoint (.ppt)
+    шляхом пошуку юнікод-рядків (UTF-16LE) та кириличних послідовностей (CP1251/UTF-8).
+    """
+    try:
+        with open(file_path, 'rb') as f:
+            data = f.read(5 * 1024 * 1024)
+
+        text_chunks = []
+        # 1. Пошук UTF-16LE рядків
+        utf16_matches = re.findall(b'(?:[\x20-\x7e\t\n\r\x00-\xff]\x00){4,}', data)
+        for m in utf16_matches:
+            try:
+                decoded = m.decode('utf-16le').strip()
+                if len(decoded) > 3 and any(c.isalnum() for c in decoded):
+                    if not any(sub in decoded for sub in ['Current User', 'PowerPoint Document', 'SummaryInformation', 'DocumentSummaryInformation']):
+                        text_chunks.append(decoded)
+            except Exception:
+                pass
+
+        # 2. Пошук ASCII / CP1251 рядків
+        ascii_matches = re.findall(b'[\x20-\x7e\t\n\r\xc0-\xff]{6,}', data)
+        for m in ascii_matches:
+            for enc in ['utf-8', 'cp1251', 'latin-1']:
+                try:
+                    s = m.decode(enc).strip()
+                    if s and len(s) > 5 and any(c.isalnum() for c in s):
+                        if s not in text_chunks:
+                            text_chunks.append(s)
+                        break
+                except Exception:
+                    pass
+
+        if text_chunks:
+            return "Текст презентації (видобуто з бінарного формату .ppt):\n" + "\n".join(text_chunks)[:max_chars]
+        return "[Документ .ppt не містить розпізнаваного тексту]"
+    except Exception as e:
+        return f"[Помилка читання .ppt файлу: {str(e)}]"
+
+
+def extract_text_from_powerpoint(file_path, max_slides=40):
+    """
+    Видобуває детальну структуру, слайди, текст, ієрархію списків, таблиці та нотатки
+    із презентацій PowerPoint (.pptx та .ppt).
     """
     try:
         from pptx import Presentation
+        from pptx.enum.shapes import MSO_SHAPE_TYPE
+    except Exception:
+        MSO_SHAPE_TYPE = None
+
+    try:
         prs = Presentation(file_path)
         slides_text = []
+        total_slides = len(prs.slides)
 
-        for idx, slide in enumerate(prs.slides[:max_slides], 1):
-            slide_lines = [f"📽️ Слайд {idx}:"]
+        def _process_shape(shape):
+            lines = []
+            img_c = 0
+            tbl_c = 0
+
+            # Рекурсивна обробка груп фігур
+            if hasattr(shape, "shapes"):
+                for sub_sh in shape.shapes:
+                    sub_lines, sub_img, sub_tbl = _process_shape(sub_sh)
+                    lines.extend(sub_lines)
+                    img_c += sub_img
+                    tbl_c += sub_tbl
+                return lines, img_c, tbl_c
+
+            # Таблиця
+            if hasattr(shape, "has_table") and shape.has_table:
+                tbl_c += 1
+                lines.append("[Таблиця на слайді:]")
+                for row in shape.table.rows:
+                    row_cells = [cell.text.strip().replace('\n', ' ') for cell in row.cells]
+                    if any(row_cells):
+                        lines.append(" | ".join(row_cells))
+                return lines, img_c, tbl_c
+
+            # Текстовий блок
+            if hasattr(shape, "has_text_frame") and shape.has_text_frame:
+                for p in shape.text_frame.paragraphs:
+                    pt = p.text.strip()
+                    if pt:
+                        level = getattr(p, 'level', 0) or 0
+                        indent = "  " * level
+                        bullet = "• " if level > 0 else ""
+                        lines.append(f"{indent}{bullet}{pt}")
+            elif hasattr(shape, "text") and shape.text and shape.text.strip():
+                lines.append(shape.text.strip())
+
+            # Зображення / медіа
+            if hasattr(shape, "shape_type"):
+                st = shape.shape_type
+                if MSO_SHAPE_TYPE and st in [MSO_SHAPE_TYPE.PICTURE, 13]:
+                    img_c += 1
+                elif hasattr(shape, "image"):
+                    img_c += 1
+
+            return lines, img_c, tbl_c
+
+        # УВАГА: не використовувати зріз prs.slides[:max_slides], бо python-pptx викидає
+        # AttributeError: 'list' object has no attribute 'rId'!
+        for idx, slide in enumerate(prs.slides, 1):
+            if idx > max_slides:
+                break
+
+            slide_header = f"📽️ Слайд {idx}/{total_slides}"
+            title_text = ""
+            try:
+                if slide.shapes.title and slide.shapes.title.text.strip():
+                    title_text = slide.shapes.title.text.strip().replace('\n', ' ')
+            except Exception:
+                pass
+
+            if title_text:
+                slide_header += f": «{title_text}»"
+            else:
+                slide_header += ":"
+
+            slide_lines = [slide_header]
+            slide_imgs = 0
+            slide_tbls = 0
+
             for shape in slide.shapes:
-                if hasattr(shape, "text") and shape.text.strip():
-                    slide_lines.append(shape.text.strip())
-            if len(slide_lines) > 1:
+                try:
+                    if slide.shapes.title and shape == slide.shapes.title:
+                        continue
+                except Exception:
+                    pass
+
+                sh_lines, sh_img, sh_tbl = _process_shape(shape)
+                slide_lines.extend(sh_lines)
+                slide_imgs += sh_img
+                slide_tbls += sh_tbl
+
+            visual_indicators = []
+            if slide_imgs > 0:
+                visual_indicators.append(f"{slide_imgs} ілюстрацій/зображень")
+            if slide_tbls > 0:
+                visual_indicators.append(f"{slide_tbls} таблиць")
+            if visual_indicators:
+                slide_lines.append(f"  [Візуальне оформлення слайда: {', '.join(visual_indicators)}]")
+
+            try:
+                if slide.has_notes_slide and slide.notes_slide.notes_text_frame:
+                    notes = slide.notes_slide.notes_text_frame.text.strip()
+                    if notes:
+                        slide_lines.append(f"  [Нотатки доповідача: {notes}]")
+            except Exception:
+                pass
+
+            if len(slide_lines) > 1 or visual_indicators:
                 slides_text.append("\n".join(slide_lines))
 
-        return "\n\n".join(slides_text) if slides_text else "[Презентація не містить тексту або порожня]"
+        overview = f"Всього слайдів у презентації: {total_slides}."
+        if total_slides > max_slides:
+            overview += f" (Опрацьовано перші {max_slides} слайдів)."
+
+        return overview + "\n\n" + "\n\n".join(slides_text) if slides_text else "[Презентація не містить тексту або порожня]"
     except Exception as e:
-        return f"[Помилка читання презентації .pptx: {str(e)}]"
+        ext_lower = os.path.splitext(file_path)[1].lower()
+        if ext_lower == '.ppt' or 'not a zip' in str(e).lower() or 'PackageNotFoundError' in str(e):
+            return extract_text_from_binary_presentation(file_path)
+        return f"[Помилка читання презентації: {str(e)}]"
 
 
 def extract_text_from_archive(file_path, ext, max_files=8, max_file_chars=12000):
@@ -930,9 +1077,28 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
         f"ПРЕДМЕТ: {subject_name}",
         f"КЛАС: {class_name}",
         f"НАЗВА ТА ТЕМА ЗАВДАННЯ: {assignment_title}",
-        f"УМОВА ТА ВИМОГИ ВЧИТЕЛЯ:\n{assignment_desc}\n",
+        f"УМОВА ТА ВИМОГИ ВЧИТЕЛЯ (ЗАВДАННЯ ДО ВИКОНАННЯ):\n{assignment_desc}\n",
         f"ОБРАНІ КРИТЕРІЇ ПЕРЕВІРКИ: {preset_name_display}",
     ]
+
+    # ── КРИТИЧНО: ОБСЯГ ЗАВДАННЯ ВЧИТЕЛЯ ТА ПРІОРИТЕТ УМОВИ (Scope of Work) ───
+    prompt_lines.append(
+        "🎯 КРИТИЧНЕ ПРАВИЛО: АБСОЛЮТНИЙ ПРІОРИТЕТ ВИМОГ ВЧИТЕЛЯ ТА ОБСЯГ РОБОТИ (SCOPE OF WORK):\n"
+        "1. Поле «УМОВА ТА ВИМОГИ ВЧИТЕЛЯ (ЗАВДАННЯ ДО ВИКОНАННЯ)» має НАЙВИЩИЙ І БЕЗУМОВНИЙ ПРІОРИТЕТ над будь-якими прикріпленими файлами чи матеріалами.\n"
+        "2. Прикріплені вчителем файли (документи, підручники, презентації, практичні роботи) — це лише ДОВІДКОВИЙ РОЗДАТКОВИЙ МАТЕРІАЛ. У такому файлі може бути 5, 10 чи більше завдань/вправ.\n"
+        "3. ЯКЩО ВЧИТЕЛЬ У ПОЛІ «ЗАВДАННЯ ДО ВИКОНАННЯ» ВКАЗАВ ЗРОБИТИ ЛИШЕ ПЕВНЕ КОНКРЕТНЕ ЗАВДАННЯ (наприклад: «виконати тільки завдання 2», «зробити вправу 3», «розв'язати номер 4», «виконати лише одне завдання...» тощо):\n"
+        "   - ТИ ЗОБОВ'ЯЗАНИЙ ОЦІНЮВАТИ ВИКЛЮЧНО ТЕ КОНКРЕТНЕ ЗАВДАННЯ/ВПРАВУ, ЯКЕ ЗАДАВ ВЧИТЕЛЬ!\n"
+        "   - СУВОРО ТА КАТЕГОРИЧНО ЗАБОРОНЕНО знижувати оцінку, занижувати рівень досягнень або писати у «weaknesses» чи «feedback_comment», що робота неповна або що «учень не виконав завдання 1, 3, 4, 5». Всі інші завдання з файлу вважаються НЕЗАДАНИМИ!\n"
+        "   - Якщо учень якісно та правильно виконав вказане вчителем завдання (наприклад, тільки 1 вправу з 5 наявних у документі), робота вважається ВИКОНАНОЮ НА 100% У ПОВНОМУ ОБСЯЗІ і заслуговує на найвищий бал (10-12 балів відповідно до якості виконання)."
+    )
+
+    # ── ОЦІНЮВАННЯ ПРЕЗЕНТАЦІЙ (.pptx, .ppt, .odp) ──────────────────────────
+    prompt_lines.append(
+        "📽️ ВКАЗІВКИ ДЛЯ ПЕРЕВІРКИ ПРЕЗЕНТАЦІЙ (якщо робота є презентацією):\n"
+        "- Оцінюй презентацію комплексно: змістовну глибину розкриття теми, логічну структуру (титульний слайд, вступ, основні тези, висновки), лаконічність формулювання думок на слайдах (тези замість перевантаження суцільним текстом).\n"
+        "- Враховуй візуальне наповнення (наявність ілюстрацій, схем, таблиць, зафіксованих у структурі слайдів).\n"
+        "- У 'strengths' та 'weaknesses' відзначай як відповідність темі, так і якість оформлення презентації."
+    )
 
     # Витягуємо вміст прикріплених вчителем файлів до завдання (щоб ШІ знав повну умову завдання)
     if assignment and assignment.files.exists():
@@ -947,7 +1113,9 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                     teacher_files_content.append(f"• Прикріплений вчителем файл «{af_name}» ({af.get_extension()})")
         if teacher_files_content:
             prompt_lines.append("\n═══════════════════════════════════════════════════════════════════")
-            prompt_lines.append("ПОВНА УМОВА ТА НАВЧАЛЬНІ МАТЕРІАЛИ З ПРИКРІПЛЕНИХ ВЧИТЕЛЕМ ФАЙЛІВ:")
+            prompt_lines.append("МАТЕРІАЛИ ДО УРОКУ / ДОВІДКОВІ ФАЙЛИ ВЧИТЕЛЯ:")
+            prompt_lines.append("⚠️ УВАГА ДЛЯ ШІ: Текст нижче — це лише вихідні допоміжні/роздаткові матеріали уроку (підручник, методичка, шаблон або список вправ). Обов'язковий обсяг завдань для учня визначається ВИКЛЮЧНО полем «УМОВА ТА ВИМОГИ ВЧИТЕЛЯ (ЗАВДАННЯ ДО ВИКОНАННЯ)» вище!")
+            prompt_lines.append("Якщо у файлі міститься 5 завдань, а вчитель вимагав виконати лише одне конкретне — оцінюй виключно це одне завдання! Решта завдань з файлу вважаються незаданими.")
             prompt_lines.extend(teacher_files_content)
             prompt_lines.append("═══════════════════════════════════════════════════════════════════\n")
 
@@ -1026,6 +1194,7 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
         prompt_lines.append("═══════════════════════════════════════════════════════════════════\n")
 
     # ── ПЕРЕВІРКА НА ВИКОРИСТАННЯ ШТУЧНОГО ІНТЕЛЕКТУ (AI Content Detection) ──
+    tolerance_percent = getattr(settings, 'ai_detector_tolerance_percent', 25) or 25
     is_ai_allowed = bool(assignment and assignment.allow_ai_usage)
     prompt_lines.append("═══════════════════════════════════════════════════════════════════")
     prompt_lines.append("🤖 ПЕРЕВІРКА НА ВИКОРИСТАННЯ ШТУЧНОГО ІНТЕЛЕКТУ (AI DETECTOR):")
@@ -1034,22 +1203,42 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
         "1. Ознаки ШІ в тексті: характерна неприродна шаблонність відповідей мовних моделей, надмірно формальний академічний стиль для шкільного віку, однакові за розміром абзаци, характерні вступні та заключні фрази («У підсумку можна сказати...», «Цей твір розкриває...»).\n"
         "2. Ознаки ШІ в коді: шаблонні автогенеровані коментарі до кожного очевидного рядка, назви функцій/змінних у стилі ШІ-генераторів, використання конструкцій чи бібліотек, що не вивчаються у шкільній програмі.\n"
         f"3. ПОЛІТИКА ВЧИТЕЛЯ ЩОДО ШІ: {'ДОЗВОЛЕНО використання ШІ учнями' if is_ai_allowed else 'ЗАБОРОНЕНО використання ШІ учнями (вимагається самостійна робота)'}.\n"
-        "- Якщо ШІ заборонено вчителем і виявлено ознаки генерації: зафіксуй це у 'weaknesses' та 'feedback_comment', а також врахуй при оцінюванні.\n"
-        "- Якщо ШІ дозволено вчителем і виявлено ознаки генерації: оціни доречність та якість застосування ШІ.\n"
+        f"4. ПОРІГ ТОЛЕРАНТНОСТІ (ДОПУСТИМИЙ ВІДСОТОК): В системі встановлено допустимий поріг {tolerance_percent}%.\n"
+        f"ВАЖЛИВО: Учні можуть скопіювати з умови, підручника чи конспекту окремі терміни, назву теми, формули або 1-2 слова/речення. Це НЕ є використанням ШІ! "
+        f"Оціни орієнтовний відсоток тексту/коду, який дійсно згенеровано ШІ ('ai_generated_percent': ціле число від 0 до 100).\n"
+        f"- Якщо частка підозрілого тексту становить {tolerance_percent}% або менше, ВВАЖАЙ РОБОТУ САМОСТІЙНОЮ: поверни 'ai_generated_detected': false, 'ai_generated_confidence': 'none'.\n"
+        f"- 'ai_generated_detected': true встановлюй ТІЛЬКИ якщо відсоток машинної генерації ПЕРЕВИЩУЄ {tolerance_percent}% і є чіткі вагомі ознаки згенерованого тексту/коду.\n"
         "ОБОВ'ЯЗКОВО поверни в JSON поля:\n"
-        "- 'ai_generated_detected': true (якщо є ознаки ШІ) або false\n"
+        "- 'ai_generated_percent': ціле число від 0 до 100 (відсоток тексту, що має ознаки генерації ШІ)\n"
+        f"- 'ai_generated_detected': true (якщо ШІ > {tolerance_percent}%) або false\n"
         "- 'ai_generated_confidence': 'none' | 'low' | 'medium' | 'high'\n"
         "- 'ai_generated_details': короткий висновок українською мовою з поясненням виявлених ознак або null."
     )
     prompt_lines.append("═══════════════════════════════════════════════════════════════════\n")
 
+    # ── ПЕРЕВІРКА НА СПІВАВТОРІВ (ГРУПОВА РОБОТА) ─────────────────────────────
+    if submission.comment_student:
+        try:
+            from .student_matcher import extract_coauthors_from_comment
+            coauthors = extract_coauthors_from_comment(
+                submission.comment_student,
+                submission.class_group,
+                submission.last_name,
+                submission.first_name
+            )
+            if coauthors:
+                coauthors_str = ", ".join(f"{c['last_name']} {c['first_name']}" for c in coauthors)
+                prompt_lines.append(f"👥 ГРУПОВА РОБОТА / СПІВАВТОРИ: У коментарі учень вказав, що над роботою спільно працювали: {coauthors_str}. Оцінюй роботу як спільний командний проєкт.")
+        except Exception:
+            pass
+
     prompt_lines.append(f"\nДАНІ УЧНЯ: {submission.get_student_full_name()} ({class_name})")
     prompt_lines.append("ВИКОНАНА РОБОТА УЧНЯ ДЛЯ ОЦІНЮВАННЯ:")
     prompt_lines.extend(text_parts)
     if is_traditional:
-        prompt_lines.append(f"\nПроаналізуй роботу за класичною (традиційною) 12-бальною системою ({preset_name_display}) та обов'язково поверни JSON з полями: suggested_grade (тільки ціле число 1-12 або 'Доопрацювати'), level, format_warning (рядок із зауваженням або null), summary, strengths (масив), weaknesses (масив), feedback_comment, ai_generated_detected (true/false), ai_generated_confidence ('none'/'low'/'medium'/'high'), ai_generated_details (рядок або null). Поле 'gr_results' поверни порожнім масивом [] або null, оскільки групи результатів НЕ використовуються в класичній системі.")
+        prompt_lines.append(f"\nПроаналізуй роботу за класичною (традиційною) 12-бальною системою ({preset_name_display}) та обов'язково поверни JSON з полями: suggested_grade (тільки ціле число 1-12 або 'Доопрацювати'), level, format_warning (рядок із зауваженням або null), summary, strengths (масив), weaknesses (масив), feedback_comment, ai_generated_percent (число 0-100), ai_generated_detected (true/false), ai_generated_confidence ('none'/'low'/'medium'/'high'), ai_generated_details (рядок або null). Поле 'gr_results' поверни порожнім масивом [] або null, оскільки групи результатів НЕ використовуються в класичній системі.")
     else:
-        prompt_lines.append(f"\nПроаналізуй роботу згідно з обраними критеріями ({preset_name_display}) та обов'язково поверни JSON з полями: suggested_grade (тільки ціле число 1-12 або 'Доопрацювати'), level, format_warning (рядок із зауваженням або null), summary, strengths (масив), weaknesses (масив), feedback_comment, gr_results (масив об'єктів з code, name, grade, level, comment), ai_generated_detected (true/false), ai_generated_confidence ('none'/'low'/'medium'/'high'), ai_generated_details (рядок або null). Усі оцінки обов'язково мають бути цілими числами (без десятих часток), заокругленими на користь учня.")
+        prompt_lines.append(f"\nПроаналізуй роботу згідно з обраними критеріями ({preset_name_display}) та обов'язково поверни JSON з полями: suggested_grade (тільки ціле число 1-12 або 'Доопрацювати'), level, format_warning (рядок із зауваженням або null), summary, strengths (масив), weaknesses (масив), feedback_comment, gr_results (масив об'єктів з code, name, grade, level, comment), ai_generated_percent (число 0-100), ai_generated_detected (true/false), ai_generated_confidence ('none'/'low'/'medium'/'high'), ai_generated_details (рядок або null). Усі оцінки обов'язково мають бути цілими числами (без десятих часток), заокругленими на користь учня.")
 
     if custom_prompt:
         system_instruction = custom_prompt.strip()
@@ -1057,6 +1246,17 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
         system_instruction = selected_preset.get_full_prompt().strip()
     else:
         system_instruction = (settings.system_prompt or DEFAULT_NUS_SYSTEM_PROMPT).strip()
+
+    # Завжди гарантуємо правило Scope of Work в системній інструкції
+    if "SCOPE OF WORK" not in system_instruction:
+        system_instruction += (
+            "\n\nПРІОРИТЕТ ВИМОГ ВЧИТЕЛЯ ТА ОБСЯГ ЗАВДАННЯ (SCOPE OF WORK):\n"
+            "- Текст у полі «ЗАВДАННЯ ДО ВИКОНАННЯ» від вчителя має АБСОЛЮТНИЙ ПРІОРИТЕТ над прикріпленими файлами чи матеріалами.\n"
+            "- Прикріплений файл — це лише допоміжний роздатковий матеріал уроку. Якщо у файлі є кілька завдань (наприклад, 5 завдань чи вправ), але вчитель вказав виконати тільки одне конкретне (наприклад, завдання 3):\n"
+            "  * Оцінюй ВИКЛЮЧНО вказане вчителем завдання.\n"
+            "  * КАТЕГОРИЧНО ЗАБОРОНЕНО знижувати бал або писати зауваження про «невиконання решти завдань» — вони вважаються незаданими!\n"
+            "  * Робота вважається виконаною у повному обсязі (100%), якщо якісно виконано саме задане вчителем завдання.\n"
+        )
 
     # Формування payload для Gemini API
     request_parts = [{"text": "\n".join(prompt_lines)}]
@@ -1257,13 +1457,32 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                         student_feedback_parts.append(f"💬 {feedback_comment}")
                     clean_student_feedback = "\n\n".join(student_feedback_parts) if student_feedback_parts else feedback_comment
 
-                    # Виявлення використання ШІ у роботі
+                    # Виявлення використання ШІ у роботі з урахуванням порогу толерантності
+                    raw_ai_percent = result_json.get('ai_generated_percent')
+                    ai_generated_percent = None
+                    if raw_ai_percent is not None:
+                        try:
+                            clean_p_str = str(raw_ai_percent).replace('%', '').strip()
+                            ai_generated_percent = int(float(clean_p_str))
+                            ai_generated_percent = max(0, min(100, ai_generated_percent))
+                        except (ValueError, TypeError):
+                            ai_generated_percent = None
+
+                    tolerance = getattr(settings, 'ai_detector_tolerance_percent', 25) or 25
                     raw_ai_detected = result_json.get('ai_generated_detected')
                     ai_generated_detected = bool(raw_ai_detected and raw_ai_detected not in ['false', 'False', 0, '0', 'none', 'null'])
+
+                    # Застосування порогу толерантності (якщо скопійовано лише 1-2 фрази чи відсоток <= допустимого)
+                    if ai_generated_percent is not None:
+                        if ai_generated_percent <= tolerance:
+                            ai_generated_detected = False
+                    elif not ai_generated_detected:
+                        ai_generated_percent = 0
+
                     ai_generated_confidence = str(result_json.get('ai_generated_confidence') or 'none').lower().strip()
                     if ai_generated_confidence not in ['none', 'low', 'medium', 'high']:
                         ai_generated_confidence = 'medium' if ai_generated_detected else 'none'
-                    if not ai_generated_detected and ai_generated_confidence != 'none':
+                    if not ai_generated_detected:
                         ai_generated_confidence = 'none'
 
                     ai_generated_details = str(result_json.get('ai_generated_details') or '').strip()
@@ -1277,6 +1496,7 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                     submission.ai_generated_detected = ai_generated_detected
                     submission.ai_generated_confidence = ai_generated_confidence
                     submission.ai_generated_details = ai_generated_details
+                    submission.ai_generated_percent = ai_generated_percent
                     submission.ai_model_used = model_name
                     submission.ai_status = 'success'
                     submission.ai_error_reason = ''
@@ -1284,7 +1504,7 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                     submission.save(update_fields=[
                         'ai_suggested_grade', 'ai_score_level', 'ai_feedback', 'ai_gr_results',
                         'ai_generated_detected', 'ai_generated_confidence', 'ai_generated_details',
-                        'ai_model_used', 'ai_status', 'ai_error_reason', 'ai_reviewed_at'
+                        'ai_generated_percent', 'ai_model_used', 'ai_status', 'ai_error_reason', 'ai_reviewed_at'
                     ])
 
                     return {
@@ -1296,6 +1516,7 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                         'gr_results': [] if is_traditional else clean_gr_results,
                         'gr_avg': None if is_traditional else avg_gr_grade,
                         'ai_generated_detected': ai_generated_detected,
+                        'ai_generated_percent': ai_generated_percent,
                         'ai_generated_confidence': ai_generated_confidence,
                         'ai_generated_details': ai_generated_details,
                         'feedback': combined_feedback,

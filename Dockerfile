@@ -6,6 +6,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libpq-dev \
     gcc \
+    antiword \
+    libreoffice-nogui \
+    poppler-utils \
+    fonts-dejavu-core \
+    fonts-liberation \
     && rm -rf /var/lib/apt/lists/*
 
 # Налаштовуємо робочу директорію
@@ -32,5 +37,5 @@ COPY . /app/
 RUN mkdir -p /app/media /app/staticfiles /app/logs
 RUN chmod -R 755 /app/media /app/staticfiles /app/logs
 
-# Команда запуску через gunicorn з попереднім збором статики
-CMD ["sh", "-c", "python manage.py collectstatic --noinput && gunicorn --bind 0.0.0.0:8000 --workers 3 schoolnet.wsgi:application"]
+# Команда запуску через gunicorn з автоматичною міграцією БД та збором статики
+CMD ["sh", "-c", "python manage.py migrate && python manage.py collectstatic --noinput && gunicorn --bind 0.0.0.0:8000 --workers 3 schoolnet.wsgi:application"]

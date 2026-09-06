@@ -206,7 +206,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 html += '<div class="file-size">' + escHtml(f.size) + '</div></div>';
                 html += '<div class="file-actions">';
 
-                html += '<a href="' + escHtml(f.url) + '" download="' + escHtml(f.name) + '" class="btn-download">⬇ Завантажити</a>';
+                html += '<a href="' + escHtml(f.download_url || f.url) + '" class="btn-download">⬇ Завантажити</a>';
 
                 html += '</div></div>';
             });
@@ -475,6 +475,11 @@ document.addEventListener('DOMContentLoaded', function () {
         return document.querySelector('.sidebar');
     }
 
+    // Якщо на сторінці немає сайдбару, приховуємо кнопку меню взагалі
+    if (!currentSidebar()) {
+        mobileMenuBtn.style.display = 'none';
+    }
+
     mobileMenuBtn.addEventListener('click', function () {
         const sidebar = currentSidebar();
         if (!sidebar) return;
@@ -498,16 +503,35 @@ document.addEventListener('DOMContentLoaded', function () {
 document.addEventListener('DOMContentLoaded', function () {
     const menu = document.getElementById('user-menu');
     const btn = document.getElementById('user-menu-btn');
-    if (!menu || !btn) return;
-    btn.addEventListener('click', function (e) {
-        e.stopPropagation();
-        const open = menu.classList.toggle('open');
-        btn.setAttribute('aria-expanded', open ? 'true' : 'false');
-    });
-    document.addEventListener('click', function () {
-        menu.classList.remove('open');
-        btn.setAttribute('aria-expanded', 'false');
-    });
+    if (menu && btn) {
+        btn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            const open = menu.classList.toggle('open');
+            btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+        });
+        document.addEventListener('click', function () {
+            menu.classList.remove('open');
+            btn.setAttribute('aria-expanded', 'false');
+        });
+    }
+
+    // Центр сповіщень
+    const notifBtn = document.getElementById('notifications-btn');
+    const notifPanel = document.getElementById('notifications-panel');
+    if (notifBtn && notifPanel) {
+        notifBtn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            const isShown = notifPanel.style.display === 'block';
+            notifPanel.style.display = isShown ? 'none' : 'block';
+            notifBtn.setAttribute('aria-expanded', isShown ? 'false' : 'true');
+        });
+        document.addEventListener('click', function (e) {
+            if (!notifPanel.contains(e.target) && e.target !== notifBtn) {
+                notifPanel.style.display = 'none';
+                notifBtn.setAttribute('aria-expanded', 'false');
+            }
+        });
+    }
 });
 
 
@@ -599,6 +623,8 @@ document.addEventListener('submit', function (e) {
     let progressTimer = null;
     let progressBar = null;
 
+    let indicatorTimer = null;
+
     function getBar() {
         if (!progressBar) {
             progressBar = document.getElementById('global-progress-bar');
@@ -611,21 +637,41 @@ document.addEventListener('submit', function (e) {
         return progressBar;
     }
 
+    function getIndicator() {
+        return document.getElementById('global-loading-indicator');
+    }
+
     window.startProgressBar = function () {
         const bar = getBar();
+        const indicator = getIndicator();
         clearTimeout(progressTimer);
+        clearTimeout(indicatorTimer);
+
+        // Миттєвий старт смужки без затримок
+        bar.classList.add('active');
+        bar.style.width = '25%';
+        bar.style.opacity = '1';
+
+        // Плавний рух вперед
         progressTimer = setTimeout(function () {
-            bar.classList.add('active');
-            bar.style.width = '0%';
-            bar.style.opacity = '1';
-            requestAnimationFrame(function () { bar.style.width = '40%'; });
-            progressTimer = setTimeout(function () { bar.style.width = '78%'; }, 400);
-        }, 140);
+            bar.style.width = '68%';
+        }, 120);
+
+        // Якщо завантаження триває більше 180мс — м'яко показуємо бейдж
+        indicatorTimer = setTimeout(function () {
+            if (indicator) indicator.classList.add('active');
+            bar.style.width = '88%';
+        }, 180);
     };
 
     window.finishProgressBar = function () {
         const bar = getBar();
+        const indicator = getIndicator();
         clearTimeout(progressTimer);
+        clearTimeout(indicatorTimer);
+
+        if (indicator) indicator.classList.remove('active');
+
         bar.style.width = '100%';
         progressTimer = setTimeout(() => {
             bar.style.opacity = '0';
@@ -633,10 +679,10 @@ document.addEventListener('submit', function (e) {
                 bar.classList.remove('active');
                 bar.style.width = '0%';
             }, 250);
-        }, 180);
+        }, 150);
     };
 
-    // Автоматична візуалізація завантаження при переході за посиланнями
+    // Автоматична візуалізація завантаження при переході за внутрішніми посиланнями
     document.addEventListener('click', function (e) {
         const link = e.target.closest('a');
         if (!link) return;
@@ -645,7 +691,10 @@ document.addEventListener('submit', function (e) {
             link.getAttribute('target') === '_blank' || link.hasAttribute('download')) {
             return;
         }
-        if (link.hasAttribute('onclick') || href === window.location.pathname + window.location.search) {
+        if (link.hasAttribute('onclick') && link.getAttribute('onclick').includes('return false')) {
+            return;
+        }
+        if (href === window.location.pathname + window.location.search) {
             return;
         }
         if (href.startsWith('/') || href.startsWith('?') || href.includes(window.location.host)) {
@@ -653,8 +702,122 @@ document.addEventListener('submit', function (e) {
         }
     });
 
+    // При відправці звичайних форм також показуємо індикатор
+    document.addEventListener('submit', function (e) {
+        if (!e.defaultPrevented && e.target && !e.target.hasAttribute('data-no-progress')) {
+            window.startProgressBar();
+        }
+    });
+
+    // Завершення індикатора при завантаженні або поверненні з кешу
     window.addEventListener('load', function () {
         window.finishProgressBar();
     });
+    window.addEventListener('pageshow', function () {
+        window.finishProgressBar();
+    });
 })();
+
+
+/* ══════════════════════════════════════════════════════
+   АВТОМАТИЧНЕ ЗБЕРЕЖЕННЯ ТА ВІДНОВЛЕННЯ ПОЗИЦІЇ СКРОЛУ
+   (Запобігає підстрибуванню на початок сторінки при діях вчителя:
+   збереження, видалення, оцінювання, налаштування тощо)
+══════════════════════════════════════════════════════ */
+(function () {
+    'use strict';
+
+    const STORAGE_KEY = 'sn_action_scroll_pos';
+
+    function getScrollPos() {
+        return window.scrollY || window.pageYOffset || document.documentElement.scrollTop || 0;
+    }
+
+    // 1. При відправці будь-якої форми зберігаємо позицію скролу
+    document.addEventListener('submit', function (e) {
+        try {
+            const y = getScrollPos();
+            if (y > 30) {
+                const state = {
+                    path: window.location.pathname,
+                    search: window.location.search,
+                    scrollY: y,
+                    time: Date.now()
+                };
+                sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+            }
+        } catch (err) {}
+    }, true);
+
+    // Також фіксуємо скрол при кліку на кнопки/посилання дій із підтвердженням
+    document.addEventListener('click', function (e) {
+        const btn = e.target.closest('button[type="submit"], a[data-confirm], button[data-confirm]');
+        if (btn) {
+            try {
+                const y = getScrollPos();
+                if (y > 30) {
+                    const state = {
+                        path: window.location.pathname,
+                        search: window.location.search,
+                        scrollY: y,
+                        time: Date.now()
+                    };
+                    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+                }
+            } catch (err) {}
+        }
+    }, true);
+
+    // 2. Відновлюємо скрол після перенаправлення чи оновлення сторінки
+    function tryRestoreScroll() {
+        try {
+            const raw = sessionStorage.getItem(STORAGE_KEY);
+            if (!raw) return;
+
+            const state = JSON.parse(raw);
+            // Перевіряємо свіжість збереженого положення (до 25 секунд)
+            if (Date.now() - state.time > 25000) {
+                sessionStorage.removeItem(STORAGE_KEY);
+                return;
+            }
+
+            const currentPath = window.location.pathname;
+            // Відновлюємо, якщо це та сама сторінка або споріднений розділ вчителя
+            if (state.path === currentPath || (state.path.startsWith('/teacher') && currentPath.startsWith('/teacher'))) {
+                const targetY = state.scrollY;
+
+                // Багаторазове відновлення для врахування завантаження динамічного контенту (зображень, шрифтів, карток)
+                window.scrollTo({ top: targetY, behavior: 'instant' });
+
+                requestAnimationFrame(function () {
+                    window.scrollTo({ top: targetY, behavior: 'instant' });
+                });
+
+                setTimeout(function () {
+                    window.scrollTo({ top: targetY, behavior: 'instant' });
+                }, 50);
+
+                setTimeout(function () {
+                    window.scrollTo({ top: targetY, behavior: 'instant' });
+                }, 150);
+
+                setTimeout(function () {
+                    window.scrollTo({ top: targetY, behavior: 'instant' });
+                    sessionStorage.removeItem(STORAGE_KEY);
+                }, 350);
+            } else {
+                sessionStorage.removeItem(STORAGE_KEY);
+            }
+        } catch (err) {}
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', tryRestoreScroll);
+    } else {
+        tryRestoreScroll();
+    }
+
+    window.addEventListener('load', tryRestoreScroll);
+})();
+
 

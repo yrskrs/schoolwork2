@@ -53,6 +53,15 @@
                 <span class="due-badge">⏰ {{ assignment.scheduled_at|date:"d.m.Y H:i" }}</span>
                 {% endif %}
 
+                <!-- Відмітка про перенесення уроку -->
+                {% if assignment.reschedule_logs.first %}
+                {% with last_resched=assignment.reschedule_logs.first %}
+                <span class="due-badge" style="background:rgba(239,68,68,0.1);color:#dc2626;border:1px solid rgba(239,68,68,0.25);" title="Перенесено з {{ last_resched.original_date|date:'d.m' }} на {{ last_resched.new_date|date:'d.m' }}. Причина: {{ last_resched.get_reason_type_display }}{% if last_resched.reason_comment %} ({{ last_resched.reason_comment }}){% endif %}">
+                    {{ last_resched.reason_icon }} Перенесено на {{ last_resched.new_date|date:'d.m' }}
+                </span>
+                {% endwith %}
+                {% endif %}
+
                 <!-- Файли -->
                 {% if assignment.files.count %}
                 <span class="attachment-count">📎 {{ assignment.files.count }}</span>
@@ -125,6 +134,23 @@
                     </button>
                 </form>
                 {% endif %}
+
+                <!-- Перенести урок (для опублікованих та запланованих) -->
+                {% if assignment.status == 'published' or assignment.status == 'scheduled' %}
+                <button type="button"
+                        class="btn btn-secondary btn-sm btn-icon"
+                        onclick="openRescheduleModalDirect({{ assignment.pk }}, '{{ assignment.title|escapejs }}', '{% if assignment.classes.first %}{{ assignment.classes.first.id }}{% endif %}')"
+                        title="Перенести цей урок на іншу дату/наступний урок (вказати причину)">
+                    🔄
+                </button>
+                {% endif %}
+
+                <!-- Експорт завдання на флешку (ZIP) -->
+                <a href="{% url 'export_assignment_zip' assignment.pk %}"
+                   class="btn btn-secondary btn-sm btn-icon"
+                   title="Експортувати на флешку у ZIP (завдання з усіма файлами)">
+                    💾
+                </a>
 
                 <!-- Редагувати -->
                 <a href="{% url 'assignment_edit' assignment.pk %}"

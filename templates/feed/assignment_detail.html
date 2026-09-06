@@ -18,8 +18,17 @@
         <!-- ════ САЙДБАР (КНОПКА ЗДАЧІ ТА МЕТАДАНІ) ═════════════════════════ -->
         <aside class="sidebar" id="detail-sidebar" aria-label="Панель дій та інформації">
 
-            <!-- 1. ГОЛОВНА КНОПКА ЗДАЧІ РОБОТИ УЧНЕМ -->
-            {% if not is_teacher %}
+            <!-- 1. ГОЛОВНА КНОПКА ДІЙ: РЕДАГУВАННЯ ДЛЯ ВЧИТЕЛЯ АБО ЗДАЧА ДЛЯ УЧНІВ -->
+            {% if can_edit %}
+            <div class="sidebar-card" style="padding:16px;background:var(--color-bg-secondary);border:1px solid var(--color-border);border-left:4px solid #f59e0b;">
+                <div class="page-hero-kicker" style="margin-bottom:6px;color:#d97706;">Режим вчителя</div>
+                <h3 style="font-size:1.02rem;font-weight:750;margin:0 0 10px;color:var(--color-text-primary);">Керування завданням</h3>
+                <a href="{% url 'assignment_edit' assignment.pk %}" class="btn btn-warning btn-block" style="padding:10px 14px;font-weight:750;display:flex;align-items:center;justify-content:center;gap:6px;text-decoration:none;box-shadow:0 2px 8px rgba(245,158,11,0.25);">
+                    <span>✏️</span>
+                    <span>Відредагувати завдання</span>
+                </a>
+            </div>
+            {% elif not is_teacher %}
             <div class="sidebar-card" style="padding:16px;">
                 <div class="page-hero-kicker" style="margin-bottom:6px;">Для учнів</div>
                 <h3 style="font-size:1.05rem;font-weight:750;margin:0 0 10px;">Виконали завдання?</h3>
@@ -65,13 +74,48 @@
                         {% endif %}
                     </div>
 
-                    <!-- Дата публікації -->
+                    <!-- Актуальність до уроку для учнів -->
+                    {% with rel_badge=assignment.get_relevance_badge %}
                     <div>
                         <div style="color:var(--color-text-muted);font-size:11px;font-weight:700;text-transform:uppercase;margin-bottom:4px;">
-                            Опубліковано:
+                            Актуальність до уроку:
+                        </div>
+                        <div class="publish-date-badge {{ rel_badge.badge_class }}" style="display:inline-flex;padding:4px 10px;font-size:12.5px;">
+                            {% if rel_badge.is_now or rel_badge.is_today %}
+                            <span class="live-dot-pulse"></span>
+                            {% endif %}
+                            {{ rel_badge.badge_text }}
+                        </div>
+                    </div>
+                    {% endwith %}
+
+                    <!-- Відмітка про перенесення уроку вчителем -->
+                    {% if assignment.reschedule_logs.first %}
+                    {% with last_resched=assignment.reschedule_logs.first %}
+                    <div>
+                        <div style="color:#dc2626;font-size:11px;font-weight:700;text-transform:uppercase;margin-bottom:4px;">
+                            Статус уроку:
+                        </div>
+                        <div style="background:rgba(239,68,68,0.1);color:#dc2626;border:1px solid rgba(239,68,68,0.25);border-radius:var(--radius-sm);padding:5px 10px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:6px;">
+                            <span>{{ last_resched.reason_icon }}</span>
+                            <span>Перенесено на {{ last_resched.new_date|date:"d.m.Y" }} ({{ last_resched.get_reason_type_display }})</span>
+                        </div>
+                        {% if last_resched.reason_comment %}
+                        <div style="font-size:11.5px;color:var(--color-text-muted);margin-top:3px;font-style:italic;">
+                            "{{ last_resched.reason_comment }}"
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endwith %}
+                    {% endif %}
+
+                    <!-- Дата публікації (залишена в інформації) -->
+                    <div>
+                        <div style="color:var(--color-text-muted);font-size:11px;font-weight:700;text-transform:uppercase;margin-bottom:4px;">
+                            Дата публікації:
                         </div>
                         <div style="color:var(--color-text-primary);font-weight:600;">
-                            📅 {{ assignment.published_at|date:"d.m.Y" }}
+                            📅 {{ assignment.published_at|date:"d.m.Y" }} о {{ assignment.published_at|time:"H:i" }}
                             <span style="color:var(--color-text-muted);font-size:11px;font-weight:normal;">({{ assignment.relative_published_display }})</span>
                         </div>
                     </div>
@@ -157,6 +201,18 @@
                         </a>
                     </li>
                     <li>
+                        <a href="javascript:void(0)" onclick="openRescheduleModalDirect({{ assignment.pk }}, '{{ assignment.title|escapejs }}', '{% if assignment.classes.first %}{{ assignment.classes.first.id }}{% endif %}')">
+                            <span>🔄</span>
+                            <span>Перенести цей урок / дату</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="{% url 'export_assignment_zip' assignment.pk %}">
+                            <span>💾</span>
+                            <span>Експортувати на флешку (ZIP)</span>
+                        </a>
+                    </li>
+                    <li>
                         <a href="{% url 'assignment_submissions' assignment.pk %}">
                             <span>📊</span>
                             <span>Перевірити здані роботи ({{ submissions_count }})</span>
@@ -198,8 +254,8 @@
 
                 <div style="padding:24px 28px;">
 
-                    <!-- Верхні теги -->
-                    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:16px;">
+                    <!-- Верхні теги та кнопка швидкого редагування для вчителя -->
+                    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:16px;">
                         <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
                             {% if assignment.subject %}
                             <span class="subject-tag" style="background-color:{{ assignment.subject.color }}22;color:{{ assignment.subject.color }};font-size:13px;padding:4px 12px;font-weight:700;">
@@ -218,6 +274,15 @@
                             <span class="individual-tag">👤 {{ assignment.student_display }}</span>
                             {% endif %}
                         </div>
+
+                        {% if can_edit %}
+                        <div class="teacher-quick-edit-wrap">
+                            <a href="{% url 'assignment_edit' assignment.pk %}" class="btn btn-warning btn-sm" id="btn-quick-edit-top" style="display:inline-flex;align-items:center;gap:6px;font-weight:750;font-size:13px;padding:7px 14px;border-radius:var(--radius-sm);box-shadow:0 2px 8px rgba(245,158,11,0.25);text-decoration:none;">
+                                <span>✏️</span>
+                                <span>Відредагувати завдання</span>
+                            </a>
+                        </div>
+                        {% endif %}
                     </div>
 
                     <!-- Назва завдання -->
@@ -227,92 +292,110 @@
 
                     <!-- Опис завдання -->
                     {% if assignment.description %}
-                    <div class="assignment-description-card" style="margin-bottom:24px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,0.03);">
-                        <div style="padding:10px 18px;background:linear-gradient(135deg, rgba(99,102,241,0.08) 0%, rgba(139,92,246,0.04) 100%);border-bottom:1px solid var(--color-border);display:flex;align-items:center;gap:8px;">
-                            <span style="font-size:15px;">📝</span>
-                            <span style="font-size:11.5px;font-weight:800;text-transform:uppercase;color:var(--color-primary);letter-spacing:0.04em;">
-                                Опис завдання
-                            </span>
+                    <div class="assignment-description-card">
+                        <div class="assignment-description-header">
+                            <span class="desc-icon">📝</span>
+                            <span class="assignment-description-title">Завдання до виконання:</span>
                         </div>
-                        <div class="assignment-full-description" style="font-size:15px;line-height:1.75;color:var(--color-text-primary);white-space:pre-wrap;padding:18px 20px;font-family:inherit;">{{ assignment.description }}</div>
+                        <div class="assignment-full-description" id="assignment-desc-content">{{ assignment.description }}</div>
                     </div>
                     {% endif %}
 
-                    <!-- Посилання -->
-                    {% if assignment.link_url %}
-                    <div style="margin-bottom:20px;padding:14px 18px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);display:flex;align-items:center;gap:12px;box-shadow:0 1px 4px rgba(0,0,0,0.02);">
-                        <span style="font-size:22px;">🔗</span>
-                        <div style="flex:1;">
-                            <div style="font-size:11px;color:var(--color-text-muted);font-weight:800;letter-spacing:0.04em;text-transform:uppercase;">Корисне посилання:</div>
-                            <a href="{{ assignment.link_url }}" target="_blank" rel="noopener noreferrer" style="font-weight:700;color:var(--color-primary);font-size:14px;word-break:break-all;">
-                                {{ assignment.link_label|default:assignment.link_url }} ↗
-                            </a>
+                    <!-- Єдиний блок посилань на одному рівні -->
+                    {% if assignment.link_url or assignment.additional_links.all %}
+                    <div class="assignment-links-card">
+                        <div class="assignment-links-header">
+                            <span>🔗</span>
+                            <span>Корисні вебресурси та матеріали</span>
                         </div>
-                    </div>
-                    {% endif %}
-
-                    <!-- Додаткові посилання -->
-                    {% if assignment.additional_links.all %}
-                    <div style="margin-bottom:20px;display:flex;flex-direction:column;gap:8px;">
-                        {% for link in assignment.additional_links.all %}
-                        <div style="padding:12px 16px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);display:flex;align-items:center;gap:10px;box-shadow:0 1px 4px rgba(0,0,0,0.02);">
-                            <span style="font-size:16px;">🔗</span>
-                            <a href="{{ link.url }}" target="_blank" rel="noopener noreferrer" style="font-weight:600;color:var(--color-primary);font-size:13px;">
-                                {{ link.label|default:link.url }} ↗
+                        <div class="assignment-links-grid">
+                            {% if assignment.link_url %}
+                            <a href="{{ assignment.link_url }}" target="_blank" rel="noopener noreferrer" class="assignment-link-item" title="{{ assignment.get_link_display_title }}">
+                                <div class="link-item-icon">🌐</div>
+                                <div class="link-item-content">
+                                    <div class="link-item-title">{{ assignment.get_link_display_title }}</div>
+                                    <div class="link-item-url">{{ assignment.link_url }}</div>
+                                </div>
+                                <span class="link-item-arrow">↗</span>
                             </a>
+                            {% endif %}
+                            {% for link in assignment.additional_links.all %}
+                            <a href="{{ link.url }}" target="_blank" rel="noopener noreferrer" class="assignment-link-item" title="{{ link.get_link_display_title }}">
+                                <div class="link-item-icon">🌐</div>
+                                <div class="link-item-content">
+                                    <div class="link-item-title">{{ link.get_link_display_title }}</div>
+                                    <div class="link-item-url">{{ link.url }}</div>
+                                </div>
+                                <span class="link-item-arrow">↗</span>
+                            </a>
+                            {% endfor %}
                         </div>
-                        {% endfor %}
                     </div>
                     {% endif %}
 
                     <!-- Прикріплені навчальні матеріали (файли вчителя) -->
                     {% if files_with_preview %}
-                    <div style="margin-bottom:32px;">
-                        <h3 style="font-size:1.15rem;font-weight:800;margin:0 0 14px;color:var(--color-text-primary);display:flex;align-items:center;gap:8px;">
-                            📁 Навчальні матеріали до уроку ({{ files_with_preview|length }})
-                        </h3>
+                    <div style="margin-bottom:32px;" id="assignment-files-section">
+                        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin:0 0 14px;">
+                            <h3 style="font-size:1.15rem;font-weight:800;margin:0;color:var(--color-text-primary);display:flex;align-items:center;gap:8px;">
+                                📁 Навчальні матеріали до уроку ({{ files_with_preview|length }})
+                            </h3>
+                            <button type="button" id="btn-collapse-all-previews" onclick="collapseAllInlinePreviews()" class="btn btn-secondary btn-sm" style="display:none;font-weight:700;align-items:center;gap:6px;transition:all 0.25s cubic-bezier(0.4, 0, 0.2, 1);box-shadow:0 1px 4px rgba(0,0,0,0.06);border-color:var(--color-border);background:var(--color-surface);">
+                                📂 Згорнути всі
+                            </button>
+                        </div>
 
                         <div style="display:flex;flex-direction:column;gap:14px;">
                             {% for f in files_with_preview %}
-                            <div class="assignment-file-box" style="background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:var(--radius-lg);overflow:hidden;transition:box-shadow 0.2s ease;">
+                            <div class="assignment-file-box" id="assignment-file-box-{{ forloop.counter }}" style="background:var(--color-surface);border:1.5px solid var(--color-border);border-radius:var(--radius-lg);overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,0.03);transition:box-shadow 0.2s ease;">
                                 
                                 <!-- Шапка файлу з діями -->
-                                <div style="padding:14px 18px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;background:var(--color-surface);border-bottom:1px solid var(--color-border);">
-                                    <div style="display:flex;align-items:center;gap:12px;overflow:hidden;">
-                                        <span style="font-size:28px;flex-shrink:0;">{{ f.icon }}</span>
+                                <div style="padding:16px 20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:14px;background:var(--color-surface);">
+                                    <div style="display:flex;align-items:center;gap:14px;overflow:hidden;">
+                                        <div style="width:46px;height:46px;border-radius:12px;background:var(--color-bg-secondary);border:1px solid var(--color-border);display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0;">
+                                            {{ f.icon }}
+                                        </div>
                                         <div>
-                                            <div style="font-weight:800;font-size:14px;color:var(--color-text-primary);word-break:break-all;">
+                                            <div style="font-weight:800;font-size:15px;color:var(--color-text-primary);word-break:break-all;line-height:1.35;">
                                                 {{ f.original_name }}
                                             </div>
-                                            <div style="font-size:12px;color:var(--color-text-muted);margin-top:2px;">
-                                                {{ f.size_display }} · Розширення {{ f.extension }}
+                                            <div style="font-size:12px;color:var(--color-text-muted);margin-top:4px;display:flex;align-items:center;gap:8px;">
+                                                <span style="background:var(--color-bg-secondary);padding:2px 7px;border-radius:4px;font-weight:700;">{{ f.extension|upper }}</span>
+                                                <span>{{ f.size_display }}</span>
                                             </div>
                                         </div>
                                     </div>
 
                                     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
                                         {% if f.preview_type != 'download_only' %}
-                                        <button type="button" class="btn btn-primary btn-sm" onclick="toggleFileInlinePreview({{ forloop.counter }})" id="preview-toggle-btn-{{ forloop.counter }}">
+                                        <button type="button" class="btn btn-primary btn-sm" onclick="toggleFileInlinePreview({{ forloop.counter }})" id="preview-toggle-btn-{{ forloop.counter }}" style="font-weight:700;display:inline-flex;align-items:center;gap:6px;">
                                             👁️ Переглянути в браузері
                                         </button>
                                         {% endif %}
-                                        <a href="{{ f.url }}" download class="btn btn-secondary btn-sm" style="font-weight:700;">
-                                            ⬇️ Завантажити файл
+                                        <a href="{% url 'file_download' f.id %}" class="btn btn-secondary btn-sm" style="font-weight:700;display:inline-flex;align-items:center;gap:6px;">
+                                            ⬇️ Завантажити
                                         </a>
                                     </div>
                                 </div>
 
-                                <!-- Тіло попереднього перегляду прямо у цій вкладці -->
+                                <!-- Тіло попереднього перегляду прямо у цій вкладці (з канвасом і реалістичними тінями) -->
                                 {% if f.preview_type != 'download_only' %}
-                                <div id="inline-file-preview-{{ forloop.counter }}" style="display:none;padding:16px;background:var(--color-bg-secondary);border-top:1px solid var(--color-border);">
+                                <div id="inline-file-preview-{{ forloop.counter }}" class="file-preview-stage" style="display:none;">
                                     
-                                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;padding:8px 14px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);">
-                                        <span style="font-size:13px;font-weight:700;color:var(--color-primary);">
-                                            📖 Попередній перегляд документа: {{ f.original_name }}
+                                    <div class="file-preview-stage-header">
+                                        <span style="font-size:13px;font-weight:700;color:var(--color-primary);display:flex;align-items:center;gap:6px;">
+                                            <span>📖</span> Перегляд документа: {{ f.original_name }}
                                         </span>
-                                        <button type="button" class="btn btn-secondary btn-sm" onclick="toggleFileInlinePreview({{ forloop.counter }})">
-                                            ✕ Сховати перегляд
-                                        </button>
+                                        <div style="display:flex;gap:8px;align-items:center;">
+                                            {% if f.preview_type == 'pdf' %}
+                                            <a href="{% url 'file_view' f.id %}" target="_blank" class="btn btn-secondary btn-sm" style="font-weight:700;">
+                                                ↗ Відкрити на весь екран
+                                            </a>
+                                            {% endif %}
+                                            <button type="button" class="btn btn-secondary btn-sm" onclick="toggleFileInlinePreview({{ forloop.counter }})">
+                                                ✕ Сховати перегляд
+                                            </button>
+                                        </div>
                                     </div>
 
                                     <!-- 1. ОФІСНІ ДОКУМЕНТИ (Word, Excel, PowerPoint, ODT) -->
@@ -320,16 +403,127 @@
                                         {% if f.error_preview %}
                                         <div class="alert alert-warning" style="margin-bottom:12px;">⚠️ {{ f.error_preview }}</div>
                                         {% endif %}
+
+                                        {% if f.extension in '.pptx .ppt .odp' %}
+                                        <!-- ── PPTX: перемикач між слайдами і текстом ─── -->
+                                        <div class="pptx-tabs" style="margin-bottom:14px;display:flex;gap:10px;border-bottom:2px solid var(--color-border);padding-bottom:10px;align-items:center;flex-wrap:wrap;">
+                                            <button class="pptx-tab-btn active" onclick="switchPptxTab(this, 'slides-{{ forloop.counter }}')"
+                                                style="background:var(--color-primary);color:#fff;border:none;border-radius:8px;padding:7px 18px;font-weight:700;cursor:pointer;font-size:13.5px;display:inline-flex;align-items:center;gap:6px;transition:all 0.2s;">
+                                                🎨 Слайди {% if f.slide_count %}({{ f.slide_count }}){% endif %}
+                                            </button>
+                                            <button class="pptx-tab-btn" onclick="switchPptxTab(this, 'text-{{ forloop.counter }}')"
+                                                style="background:var(--color-bg-secondary);color:var(--color-text-primary);border:1px solid var(--color-border);border-radius:8px;padding:7px 18px;font-weight:600;cursor:pointer;font-size:13.5px;display:inline-flex;align-items:center;gap:6px;transition:all 0.2s;">
+                                                📝 Текстовий вигляд
+                                            </button>
+                                            {% if f.pdf_preview_url %}
+                                            <a href="{{ f.pdf_preview_url }}" target="_blank"
+                                               style="margin-left:auto;text-decoration:none;font-size:12.5px;font-weight:600;color:var(--color-primary);padding:6px 14px;border-radius:6px;background:var(--color-bg-secondary);border:1px solid var(--color-border);display:inline-flex;align-items:center;gap:6px;">
+                                               📄 Завантажити PDF версію
+                                            </a>
+                                            {% endif %}
+                                        </div>
+
+                                        <!-- SLIDES VIEW -->
+                                        <div id="slides-{{ forloop.counter }}" class="pptx-tab-panel">
+                                            {% if f.slide_urls %}
+                                            <div class="presentation-player" id="pptx-player-{{ forloop.counter }}" data-total="{{ f.slide_count }}" style="background:#0b0f19; border-radius:12px; overflow:hidden; box-shadow:0 8px 32px rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.1);">
+                                                <!-- Верхня панель управління -->
+                                                <div class="player-toolbar" style="display:flex; justify-content:space-between; align-items:center; padding:10px 16px; background:rgba(255,255,255,0.06); border-bottom:1px solid rgba(255,255,255,0.1); color:#fff; flex-wrap:wrap; gap:10px;">
+                                                    <div style="display:flex; align-items:center; gap:8px;">
+                                                        <button type="button" onclick="changeSlide('{{ forloop.counter }}', -1)" title="Попередній слайд (←)"
+                                                            style="background:rgba(255,255,255,0.12); color:#fff; border:none; border-radius:6px; padding:6px 14px; font-weight:700; cursor:pointer; font-size:13px; display:inline-flex; align-items:center; gap:4px; transition:background 0.2s;">
+                                                            ◀ Попередній
+                                                        </button>
+                                                        <span style="font-size:13px; font-weight:700; padding:5px 12px; background:rgba(0,0,0,0.4); border-radius:6px; border:1px solid rgba(255,255,255,0.1);">
+                                                            Слайд <span id="slide-cur-{{ forloop.counter }}">1</span> з {{ f.slide_count }}
+                                                        </span>
+                                                        <button type="button" onclick="changeSlide('{{ forloop.counter }}', 1)" title="Наступний слайд (→)"
+                                                            style="background:rgba(255,255,255,0.12); color:#fff; border:none; border-radius:6px; padding:6px 14px; font-weight:700; cursor:pointer; font-size:13px; display:inline-flex; align-items:center; gap:4px; transition:background 0.2s;">
+                                                            Наступний ▶
+                                                        </button>
+                                                    </div>
+
+                                                    <div style="display:flex; align-items:center; gap:8px;">
+                                                        <button type="button" id="mode-single-{{ forloop.counter }}" onclick="setPlayerMode('{{ forloop.counter }}', 'single')"
+                                                            style="background:var(--color-primary); color:#fff; border:none; border-radius:6px; padding:6px 14px; font-size:12.5px; font-weight:700; cursor:pointer; transition:all 0.2s;">
+                                                            📽️ Показ слайдів
+                                                        </button>
+                                                        <button type="button" id="mode-all-{{ forloop.counter }}" onclick="setPlayerMode('{{ forloop.counter }}', 'all')"
+                                                            style="background:rgba(255,255,255,0.08); color:#cbd5e1; border:none; border-radius:6px; padding:6px 14px; font-size:12.5px; font-weight:600; cursor:pointer; transition:all 0.2s;">
+                                                            📜 Усі слайди
+                                                        </button>
+                                                        <button type="button" onclick="toggleSlideFullscreen('pptx-player-{{ forloop.counter }}')" title="На весь екран (F)"
+                                                            style="background:rgba(255,255,255,0.08); color:#cbd5e1; border:none; border-radius:6px; padding:6px 10px; font-size:13px; cursor:pointer;">
+                                                            ⛶
+                                                        </button>
+                                                    </div>
+                                                </div>
+
+                                                <!-- Режим 1: Показ одного слайду -->
+                                                <div id="player-single-view-{{ forloop.counter }}" style="display:block; padding:16px; background:#080c14;">
+                                                    <div style="display:flex; justify-content:center; align-items:center; min-height:400px; max-height:75vh; position:relative; overflow:hidden;">
+                                                        <img id="main-slide-img-{{ forloop.counter }}" src="{{ f.slide_urls.0 }}" alt="Слайд 1"
+                                                             style="max-width:100%; max-height:75vh; object-fit:contain; border-radius:6px; box-shadow:0 8px 30px rgba(0,0,0,0.6); display:block; margin:0 auto; transition:opacity 0.15s ease;">
+                                                    </div>
+
+                                                    <!-- Стрічка мініатюр знизу -->
+                                                    <div class="thumb-strip-scroll" id="thumb-strip-{{ forloop.counter }}" style="display:flex; gap:8px; overflow-x:auto; padding:12px 4px 4px; margin-top:12px; border-top:1px solid rgba(255,255,255,0.08); scroll-behavior:smooth;">
+                                                        {% for url in f.slide_urls %}
+                                                        <div class="slide-thumb-box" onclick="goToSlide('{{ forloop.parentloop.counter }}', {{ forloop.counter0 }})" id="thumb-{{ forloop.parentloop.counter }}-{{ forloop.counter0 }}"
+                                                             style="flex:0 0 96px; cursor:pointer; border-radius:4px; overflow:hidden; border:2px solid {% if forloop.first %}var(--color-primary){% else %}transparent{% endif %}; opacity:{% if forloop.first %}1{% else %}0.6{% endif %}; transition:all 0.2s;"
+                                                             title="Слайд {{ forloop.counter }}">
+                                                            <img src="{{ url }}" loading="lazy" style="width:100%; height:auto; display:block;" alt="Слайд {{ forloop.counter }}">
+                                                        </div>
+                                                        {% endfor %}
+                                                    </div>
+                                                </div>
+
+                                                <!-- Режим 2: Усі слайди вертикальним списком -->
+                                                <div id="player-all-view-{{ forloop.counter }}" style="display:none; padding:24px 16px; background:#080c14; flex-direction:column; gap:24px; max-height:80vh; overflow-y:auto; -webkit-overflow-scrolling:touch;">
+                                                    {% for url in f.slide_urls %}
+                                                    <div id="all-slide-{{ forloop.parentloop.counter }}-{{ forloop.counter0 }}" style="max-width:880px; margin:0 auto; width:100%; flex:0 0 auto; flex-shrink:0; position:relative; border-radius:8px; overflow:hidden; box-shadow:0 6px 24px rgba(0,0,0,0.5); background:#111827;">
+                                                        <div style="position:absolute; top:10px; left:10px; background:rgba(0,0,0,0.75); color:#fff; padding:3px 10px; border-radius:6px; font-size:12px; font-weight:700; z-index:2; backdrop-filter:blur(4px);">
+                                                            Слайд {{ forloop.counter }} з {{ f.slide_count }}
+                                                        </div>
+                                                        <img src="{{ url }}" style="width:100%; height:auto; display:block;" alt="Слайд {{ forloop.counter }}">
+                                                    </div>
+                                                    {% endfor %}
+                                                </div>
+                                            </div>
+
+                                            <script>
+                                                window.pptxSlides = window.pptxSlides || {};
+                                                window.pptxSlides['{{ forloop.counter }}'] = {{ f.slide_urls|safe }};
+                                                window.pptxCurSlide = window.pptxCurSlide || {};
+                                                window.pptxCurSlide['{{ forloop.counter }}'] = 0;
+                                            </script>
+                                            {% else %}
+                                            <div class="alert alert-warning">Слайди презентації генеруються або недоступні. Ви можете переглянути текстовий вміст на вкладці "📝 Текстовий вигляд".</div>
+                                            {% endif %}
+                                        </div>
+
+                                        <!-- TEXT VIEW -->
+                                        <div id="text-{{ forloop.counter }}" class="pptx-tab-panel" style="display:none;">
+                                            {% if f.html_preview %}
+                                            <div style="overflow-x:auto;">{{ f.html_preview|safe }}</div>
+                                            {% else %}
+                                            <p class="text-muted">Текстовий вміст відсутній.</p>
+                                            {% endif %}
+                                        </div>
+
+                                        {% else %}
+                                        <!-- Word / Excel / ODT — звичайний вигляд -->
                                         {% if f.html_preview %}
                                         <div style="overflow-x:auto;">
                                             {{ f.html_preview|safe }}
                                         </div>
                                         {% endif %}
+                                        {% endif %}
 
                                     <!-- 2. PDF ДОКУМЕНТИ -->
                                     {% elif f.preview_type == 'pdf' %}
-                                    <div style="height:700px;background:#1e293b;border-radius:var(--radius-md);overflow:hidden;position:relative;">
-                                        <iframe src="{% url 'file_view' f.id %}#toolbar=1" width="100%" height="100%" style="border:none;width:100%;height:100%;background:#fff;" title="{{ f.original_name }}"></iframe>
+                                    <div style="height:700px;background:#1e293b;border-radius:var(--radius-md);overflow:hidden;position:relative;box-shadow:0 8px 30px rgba(0,0,0,0.12);">
+                                        <iframe data-src="{% url 'file_view' f.id %}#toolbar=1" width="100%" height="100%" style="border:none;width:100%;height:100%;background:#fff;" title="{{ f.original_name }}"></iframe>
                                     </div>
 
 
@@ -493,33 +687,398 @@
 <script src="{% static 'vendor/prism/prism-json.min.js' %}"></script>
 
 <script>
-function toggleFileInlinePreview(id) {
+function openFileInlinePreview(id) {
     const previewBox = document.getElementById('inline-file-preview-' + id);
     const btn = document.getElementById('preview-toggle-btn-' + id);
+    const fileBox = document.getElementById('assignment-file-box-' + id) || (previewBox ? previewBox.closest('.assignment-file-box') : null);
+    if (!previewBox || previewBox.dataset.animating === 'true') return;
+
+    // Підключаємо iframe тільки при натисканні (запобігає автоматичному завантаженню PDF)
+    const iframes = previewBox.querySelectorAll('iframe[data-src]');
+    iframes.forEach(function(ifr) {
+        if (!ifr.getAttribute('src')) {
+            ifr.setAttribute('src', ifr.getAttribute('data-src'));
+        }
+    });
+
+    // Викликаємо Prism для підсвічування синтаксису коду
+    if (window.Prism) {
+        const codeBlocks = previewBox.querySelectorAll('pre code');
+        codeBlocks.forEach(function(codeEl) {
+            Prism.highlightElement(codeEl);
+        });
+    }
+
+    // Автозавантаження PPTX слайдів якщо ще не завантажено
+    const slidesPanel = previewBox.querySelector('.pptx-tab-panel[data-file-id]');
+    if (slidesPanel && slidesPanel.getAttribute('data-loaded') === 'false') {
+        loadPptxSlides(slidesPanel);
+    }
+
+    previewBox.dataset.animating = 'true';
+    previewBox.classList.add('expanding');
+    previewBox.style.display = 'block';
+
+    // Отримуємо цільову висоту для плавної анімації
+    previewBox.style.maxHeight = 'none';
+    const targetHeight = previewBox.scrollHeight;
+    previewBox.style.maxHeight = '0px';
+    previewBox.style.opacity = '0';
+    previewBox.style.paddingTop = '0px';
+    previewBox.style.paddingBottom = '0px';
+    previewBox.style.marginTop = '0px';
+
+    // Примусовий reflow
+    void previewBox.offsetHeight;
+
+    // Запускаємо плавне розгортання
+    previewBox.style.maxHeight = (targetHeight + 40) + 'px';
+    previewBox.style.opacity = '1';
+    previewBox.style.paddingTop = '';
+    previewBox.style.paddingBottom = '';
+    previewBox.style.marginTop = '';
+
+    if (btn) btn.textContent = '✕ Сховати перегляд';
+
+    // М'яко і спокійно центруємо екран на відкритому документі без різких рухів
+    if (fileBox) {
+        const boxTop = fileBox.getBoundingClientRect().top + (window.pageYOffset || document.documentElement.scrollTop || 0);
+        const targetY = Math.max(0, boxTop - 70);
+        window.scrollTo({ top: targetY, behavior: 'smooth' });
+    }
+
+    setTimeout(function() {
+        previewBox.classList.remove('expanding');
+        previewBox.style.maxHeight = '';
+        previewBox.style.overflow = '';
+        previewBox.dataset.animating = 'false';
+        updateCollapseAllButton();
+    }, 420);
+
+    updateCollapseAllButton();
+}
+
+function closeFileInlinePreview(id, skipScroll = false) {
+    const previewBox = document.getElementById('inline-file-preview-' + id);
+    const btn = document.getElementById('preview-toggle-btn-' + id);
+    const fileBox = document.getElementById('assignment-file-box-' + id) || (previewBox ? previewBox.closest('.assignment-file-box') : null);
+    if (!previewBox || previewBox.style.display === 'none' || previewBox.dataset.animating === 'true') return;
+
+    previewBox.dataset.animating = 'true';
+    previewBox.classList.add('collapsing');
+
+    // Фіксуємо поточну висоту перед згортанням
+    const currentHeight = previewBox.offsetHeight;
+    previewBox.style.maxHeight = currentHeight + 'px';
+    previewBox.style.opacity = '1';
+
+    // Примусовий reflow
+    void previewBox.offsetHeight;
+
+    // Запускаємо плавне схлопування
+    previewBox.style.maxHeight = '0px';
+    previewBox.style.opacity = '0';
+    previewBox.style.paddingTop = '0px';
+    previewBox.style.paddingBottom = '0px';
+    previewBox.style.marginTop = '0px';
+    previewBox.style.marginBottom = '0px';
+
+    if (btn) btn.textContent = '👁️ Переглянути в браузері';
+
+    // Тільки якщо шапка картки виїхала вище поля зору учня (наприклад, коли учень читав внизу документа),
+    // спокійно повертаємо екран до шапки картки без коливань туди-сюди
+    if (!skipScroll && fileBox) {
+        const boxRect = fileBox.getBoundingClientRect();
+        if (boxRect.top < 60) {
+            const currentScroll = window.pageYOffset || document.documentElement.scrollTop || 0;
+            const targetY = Math.max(0, currentScroll + boxRect.top - 70);
+            window.scrollTo({ top: targetY, behavior: 'smooth' });
+        }
+    }
+
+    setTimeout(function() {
+        previewBox.style.display = 'none';
+        previewBox.classList.remove('collapsing');
+        previewBox.style.maxHeight = '';
+        previewBox.style.opacity = '';
+        previewBox.style.paddingTop = '';
+        previewBox.style.paddingBottom = '';
+        previewBox.style.marginTop = '';
+        previewBox.style.marginBottom = '';
+        previewBox.style.overflow = '';
+        previewBox.dataset.animating = 'false';
+        updateCollapseAllButton();
+    }, 420);
+
+    updateCollapseAllButton();
+}
+
+function toggleFileInlinePreview(id) {
+    const previewBox = document.getElementById('inline-file-preview-' + id);
     if (!previewBox) return;
 
-    if (previewBox.style.display === 'none' || !previewBox.style.display) {
-        previewBox.style.display = 'block';
-        if (btn) btn.textContent = '✕ Сховати перегляд';
-        // Викликаємо Prism для підсвічування синтаксису коду
-        if (window.Prism) {
-            const codeBlocks = previewBox.querySelectorAll('pre code');
-            codeBlocks.forEach(function(codeEl) {
-                Prism.highlightElement(codeEl);
-            });
-        }
-        previewBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    if (previewBox.style.display === 'none' || !previewBox.style.display || previewBox.offsetHeight === 0) {
+        openFileInlinePreview(id);
     } else {
-        previewBox.style.display = 'none';
-        if (btn) btn.textContent = '👁️ Переглянути в браузері';
+        closeFileInlinePreview(id);
     }
 }
+
+function updateCollapseAllButton() {
+    const btn = document.getElementById('btn-collapse-all-previews');
+    if (!btn) return;
+
+    const allStages = document.querySelectorAll('.file-preview-stage');
+    let openCount = 0;
+    allStages.forEach(function(el) {
+        if (el.style.display !== 'none' && !el.classList.contains('collapsing') && (el.offsetHeight > 0 || el.classList.contains('expanding'))) {
+            openCount++;
+        }
+    });
+
+    if (openCount > 0) {
+        btn.style.display = 'inline-flex';
+        btn.innerHTML = '📂 Згорнути всі' + (openCount > 1 ? ' (' + openCount + ')' : '');
+    } else {
+        btn.style.display = 'none';
+    }
+}
+
+function collapseAllInlinePreviews() {
+    const allStages = document.querySelectorAll('.file-preview-stage');
+    let count = 0;
+    allStages.forEach(function(box) {
+        if (box.style.display !== 'none' && !box.classList.contains('collapsing')) {
+            const id = box.id.replace('inline-file-preview-', '');
+            closeFileInlinePreview(id, true);
+            count++;
+        }
+    });
+
+    if (count > 0) {
+        const section = document.getElementById('assignment-files-section');
+        if (section) {
+            const secRect = section.getBoundingClientRect();
+            if (secRect.top < 60 || secRect.top > window.innerHeight) {
+                const currentScroll = window.pageYOffset || document.documentElement.scrollTop || 0;
+                const targetY = Math.max(0, currentScroll + secRect.top - 70);
+                window.scrollTo({ top: targetY, behavior: 'smooth' });
+            }
+        }
+    }
+}
+
+// ── PPTX Presentation Player Functions ─────────────────────────────────────────
+
+function switchPptxTab(btn, panelId) {
+    const tabsContainer = btn.closest('.pptx-tabs');
+    if (!tabsContainer) return;
+    const previewBox = tabsContainer.closest('[id^="inline-file-preview-"]');
+
+    tabsContainer.querySelectorAll('.pptx-tab-btn').forEach(function(b) {
+        b.style.background = 'var(--color-bg-secondary)';
+        b.style.color = 'var(--color-text-primary)';
+        b.style.fontWeight = '600';
+        b.style.border = '1px solid var(--color-border)';
+    });
+    btn.style.background = 'var(--color-primary)';
+    btn.style.color = '#fff';
+    btn.style.fontWeight = '700';
+    btn.style.border = 'none';
+
+    if (previewBox) {
+        previewBox.querySelectorAll('.pptx-tab-panel').forEach(function(p) {
+            p.style.display = 'none';
+        });
+    }
+
+    const panel = document.getElementById(panelId);
+    if (!panel) return;
+    panel.style.display = 'block';
+}
+
+function changeSlide(playerIdx, delta) {
+    if (!window.pptxSlides || !window.pptxSlides[playerIdx]) return;
+    const slides = window.pptxSlides[playerIdx];
+    let cur = window.pptxCurSlide ? (window.pptxCurSlide[playerIdx] || 0) : 0;
+    cur += delta;
+    if (cur < 0) cur = slides.length - 1;
+    if (cur >= slides.length) cur = 0;
+    goToSlide(playerIdx, cur);
+}
+
+function goToSlide(playerIdx, index) {
+    if (!window.pptxSlides || !window.pptxSlides[playerIdx]) return;
+    const slides = window.pptxSlides[playerIdx];
+    if (index < 0 || index >= slides.length) return;
+    window.pptxCurSlide = window.pptxCurSlide || {};
+    window.pptxCurSlide[playerIdx] = index;
+
+    // Оновлюємо головне зображення слайду
+    const img = document.getElementById('main-slide-img-' + playerIdx);
+    if (img) {
+        img.style.opacity = '0.35';
+        img.src = slides[index];
+        img.onload = function() { img.style.opacity = '1'; };
+    }
+
+    // Оновлюємо номер поточного слайду
+    const curEl = document.getElementById('slide-cur-' + playerIdx);
+    if (curEl) curEl.textContent = (index + 1);
+
+    // Оновлюємо стрічку мініатюр
+    const strip = document.getElementById('thumb-strip-' + playerIdx);
+    if (strip) {
+        strip.querySelectorAll('.slide-thumb-box').forEach(function(box, i) {
+            if (i === index) {
+                box.style.borderColor = 'var(--color-primary)';
+                box.style.opacity = '1';
+                box.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+            } else {
+                box.style.borderColor = 'transparent';
+                box.style.opacity = '0.6';
+            }
+        });
+    }
+}
+
+function setPlayerMode(playerIdx, mode) {
+    const singleView = document.getElementById('player-single-view-' + playerIdx);
+    const allView = document.getElementById('player-all-view-' + playerIdx);
+    const btnSingle = document.getElementById('mode-single-' + playerIdx);
+    const btnAll = document.getElementById('mode-all-' + playerIdx);
+
+    if (mode === 'single') {
+        if (singleView) singleView.style.display = 'block';
+        if (allView) allView.style.display = 'none';
+        if (btnSingle) {
+            btnSingle.style.background = 'var(--color-primary)';
+            btnSingle.style.color = '#fff';
+            btnSingle.style.fontWeight = '700';
+        }
+        if (btnAll) {
+            btnAll.style.background = 'rgba(255,255,255,0.08)';
+            btnAll.style.color = '#cbd5e1';
+            btnAll.style.fontWeight = '600';
+        }
+    } else {
+        if (singleView) singleView.style.display = 'none';
+        if (allView) allView.style.display = 'flex';
+        if (btnSingle) {
+            btnSingle.style.background = 'rgba(255,255,255,0.08)';
+            btnSingle.style.color = '#cbd5e1';
+            btnSingle.style.fontWeight = '600';
+        }
+        if (btnAll) {
+            btnAll.style.background = 'var(--color-primary)';
+            btnAll.style.color = '#fff';
+            btnAll.style.fontWeight = '700';
+        }
+
+        // Прокручуємо до активного слайда у списку всіх слайдів
+        const curIdx = (window.pptxCurSlide && window.pptxCurSlide[playerIdx]) || 0;
+        const targetSlide = document.getElementById('all-slide-' + playerIdx + '-' + curIdx);
+        if (targetSlide) {
+            setTimeout(function() {
+                targetSlide.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }, 30);
+        }
+    }
+}
+
+function toggleSlideFullscreen(playerId) {
+    const el = document.getElementById(playerId);
+    if (!el) return;
+    if (!document.fullscreenElement) {
+        if (el.requestFullscreen) {
+            el.requestFullscreen();
+        } else if (el.webkitRequestFullscreen) {
+            el.webkitRequestFullscreen();
+        }
+    } else {
+        if (document.exitFullscreen) {
+            document.exitFullscreen();
+        }
+    }
+}
+
+// Навігація клавішами стрілок (←, →) для слайдів
+document.addEventListener('keydown', function(e) {
+    if (['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return;
+    if (window.pptxSlides) {
+        const keys = Object.keys(window.pptxSlides);
+        if (keys.length > 0) {
+            const firstId = keys[0];
+            if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                changeSlide(firstId, -1);
+            } else if (e.key === 'ArrowRight' || e.key === ' ') {
+                e.preventDefault();
+                changeSlide(firstId, 1);
+            }
+        }
+    }
+});
+
 
 document.addEventListener('DOMContentLoaded', function() {
     if (window.Prism) {
         Prism.highlightAll();
     }
 });
+
+function copyAssignmentDescription() {
+    var descEl = document.getElementById('assignment-desc-content');
+    if (!descEl) return;
+    var text = descEl.innerText || descEl.textContent || '';
+    if (!text.trim()) return;
+
+    var btn = document.getElementById('copy-desc-btn');
+    var textEl = document.getElementById('copy-desc-text');
+    var iconEl = document.getElementById('copy-desc-icon');
+
+    function showCopiedFeedback() {
+        if (textEl && iconEl && btn) {
+            textEl.textContent = 'Скопійовано!';
+            iconEl.textContent = '✅';
+            btn.classList.add('copied');
+            setTimeout(function() {
+                textEl.textContent = 'Копіювати';
+                iconEl.textContent = '📋';
+                btn.classList.remove('copied');
+            }, 2000);
+        }
+    }
+
+    if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text.trim()).then(showCopiedFeedback).catch(function() {
+            fallbackCopy();
+        });
+    } else {
+        fallbackCopy();
+    }
+
+    function fallbackCopy() {
+        try {
+            var textarea = document.createElement('textarea');
+            textarea.value = text.trim();
+            textarea.style.position = 'fixed';
+            textarea.style.opacity = '0';
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+            showCopiedFeedback();
+        } catch (e) {
+            console.error('Copy failed:', e);
+        }
+    }
+}
 </script>
+
+{% if is_teacher %}
+{% include 'feed/components/reschedule_modal.html' %}
+{% endif %}
+
 {% endblock %}
 

@@ -1,0 +1,88 @@
+{% if user.is_authenticated and user.teacher_profile and live_lesson_status %}
+<div class="live-lesson-widget" id="live-lesson-widget" style="margin-bottom: 20px;">
+    {% if live_lesson_status.has_schedule %}
+        <div class="live-lesson-card status-{{ live_lesson_status.status_type }}" 
+             style="background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: 14px 18px; box-shadow: 0 2px 10px rgba(0,0,0,0.03); display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; position: relative; overflow: hidden;">
+            
+            <!-- Ліва кольорова смужка статусу -->
+            <div style="position: absolute; left: 0; top: 0; bottom: 0; width: 4px; 
+                {% if live_lesson_status.status_type == 'in_lesson' %}background: #10b981;
+                {% elif live_lesson_status.status_type == 'in_break' %}background: #f59e0b;
+                {% elif live_lesson_status.status_type == 'before_school' %}background: #3b82f6;
+                {% else %}background: var(--color-primary);{% endif %}">
+            </div>
+
+            <div style="display: flex; align-items: center; gap: 14px; padding-left: 6px;">
+                <!-- Іконка статусу з пульсацією -->
+                <div class="status-icon-bubble" style="width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0;
+                    {% if live_lesson_status.status_type == 'in_lesson' %}background: rgba(16, 185, 129, 0.15); color: #059669;
+                    {% elif live_lesson_status.status_type == 'in_break' %}background: rgba(245, 158, 11, 0.15); color: #d97706;
+                    {% elif live_lesson_status.status_type == 'before_school' %}background: rgba(59, 130, 246, 0.15); color: #2563eb;
+                    {% else %}background: var(--color-bg-secondary); color: var(--color-text-secondary);{% endif %}">
+                    {% if live_lesson_status.status_type == 'in_lesson' %}🔔
+                    {% elif live_lesson_status.status_type == 'in_break' %}☕
+                    {% elif live_lesson_status.status_type == 'before_school' %}🌅
+                    {% else %}📅{% endif %}
+                </div>
+
+                <div>
+                    <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                        <span class="badge" style="font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 12px;
+                            {% if live_lesson_status.status_type == 'in_lesson' %}background: rgba(16, 185, 129, 0.15); color: #059669; border: 1px solid rgba(16, 185, 129, 0.3);
+                            {% elif live_lesson_status.status_type == 'in_break' %}background: rgba(245, 158, 11, 0.15); color: #d97706; border: 1px solid rgba(245, 158, 11, 0.3);
+                            {% elif live_lesson_status.status_type == 'before_school' %}background: rgba(59, 130, 246, 0.15); color: #2563eb; border: 1px solid rgba(59, 130, 246, 0.3);
+                            {% else %}background: var(--color-bg-secondary); color: var(--color-text-secondary); border: 1px solid var(--color-border);{% endif %}">
+                            {{ live_lesson_status.badge_text }}
+                        </span>
+
+                        <h3 style="margin: 0; font-size: 14px; font-weight: 800; color: var(--color-text-primary);">
+                            {{ live_lesson_status.title }}
+                        </h3>
+                    </div>
+
+                    <div style="font-size: 13px; color: var(--color-text-muted); margin-top: 3px; display: flex; align-items: center; gap: 6px;">
+                        <span>⏱️</span>
+                        <span id="live-lesson-time-info">{{ live_lesson_status.time_info }}</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Кнопки швидкого переходу -->
+            <div style="display: flex; align-items: center; gap: 8px;">
+                {% if live_lesson_status.current_lesson %}
+                <a href="{% url 'assignment_create' %}?class_group={{ live_lesson_status.current_lesson.class_group_id }}" 
+                   class="btn btn-primary btn-sm" 
+                   style="font-size: 12px; font-weight: 700; border-radius: var(--radius-sm); white-space: nowrap;">
+                    ➕ Завдання для {{ live_lesson_status.current_lesson.class_group.name }}
+                </a>
+                {% elif live_lesson_status.next_lesson %}
+                <a href="{% url 'assignment_create' %}?class_group={{ live_lesson_status.next_lesson.class_group_id }}" 
+                   class="btn btn-secondary btn-sm" 
+                   style="font-size: 12px; font-weight: 700; border-radius: var(--radius-sm); white-space: nowrap;">
+                    ➕ Завдання для {{ live_lesson_status.next_lesson.class_group.name }}
+                </a>
+                {% endif %}
+
+                <a href="{% url 'teacher_students' %}?tab=schedule" 
+                   class="btn btn-secondary btn-sm" 
+                   title="Переглянути та редагувати розклад уроків"
+                   style="font-size: 12px; font-weight: 600; border-radius: var(--radius-sm); white-space: nowrap;">
+                    📅 Мій розклад
+                </a>
+            </div>
+
+        </div>
+    {% else %}
+        <!-- Якщо розклад ще не налаштовано — компактна ненав'язлива підказка -->
+        <div style="background: var(--color-surface); border: 1px dashed var(--color-border); border-radius: var(--radius-md); padding: 10px 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+            <div style="display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--color-text-secondary);">
+                <span style="font-size: 18px;">📅</span>
+                <span>Налаштуйте розклад уроків, щоб бачити поточний урок, час до дзвінка та нагадування про публікацію завдань.</span>
+            </div>
+            <a href="{% url 'teacher_students' %}?tab=schedule" class="btn btn-secondary btn-sm" style="font-size: 12px; font-weight: 700; white-space: nowrap;">
+                📅 Налаштувати розклад
+            </a>
+        </div>
+    {% endif %}
+</div>
+{% endif %}

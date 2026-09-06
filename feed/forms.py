@@ -11,6 +11,7 @@
 from django import forms
 from django.core.exceptions import ValidationError
 from django.contrib.auth.models import User
+from django.utils import timezone
 from .models import Assignment, Teacher, ClassGroup, Subject, Student
 
 
@@ -77,6 +78,88 @@ class TeacherLoginForm(forms.Form):
             'class': 'form-input',
         })
     )
+
+
+# ─── Форма майстра першого запуску ───────────────────────────────────────────
+class FirstRunSetupForm(forms.Form):
+    """Форма створення головного адміністратора при першому запуску системи."""
+
+    username = forms.CharField(
+        label='Логін адміністратора',
+        max_length=150,
+        initial='admin',
+        help_text='Латинські літери, цифри та символи @/./+/-/_',
+        widget=forms.TextInput(attrs={
+            'class': 'form-input',
+            'placeholder': 'admin',
+            'autocomplete': 'username',
+            'required': 'required',
+            'autofocus': 'autofocus',
+        })
+    )
+    full_name = forms.CharField(
+        label='ПІБ вчителя / адміністратора',
+        max_length=200,
+        initial='Адміністратор системи',
+        help_text='Буде відображатися учням та в журналі',
+        widget=forms.TextInput(attrs={
+            'class': 'form-input',
+            'placeholder': 'Іваненко Іван Іванович',
+            'required': 'required',
+        })
+    )
+    email = forms.EmailField(
+        label='Email (необов\'язково)',
+        required=False,
+        widget=forms.EmailInput(attrs={
+            'class': 'form-input',
+            'placeholder': 'admin@school.ua',
+            'autocomplete': 'email',
+        })
+    )
+    password = forms.CharField(
+        label='Пароль',
+        min_length=6,
+        widget=forms.PasswordInput(attrs={
+            'class': 'form-input',
+            'placeholder': 'Введіть надійний пароль (мін. 6 символів)',
+            'autocomplete': 'new-password',
+            'required': 'required',
+        })
+    )
+    password_confirm = forms.CharField(
+        label='Підтвердження пароля',
+        widget=forms.PasswordInput(attrs={
+            'class': 'form-input',
+            'placeholder': 'Повторіть пароль',
+            'autocomplete': 'new-password',
+            'required': 'required',
+        })
+    )
+    seed_default_data = forms.BooleanField(
+        label='Ініціалізувати базу стандартними предметами та класами НУШ',
+        required=False,
+        initial=True,
+        help_text='Автоматично створить популярні шкільні предмети (Інформатика, Математика, Фізика...), класи (9А, 10А...) та шкали критеріїв НУШ'
+    )
+
+    def clean_username(self):
+        username = self.cleaned_data.get('username', '').strip()
+        if not username:
+            raise ValidationError('Вкажіть логін адміністратора.')
+        if User.objects.filter(username__iexact=username).exists():
+            raise ValidationError(f'Користувач з логіном "{username}" вже існує.')
+        return username
+
+    def clean(self):
+        cleaned_data = super().clean()
+        password = cleaned_data.get('password')
+        password_confirm = cleaned_data.get('password_confirm')
+
+        if password and password_confirm:
+            if password != password_confirm:
+                self.add_error('password_confirm', 'Введені паролі не збігаються.')
+        return cleaned_data
 
 
 # ─── Форма вибору класу учнем ─────────────────────────────────────────────────
@@ -332,16 +415,16 @@ class AssignmentForm(forms.ModelForm):
                 self.fields['subject'].queryset = Subject.objects.all()
 
             if teacher.classes.exists():
-                self.fields['classes'].queryset = teacher.classes.all().order_by('grade', 'letter')
+                self.fields['classes'].queryset = teacher.classes.all().order_by('grade', 'letter', 'name')
             else:
-                self.fields['classes'].queryset = ClassGroup.objects.all().order_by('grade', 'letter')
+                self.fields['classes'].queryset = ClassGroup.objects.all().order_by('grade', 'letter', 'name')
 
             default_subject = teacher.get_default_subject()
             if default_subject and not self.initial.get('subject'):
                 self.initial['subject'] = default_subject.pk
         else:
-            self.fields['subject'].queryset = Subject.objects.all()
-            self.fields['classes'].queryset = ClassGroup.objects.all().order_by('grade', 'letter')
+            self.fields['subject'].queryset = Subject.objects.all().order_by('name')
+            self.fields['classes'].queryset = ClassGroup.objects.all().order_by('grade', 'letter', 'name')
 
 
 
@@ -412,6 +495,8 @@ class AssignmentForm(forms.ModelForm):
             instance.scheduled_at = self.cleaned_data.get('scheduled_at')
         else:
             instance.status = Assignment.STATUS_PUBLISHED
+            if not instance.published_at or instance.duplicated_from_id is not None:
+                instance.published_at = timezone.now()
 
         if commit:
             instance.save()
@@ -491,7 +576,7 @@ class SubmissionForm(forms.Form):
                 self.fields['full_name'].initial = assignment.student_name
 
             # Показуємо тільки класи, яким призначено це завдання (або всі)
-            assigned_classes = assignment.classes.all().order_by('grade', 'letter')
+            assigned_classes = assignment.classes.all().order_by('grade', 'letter', 'name')
             if assigned_classes.exists():
                 self.fields['class_group'].queryset = assigned_classes
                 first_class = assigned_classes.first()
@@ -499,9 +584,9 @@ class SubmissionForm(forms.Form):
                     self.fields['class_group'].initial = first_class
                 self.fields['class_group'].empty_label = None
             else:
-                self.fields['class_group'].queryset = ClassGroup.objects.all().order_by('grade', 'letter')
+                self.fields['class_group'].queryset = ClassGroup.objects.all().order_by('grade', 'letter', 'name')
         else:
-            self.fields['class_group'].queryset = ClassGroup.objects.all().order_by('grade', 'letter')
+            self.fields['class_group'].queryset = ClassGroup.objects.all().order_by('grade', 'letter', 'name')
 
     def clean(self):
         cleaned_data = super().clean()

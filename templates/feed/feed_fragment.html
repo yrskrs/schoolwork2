@@ -103,15 +103,17 @@
                     <span>{{ assignment.teacher.full_name }}</span>
                 </div>
 
-                <!-- Розумна дата публікації (Сьогодні / Вчора / День тижня + дата) -->
-                {% if assignment.published_at %}
-                <span class="publish-date-badge {% if assignment.is_published_today %}badge-today{% elif assignment.is_published_yesterday %}badge-yesterday{% else %}badge-earlier{% endif %}">
-                    {% if assignment.is_published_today %}
+                <!-- Актуальність завдання до уроку (для учнів) -->
+                {% with rel_badge=assignment.get_relevance_badge %}
+                <span class="publish-date-badge {{ rel_badge.badge_class }}" title="Технічна дата публікації: {{ assignment.published_at|date:'d.m.Y H:i' }}">
+                    {% if rel_badge.is_now %}
+                    <span class="live-dot-pulse"></span>
+                    {% elif rel_badge.is_today %}
                     <span class="live-dot-pulse"></span>
                     {% endif %}
-                    📅 {{ assignment.relative_published_display }}
+                    {{ rel_badge.badge_text }}
                 </span>
-                {% endif %}
+                {% endwith %}
 
                 {% if assignment.unarchived_at %}
                 <span class="unarchive-badge" title="Завдання відновлено з архіву">

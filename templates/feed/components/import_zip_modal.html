@@ -1,0 +1,65 @@
+<!-- ── Модальне вікно імпорту завдань з флешки (ZIP) ── -->
+<div id="import-zip-modal" style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(15,23,42,0.65);z-index:99999;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(4px);">
+    <div class="custom-modal-content" style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);width:100%;max-width:520px;box-shadow:0 20px 40px rgba(0,0,0,0.22);overflow:hidden;animation:rescheduleModalIn 0.2s ease-out;">
+        
+        <div style="padding:16px 20px;background:var(--color-bg-secondary);border-bottom:1px solid var(--color-border);display:flex;align-items:center;justify-content:space-between;">
+            <div style="display:flex;align-items:center;gap:8px;font-weight:800;font-size:15px;color:var(--color-text-primary);">
+                <span style="font-size:18px;">💾</span>
+                <span>Імпорт завдань з флешки (ZIP-пакет)</span>
+            </div>
+            <button type="button" onclick="closeImportZipModal()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--color-text-muted);line-height:1;padding:4px;" aria-label="Закрити">✕</button>
+        </div>
+
+        <form method="POST" action="{% url 'import_assignments_zip' %}" enctype="multipart/form-data" style="margin:0;padding:20px;">
+            {% csrf_token %}
+
+            <div style="font-size:13px;color:var(--color-text-secondary);line-height:1.5;margin-bottom:16px;">
+                Оберіть ZIP-архів завдань, створений на домашньому або іншому комп'ютері. Система автоматично відновить усі завдання, тексти, посилання, налаштування та прикріплені файли (презентації, документи, PDF тощо).
+            </div>
+
+            <!-- Зона завантаження файлу -->
+            <div style="border:2px dashed var(--color-border);border-radius:var(--radius-md);padding:24px;text-align:center;background:var(--color-bg-secondary);margin-bottom:16px;cursor:pointer;" onclick="document.getElementById('zip-archive-file-input').click()">
+                <div style="font-size:36px;margin-bottom:8px;">📦</div>
+                <div style="font-weight:700;font-size:14px;color:var(--color-text-primary);margin-bottom:4px;">
+                    Оберіть або перетягніть ZIP-архів
+                </div>
+                <div style="font-size:12px;color:var(--color-text-muted);" id="zip-file-selected-name">
+                    Підтримуються файли <code>.zip</code>, створені функцією «Експорт на флешку»
+                </div>
+                <input type="file" id="zip-archive-file-input" name="archive" accept=".zip" required style="display:none;" onchange="onZipFileSelected(this)">
+            </div>
+
+            <div style="display:flex;justify-content:flex-end;gap:10px;border-top:1px solid var(--color-border);padding-top:16px;">
+                <button type="button" class="btn btn-secondary" onclick="closeImportZipModal()" style="font-weight:600;">
+                    Скасувати
+                </button>
+                <button type="submit" class="btn btn-primary" style="font-weight:700;padding:8px 20px;">
+                    📥 Імпортувати завдання
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function openImportZipModal() {
+    var modal = document.getElementById('import-zip-modal');
+    if (modal) modal.style.display = 'flex';
+}
+function closeImportZipModal() {
+    var modal = document.getElementById('import-zip-modal');
+    if (modal) modal.style.display = 'none';
+}
+function onZipFileSelected(input) {
+    if (input.files && input.files[0]) {
+        var el = document.getElementById('zip-file-selected-name');
+        if (el) {
+            el.innerHTML = '<strong style="color:var(--color-primary);">Обрано: ' + input.files[0].name + ' (' + (input.files[0].size / 1024).toFixed(1) + ' КБ)</strong>';
+        }
+    }
+}
+document.addEventListener('click', function(e) {
+    var modal = document.getElementById('import-zip-modal');
+    if (modal && e.target === modal) closeImportZipModal();
+});
+</script>

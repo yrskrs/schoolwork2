@@ -10,7 +10,7 @@
 
 import re
 import difflib
-from typing import Tuple, List, Dict, Optional, Set
+from typing import Tuple, List, Dict, Optional, Set, Any
 
 # Словник еквівалентності українських імен (повні, скорочені, пестливі форми)
 UKRAINIAN_NAME_VARIANTS: Dict[str, Set[str]] = {
@@ -316,3 +316,151 @@ def cluster_submissions_by_student(submissions_list) -> List[Dict]:
     # Сортуємо учнів за алфавітом прізвища
     clusters.sort(key=lambda c: (c['last_name'].lower(), c['first_name'].lower()))
     return clusters
+
+
+def normalize_ukrainian_name_declension(w: str) -> str:
+    """
+    Нормалізує форму імені чи прізвища з непрямих відмінків (зокрема орудного: ким? з ким?)
+    до називного відмінка (наприклад: Максимом -> Максим, Тарасом -> Тарас, Шевченком -> Шевченко).
+    """
+    w = (w or '').strip()
+    if not w:
+        return ''
+    lower = w.lower()
+
+    subst = [
+        ('енком', 'енко'), ('єнком', 'єнко'), ('чуком', 'чук'), ('щуком', 'щук'),
+        ('овим', 'ов'), ('євим', 'єв'), ('евим', 'ев'),
+        ('ським', 'ський'), ('цьким', 'цький'), ('зьким', 'зький'),
+        ('ією', 'ія'), ('иєю', 'ия'), ('гою', 'га'), ('ною', 'на'), ('тою', 'та'),
+        ('рою', 'ра'), ('лою', 'ла'), ('мою', 'ма'), ('вою', 'ва'), ('цою', 'ця'),
+        ('ею', 'я'), ('єю', 'я'),
+        ('тром', 'тро'), ('йлом', 'йло'), ('дром', 'др'), ('асом', 'ас'),
+        ('аном', 'ан'), ('ієм', 'ій'), ('рієм', 'рій'), ('лем', 'ль'), ('зом', 'з'),
+        ('сом', 'с'), ('мом', 'м'), ('ром', 'р'), ('ком', 'к')
+    ]
+    for suf, repl in subst:
+        if lower.endswith(suf) and len(lower) >= len(suf) + 2:
+            return (lower[:-len(suf)] + repl).capitalize()
+
+    return w.capitalize()
+
+
+def is_likely_first_name(word: str) -> bool:
+    """Перевіряє, чи є слово відомим українським іменем."""
+    if not word:
+        return False
+    w_norm = normalize_ukrainian_name_declension(word).lower()
+    return w_norm in _FIRST_NAME_INDEX or word.lower() in _FIRST_NAME_INDEX
+
+
+def extract_coauthors_from_comment(
+    comment_text: str,
+    class_group=None,
+    exclude_last_name: str = '',
+    exclude_first_name: str = ''
+) -> List[Dict[str, Any]]:
+    """
+    Знаходить згадки співавторів (інших учнів) у коментарі до зданої роботи.
+    Повертає список унікальних знайдених учнів (без повторень та без автора роботи).
+    Кожен елемент: {'student': Student | None, 'first_name': str, 'last_name': str, 'full_name': str}
+    """
+    if not comment_text or not comment_text.strip():
+        return []
+
+    text = comment_text.strip()
+    found_coauthors = []
+    seen_identities = set()
+
+    # Додаємо автора роботи до списку виключень
+    if exclude_last_name:
+        seen_identities.add(f"{exclude_last_name.strip().lower()}_{exclude_first_name.strip().lower()}")
+
+    # 1. Якщо передано class_group, перевіряємо чи згадуються реальні учні цього класу
+    if class_group:
+        try:
+            from .models import Student
+            class_students = list(Student.objects.filter(class_group=class_group))
+            lower_text = text.lower()
+
+            for st in class_students:
+                if is_same_student_identity(st.last_name, st.first_name, exclude_last_name, exclude_first_name):
+                    continue
+
+                st_key = f"{st.last_name.lower()}_{st.first_name.lower()}"
+                if st_key in seen_identities:
+                    continue
+
+                ln = st.last_name.lower()
+                fn = st.first_name.lower()
+
+                ln_stem = ln[:-1] if len(ln) >= 5 else ln
+                first_name_forms = _FIRST_NAME_INDEX.get(fn, {fn})
+
+                has_last_name = bool(re.search(r'\b' + re.escape(ln_stem), lower_text, re.IGNORECASE))
+                has_first_name = any(re.search(r'\b' + re.escape(form), lower_text, re.IGNORECASE) for form in first_name_forms)
+
+                if has_last_name and has_first_name:
+                    seen_identities.add(st_key)
+                    found_coauthors.append({
+                        'student': st,
+                        'first_name': st.first_name,
+                        'last_name': st.last_name,
+                        'full_name': st.get_full_name(),
+                    })
+                elif has_last_name and any(kw in lower_text for kw in ['разом', 'викону', 'автор', 'група', 'парі', 'співавтор', 'робили', 'працювали']):
+                    seen_identities.add(st_key)
+                    found_coauthors.append({
+                        'student': st,
+                        'first_name': st.first_name,
+                        'last_name': st.last_name,
+                        'full_name': st.get_full_name(),
+                    })
+        except Exception:
+            pass
+
+    # 2. Інтелектуальний парсинг ключових фраз групової роботи
+    keyword_patterns = [
+        r'(?:(?:виконувал[иао]|виконал[иао]|працювал[иа]|робил[иа]|здавал[иа])\s*(?:разом|вдвох|в\s+парі|у\s+парі)?\s*(?:з|із|зі)?|'
+        r'разом\s+(?:з|із|зі)|'
+        r'спільно\s+(?:з|із|зі)|'
+        r'вдвох\s+(?:з|із|зі)|'
+        r'(?:у|в)\s+парі\s+(?:з|із|зі)|'
+        r'разом[\s:]+|'
+        r'співавтор[иів]*[\s:]+|'
+        r'автор[иів]*\s*(?:роботи|проєкту|проекту)?[\s:]+|'
+        r'учасник[иів]*[\s:]+)'
+        r'[\s:]*([^\.\n;]+)',
+    ]
+
+    for pat in keyword_patterns:
+        matches = re.finditer(pat, text, re.IGNORECASE)
+        for m in matches:
+            chunk = m.group(1).strip()
+            names_raw = re.split(r'[,;]|\s+та\s+|\s+і\s+|\s+й\s+', chunk)
+            for raw_n in names_raw:
+                clean_words = [w for w in re.sub(r'[^\w\s]', '', raw_n).split() if w.isalpha()]
+                if 2 <= len(clean_words) <= 3:
+                    w1 = normalize_ukrainian_name_declension(clean_words[0])
+                    w2 = normalize_ukrainian_name_declension(clean_words[1])
+
+                    # Визначення порядку "Ім'я Прізвище" чи "Прізвище Ім'я"
+                    if is_likely_first_name(clean_words[0]) and not is_likely_first_name(clean_words[1]):
+                        fn, ln = w1, w2
+                    else:
+                        ln, fn = w1, w2
+
+                    if is_same_student_identity(ln, fn, exclude_last_name, exclude_first_name):
+                        continue
+
+                    cand_key = f"{ln.lower()}_{fn.lower()}"
+                    if cand_key not in seen_identities and not any(is_same_student_identity(ln, fn, fc['last_name'], fc['first_name']) for fc in found_coauthors):
+                        seen_identities.add(cand_key)
+                        found_coauthors.append({
+                            'student': None,
+                            'first_name': fn,
+                            'last_name': ln,
+                            'full_name': f"{ln} {fn}",
+                        })
+
+    return found_coauthors

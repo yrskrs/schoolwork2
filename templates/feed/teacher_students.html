@@ -226,6 +226,33 @@
     color: #fff;
     border-color: var(--color-primary);
 }
+@media print {
+    .sidebar, .navbar, .page-header, .stat-box, .class-tabs-scroll,
+    #btn-mode-view, #btn-mode-edit, #save-schedule-top-btn, button[onclick="window.print()"],
+    .custom-modal-backdrop, footer, .alert {
+        display: none !important;
+    }
+    body, .page-wrapper, .feed-layout, .feed-main-col {
+        background: #fff !important;
+        color: #000 !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        max-width: 100% !important;
+        width: 100% !important;
+    }
+    #schedule-view-mode-container {
+        display: block !important;
+        border: 1px solid #999 !important;
+        box-shadow: none !important;
+    }
+    #schedule-edit-mode-container {
+        display: none !important;
+    }
+    .printable-schedule-table th, .printable-schedule-table td {
+        border: 1px solid #ccc !important;
+        color: #000 !important;
+    }
+}
 </style>
 {% endblock %}
 
@@ -247,6 +274,7 @@
                     <div class="page-hero-sub">Редагування імен, зміна класів з перенесенням робіт та імпорт списків</div>
                 </div>
 
+                {% if current_tab != 'schedule' %}
                 <div style="display:flex;gap:8px;flex-wrap:wrap;">
                     <button type="button" class="btn btn-primary" onclick="openAddStudentModal()" style="font-weight:700;">
                         ➕ Додати учня
@@ -258,8 +286,32 @@
                         📤 Експорт CSV
                     </a>
                 </div>
+                {% endif %}
             </div>
 
+            <!-- ── Перемикач вкладок розділу ───────────────────────────────────── -->
+            <div style="display:flex;gap:10px;margin-bottom:20px;border-bottom:1px solid var(--color-border);padding-bottom:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;">
+                <div style="display:flex;gap:8px;align-items:center;">
+                    <a href="{% url 'teacher_students' %}?tab=students" class="btn {% if current_tab != 'schedule' %}btn-primary{% else %}btn-secondary{% endif %}" style="font-weight:700;display:inline-flex;align-items:center;gap:6px;border-radius:var(--radius-md);">
+                        👥 Список учнів та класів
+                    </a>
+                    <a href="{% url 'teacher_students' %}?tab=schedule" class="btn {% if current_tab == 'schedule' %}btn-primary{% else %}btn-secondary{% endif %}" style="font-weight:700;display:inline-flex;align-items:center;gap:6px;border-radius:var(--radius-md);">
+                        📅 Мій тижневий розклад уроків
+                        {% if total_scheduled_lessons %}
+                        <span style="background:rgba(255,255,255,0.25);padding:1px 8px;border-radius:12px;font-size:11px;">{{ total_scheduled_lessons }}</span>
+                        {% endif %}
+                    </a>
+                </div>
+                {% if current_tab == 'schedule' %}
+                <div style="display:flex;gap:8px;">
+                    <a href="{% url 'teacher_settings' %}?tab=environment#bell-schedule-section" class="btn btn-secondary btn-sm" style="font-size:12.5px;">
+                        ⚙️ Розклад дзвінків (час уроків)
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+
+            {% if current_tab != 'schedule' %}
             <!-- ── Статистика бази учнів ──────────────────────────────────────── -->
             <div class="students-stats-grid">
                 <div class="stat-box">
@@ -359,7 +411,7 @@
                 </div>
 
                 {% if page_obj %}
-                <div style="overflow-x:auto;">
+                <div class="table-responsive" style="overflow-x:auto;width:100%;max-width:100%;-webkit-overflow-scrolling:touch;">
                     <table class="student-table">
                         <thead>
                             <tr>
@@ -478,6 +530,270 @@
                 {% endif %}
 
             </div>
+            {% else %}
+            <!-- ── Вкладка: Мій тижневий розклад уроків ──────────────────────── -->
+            <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:24px;box-shadow:0 2px 10px rgba(0,0,0,0.03);margin-bottom:24px;" id="teacher-schedule-wrapper">
+                
+                <!-- 1. Інформаційний банер проведених уроків та швидких переглядів -->
+                <div style="background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:14px 18px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px;margin-bottom:20px;">
+                    <div style="display:flex;align-items:center;gap:14px;">
+                        <div style="width:44px;height:44px;border-radius:12px;background:rgba(99,102,241,0.12);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;">
+                            🎓
+                        </div>
+                        <div>
+                            <div style="font-size:11.5px;color:var(--color-text-muted);font-weight:700;text-transform:uppercase;letter-spacing:0.04em;">
+                                Облік навчальних годин
+                            </div>
+                            <div style="display:flex;align-items:center;gap:10px;margin-top:2px;">
+                                <span style="font-size:24px;font-weight:900;color:var(--color-primary);line-height:1;">
+                                    {{ teacher_conducted_lessons.count|default:"0" }}
+                                </span>
+                                <span style="font-size:13.5px;font-weight:700;color:var(--color-text-primary);">
+                                    проведених уроків
+                                </span>
+                                <span class="badge" style="font-size:11px;padding:2px 8px;border-radius:10px;background:{% if teacher_conducted_lessons.is_manual %}rgba(245,158,11,0.15);color:#d97706;border:1px solid rgba(245,158,11,0.3);{% else %}rgba(16,185,129,0.15);color:#059669;border:1px solid rgba(16,185,129,0.3);{% endif %};">
+                                    {% if teacher_conducted_lessons.is_manual %}✏️ Встановлено вручну{% else %}🤖 Розраховано системою (з 1 вересня){% endif %}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                        <button type="button" class="btn btn-secondary btn-sm" onclick="openConductedLessonsModal()" style="font-weight:700;">
+                            ✏️ Змінити число вручну
+                        </button>
+                        <a href="{% url 'teacher_rescheduled_calendar' %}" class="btn btn-secondary btn-sm" style="font-weight:700;">
+                            📅 30-денний календар перенесень
+                        </a>
+                    </div>
+                </div>
+
+                <!-- 2. Шапка розкладу та перемикач режимів (Перегляд vs Редагування) -->
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:16px;margin-bottom:18px;">
+                    <div>
+                        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                            <h2 style="font-size:1.35rem;font-weight:800;margin:0;color:var(--color-text-primary);">
+                                📅 Мій розклад уроків по класах
+                            </h2>
+                            <span class="badge" style="background:rgba(99,102,241,0.12);color:var(--color-primary);font-weight:700;font-size:12px;padding:4px 10px;border-radius:20px;">
+                                Уроків у тижні: <span id="active-lessons-counter">{{ total_scheduled_lessons }}</span>
+                            </span>
+                        </div>
+                        <p style="font-size:13px;color:var(--color-text-muted);margin:4px 0 0;max-width:760px;">
+                            Переглядайте тижневу сітку уроків у зручному форматі або перемикайтесь у режим редагування для зміни класів та кабінетів.
+                        </p>
+                    </div>
+
+                    <!-- Перемикач режимів: Перегляд vs Редагування -->
+                    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                        <div style="display:flex;gap:2px;background:var(--color-bg-secondary);padding:3px;border-radius:var(--radius-md);border:1px solid var(--color-border);">
+                            <button type="button" id="btn-mode-view" class="btn btn-sm" onclick="setScheduleViewMode('view')" style="font-weight:700;padding:6px 14px;border-radius:4px;border:none;background:var(--color-primary);color:#fff;cursor:pointer;transition:all 0.15s ease;">
+                                👀 Режим перегляду
+                            </button>
+                            <button type="button" id="btn-mode-edit" class="btn btn-sm" onclick="setScheduleViewMode('edit')" style="font-weight:700;padding:6px 14px;border-radius:4px;border:none;background:transparent;color:var(--color-text-secondary);cursor:pointer;transition:all 0.15s ease;">
+                                ✏️ Режим редагування
+                            </button>
+                        </div>
+
+                        <button type="button" class="btn btn-secondary btn-sm" onclick="window.print()" style="font-weight:700;" title="Роздрукувати тижневий розклад">
+                            🖨️ Друкувати
+                        </button>
+
+                        <button type="submit" form="schedule-form" id="save-schedule-top-btn" class="btn btn-primary btn-sm" style="font-weight:700;display:none;box-shadow:0 4px 12px rgba(99,102,241,0.35);">
+                            💾 Зберегти зміни
+                        </button>
+                    </div>
+                </div>
+
+                {% if not bell_slots %}
+                <div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);border-radius:var(--radius-md);padding:24px;text-align:center;">
+                    <div style="font-size:36px;margin-bottom:8px;">🔔</div>
+                    <h4 style="margin:0 0 6px;color:#dc2626;font-weight:700;">Розклад дзвінків ще не налаштовано</h4>
+                    <p style="font-size:13px;color:var(--color-text-muted);margin:0 0 16px;">
+                        Щоб вказати розклад уроків по класах, спершу додайте розклад шкільних дзвінків у розділі «Середовище та заклад».
+                    </p>
+                    <a href="{% url 'teacher_settings' %}?tab=environment#bell-schedule-section" class="btn btn-primary btn-sm">
+                        ⚙️ Перейти до налаштувань дзвінків
+                    </a>
+                </div>
+                {% else %}
+
+                <!-- ═════════════════════════════════════════════════════════════ -->
+                <!-- 3.1. РЕЖИМ ПЕРЕГЛЯДУ (VIEW MODE) — ЧИСТИЙ І ЗРУЧНИЙ ВИГЛЯД   -->
+                <!-- ═════════════════════════════════════════════════════════════ -->
+                <div id="schedule-view-mode-container" class="table-responsive" style="overflow-x:auto;border-radius:var(--radius-md);border:1px solid var(--color-border);">
+                    <table class="student-table printable-schedule-table" style="width:100%;min-width:780px;">
+                        <thead>
+                            <tr>
+                                <th style="width:145px;text-align:center;background:var(--color-bg-secondary);">
+                                    № Уроку / Час
+                                </th>
+                                {% for day_num, day_name in days_of_week %}
+                                <th style="text-align:center;background:var(--color-bg-secondary);">
+                                    {{ day_name }}
+                                </th>
+                                {% endfor %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in schedule_rows %}
+                            <tr>
+                                <td style="text-align:center;vertical-align:middle;background:var(--color-bg-secondary);border-right:1px solid var(--color-border);padding:12px 8px;">
+                                    <div style="font-weight:900;font-size:14px;color:var(--color-text-primary);">
+                                        {{ row.slot.lesson_number }}-й урок
+                                    </div>
+                                    <div style="font-size:12px;color:var(--color-text-muted);margin-top:2px;font-weight:600;">
+                                        {{ row.slot.start_time|time:"H:i" }} – {{ row.slot.end_time|time:"H:i" }}
+                                    </div>
+                                    <div style="font-size:11px;color:var(--color-primary);font-weight:700;margin-top:2px;">
+                                        {{ row.slot.duration_minutes }} хв
+                                    </div>
+                                </td>
+
+                                {% for day in row.days %}
+                                <td style="vertical-align:middle;padding:10px 8px;border-right:1px solid var(--color-border);text-align:center;background:{% if day.entry %}rgba(99,102,241,0.04){% else %}transparent{% endif %};">
+                                    {% if day.entry %}
+                                    <div style="background:var(--color-surface);border:1px solid rgba(99,102,241,0.22);border-left:4px solid {{ day.entry.subject.color|default:'var(--color-primary)' }};border-radius:6px;padding:8px 10px;text-align:left;box-shadow:0 1px 4px rgba(0,0,0,0.04);">
+                                        <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
+                                            <span class="class-tag" style="font-size:12px;font-weight:800;padding:2px 8px;">
+                                                {{ day.entry.class_group.name }}
+                                            </span>
+                                            <span style="font-size:10.5px;color:var(--color-text-muted);font-weight:600;">
+                                                {{ row.slot.start_time|time:"H:i" }}
+                                            </span>
+                                        </div>
+                                        {% if day.entry.subject %}
+                                        <div style="font-size:12px;color:{{ day.entry.subject.color|default:'var(--color-primary)' }};font-weight:700;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                                            {{ day.entry.subject.icon }} {{ day.entry.subject.name }}
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                    {% else %}
+                                    <div style="color:var(--color-text-muted);font-size:12px;opacity:0.35;">
+                                        —
+                                    </div>
+                                    {% endif %}
+                                </td>
+                                {% endfor %}
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- ═════════════════════════════════════════════════════════════ -->
+                <!-- 3.2. РЕЖИМ РЕДАГУВАННЯ (EDIT MODE) — ФОРМА ВИБОРУ КЛАСІВ     -->
+                <!-- ═════════════════════════════════════════════════════════════ -->
+                <div id="schedule-edit-mode-container" style="display:none;">
+                    <form id="schedule-form" method="POST" action="{% url 'teacher_students' %}?tab=schedule">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="save_teacher_schedule">
+
+                        <div class="table-responsive" style="overflow-x:auto;border-radius:var(--radius-md);border:1px solid var(--color-border);">
+                            <table class="student-table" style="width:100%;min-width:780px;">
+                                <thead>
+                                    <tr>
+                                        <th style="width:145px;text-align:center;background:var(--color-bg-secondary);">
+                                            № Уроку / Час
+                                        </th>
+                                        {% for day_num, day_name in days_of_week %}
+                                        <th style="text-align:center;background:var(--color-bg-secondary);">
+                                            {{ day_name }}
+                                        </th>
+                                        {% endfor %}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for row in schedule_rows %}
+                                    <tr>
+                                        <td style="text-align:center;vertical-align:middle;background:var(--color-bg-secondary);border-right:1px solid var(--color-border);padding:10px 8px;">
+                                            <div style="font-weight:800;font-size:13.5px;color:var(--color-text-primary);">
+                                                {{ row.slot.lesson_number }}-й урок
+                                            </div>
+                                            <div style="font-size:12px;color:var(--color-text-muted);margin-top:2px;">
+                                                {{ row.slot.start_time|time:"H:i" }} – {{ row.slot.end_time|time:"H:i" }}
+                                            </div>
+                                            <div style="font-size:11px;color:var(--color-primary);font-weight:600;margin-top:1px;">
+                                                {{ row.slot.duration_minutes }} хв
+                                            </div>
+                                        </td>
+
+                                        {% for day in row.days %}
+                                        <td class="schedule-cell-td" style="vertical-align:top;padding:8px;border-right:1px solid var(--color-border);background:{% if day.class_id %}rgba(99,102,241,0.06){% else %}transparent{% endif %};">
+                                            <div class="schedule-cell-box" style="position:relative;border-radius:6px;padding:4px;border:1px solid {% if day.class_id %}var(--color-primary){% else %}transparent{% endif %};transition:all 0.15s ease;">
+                                                
+                                                <!-- Випадаючий список вибору класу -->
+                                                <div style="position:relative;">
+                                                    <select 
+                                                        name="cell_{{ day.day_num }}_{{ row.slot.id }}_class" 
+                                                        class="form-select schedule-class-picker"
+                                                        onchange="onScheduleCellChange(this)"
+                                                        style="width:100%;padding:6px 8px;font-size:13px;font-weight:700;border-radius:6px;border:1px solid var(--color-border);background:var(--color-surface);color:var(--color-text-primary);cursor:pointer;"
+                                                    >
+                                                        <option value="" {% if not day.class_id %}selected{% endif %} style="color:var(--color-text-muted);font-weight:normal;">— вікно —</option>
+                                                        {% for c in teacher_classes %}
+                                                        <option value="{{ c.id }}" {% if day.class_id == c.id %}selected{% endif %}>
+                                                            {{ c.name }}
+                                                        </option>
+                                                        {% endfor %}
+                                                    </select>
+                                                </div>
+
+                                                <!-- Вибір предмета (якщо вчитель веде декілька) -->
+                                                {% if teacher_subjects|length > 1 %}
+                                                <div style="margin-top:4px;">
+                                                    <select 
+                                                        name="cell_{{ day.day_num }}_{{ row.slot.id }}_subject" 
+                                                        class="form-select"
+                                                        style="width:100%;padding:3px 6px;font-size:11px;border-radius:4px;border:1px solid var(--color-border);background:var(--color-surface);color:var(--color-text-secondary);"
+                                                    >
+                                                        <option value="">(За замовчуванням)</option>
+                                                        {% for s in teacher_subjects %}
+                                                        <option value="{{ s.id }}" {% if day.subject_id == s.id %}selected{% endif %}>
+                                                            {{ s.name }}
+                                                        </option>
+                                                        {% endfor %}
+                                                    </select>
+                                                </div>
+                                                {% endif %}
+
+                                            </div>
+                                        </td>
+                                        {% endfor %}
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Панель дій збереження розкладу -->
+                        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-top:20px;padding-top:16px;border-top:1px solid var(--color-border);">
+                            <div style="font-size:13px;color:var(--color-text-muted);">
+                                💡 <em>Підказка: після збереження розкладу на головній сторінці автоматично показуватиметься поточний урок, час до закінчення уроку або перерви.</em>
+                            </div>
+                            <div style="display:flex;gap:10px;">
+                                <button type="button" class="btn btn-secondary" onclick="confirmClearSchedule()" style="color:#ef4444;">
+                                    🗑️ Очистити весь розклад
+                                </button>
+                                <button type="submit" class="btn btn-primary" style="font-weight:700;padding:10px 24px;">
+                                    💾 Зберегти розклад уроків
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Прихована форма для очищення розкладу -->
+                <form id="clear-schedule-form" method="POST" action="{% url 'teacher_students' %}?tab=schedule" style="display:none;">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="clear_teacher_schedule">
+                </form>
+
+                {% endif %}
+
+            </div>
+            <!-- ── Кінець вкладки розкладу ────────────────────────────────────── -->
+            {% endif %}
 
         </div>
     </div>
@@ -738,6 +1054,81 @@ document.addEventListener('keydown', function(e) {
         closeModal('add-student-modal');
         closeModal('edit-student-modal');
         closeModal('import-modal');
+    }
+});
+
+function onScheduleCellChange(selectEl) {
+    var td = selectEl.closest('.schedule-cell-td');
+    var box = selectEl.closest('.schedule-cell-box');
+    if (selectEl.value) {
+        if (td) td.style.background = 'rgba(99, 102, 241, 0.08)';
+        if (box) box.style.borderColor = 'var(--color-primary)';
+    } else {
+        if (td) td.style.background = 'transparent';
+        if (box) box.style.borderColor = 'transparent';
+    }
+    updateActiveLessonsCounter();
+}
+
+function updateActiveLessonsCounter() {
+    var selects = document.querySelectorAll('.schedule-class-picker');
+    var count = 0;
+    selects.forEach(function(s) {
+        if (s.value) count++;
+    });
+    var counterEl = document.getElementById('active-lessons-counter');
+    if (counterEl) counterEl.textContent = count;
+}
+
+function confirmClearSchedule() {
+    if (confirm('Ви дійсно бажаєте очистити весь свій розклад уроків?')) {
+        document.getElementById('clear-schedule-form').submit();
+    }
+}
+
+function setScheduleViewMode(mode) {
+    var viewContainer = document.getElementById('schedule-view-mode-container');
+    var editContainer = document.getElementById('schedule-edit-mode-container');
+    var btnView = document.getElementById('btn-mode-view');
+    var btnEdit = document.getElementById('btn-mode-edit');
+    var saveBtn = document.getElementById('save-schedule-top-btn');
+
+    if (mode === 'edit') {
+        if (viewContainer) viewContainer.style.display = 'none';
+        if (editContainer) editContainer.style.display = 'block';
+        if (btnEdit) {
+            btnEdit.style.background = 'var(--color-primary)';
+            btnEdit.style.color = '#fff';
+        }
+        if (btnView) {
+            btnView.style.background = 'transparent';
+            btnView.style.color = 'var(--color-text-secondary)';
+        }
+        if (saveBtn) saveBtn.style.display = 'inline-flex';
+    } else {
+        if (viewContainer) viewContainer.style.display = 'block';
+        if (editContainer) editContainer.style.display = 'none';
+        if (btnView) {
+            btnView.style.background = 'var(--color-primary)';
+            btnView.style.color = '#fff';
+        }
+        if (btnEdit) {
+            btnEdit.style.background = 'transparent';
+            btnEdit.style.color = 'var(--color-text-secondary)';
+        }
+        if (saveBtn) saveBtn.style.display = 'none';
+    }
+    try {
+        localStorage.setItem('teacher_schedule_view_mode', mode);
+    } catch(e){}
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    try {
+        var savedMode = localStorage.getItem('teacher_schedule_view_mode') || 'view';
+        setScheduleViewMode(savedMode);
+    } catch(e) {
+        setScheduleViewMode('view');
     }
 });
 </script>

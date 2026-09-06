@@ -1,0 +1,77 @@
+<!-- ── Модальне вікно редагування кількості проведених уроків ── -->
+<div id="conducted-lessons-modal" style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(15,23,42,0.65);z-index:99999;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(4px);">
+    <div class="custom-modal-content" style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);width:100%;max-width:460px;box-shadow:0 20px 45px rgba(0,0,0,0.3);overflow:hidden;animation:rescheduleModalIn 0.2s ease-out;">
+        
+        <div style="padding:16px 20px;background:var(--color-bg-secondary);border-bottom:1px solid var(--color-border);display:flex;align-items:center;justify-content:space-between;">
+            <div style="display:flex;align-items:center;gap:8px;font-weight:800;font-size:15px;color:var(--color-text-primary);">
+                <span style="font-size:18px;">🎓</span>
+                <span>Лічильник проведених уроків</span>
+            </div>
+            <button type="button" onclick="closeConductedLessonsModal()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--color-text-muted);line-height:1;padding:4px;" aria-label="Закрити">✕</button>
+        </div>
+
+        <form method="POST" action="{% url 'update_conducted_lessons' %}" style="margin:0;padding:20px;">
+            {% csrf_token %}
+
+            <div style="background:rgba(99,102,241,0.06);border:1px solid rgba(99,102,241,0.18);border-radius:var(--radius-md);padding:12px;margin-bottom:16px;">
+                <div style="font-size:12px;color:var(--color-text-secondary);line-height:1.4;">
+                    Система автоматично підраховує кількість проведених занять за вашим розкладом дзвінків з початку навчального семестру.
+                </div>
+                <div style="margin-top:8px;font-size:13px;font-weight:700;color:var(--color-primary);">
+                    🤖 Розраховано системою: 
+                    <strong>{{ teacher_conducted_lessons.calculated_count|default:"0" }}</strong> уроків
+                </div>
+            </div>
+
+            <div style="margin-bottom:16px;">
+                <label style="display:block;font-size:13px;font-weight:700;margin-bottom:6px;color:var(--color-text-primary);">
+                    Вкажіть точну кількість проведених занять (вручну):
+                </label>
+                <input type="number" 
+                       name="count" 
+                       class="form-input" 
+                       min="0" 
+                       max="2000" 
+                       value="{{ teacher_conducted_lessons.count|default:'0' }}" 
+                       required
+                       style="width:100%;font-size:16px;font-weight:800;padding:10px 14px;border-radius:var(--radius-md);">
+                <div style="font-size:11.5px;color:var(--color-text-muted);margin-top:4px;">
+                    Значення зберігається за вашим профілем для ведення звітності та планування.
+                </div>
+            </div>
+
+            <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--color-border);padding-top:16px;gap:10px;">
+                <button type="submit" name="action" value="reset" class="btn btn-secondary btn-sm" style="color:#ef4444;font-size:12px;" onclick="return confirm('Скинути вручну введене число та увімкнути автоматичний підрахунок системою?')">
+                    🔄 Скинути до розрахунку системи
+                </button>
+                <div style="display:flex;gap:8px;">
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="closeConductedLessonsModal()">
+                        Скасувати
+                    </button>
+                    <button type="submit" class="btn btn-primary btn-sm" style="font-weight:700;padding:6px 16px;">
+                        💾 Зберегти
+                    </button>
+                </div>
+            </div>
+        </form>
+
+    </div>
+</div>
+
+<script>
+function openConductedLessonsModal() {
+    var modal = document.getElementById('conducted-lessons-modal');
+    if (modal) modal.style.display = 'flex';
+}
+function closeConductedLessonsModal() {
+    var modal = document.getElementById('conducted-lessons-modal');
+    if (modal) modal.style.display = 'none';
+}
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closeConductedLessonsModal();
+});
+document.addEventListener('click', function(e) {
+    var modal = document.getElementById('conducted-lessons-modal');
+    if (modal && e.target === modal) closeConductedLessonsModal();
+});
+</script>

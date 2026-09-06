@@ -342,6 +342,101 @@
                     </div>
                 </div>
 
+                <!-- 2.2. Розклад дзвінків та уроків закладу -->
+                <div class="form-card mb-4" id="bell-schedule-card">
+                    <div class="form-card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+                        <div>
+                            <h2 class="form-card-title">🔔 Розклад дзвінків (час уроків та перерв)</h2>
+                            <div style="font-size:12px;color:var(--color-text-muted);margin-top:2px;">
+                                Вкажіть час початку та завершення кожного уроку. Тривалість перерв між уроками розраховується автоматично!
+                            </div>
+                        </div>
+                        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                            <button type="button" class="btn btn-primary btn-sm" onclick="openAddBellModal()" style="font-weight:700;">
+                                ➕ Додати урок
+                            </button>
+                            <form method="POST" style="margin:0;">
+                                {% csrf_token %}
+                                <input type="hidden" name="action" value="reset_default_bells">
+                                <button type="submit" class="btn btn-secondary btn-sm" style="font-weight:700;" data-confirm="Відновити стандартні 8 уроків розкладу дзвінків (08:30 – 15:50)?">
+                                    🔄 Стандартні дзвінки
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+
+                    <div class="form-card-body">
+                        <div style="overflow-x:auto;">
+                            <table style="width:100%;border-collapse:collapse;font-size:13.5px;">
+                                <thead>
+                                    <tr style="border-bottom:2px solid var(--color-border);text-align:left;">
+                                        <th style="padding:10px 12px;font-weight:800;">№</th>
+                                        <th style="padding:10px 12px;font-weight:800;">Початок</th>
+                                        <th style="padding:10px 12px;font-weight:800;">Кінець</th>
+                                        <th style="padding:10px 12px;font-weight:800;">Тривалість</th>
+                                        <th style="padding:10px 12px;font-weight:800;color:var(--color-primary);">Перерва до наступного уроку (авто)</th>
+                                        <th style="padding:10px 12px;text-align:right;font-weight:800;">Дії</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for slot in bell_schedules %}
+                                    <tr style="border-bottom:1px solid var(--color-border);transition:background 0.15s;" onmouseover="this.style.background='rgba(99,102,241,0.03)'" onmouseout="this.style.background='transparent'">
+                                        <td style="padding:12px;font-weight:800;">
+                                            <span style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;background:rgba(99,102,241,0.12);color:var(--color-primary);border-radius:6px;font-weight:800;">
+                                                {{ slot.lesson_number }}
+                                            </span>
+                                        </td>
+                                        <td style="padding:12px;font-weight:700;font-family:monospace;font-size:14px;">
+                                            {{ slot.start_time|time:"H:i" }}
+                                        </td>
+                                        <td style="padding:12px;font-weight:700;font-family:monospace;font-size:14px;">
+                                            {{ slot.end_time|time:"H:i" }}
+                                        </td>
+                                        <td style="padding:12px;color:var(--color-text-secondary);font-weight:600;">
+                                            {{ slot.duration_minutes }} хв
+                                        </td>
+                                        <td style="padding:12px;">
+                                            {% if slot.get_break_after is not None %}
+                                            <span style="display:inline-flex;align-items:center;gap:6px;padding:3px 10px;background:rgba(16,185,129,0.12);color:#059669;border-radius:12px;font-weight:700;font-size:12px;border:1px solid rgba(16,185,129,0.25);">
+                                                ☕ {{ slot.get_break_after }} хв перерви
+                                            </span>
+                                            {% else %}
+                                            <span class="text-muted text-xs" style="font-weight:600;">🏁 Кінець навчальних занять</span>
+                                            {% endif %}
+                                        </td>
+                                        <td style="padding:12px;text-align:right;">
+                                            <div style="display:inline-flex;gap:6px;align-items:center;">
+                                                <button type="button" class="btn btn-secondary btn-sm" style="padding:4px 9px;font-size:12px;"
+                                                        title="Редагувати час уроку"
+                                                        onclick="openEditBellModal('{{ slot.id }}', '{{ slot.lesson_number }}', '{{ slot.start_time|time:'H:i' }}', '{{ slot.end_time|time:'H:i' }}')">
+                                                    ✏️
+                                                </button>
+                                                <form method="POST" style="margin:0;display:inline;">
+                                                    {% csrf_token %}
+                                                    <input type="hidden" name="action" value="delete_bell_slot">
+                                                    <input type="hidden" name="slot_id" value="{{ slot.id }}">
+                                                    <button type="submit" class="btn btn-secondary btn-sm" style="padding:4px 9px;font-size:12px;color:#ef4444;"
+                                                            title="Видалити урок з розкладу"
+                                                            data-confirm="Видалити {{ slot.lesson_number }}-й урок з розкладу дзвінків?">
+                                                        🗑️
+                                                    </button>
+                                                </form>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    {% empty %}
+                                    <tr>
+                                        <td colspan="6" style="padding:28px;text-align:center;color:var(--color-text-muted);">
+                                            Розклад дзвінків ще не створено. Натисніть кнопку «Стандартні дзвінки» для швидкого налаштування!
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- 2.2. Адміністрування вчителів та доступів (Для Супер-Адміністратора) -->
                 {% if user.is_superuser %}
                 <div class="form-card mb-4" style="border-color:{% if is_superadmin_mode %}#f59e0b{% else %}var(--color-border){% endif %};">
@@ -529,6 +624,32 @@
                                     <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--color-text-muted);margin-top:2px;">
                                         <span>0.0 (Строга точність)</span>
                                         <span>1.0 (Творча оцінка)</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Допустимий поріг збігів для ШІ-детектора -->
+                            <div style="background:var(--color-background);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:14px 16px;margin-bottom:18px;">
+                                <div class="form-group" style="margin:0;">
+                                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+                                        <label for="ai_detector_tolerance_percent" class="form-label" style="font-weight:700;margin:0;display:flex;align-items:center;gap:6px;">
+                                            <span>🛡️</span>
+                                            <span>Допустимий поріг збігів для ШІ-детектора:</span>
+                                            <span class="badge" style="background:#6366f1;color:#fff;font-size:12px;font-weight:800;padding:2px 8px;border-radius:10px;">
+                                                <span id="ai-tol-val">{{ ai_settings.ai_detector_tolerance_percent|default:25 }}</span>%
+                                            </span>
+                                        </label>
+                                    </div>
+                                    <input type="range" name="ai_detector_tolerance_percent" id="ai_detector_tolerance_percent" min="5" max="60" step="5"
+                                           value="{{ ai_settings.ai_detector_tolerance_percent|default:25 }}" class="form-input" style="padding:0;cursor:pointer;"
+                                           oninput="document.getElementById('ai-tol-val').textContent = this.value">
+                                    <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--color-text-muted);margin-top:2px;">
+                                        <span>5% (Строга перевірка)</span>
+                                        <span style="font-weight:700;color:var(--color-primary);">25% (Рекомендовано: захист від хибних спрацьовувань)</span>
+                                        <span>60% (Висока толерантність)</span>
+                                    </div>
+                                    <div style="font-size:11.5px;color:var(--color-text-muted);margin-top:6px;line-height:1.4;">
+                                        💡 Якщо учень скопіював окремі терміни, формули чи 1-2 стандартні фрази (в межах цього відсотка), робота вважається самостійною і <strong>не</strong> маркується як згенерована ШІ.
                                     </div>
                                 </div>
                             </div>
@@ -969,11 +1090,16 @@
                         <h2 class="form-card-title">📊 Загальна статистика перевірок ШІ</h2>
                     </div>
                     <div class="form-card-body">
-                        <!-- 4 картки метрик -->
+                        <!-- 6 карток метрик -->
                         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:18px;">
                             <div class="sidebar-card" style="padding:14px;text-align:center;border-top:3px solid var(--color-primary);">
                                 <div style="font-size:24px;font-weight:900;color:var(--color-primary);">{{ total_ai_checks }}</div>
                                 <div class="text-muted text-xs" style="font-weight:700;margin-top:2px;">Всього перевірок</div>
+                                {% if teacher_ai_checks or student_ai_checks %}
+                                <div style="font-size:10px;color:var(--color-text-muted);margin-top:4px;">
+                                    👩‍🏫 {{ teacher_ai_checks }} вчит. · 🎓 {{ student_ai_checks }} учн.
+                                </div>
+                                {% endif %}
                             </div>
 
                             <div class="sidebar-card" style="padding:14px;text-align:center;border-top:3px solid #10b981;">
@@ -989,6 +1115,19 @@
                             <div class="sidebar-card" style="padding:14px;text-align:center;border-top:3px solid #f59e0b;">
                                 <div style="font-size:24px;font-weight:900;color:#d97706;">{{ level_rework }}</div>
                                 <div class="text-muted text-xs" style="font-weight:700;margin-top:2px;">🔄 На доопрацюванні</div>
+                            </div>
+
+                            <div class="sidebar-card" style="padding:14px;text-align:center;border-top:3px solid #ef4444;">
+                                <div style="font-size:24px;font-weight:900;color:#dc2626;">{{ total_ai_detected }}</div>
+                                <div class="text-muted text-xs" style="font-weight:700;margin-top:2px;">🤖 Підозра на ШІ</div>
+                                {% if avg_ai_percent %}
+                                <div style="font-size:10px;color:var(--color-text-muted);margin-top:4px;">середнє {{ avg_ai_percent }}%</div>
+                                {% endif %}
+                            </div>
+
+                            <div class="sidebar-card" style="padding:14px;text-align:center;border-top:3px solid #6b7280;">
+                                <div style="font-size:24px;font-weight:900;color:var(--color-text-muted);">{{ total_ai_failed }}</div>
+                                <div class="text-muted text-xs" style="font-weight:700;margin-top:2px;">⚠️ Помилки / Непідтримані</div>
                             </div>
                         </div>
 
@@ -1512,5 +1651,80 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 });
+
+// Модальне вікно розкладу дзвінків
+function openAddBellModal() {
+    var modal = document.getElementById('bell-modal');
+    if (!modal) return;
+    document.getElementById('bell_slot_id').value = '';
+    document.getElementById('bell-modal-title').querySelector('span').textContent = 'Додати урок до розкладу дзвінків';
+    var maxNum = 0;
+    {% for slot in bell_schedules %}
+    if ({{ slot.lesson_number }} > maxNum) maxNum = {{ slot.lesson_number }};
+    {% endfor %}
+    document.getElementById('bell_lesson_number').value = maxNum + 1;
+    document.getElementById('bell_start_time').value = '';
+    document.getElementById('bell_end_time').value = '';
+    modal.style.display = 'flex';
+}
+
+function openEditBellModal(id, num, start, end) {
+    var modal = document.getElementById('bell-modal');
+    if (!modal) return;
+    document.getElementById('bell_slot_id').value = id;
+    document.getElementById('bell-modal-title').querySelector('span').textContent = 'Редагувати ' + num + '-й урок';
+    document.getElementById('bell_lesson_number').value = num;
+    document.getElementById('bell_start_time').value = start;
+    document.getElementById('bell_end_time').value = end;
+    modal.style.display = 'flex';
+}
+
+function closeBellModal() {
+    var modal = document.getElementById('bell-modal');
+    if (modal) modal.style.display = 'none';
+}
 </script>
+
+<!-- Модальне вікно: Додавання / Редагування уроку розкладу дзвінків -->
+<div id="bell-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.65);backdrop-filter:blur(4px);z-index:9999;align-items:center;justify-content:center;">
+    <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);box-shadow:0 20px 40px rgba(0,0,0,0.3);width:95%;max-width:440px;padding:24px;position:relative;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;">
+            <h3 id="bell-modal-title" style="margin:0;font-size:17px;font-weight:800;display:flex;align-items:center;gap:8px;">
+                🔔 <span>Додати урок до розкладу дзвінків</span>
+            </h3>
+            <button type="button" onclick="closeBellModal()" style="background:transparent;border:none;font-size:18px;cursor:pointer;color:var(--color-text-muted);">✕</button>
+        </div>
+
+        <form method="POST" id="bell-slot-form">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="save_bell_slot">
+            <input type="hidden" name="slot_id" id="bell_slot_id" value="">
+
+            <div class="form-group mb-3">
+                <label class="form-label required" style="font-weight:700;">Номер уроку:</label>
+                <input type="number" name="lesson_number" id="bell_lesson_number" class="form-input" min="1" max="15" required style="font-weight:700;font-size:15px;">
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+                <div class="form-group" style="margin:0;">
+                    <label class="form-label required" style="font-weight:700;">Початок уроку:</label>
+                    <input type="time" name="start_time" id="bell_start_time" class="form-input" required style="font-family:monospace;font-size:15px;font-weight:700;">
+                </div>
+                <div class="form-group" style="margin:0;">
+                    <label class="form-label required" style="font-weight:700;">Кінець уроку:</label>
+                    <input type="time" name="end_time" id="bell_end_time" class="form-input" required style="font-family:monospace;font-size:15px;font-weight:700;">
+                </div>
+            </div>
+
+            <div style="background:var(--color-bg-secondary);padding:10px 14px;border-radius:var(--radius-md);border:1px solid var(--color-border);margin-bottom:20px;font-size:12.5px;color:var(--color-text-secondary);">
+                💡 <em>Підказка: тривалість стандартного уроку становить 45 хвилин. Час перерви до наступного уроку обчислюється автоматично.</em>
+            </div>
+
+            <div style="display:flex;justify-content:flex-end;gap:10px;">
+                <button type="button" class="btn btn-secondary" onclick="closeBellModal()">Скасувати</button>
+                <button type="submit" class="btn btn-primary" style="font-weight:700;">✓ Зберегти урок</button>
+            </div>
+        </form>
+    </div>
+</div>
 {% endblock %}

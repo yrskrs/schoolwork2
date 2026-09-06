@@ -1,0 +1,457 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}30-денний календар перенесених уроків | Шкільні Завдання{% endblock %}
+
+{% block extra_head %}
+<style>
+.calendar-card-block {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 2px 10px rgba(0,0,0,0.03);
+    overflow: hidden;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+.calendar-grid-wrapper {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    box-sizing: border-box;
+    padding-bottom: 4px;
+}
+.calendar-grid-30 {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(105px, 1fr));
+    gap: 8px;
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+}
+@media (max-width: 1250px) {
+    .calendar-grid-30 {
+        grid-template-columns: repeat(5, minmax(95px, 1fr));
+    }
+}
+@media (max-width: 850px) {
+    .calendar-grid-30 {
+        grid-template-columns: repeat(4, minmax(90px, 1fr));
+    }
+}
+@media (max-width: 600px) {
+    .calendar-grid-30 {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+@media (max-width: 380px) {
+    .calendar-grid-30 {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+.calendar-day-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: 8px;
+    min-height: 82px;
+    min-width: 0;
+    max-width: 100%;
+    width: 100%;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    transition: all 0.15s ease;
+    position: relative;
+    overflow: hidden;
+}
+.calendar-day-card:hover {
+    border-color: var(--color-primary);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+}
+.calendar-day-card.today {
+    border: 2px solid var(--color-primary);
+    background: rgba(99,102,241,0.05);
+}
+.calendar-day-card.weekend {
+    background: var(--color-bg-secondary);
+    opacity: 0.9;
+}
+.calendar-day-card.has-events {
+    border-color: #f59e0b;
+    background: rgba(245, 158, 11, 0.05);
+}
+.calendar-day-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+    min-width: 0;
+    width: 100%;
+    gap: 4px;
+}
+.calendar-day-date {
+    font-size: 13px;
+    font-weight: 800;
+    color: var(--color-text-primary);
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    letter-spacing: -0.01em;
+}
+.calendar-day-card.today .calendar-day-date {
+    color: var(--color-primary);
+}
+.calendar-day-weekday {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--color-text-muted);
+    white-space: nowrap;
+}
+.badge-today-mini {
+    font-size: 8.5px;
+    font-weight: 800;
+    padding: 1px 4px;
+    border-radius: 3px;
+    background: var(--color-primary);
+    color: #fff;
+    line-height: 1;
+    text-transform: uppercase;
+}
+.calendar-event-badge {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 6px;
+    border-radius: 4px;
+    margin-top: 3px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    text-decoration: none;
+    line-height: 1.2;
+    overflow: hidden;
+    min-width: 0;
+    max-width: 100%;
+    width: 100%;
+    box-sizing: border-box;
+}
+.calendar-event-badge .event-icon {
+    flex-shrink: 0;
+    font-size: 11px;
+}
+.calendar-event-badge .event-text {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.event-rescheduled-to {
+    background: rgba(239, 68, 68, 0.12);
+    color: #dc2626;
+    border: 1px solid rgba(239, 68, 68, 0.25);
+}
+.event-rescheduled-from {
+    background: rgba(245, 158, 11, 0.12);
+    color: #d97706;
+    border: 1px solid rgba(245, 158, 11, 0.25);
+}
+.stat-pill {
+    padding: 8px 14px;
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    box-sizing: border-box;
+}
+tr:target td {
+    background: rgba(99, 102, 241, 0.15) !important;
+    animation: highlightTargetRow 2.5s ease-out;
+}
+@keyframes highlightTargetRow {
+    0% { background: rgba(99, 102, 241, 0.4) !important; }
+    100% { background: rgba(99, 102, 241, 0.15) !important; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-wrapper">
+    <div class="feed-layout">
+
+        <!-- ════ ЛІВИЙ САЙДБАР ВЧИТЕЛЯ ════════════════════════════════════════ -->
+        {% include 'feed/components/teacher_sidebar.html' %}
+
+        <!-- ════ ЦЕНТРАЛЬНА ЧАСТИНА: 30-ДЕННИЙ КАЛЕНДАР ПЕРЕНЕСЕНЬ ═════════════ -->
+        <div class="feed-main-content">
+
+            <!-- ── Шапка розділу ─────────────────────────────────────────────── -->
+            <div class="page-hero" style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:14px;margin-bottom:20px;">
+                <div>
+                    <div class="page-hero-kicker">Журнал та облік занять</div>
+                    <h1 style="display:flex;align-items:center;gap:10px;">
+                        <span>📅</span> <span>30-денний календар перенесених уроків</span>
+                    </h1>
+                    <div class="page-hero-sub">
+                        Аналітика та контроль перенесень занять через повітряні тривоги, хвороби чи свята (доступно лише вчителю)
+                    </div>
+                </div>
+
+                <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                    <a href="{% url 'teacher_students' %}?tab=schedule" class="btn btn-secondary" style="font-weight:700;">
+                        📋 Мій тижневий розклад
+                    </a>
+                    <a href="{% url 'teacher_dashboard' %}" class="btn btn-secondary" style="font-weight:700;">
+                        ← До завдань
+                    </a>
+                </div>
+            </div>
+
+            <!-- ── Навігація по датах календаря (30 днів) ─────────────────────── -->
+            <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:14px 20px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;box-shadow:0 2px 10px rgba(0,0,0,0.03);">
+                <div style="display:flex;align-items:center;gap:10px;">
+                    <a href="?date={{ prev_date }}{% if selected_class_id %}&class_group={{ selected_class_id }}{% endif %}{% if selected_reason %}&reason_type={{ selected_reason }}{% endif %}" class="btn btn-secondary btn-sm" style="font-weight:700;">
+                        ← Попередні 30 днів
+                    </a>
+                    <a href="?date={{ today|date:'Y-m-d' }}{% if selected_class_id %}&class_group={{ selected_class_id }}{% endif %}{% if selected_reason %}&reason_type={{ selected_reason }}{% endif %}" class="btn btn-secondary btn-sm" style="font-weight:700;">
+                        Сьогодні
+                    </a>
+                    <a href="?date={{ next_date }}{% if selected_class_id %}&class_group={{ selected_class_id }}{% endif %}{% if selected_reason %}&reason_type={{ selected_reason }}{% endif %}" class="btn btn-secondary btn-sm" style="font-weight:700;">
+                        Наступні 30 днів →
+                    </a>
+                </div>
+
+                <div style="font-size:14px;font-weight:800;color:var(--color-text-primary);">
+                    Період: <span style="color:var(--color-primary);">{{ start_date|date:"d.m.Y" }}</span> — <span style="color:var(--color-primary);">{{ end_date|date:"d.m.Y" }}</span> (30 днів)
+                </div>
+
+                <!-- Фільтри -->
+                <form method="GET" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0;">
+                    <input type="hidden" name="date" value="{{ center_date|date:'Y-m-d' }}">
+                    
+                    <select name="class_group" class="form-select" onchange="this.form.submit()" style="font-size:12.5px;padding:5px 10px;border-radius:var(--radius-md);">
+                        <option value="">Всі класи</option>
+                        {% for cg in teacher_classes %}
+                        <option value="{{ cg.id }}" {% if selected_class_id == cg.id %}selected{% endif %}>{{ cg.name }}</option>
+                        {% endfor %}
+                    </select>
+
+                    <select name="reason_type" class="form-select" onchange="this.form.submit()" style="font-size:12.5px;padding:5px 10px;border-radius:var(--radius-md);">
+                        <option value="">Всі причини</option>
+                        {% for r_code, r_label in reason_choices %}
+                        <option value="{{ r_code }}" {% if selected_reason == r_code %}selected{% endif %}>{{ r_label }}</option>
+                        {% endfor %}
+                    </select>
+
+                    {% if selected_class_id or selected_reason %}
+                    <a href="?date={{ center_date|date:'Y-m-d' }}" class="btn btn-secondary btn-sm" title="Скинути фільтри">
+                        ✕
+                    </a>
+                    {% endif %}
+                </form>
+            </div>
+
+            <!-- ── Картки статистики причин перенесення ────────────────────────── -->
+            <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:12px;margin-bottom:24px;">
+                <div class="stat-pill" style="border-left:4px solid var(--color-primary);">
+                    <div style="font-size:28px;">🔄</div>
+                    <div>
+                        <div style="font-size:20px;font-weight:900;color:var(--color-primary);">{{ total_rescheduled_count }}</div>
+                        <div style="font-size:12px;color:var(--color-text-muted);font-weight:600;">Всього перенесень за 30 днів</div>
+                    </div>
+                </div>
+
+                {% for r_code, r_stat in reason_stats.items %}
+                <div class="stat-pill" style="border-left:4px solid {% if r_code == 'air_raid' %}#ef4444{% elif r_code == 'illness' %}#3b82f6{% elif r_code == 'holiday' %}#10b981{% else %}#f59e0b{% endif %};">
+                    <div>
+                        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+                            <span style="font-weight:800;font-size:13px;color:var(--color-text-primary);">{{ r_stat.title }}</span>
+                            <span style="font-weight:900;font-size:16px;color:var(--color-text-primary);">{{ r_stat.count }}</span>
+                        </div>
+                        <div style="font-size:11px;color:var(--color-text-muted);margin-top:2px;">
+                            Частка: {{ r_stat.percent }}% від усіх перенесень
+                        </div>
+                    </div>
+                </div>
+                {% empty %}
+                <div class="stat-pill" style="grid-column:1/-1;justify-content:center;color:var(--color-text-muted);font-size:13px;">
+                    ✨ За цей 30-денний період уроки не переносилися
+                </div>
+                {% endfor %}
+            </div>
+
+            <!-- ── 30-денна інтерактивна сітка ───────────────────────────────── -->
+            <div class="calendar-card-block" style="padding:20px;margin-bottom:24px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px;">
+                    <div style="font-weight:800;font-size:15px;color:var(--color-text-primary);">
+                        🗓️ Огляд 30 днів календаря
+                    </div>
+                    <div style="display:flex;gap:12px;font-size:12px;color:var(--color-text-muted);flex-wrap:wrap;">
+                        <span style="display:inline-flex;align-items:center;gap:4px;">
+                            <span style="width:10px;height:10px;border-radius:2px;background:rgba(239,68,68,0.3);display:inline-block;"></span>
+                            Нова дата уроку
+                        </span>
+                        <span style="display:inline-flex;align-items:center;gap:4px;">
+                            <span style="width:10px;height:10px;border-radius:2px;background:rgba(245,158,11,0.3);display:inline-block;"></span>
+                            Урок перенесено звідси
+                        </span>
+                    </div>
+                </div>
+
+                <div class="calendar-grid-wrapper">
+                    <div class="calendar-grid-30">
+                        {% for day in days_grid %}
+                        <div class="calendar-day-card {% if day.is_today %}today{% endif %} {% if day.is_weekend %}weekend{% endif %} {% if day.has_events %}has-events{% endif %}"
+                             id="cal-day-{{ day.date_str }}">
+                            <div class="calendar-day-header">
+                                <span class="calendar-day-date">
+                                    {{ day.date|date:"d.m" }}
+                                    {% if day.is_today %}<span class="badge-today-mini">Сьогодні</span>{% endif %}
+                                </span>
+                                <span class="calendar-day-weekday">{{ day.weekday_name }}</span>
+                            </div>
+
+                            <!-- Події перенесення на цей день -->
+                            {% for log in day.new_logs %}
+                            <a href="#log-entry-{{ log.id }}" class="calendar-event-badge event-rescheduled-to" title="Урок перенесено СЮДИ: {{ log.assignment.title }} (з {{ log.original_date|date:'d.m' }}). Причина: {{ log.get_reason_type_display }}">
+                                <span class="event-icon">{{ log.reason_icon }}</span>
+                                <span class="event-text">{{ log.class_group.name|default:'Клас' }}: {{ log.assignment.title }}</span>
+                            </a>
+                            {% endfor %}
+
+                            <!-- Події перенесення З цього дня -->
+                            {% for log in day.orig_logs %}
+                            <a href="#log-entry-{{ log.id }}" class="calendar-event-badge event-rescheduled-from" title="Урок перенесено ЗВІДСИ на {{ log.new_date|date:'d.m' }}: {{ log.assignment.title }}. Причина: {{ log.get_reason_type_display }}">
+                                <span class="event-icon">↩️</span>
+                                <span class="event-text">{{ log.class_group.name|default:'Клас' }} → {{ log.new_date|date:'d.m' }}</span>
+                            </a>
+                            {% endfor %}
+
+                            {% if not day.has_events %}
+                            <div style="flex:1;display:flex;align-items:center;justify-content:center;color:var(--color-text-muted);font-size:11px;opacity:0.4;">
+                                —
+                            </div>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── Детальна таблиця перенесених уроків за 30 днів ──────────────── -->
+            <div class="calendar-card-block" style="margin-bottom:32px;">
+                <div style="padding:16px 20px;border-bottom:1px solid var(--color-border);background:var(--color-bg-secondary);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+                    <div style="font-weight:800;font-size:14px;color:var(--color-text-primary);">
+                        📋 Реєстр перенесених уроків ({{ logs_list|length }})
+                    </div>
+                    <div style="font-size:12px;color:var(--color-text-muted);">
+                        Дані зберігаються для педагогічного обліку та звітності завучу
+                    </div>
+                </div>
+
+                {% if logs_list %}
+                <div class="table-responsive" style="overflow-x:auto;width:100%;max-width:100%;-webkit-overflow-scrolling:touch;padding:0;">
+                    <table class="student-table" style="width:100%;min-width:760px;">
+                        <thead>
+                            <tr>
+                                <th style="width:130px;padding-left:20px;">Нова дата</th>
+                                <th style="width:130px;">Було заплановано</th>
+                                <th>Завдання / Тема</th>
+                                <th>Клас</th>
+                                <th>Причина перенесення</th>
+                                <th>Деталі / Примітка</th>
+                                <th style="text-align:right;padding-right:20px;">Дії</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for log in logs_list %}
+                            <tr id="log-entry-{{ log.id }}">
+                                <td style="padding-left:20px;">
+                                    <div style="font-weight:800;color:var(--color-primary);font-size:13.5px;">
+                                        📅 {{ log.new_date|date:"d.m.Y" }}
+                                    </div>
+                                    {% if log.new_bell_slot %}
+                                    <div style="font-size:11.5px;color:var(--color-text-muted);">
+                                        {{ log.new_bell_slot.lesson_number }}-й урок ({{ log.new_bell_slot.start_time|time:"H:i" }})
+                                    </div>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <div style="font-weight:600;color:var(--color-text-muted);font-size:12.5px;text-decoration:line-through;">
+                                        {{ log.original_date|date:"d.m.Y" }}
+                                    </div>
+                                    {% if log.original_bell_slot %}
+                                    <div style="font-size:11px;color:var(--color-text-muted);">
+                                        {{ log.original_bell_slot.lesson_number }}-й урок
+                                    </div>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <a href="{% url 'assignment_detail' log.assignment.id %}" style="font-weight:700;color:var(--color-text-primary);text-decoration:none;font-size:13.5px;" title="Переглянути завдання">
+                                        {{ log.assignment.title }}
+                                    </a>
+                                    {% if log.assignment.subject %}
+                                    <div style="font-size:11px;color:{{ log.assignment.subject.color|default:'var(--color-primary)' }};margin-top:2px;">
+                                        {{ log.assignment.subject.icon }} {{ log.assignment.subject.name }}
+                                    </div>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if log.class_group %}
+                                    <span class="class-tag">{{ log.class_group.name }}</span>
+                                    {% else %}
+                                    <span class="text-muted">Всі класи</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <span style="display:inline-flex;align-items:center;gap:5px;font-weight:700;font-size:12px;padding:3px 8px;border-radius:4px;background:rgba(239,68,68,0.08);color:#dc2626;border:1px solid rgba(239,68,68,0.2);">
+                                        {{ log.reason_icon }} {{ log.get_reason_type_display }}
+                                    </span>
+                                </td>
+                                <td>
+                                    {% if log.reason_comment %}
+                                    <div style="font-size:12px;color:var(--color-text-secondary);max-width:260px;">
+                                        💬 {{ log.reason_comment }}
+                                    </div>
+                                    {% else %}
+                                    <span style="font-size:11px;color:var(--color-text-muted);">—</span>
+                                    {% endif %}
+                                    <div style="font-size:10.5px;color:var(--color-text-muted);margin-top:2px;">
+                                        Перенесено: {{ log.rescheduled_at|date:"d.m.Y H:i" }}
+                                    </div>
+                                </td>
+                                <td style="text-align:right;white-space:nowrap;padding-right:20px;">
+                                    <button type="button" class="btn btn-secondary btn-sm" onclick="openRescheduleModalDirect({{ log.assignment.id }}, '{{ log.assignment.title|escapejs }}', '{{ log.class_group_id|default:'' }}')" title="Перенести знову">
+                                        🔄
+                                    </button>
+                                    <a href="{% url 'assignment_detail' log.assignment.id %}" class="btn btn-secondary btn-sm" title="Відкрити завдання">
+                                        👁️
+                                    </a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div style="padding:48px 20px;text-align:center;color:var(--color-text-muted);">
+                    <div style="font-size:36px;margin-bottom:8px;">✨</div>
+                    <div style="font-size:14px;font-weight:700;color:var(--color-text-primary);">Немає перенесених уроків за обраний період</div>
+                    <div style="font-size:12px;margin-top:4px;">Всі уроки проводяться за штатним розкладом.</div>
+                </div>
+                {% endif %}
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<!-- Модальне вікно перенесення завдання -->
+{% include 'feed/components/reschedule_modal.html' %}
+
+{% endblock %}

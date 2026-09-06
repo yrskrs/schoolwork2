@@ -129,6 +129,46 @@
                                 <p class="form-hint">⚠️ Класи ще не створені. Ви можете додати їх у налаштуваннях профілю вчителя.</p>
                                 {% endif %}
                             </div>
+
+                            <!-- 📅 2.1. Цільовий урок за розкладом (необов'язково) -->
+                            {% if teacher_lesson_schedules %}
+                            <div id="schedule-targeting-block" style="margin-top:16px;padding:14px 16px;background:var(--color-bg-secondary);border:1px dashed var(--color-border);border-radius:var(--radius-md);">
+                                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;flex-wrap:wrap;gap:6px;">
+                                    <label class="form-label" style="font-weight:700;margin:0;font-size:13px;display:flex;align-items:center;gap:6px;">
+                                        <span>📅</span> <span>Прив'язка до розкладу уроків (необов'язково)</span>
+                                    </label>
+                                    <span style="font-size:11.5px;color:var(--color-text-muted);">
+                                        Цільовий день уроку для кожного обраного класу
+                                    </span>
+                                </div>
+                                <p class="form-hint" style="margin-top:0;margin-bottom:10px;">
+                                    Якщо одне завдання призначено декільком класам, у яких уроки в різні дні, вкажіть день за розкладом. Учні побачать позначку актуальності для свого класу (наприклад, <em>«🟢 На сьогоднішній урок»</em> або <em>«📅 На четвер»</em>).
+                                </p>
+                                
+                                <div id="schedule-targets-grid" style="display:flex;flex-direction:column;gap:8px;">
+                                    {% for class_obj in form.classes.field.queryset %}
+                                    <div class="schedule-target-row" id="target-row-class-{{ class_obj.id }}" style="display:none;align-items:center;gap:12px;padding:8px 12px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:6px;flex-wrap:wrap;">
+                                        <span style="font-weight:750;font-size:13px;min-width:70px;color:var(--color-text-primary);">
+                                            🏫 {{ class_obj.name }}:
+                                        </span>
+                                        <div style="flex:1;min-width:220px;">
+                                            <select name="class_schedule_target_{{ class_obj.id }}" class="form-select" style="font-size:12.5px;padding:5px 8px;">
+                                                <option value="auto">⚡ Автоматично (найближчий урок за розкладом)</option>
+                                                {% for sch in teacher_lesson_schedules %}
+                                                    {% if sch.class_group_id == class_obj.id %}
+                                                    <option value="slot_{{ sch.day_of_week }}_{{ sch.bell_slot_id }}" {% if sch.is_selected_for_assignment %}selected{% endif %}>
+                                                        {{ sch.get_day_of_week_display }}, {{ sch.bell_slot.lesson_number }}-й урок ({{ sch.bell_slot.start_time|time:"H:i" }})
+                                                    </option>
+                                                    {% endif %}
+                                                {% endfor %}
+                                                <option value="none">🌐 Без прив'язки до дня розкладу</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            {% endif %}
                         </div>
 
                         <!-- ════ РОЗДІЛ 3: НАВЧАЛЬНІ МАТЕРІАЛИ ТА ФАЙЛИ ═══════════════ -->
@@ -309,7 +349,7 @@
                                     <option value="">— Не обрано (буде обиратись вручну) —</option>
                                     {% for preset in criteria_presets %}
                                     <option value="{{ preset.id }}"
-                                        {% if assignment and assignment.default_ai_preset_id == preset.id %}selected{% endif %}>
+                                        {% if assignment and assignment.default_ai_preset_id == preset.id %}selected{% elif not assignment and last_ai_preset_id == preset.id %}selected{% endif %}>
                                         {{ preset.name }}
                                     </option>
                                     {% endfor %}
@@ -532,10 +572,31 @@ document.addEventListener('DOMContentLoaded', function() {
         localStorage.removeItem('schoolnet_assignment_draft');
     } catch(e) {}
 
-    // Автозавантаження ГР при редагуванні завдання з уже обраним preset
+    // Автозавантаження ГР при створенні або редагуванні завдання з уже обраним preset
     var presetSelect = document.getElementById('id_default_ai_preset');
-    if (presetSelect && presetSelect.value) {
-        loadPresetGRs(presetSelect.value, {{ assignment.default_ai_grs|default:"'[]'"|safe }});
+    if (presetSelect) {
+        {% if not is_edit %}
+        // Якщо це нове завдання і вибір ще не зроблено, перевіряємо localStorage
+        try {
+            var cachedPreset = localStorage.getItem('schoolnet_last_ai_preset');
+            if (!presetSelect.value && cachedPreset && PRESET_GR_DATA[cachedPreset]) {
+                presetSelect.value = cachedPreset;
+            }
+        } catch(e) {}
+        {% endif %}
+
+        if (presetSelect.value) {
+            loadPresetGRs(presetSelect.value, {% if is_edit %}{{ assignment.default_ai_grs|default:"'[]'"|safe }}{% else %}{{ last_ai_grs|default:"'[]'"|safe }}{% endif %});
+        }
+
+        // Запам'ятовуємо вибір при зміні користувачем у localStorage
+        presetSelect.addEventListener('change', function() {
+            if (this.value) {
+                try {
+                    localStorage.setItem('schoolnet_last_ai_preset', this.value);
+                } catch(e) {}
+            }
+        });
     }
 });
 
@@ -593,6 +654,60 @@ function loadPresetGRs(presetId, existingGRs) {
     section.style.display = 'block';
 }
 
+// Синхронізація блоку прив'язки до розкладу з обраними класами
+function syncScheduleTargetRows() {
+    var classCheckboxes = document.querySelectorAll('.class-checkbox-group input[type="checkbox"]');
+    var targetingBlock = document.getElementById('schedule-targeting-block');
+    var anyChecked = false;
+
+    classCheckboxes.forEach(function(cb) {
+        var row = document.getElementById('target-row-class-' + cb.value);
+        if (row) {
+            if (cb.checked) {
+                row.style.display = 'flex';
+                anyChecked = true;
+            } else {
+                row.style.display = 'none';
+            }
+        }
+    });
+
+    if (targetingBlock) {
+        targetingBlock.style.display = anyChecked ? 'block' : 'none';
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Гарантоване сортування пігулок вибору класів (5-А, 5-Б, 9-А, 10-А тощо)
+    (function sortClassPills() {
+        var group = document.querySelector('.class-checkbox-group');
+        if (!group) return;
+        var pills = Array.from(group.querySelectorAll('.class-check-pill'));
+        if (pills.length <= 1) return;
+        pills.sort(function(a, b) {
+            var textA = a.textContent.trim();
+            var textB = b.textContent.trim();
+            var parseClass = function(t) {
+                var mNum = t.match(/\d+/);
+                var num = mNum ? parseInt(mNum[0], 10) : 999;
+                var mLet = t.match(/[a-zA-Zа-яА-ЯіїєґІЇЄҐ]+/);
+                var let = mLet ? mLet[0].toUpperCase() : '';
+                return { num: num, let: let, text: t };
+            };
+            var pa = parseClass(textA);
+            var pb = parseClass(textB);
+            if (pa.num !== pb.num) return pa.num - pb.num;
+            return textA.localeCompare(textB, 'uk', { numeric: true });
+        });
+        pills.forEach(function(p) { group.appendChild(p); });
+    })();
+
+    var classCheckboxes = document.querySelectorAll('.class-checkbox-group input[type="checkbox"]');
+    classCheckboxes.forEach(function(cb) {
+        cb.addEventListener('change', syncScheduleTargetRows);
+    });
+    syncScheduleTargetRows();
+});
 </script>
 {% endblock %}
 

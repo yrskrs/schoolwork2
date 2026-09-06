@@ -1,4 +1,4 @@
-# Core Web Framework
+  # Core Web Framework
 Django>=5.0,<7.0
 asgiref>=3.8.0
 sqlparse>=0.5.0

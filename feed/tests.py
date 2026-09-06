@@ -535,6 +535,78 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
         self.assertEqual(sub.comments.count(), 1)
         self.assertIn('відгук ШІ', sub.comments.first().text)
 
+    @patch('feed.gemini_service._http_post_json')
+    def test_ai_scope_of_work_instruction(self, mock_http_post):
+        """Тест правила Scope of Work: пріоритет умови вчителя над вмістом прикріпленого файлу."""
+        from .models import AISettings, AssignmentFile
+        from .gemini_service import evaluate_submission_with_gemini
+
+        settings = AISettings.get_solo()
+        settings.api_key = 'fake-api-key'
+        settings.is_enabled = True
+        settings.save()
+
+        # Завдання з вимогою виконати тільки одне завдання з кількох
+        self.assignment.description = "Виконати ТІЛЬКИ завдання 2 з практичної роботи. Інші завдання робити не потрібно!"
+        self.assignment.save()
+
+        # Додаємо прикріплений файл вчителя з 5 завданнями
+        teacher_file = SimpleUploadedFile(
+            "Практична_робота_1.txt",
+            "Завдання 1. ...\nЗавдання 2. ...\nЗавдання 3. ...\nЗавдання 4. ...\nЗавдання 5. ...".encode('utf-8'),
+            content_type="text/plain"
+        )
+        AssignmentFile.objects.create(
+            assignment=self.assignment,
+            file=teacher_file,
+            original_name="Практична_робота_1.txt"
+        )
+
+        mock_data = {
+            "candidates": [
+                {
+                    "content": {
+                        "parts": [
+                            {
+                                "text": '{"suggested_grade": "11", "level": "Високий (10-12)", "summary": "Завдання 2 виконано бездоганно", "strengths": ["Точний розв\'язок завдання 2"], "weaknesses": [], "feedback_comment": "Відмінна робота!"}'
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+        mock_http_post.return_value = (200, mock_data, json.dumps(mock_data))
+
+        student_file = SimpleUploadedFile("task2_solution.txt", "Розв'язок завдання 2: ...".encode('utf-8'), content_type="text/plain")
+        sub = Submission.objects.create(
+            assignment=self.assignment,
+            first_name='Максим',
+            last_name='Бондар',
+            class_group=self.class_group,
+            file=student_file,
+            comment_student='Зробив тільки завдання 2, як ви й просили.'
+        )
+
+        res = evaluate_submission_with_gemini(sub)
+        self.assertEqual(res['status'], 'success')
+
+        # Перевіряємо сформований payload, відправлений в Gemini API
+        self.assertTrue(mock_http_post.called)
+        sent_payload = mock_http_post.call_args[0][1]
+
+        # 1. Системна інструкція містить обов'язкове правило SCOPE OF WORK
+        sys_text = sent_payload['systemInstruction']['parts'][0]['text']
+        self.assertIn('SCOPE OF WORK', sys_text)
+        self.assertIn('ПРІОРИТЕТ ВИМОГ ВЧИТЕЛЯ', sys_text)
+
+        # 2. Промпт містить умову вчителя, блок правил SCOPE OF WORK та позначення файлів як довідкових
+        user_prompt_text = sent_payload['contents'][0]['parts'][0]['text']
+        self.assertIn('УМОВА ТА ВИМОГИ ВЧИТЕЛЯ (ЗАВДАННЯ ДО ВИКОНАННЯ):', user_prompt_text)
+        self.assertIn('Виконати ТІЛЬКИ завдання 2', user_prompt_text)
+        self.assertIn('SCOPE OF WORK', user_prompt_text)
+        self.assertIn('МАТЕРІАЛИ ДО УРОКУ / ДОВІДКОВІ ФАЙЛИ ВЧИТЕЛЯ', user_prompt_text)
+        self.assertIn('решта завдань з файлу вважаються незаданими', user_prompt_text.lower())
+
     def test_ai_batch_check_queue_api(self):
         """Тест API черги пакетної перевірки робіт."""
         self.client.login(username='teacher1', password='password123')
@@ -1884,7 +1956,8 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
         # 4. Перевірка картки учня (submission_detail)
         sub_detail_resp = self.client.get(reverse('submission_detail', args=[sub.id]))
         self.assertEqual(sub_detail_resp.status_code, 200)
-        self.assertContains(sub_detail_resp, 'У роботі зафіксовано використання генеративного ШІ (дозволено вчителем)')
+        self.assertContains(sub_detail_resp, 'У роботі зафіксовано використання генеративного ШІ')
+        self.assertContains(sub_detail_resp, '(дозволено вчителем)')
         self.assertContains(sub_detail_resp, 'Виявлено характерні шаблонні формулювання нейромереж')
 
         # 5. Перевірка сторінки вчителя (assignment_submissions) та (view_file)
@@ -2300,6 +2373,83 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
         resp_sub_detail = self.client.get(reverse('submission_detail', args=[sub.id]))
         self.assertEqual(resp_sub_detail.status_code, 200)
         self.assertContains(resp_sub_detail, '<video src="')
+
+
+class FirstRunSetupTests(TestCase):
+    """Тестування майстра першого запуску системи (First-Run Setup Wizard)."""
+
+    def setUp(self):
+        from feed.middleware import set_has_admin
+        set_has_admin(None)
+
+    def tearDown(self):
+        from feed.middleware import set_has_admin
+        set_has_admin(None)
+
+    def test_first_run_redirect_when_no_superuser(self):
+        """Коли в системі немає суперкористувачів, запити перенаправляються на /setup/."""
+        from feed.middleware import set_has_admin
+        User.objects.all().delete()
+        set_has_admin(None)
+
+        resp = self.client.get('/')
+        self.assertRedirects(resp, reverse('first_run_setup'))
+
+    def test_first_run_setup_page_renders_when_no_superuser(self):
+        """Сторінка /setup/ відкривається з кодом 200, якщо суперкористувачів немає."""
+        from feed.middleware import set_has_admin
+        User.objects.all().delete()
+        set_has_admin(None)
+
+        resp = self.client.get(reverse('first_run_setup'))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, 'Ласкаво просимо до SchoolNet')
+        self.assertContains(resp, 'Логін головного адміністратора')
+
+    def test_first_run_setup_form_submission_creates_admin_and_seeds_data(self):
+        """Успішне створення першого адміністратора, профілю вчителя та авто-ініціалізація даних."""
+        from feed.middleware import set_has_admin
+        User.objects.all().delete()
+        set_has_admin(None)
+
+        resp = self.client.post(reverse('first_run_setup'), {
+            'username': 'schooladmin',
+            'full_name': 'Петренко Петро Петрович',
+            'email': 'admin@myschool.ua',
+            'password': 'SuperPassword2026',
+            'password_confirm': 'SuperPassword2026',
+            'seed_default_data': True,
+        })
+        self.assertRedirects(resp, reverse('teacher_dashboard'))
+
+        # Перевірка створення суперкористувача та профілю
+        admin_user = User.objects.get(username='schooladmin')
+        self.assertTrue(admin_user.is_superuser)
+        self.assertTrue(admin_user.is_staff)
+        self.assertEqual(admin_user.email, 'admin@myschool.ua')
+        self.assertEqual(admin_user.teacher_profile.full_name, 'Петренко Петро Петрович')
+
+        # Перевірка ініціалізації типових предметів та класів
+        self.assertTrue(Subject.objects.filter(name='Інформатика').exists())
+        self.assertTrue(ClassGroup.objects.filter(name='9А').exists())
+
+        # Перевірка, що повторний доступ до /setup/ для авторизованого адміна редиректить у кабінет
+        resp2 = self.client.get(reverse('first_run_setup'))
+        self.assertRedirects(resp2, reverse('teacher_dashboard'))
+
+        # Для неавторизованого користувача — редиректить на сторінку входу
+        self.client.logout()
+        resp3 = self.client.get(reverse('first_run_setup'))
+        self.assertRedirects(resp3, reverse('teacher_login'))
+
+    def test_first_run_setup_blocked_when_superuser_exists(self):
+        """Якщо в системі вже є суперкористувач, /setup/ перенаправляє на teacher_login."""
+        from feed.middleware import set_has_admin
+        User.objects.create_superuser(username='existingadmin', password='password123')
+        set_has_admin(True)
+
+        resp = self.client.get(reverse('first_run_setup'))
+        self.assertRedirects(resp, reverse('teacher_login'))
 
 
 

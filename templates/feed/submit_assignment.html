@@ -73,14 +73,13 @@
                 <div style="padding:10px 14px;display:flex;flex-direction:column;gap:8px;font-size:13px;">
 
                     {% for file in assignment.files.all %}
-                    <a href="{% url 'file_view' file.id %}" target="_blank"
-                       style="display:flex;align-items:center;gap:8px;padding:8px;background:var(--color-bg-secondary);border-radius:var(--radius-sm);text-decoration:none;color:var(--color-text-primary);transition:background 0.15s;">
+                    <div style="display:flex;align-items:center;gap:8px;padding:8px;background:var(--color-bg-secondary);border-radius:var(--radius-sm);color:var(--color-text-primary);pointer-events:none;user-select:none;opacity:0.85;">
                         <span style="font-size:16px;">{{ file.get_file_icon }}</span>
                         <div style="overflow:hidden;flex:1;">
                             <div style="font-weight:600;font-size:12px;text-overflow:ellipsis;overflow:hidden;white-space:nowrap;">{{ file.original_name }}</div>
                             <div style="font-size:10px;color:var(--color-text-muted);">{{ file.get_size_display }}</div>
                         </div>
-                    </a>
+                    </div>
                     {% endfor %}
 
                     {% if assignment.link_url %}
@@ -166,13 +165,36 @@
                     </div>
                     {% endif %}
 
+                    <!-- Опис завдання від вчителя -->
+                    {% if assignment.description %}
+                    <div class="assignment-description-card is-compact" style="margin-bottom:24px;">
+                        <div class="assignment-description-header">
+                            <div class="assignment-description-title">
+                                <span class="desc-icon">📝</span>
+                                <span>Умова та вказівки до завдання</span>
+                            </div>
+                            <span class="assignment-desc-badge">📌 Що потрібно виконати</span>
+                        </div>
+                        <div class="assignment-full-description">{{ assignment.description }}</div>
+                    </div>
+                    {% endif %}
+
                     <form method="POST" enctype="multipart/form-data" id="submit-form" novalidate>
                         {% csrf_token %}
+
+                        <!-- Блок клієнтського попередження про порожні поля -->
+                        <div id="form-validation-alert" style="display:none;margin-bottom:20px;padding:14px 18px;border-radius:var(--radius-md);background:rgba(239,68,68,0.08);border:1.5px solid #ef4444;color:#ef4444;animation:fadeIn 0.2s ease-in-out;">
+                            <div style="font-weight:800;display:flex;align-items:center;gap:8px;font-size:14px;">
+                                <span style="font-size:18px;">⚠️</span>
+                                <span>Заповніть обов'язкові поля перед відправкою</span>
+                            </div>
+                            <div id="form-validation-alert-text" style="margin-top:6px;font-size:13px;color:var(--color-text-primary);line-height:1.4;"></div>
+                        </div>
 
                         <!-- Блок особистих даних учня -->
                         <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
                             <!-- Прізвище та ім'я -->
-                            <div class="form-group" style="margin:0;position:relative;">
+                            <div class="form-group" style="margin:0;position:relative;" id="group_full_name">
                                 <label for="{{ form.full_name.id_for_label }}" class="form-label" style="font-weight:700;">
                                     👤 {{ form.full_name.label }} <span style="color:#ef4444">*</span>
                                 </label>
@@ -182,6 +204,10 @@
                                          style="display:none;position:absolute;top:100%;left:0;right:0;z-index:50;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);box-shadow:0 8px 24px rgba(0,0,0,0.12);max-height:220px;overflow-y:auto;margin-top:4px;">
                                     </div>
                                 </div>
+                                <div id="full-name-client-error" style="display:none;color:#ef4444;font-size:12px;font-weight:700;margin-top:6px;align-items:center;gap:4px;">
+                                    <span>⚠️</span>
+                                    <span>Обов'язково вкажіть ваше прізвище та ім'я!</span>
+                                </div>
                                 {% if form.full_name.errors %}
                                 <div style="color:#ef4444;font-size:12px;margin-top:4px;">{{ form.full_name.errors|join:" " }}</div>
                                 {% endif %}
@@ -190,11 +216,15 @@
 
 
                             <!-- Клас -->
-                            <div class="form-group" style="margin:0;">
+                            <div class="form-group" style="margin:0;" id="group_class_group">
                                 <label for="{{ form.class_group.id_for_label }}" class="form-label" style="font-weight:700;">
                                     🏫 {{ form.class_group.label }} <span style="color:#ef4444">*</span>
                                 </label>
                                 {{ form.class_group }}
+                                <div id="class-client-error" style="display:none;color:#ef4444;font-size:12px;font-weight:700;margin-top:6px;align-items:center;gap:4px;">
+                                    <span>⚠️</span>
+                                    <span>Обов'язково оберіть ваш клас зі списку!</span>
+                                </div>
                                 {% if form.class_group.errors %}
                                 <div style="color:#ef4444;font-size:12px;margin-top:4px;">{{ form.class_group.errors|join:" " }}</div>
                                 {% endif %}
@@ -450,6 +480,29 @@ const classSelect = document.getElementById('id_class_group');
 const autoDropdown = document.getElementById('student-autocomplete-dropdown');
 let debounceTimer = null;
 
+// Гарантоване сортування класів у випадаючому списку (5-А, 5-Б, 9-А, 9-Б, 10-А тощо)
+(function sortClassOptions() {
+    if (!classSelect || classSelect.options.length <= 1) return;
+    const selectedVal = classSelect.value;
+    const options = Array.from(classSelect.options);
+    const firstOpt = (options[0].value === '' || options[0].text.indexOf('---') !== -1) ? options.shift() : null;
+    options.sort(function(a, b) {
+        const parseClass = function(text) {
+            const mNum = text.match(/\d+/);
+            const num = mNum ? parseInt(mNum[0], 10) : 999;
+            return { num: num, text: text };
+        };
+        const pa = parseClass(a.text);
+        const pb = parseClass(b.text);
+        if (pa.num !== pb.num) return pa.num - pb.num;
+        return a.text.localeCompare(b.text, 'uk', { numeric: true });
+    });
+    classSelect.innerHTML = '';
+    if (firstOpt) classSelect.appendChild(firstOpt);
+    options.forEach(function(opt) { classSelect.appendChild(opt); });
+    if (selectedVal) classSelect.value = selectedVal;
+})();
+
 function fetchStudentSuggestions() {
     if (!nameInput || !autoDropdown) return;
     const query = nameInput.value.trim();
@@ -515,6 +568,138 @@ document.addEventListener('click', function(e) {
         autoDropdown.style.display = 'none';
     }
 });
+
+// ── Клієнтська валідація форми здачі без перезавантаження та втрати файлів ──
+const submitForm = document.getElementById('submit-form');
+const nameErrorDiv = document.getElementById('full-name-client-error');
+const classErrorDiv = document.getElementById('class-client-error');
+const alertBox = document.getElementById('form-validation-alert');
+const alertText = document.getElementById('form-validation-alert-text');
+
+function resetValidationErrors() {
+    if (nameInput) {
+        nameInput.style.borderColor = '';
+        nameInput.style.boxShadow = '';
+    }
+    if (classSelect) {
+        classSelect.style.borderColor = '';
+        classSelect.style.boxShadow = '';
+    }
+    if (nameErrorDiv) nameErrorDiv.style.display = 'none';
+    if (classErrorDiv) classErrorDiv.style.display = 'none';
+    if (alertBox) alertBox.style.display = 'none';
+}
+
+if (nameInput) {
+    nameInput.addEventListener('input', function() {
+        if (this.value.trim()) {
+            this.style.borderColor = '';
+            this.style.boxShadow = '';
+            if (nameErrorDiv) nameErrorDiv.style.display = 'none';
+            if (alertBox && (!classErrorDiv || classErrorDiv.style.display === 'none')) {
+                alertBox.style.display = 'none';
+            }
+        }
+    });
+}
+
+if (classSelect) {
+    classSelect.addEventListener('change', function() {
+        if (this.value) {
+            this.style.borderColor = '';
+            this.style.boxShadow = '';
+            if (classErrorDiv) classErrorDiv.style.display = 'none';
+            if (alertBox && (!nameErrorDiv || nameErrorDiv.style.display === 'none')) {
+                alertBox.style.display = 'none';
+            }
+        }
+    });
+}
+
+if (submitForm) {
+    submitForm.addEventListener('submit', function(e) {
+        resetValidationErrors();
+
+        let hasError = false;
+        let firstInvalid = null;
+        const missingFields = [];
+
+        const nameVal = nameInput ? nameInput.value.trim() : '';
+        const classVal = classSelect ? classSelect.value.trim() : '';
+
+        if (!nameVal) {
+            hasError = true;
+            if (!firstInvalid) firstInvalid = nameInput;
+            if (nameInput) {
+                nameInput.style.borderColor = '#ef4444';
+                nameInput.style.boxShadow = '0 0 0 3px rgba(239, 68, 68, 0.2)';
+            }
+            if (nameErrorDiv) {
+                nameErrorDiv.style.display = 'flex';
+            }
+            missingFields.push('Прізвище та ім\'я');
+        }
+
+        if (!classVal) {
+            hasError = true;
+            if (!firstInvalid) firstInvalid = classSelect;
+            if (classSelect) {
+                classSelect.style.borderColor = '#ef4444';
+                classSelect.style.boxShadow = '0 0 0 3px rgba(239, 68, 68, 0.2)';
+            }
+            if (classErrorDiv) {
+                classErrorDiv.style.display = 'flex';
+            }
+            missingFields.push('Клас');
+        }
+
+        const linkInput = document.getElementById('id_link');
+        const commentInput = document.getElementById('id_comment_student');
+        const hasFiles = fileStore && fileStore.files && fileStore.files.length > 0;
+        const hasLink = linkInput && linkInput.value.trim().length > 0;
+        const hasComment = commentInput && commentInput.value.trim().length > 0;
+
+        if (!hasFiles && !hasLink && !hasComment) {
+            hasError = true;
+            if (!firstInvalid) firstInvalid = dropZone || document.getElementById('id_files');
+            missingFields.push('Матеріали роботи (файл, посилання або відповідь)');
+        }
+
+        if (hasError) {
+            // Зупиняємо відправку форми на сервер — файли та введені тексти НЕ скидаються!
+            e.preventDefault();
+
+            if (alertBox && alertText) {
+                alertText.innerHTML = 'Будь ласка, заповніть: <strong>' + missingFields.join(', ') + '</strong>.<br>✨ <em>Ваші вже обрані файли та введений коментар збережено і не зникнуть!</em>';
+                alertBox.style.display = 'block';
+            }
+
+            if (firstInvalid) {
+                firstInvalid.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                setTimeout(function() {
+                    if (typeof firstInvalid.focus === 'function') {
+                        firstInvalid.focus();
+                    }
+                }, 200);
+            }
+            return false;
+        }
+
+        // Якщо валідація успішна, гарантуємо перенесення файлів
+        if (filesInput && fileStore) {
+            filesInput.files = fileStore.files;
+        }
+
+        // Запобігаємо повторній відправці
+        const submitBtn = submitForm.querySelector('button[type="submit"]');
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '⏳ Відправка роботи на сервер...';
+            submitBtn.style.opacity = '0.85';
+            submitBtn.style.cursor = 'wait';
+        }
+    });
+}
 </script>
 {% endblock %}
 

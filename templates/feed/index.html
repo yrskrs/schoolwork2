@@ -29,31 +29,30 @@
         <!-- ════ САЙДБАР ════════════════════════════════════════════════════ -->
         <aside class="sidebar" id="main-sidebar" aria-label="Фільтри">
 
-            <!-- Фільтр по класах -->
+            <!-- Фільтр по класах (сітка для компактності на HD Ready) -->
             <div class="sidebar-card">
                 <div class="sidebar-header">🏫 Класи</div>
-                <ul class="sidebar-list" role="list">
-                    <li {% if not selected_class_id %}class="active"{% endif %} id="filter-class-all">
+                <div class="sidebar-classes-container">
+                    <div class="class-grid-all-btn {% if not selected_class_id %}active{% endif %}" id="filter-class-all">
                         <a href="#" onclick="return applyFilter('all', null)">
                             <span>📋</span>
                             <span>Всі класи</span>
                         </a>
-                    </li>
-                    {% for class in all_classes %}
-                    <li {% if selected_class_id == class.id %}class="active"{% endif %} id="filter-class-{{ class.id }}">
-                        <a href="#" onclick="return applyFilter('{{ class.id }}', null)">
-                            <span class="class-badge">{{ class.grade }}{{ class.letter }}</span>
-                            <span>{{ class.name }}</span>
-                        </a>
-                    </li>
-                    {% empty %}
-                    <li>
-                        <span style="padding:10px 16px;color:var(--color-text-muted);font-size:13px;display:block">
+                    </div>
+                    <div class="sidebar-class-grid" role="group" aria-label="Вибір класу">
+                        {% for class in all_classes %}
+                        <div class="class-grid-item {% if selected_class_id == class.id %}active{% endif %}" id="filter-class-{{ class.id }}">
+                            <a href="#" onclick="return applyFilter('{{ class.id }}', null)" title="{{ class.name }}">
+                                <span>{{ class.name }}</span>
+                            </a>
+                        </div>
+                        {% empty %}
+                        <div style="grid-column:1/-1;padding:8px;color:var(--color-text-muted);font-size:12px;text-align:center;">
                             Класи ще не додані
-                        </span>
-                    </li>
-                    {% endfor %}
-                </ul>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
             </div>
 
             <!-- 2. Календар завдань (Google Calendar стиль) -->
@@ -88,6 +87,9 @@
 
         <!-- ════ СТРІЧКА ЗАВДАНЬ ═════════════════════════════════════════════ -->
         <section aria-label="Стрічка завдань">
+
+            <!-- Інформер поточного уроку для вчителя -->
+            {% include 'feed/components/live_lesson_widget.html' %}
 
             <!-- Зона що оновлюється через AJAX -->
             <div id="feed-zone">
@@ -193,15 +195,17 @@
                                     <span>{{ assignment.teacher.full_name }}</span>
                                 </div>
 
-                                <!-- Розумна дата публікації (Сьогодні / Вчора / День тижня + дата) -->
-                                {% if assignment.published_at %}
-                                <span class="publish-date-badge {% if assignment.is_published_today %}badge-today{% elif assignment.is_published_yesterday %}badge-yesterday{% else %}badge-earlier{% endif %}">
-                                    {% if assignment.is_published_today %}
+                                <!-- Актуальність завдання до уроку (для учнів) -->
+                                {% with rel_badge=assignment.get_relevance_badge %}
+                                <span class="publish-date-badge {{ rel_badge.badge_class }}" title="Технічна дата публікації: {{ assignment.published_at|date:'d.m.Y H:i' }}">
+                                    {% if rel_badge.is_now %}
+                                    <span class="live-dot-pulse"></span>
+                                    {% elif rel_badge.is_today %}
                                     <span class="live-dot-pulse"></span>
                                     {% endif %}
-                                    📅 {{ assignment.relative_published_display }}
+                                    {{ rel_badge.badge_text }}
                                 </span>
-                                {% endif %}
+                                {% endwith %}
 
                                 {% if assignment.unarchived_at %}
                                 <span class="unarchive-badge" title="Завдання відновлено з архіву">

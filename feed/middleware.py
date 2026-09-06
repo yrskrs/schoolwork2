@@ -141,3 +141,67 @@ def get_online_stats():
         'clients': clients_list,
         'threshold_seconds': ONLINE_THRESHOLD_SECONDS,
     }
+
+
+# ─── Майстер першого запуску (First-Run Setup) ────────────────────────────────
+_has_admin = None
+_setup_lock = Lock()
+
+
+def set_has_admin(val=True):
+    """Оновлює глобальний кеш наявності адміністратора в системі."""
+    global _has_admin
+    with _setup_lock:
+        _has_admin = bool(val)
+
+
+def check_has_admin():
+    """Повертає поточний статус або перевіряє наявність суперкористувача в БД."""
+    global _has_admin
+    if _has_admin is True:
+        return True
+    from django.contrib.auth.models import User
+    from django.db import DatabaseError, OperationalError, ProgrammingError
+    try:
+        exists = User.objects.filter(is_superuser=True).exists()
+        with _setup_lock:
+            _has_admin = exists
+        return exists
+    except (DatabaseError, OperationalError, ProgrammingError):
+        return True  # Безпечний фолбек, якщо таблиці ще не готові
+
+
+class FirstRunSetupMiddleware:
+    """
+    Перевіряє, чи є в системі хоча б один адміністратор (User.is_superuser=True).
+    Якщо адміністраторів немає (перший запуск після чистого розгортання),
+    автоматично перенаправляє відвідувача на майстер створення адміністратора (/setup/).
+    """
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        global _has_admin
+        path = request.path_info or request.path
+
+        # 1. Якщо вже підтверджено наявність адміна — миттєвий пропуск без SQL
+        if _has_admin is True:
+            return self.get_response(request)
+
+        # 2. Дозволяємо технічні шляхи та саму сторінку налаштування
+        if (
+            path.startswith('/static/') or
+            path.startswith('/media/') or
+            path == '/favicon.ico' or
+            path.startswith('/setup/')
+        ):
+            return self.get_response(request)
+
+        # 3. Перевіряємо в базі даних
+        from django.shortcuts import redirect
+        has_admin = check_has_admin()
+        if not has_admin:
+            return redirect('first_run_setup')
+
+        return self.get_response(request)
