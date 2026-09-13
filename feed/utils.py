@@ -1305,3 +1305,112 @@ def get_teacher_upcoming_notifications(teacher, now_dt=None):
     return notifications
 
 
+def extract_clean_comment_from_raw_json(text):
+    """
+    Якщо текст містить сирий JSON (наприклад через пошкоджений або обірваний вивід ШІ),
+    видобуває з нього чистий змістовний коментар/відгук для учня (feedback_comment або summary)
+    повністю прибираючи фігурні дужки, лапки та технічні ключі JSON.
+    """
+    if not text:
+        return ""
+
+    prefix = ""
+    work_text = str(text).strip()
+    tag = "🤖 [Рекомендації та відгук ШІ]:"
+    if tag in work_text:
+        prefix = tag + "\n"
+        work_text = work_text.replace(tag, "").strip()
+
+    # Якщо текст не схожий на JSON — повертаємо як є
+    if not (work_text.startswith('{') or '"feedback_comment"' in work_text or '"suggested_grade"' in work_text or '"summary"' in work_text):
+        return text
+
+    # 1. Спроба розпарсити через json.loads (з попереднім очищенням)
+    try:
+        sanitized = re.sub(r"(?<!\\)\\'", "'", work_text)
+        sanitized = re.sub(r',\s*([\]}])', r'\1', sanitized)
+        data = json.loads(sanitized, strict=False)
+        if isinstance(data, dict):
+            fc = data.get('feedback_comment') or data.get('summary')
+            if fc and str(fc).strip():
+                return prefix + str(fc).strip()
+    except Exception:
+        pass
+
+    # 2. Видобування feedback_comment через Regex
+    fc_m = re.search(r'"feedback_comment"\s*:\s*"((?:[^"\\]|\\.)*)"', work_text)
+    if fc_m:
+        try:
+            fc_val = json.loads('"' + fc_m.group(1) + '"')
+        except Exception:
+            fc_val = fc_m.group(1).replace(r'\"', '"').replace(r'\n', '\n').replace(r"\'", "'")
+        if fc_val and len(str(fc_val).strip()) > 3:
+            return prefix + str(fc_val).strip()
+
+    # 3. Видобування summary через Regex
+    sum_m = re.search(r'"summary"\s*:\s*"((?:[^"\\]|\\.)*)"', work_text)
+    if sum_m:
+        try:
+            sum_val = json.loads('"' + sum_m.group(1) + '"')
+        except Exception:
+            sum_val = sum_m.group(1).replace(r'\"', '"').replace(r'\n', '\n').replace(r"\'", "'")
+        if sum_val and len(str(sum_val).strip()) > 3:
+            return prefix + str(sum_val).strip()
+
+    # 4. Якщо жодне поле не видобулось — видаляємо технічні JSON символи
+    cleaned = re.sub(r'[{}\[\]"]', '', work_text)
+    cleaned = re.sub(r'(?:suggested_grade|format_warning|feedback_comment|status|strengths|weaknesses|gr_results|level|summary|ai_generated_\w+)\s*:', '', cleaned)
+    lines = [l.strip() for l in cleaned.split('\n') if l.strip()]
+    return prefix + '\n'.join(lines)
+
+
+def format_raw_json_feedback_for_display(text):
+    """
+    Форматує сирий JSON або обірвану відповідь ШІ у структурований відгук для інтерфейсу вчителя:
+    📌 Висновок: ...
+    ✅ Сильні сторони: ...
+    💡 Зауваження: ...
+    💬 Рекомендація: ...
+    """
+    if not text:
+        return ""
+    work_text = str(text).strip()
+    if not (work_text.startswith('{') or '"suggested_grade"' in work_text or '"feedback_comment"' in work_text):
+        return text
+
+    data = None
+    try:
+        sanitized = re.sub(r"(?<!\\)\\'", "'", work_text)
+        sanitized = re.sub(r',\s*([\]}])', r'\1', sanitized)
+        data = json.loads(sanitized, strict=False)
+    except Exception:
+        pass
+
+    if not data or not isinstance(data, dict):
+        from feed.gemini_service import extract_json_from_text
+        data = extract_json_from_text(work_text)
+
+    if not data or not isinstance(data, dict):
+        return extract_clean_comment_from_raw_json(work_text)
+
+    parts = []
+    fw = data.get('format_warning')
+    if fw:
+        parts.append(f"⚠️ **Зауваження до формату файлу:**\n{fw}")
+    summary = data.get('summary')
+    if summary:
+        parts.append(f"📌 **Висновок:** {summary}")
+    strengths = data.get('strengths')
+    if strengths and isinstance(strengths, list):
+        parts.append("✅ **Сильні сторони:**\n" + "\n".join(f"• {s}" for s in strengths))
+    weaknesses = data.get('weaknesses')
+    if weaknesses and isinstance(weaknesses, list):
+        parts.append("💡 **Зауваження та неточності:**\n" + "\n".join(f"• {w}" for w in weaknesses))
+    fc = data.get('feedback_comment')
+    if fc:
+        parts.append(f"💬 **Рекомендація учню:**\n{fc}")
+
+    return "\n\n".join(parts) if parts else (fc or summary or extract_clean_comment_from_raw_json(work_text))
+
+
+

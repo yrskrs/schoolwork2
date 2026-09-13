@@ -1064,22 +1064,34 @@ def extract_submission_content(submission):
 def extract_json_from_text(text):
     """
     Надійно видобуває JSON-об'єкт із будь-якого тексту чи markdown-блоку відповіді Gemini.
+    Підтримує виправлення невалідних escape-послідовностей (наприклад \'), незакритих лапок/дужок
+    через обрив токенів, та автоматичний regex-парсинг окремих полів при пошкодженому JSON.
     """
     if not text:
         return None
     text = text.strip()
 
-    # 1. Пряма спроба парсингу
+    # Допоміжна функція нормалізації тексту перед JSON-парсингом
+    def _sanitize_json_str(s):
+        # Виправлення невалідно екранованих одинарних лапок \' -> '
+        s = re.sub(r"(?<!\\)\\'", "'", s)
+        # Виправлення типових висячих ком перед закриваючими дужками
+        s = re.sub(r',\s*([\]}])', r'\1', s)
+        return s
+
+    # 1. Пряма спроба парсингу нормалізованого тексту
+    sanitized = _sanitize_json_str(text)
     try:
-        return json.loads(text)
+        return json.loads(sanitized, strict=False)
     except Exception:
         pass
 
     # 2. Пошук markdown блоку ```json ... ``` або ``` ... ```
     code_match = re.search(r'```(?:json)?\s*(\{[\s\S]*?\})\s*```', text)
     if code_match:
+        cand = _sanitize_json_str(code_match.group(1).strip())
         try:
-            return json.loads(code_match.group(1).strip())
+            return json.loads(cand, strict=False)
         except Exception:
             pass
 
@@ -1087,11 +1099,69 @@ def extract_json_from_text(text):
     first_brace = text.find('{')
     last_brace = text.rfind('}')
     if first_brace != -1 and last_brace != -1 and last_brace > first_brace:
-        candidate = text[first_brace:last_brace + 1].strip()
+        candidate = _sanitize_json_str(text[first_brace:last_brace + 1].strip())
         try:
-            return json.loads(candidate)
+            return json.loads(candidate, strict=False)
         except Exception:
             pass
+
+    # 4. Спроба відновлення обірваного/обрізаного JSON (наприклад через ліміт токенів)
+    if first_brace != -1:
+        cand = text[first_brace:]
+        for r_pos in range(len(cand), max(0, len(cand) - 800), -1):
+            sub = cand[:r_pos].rstrip()
+            if sub.endswith(','):
+                sub = sub[:-1].rstrip()
+            open_braces = sub.count('{') - sub.count('}')
+            open_brackets = sub.count('[') - sub.count(']')
+            if open_braces > 0 or open_brackets > 0:
+                closing = (']' * max(0, open_brackets)) + ('}' * max(0, open_braces))
+                attempt = _sanitize_json_str(sub + closing)
+                try:
+                    res = json.loads(attempt, strict=False)
+                    if isinstance(res, dict) and ('suggested_grade' in res or 'feedback_comment' in res or 'summary' in res):
+                        return res
+                except Exception:
+                    continue
+
+    # 5. Резервне пряме видобування полів через Regex (якщо JSON синтаксично пошкоджений)
+    if first_brace != -1 or '"suggested_grade"' in text or '"feedback_comment"' in text:
+        recovered = {}
+        g_m = re.search(r'"suggested_grade"\s*:\s*["\']?([^"\',\s}]+)', text)
+        if g_m: recovered['suggested_grade'] = g_m.group(1).strip()
+
+        l_m = re.search(r'"level"\s*:\s*"([^"]+)"', text)
+        if l_m: recovered['level'] = l_m.group(1).strip()
+
+        fw_m = re.search(r'"format_warning"\s*:\s*(?:"((?:[^"\\]|\\.)*)"|null|None)', text)
+        if fw_m and fw_m.group(1): recovered['format_warning'] = fw_m.group(1).strip()
+
+        s_m = re.search(r'"summary"\s*:\s*"((?:[^"\\]|\\.)*)"', text)
+        if s_m:
+            try:
+                recovered['summary'] = json.loads('"' + s_m.group(1) + '"')
+            except Exception:
+                recovered['summary'] = s_m.group(1).replace(r'\"', '"').replace(r'\n', '\n')
+
+        fc_m = re.search(r'"feedback_comment"\s*:\s*"((?:[^"\\]|\\.)*)"', text)
+        if fc_m:
+            try:
+                recovered['feedback_comment'] = json.loads('"' + fc_m.group(1) + '"')
+            except Exception:
+                recovered['feedback_comment'] = fc_m.group(1).replace(r'\"', '"').replace(r'\n', '\n')
+
+        str_m = re.search(r'"strengths"\s*:\s*\[([\s\S]*?)\]', text)
+        if str_m:
+            items = re.findall(r'"((?:[^"\\]|\\.)*)"', str_m.group(1))
+            recovered['strengths'] = [it.replace(r'\"', '"').replace(r'\n', '\n') for it in items]
+
+        weak_m = re.search(r'"weaknesses"\s*:\s*\[([\s\S]*?)\]', text)
+        if weak_m:
+            items = re.findall(r'"((?:[^"\\]|\\.)*)"', weak_m.group(1))
+            recovered['weaknesses'] = [it.replace(r'\"', '"').replace(r'\n', '\n') for it in items]
+
+        if recovered.get('suggested_grade') or recovered.get('feedback_comment') or recovered.get('summary'):
+            return recovered
 
     return None
 
@@ -1408,7 +1478,7 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
         "generationConfig": {
             "temperature": float(settings.temperature or 0.2),
             "responseMimeType": "application/json",
-            "maxOutputTokens": 1024
+            "maxOutputTokens": 4096
         }
     }
 
@@ -1672,11 +1742,17 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                         'fallback_activated': fallback_happened
                     }
                 else:
-                    grade_match = re.search(r'((?:1[0-2]|[1-9])|Доопрацювати)', raw_text, re.IGNORECASE)
+                    from feed.utils import extract_clean_comment_from_raw_json, format_raw_json_feedback_for_display
+
+                    grade_match = re.search(r'(?:suggested_grade["\']?\s*:\s*["\']?|\b)(1[0-2]|[1-9]|Доопрацювати)\b', raw_text, re.IGNORECASE)
                     suggested_grade = grade_match.group(1) if grade_match else 'Доопрацювати'
 
+                    # Гарантуємо, що учням і вчителю не показується сирий JSON
+                    clean_feedback = extract_clean_comment_from_raw_json(raw_text)
+                    formatted_feedback = format_raw_json_feedback_for_display(raw_text)
+
                     submission.ai_suggested_grade = suggested_grade
-                    submission.ai_feedback = raw_text
+                    submission.ai_feedback = formatted_feedback
                     submission.ai_model_used = model_name
                     submission.ai_status = 'success'
                     submission.ai_error_reason = ''
@@ -1684,7 +1760,14 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                     submission.save(update_fields=[
                         'ai_suggested_grade', 'ai_feedback', 'ai_model_used', 'ai_status', 'ai_error_reason', 'ai_reviewed_at'
                     ])
-                    return {'status': 'success', 'feedback': raw_text, 'suggested_grade': suggested_grade, 'model_used': model_name}
+                    return {
+                        'status': 'success',
+                        'feedback': formatted_feedback,
+                        'clean_feedback': clean_feedback,
+                        'feedback_comment': clean_feedback,
+                        'suggested_grade': suggested_grade,
+                        'model_used': model_name
+                    }
 
             except Exception as e:
                 attempted_errors.append(f"[{model_name} виняток]: {str(e)}")

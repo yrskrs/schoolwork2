@@ -5999,7 +5999,7 @@ def api_ai_process_item(request, submission_id):
         'status': res.get('status'),
         'suggested_grade': submission.ai_suggested_grade or '—',
         'level': submission.ai_score_level or '',
-        'feedback': submission.ai_feedback or '',
+        'feedback': submission.get_formatted_ai_feedback() or '',
         'clean_feedback': submission.get_clean_ai_feedback_for_student(),
         'gr_results': submission.get_ai_gr_results_list(),
         'gr_avg': submission.get_ai_gr_average(),

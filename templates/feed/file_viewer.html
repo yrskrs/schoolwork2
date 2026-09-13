@@ -1209,7 +1209,7 @@
                                 </div>
                             </div>
                             {% endif %}
-                            <div style="font-size:12px;color:var(--color-text-secondary);line-height:1.4;white-space:pre-wrap;max-height:160px;overflow-y:auto;border-top:1px dashed var(--color-border);padding-top:6px;margin-top:6px;">{{ submission.ai_feedback }}</div>
+                            <div style="font-size:12px;color:var(--color-text-secondary);line-height:1.4;white-space:pre-wrap;max-height:160px;overflow-y:auto;border-top:1px dashed var(--color-border);padding-top:6px;margin-top:6px;">{{ submission.get_formatted_ai_feedback }}</div>
                         </div>
 
                         <button type="button" class="btn btn-primary btn-sm" onclick="applyAIEvaluation({{ submission.id }})" style="width:100%;font-size:12px;font-weight:700;padding:6px;">

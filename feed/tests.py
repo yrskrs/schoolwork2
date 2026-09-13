@@ -2716,6 +2716,78 @@ class FirstRunSetupTests(TestCase):
         self.assertContains(resp_sub, 'localStorage.removeItem(\'submit_show_condition\')')
 
 
+class AIRawJSONProtectionTests(TestCase):
+    """
+    Тести перевірки надійного захисту учнів від показу сирого JSON у коментарях та відгуках ШІ.
+    """
+    def test_extract_json_from_text_handles_truncated_and_invalid_escapes(self):
+        from feed.gemini_service import extract_json_from_text
+
+        # Випадок 1: обірваний через токени JSON
+        truncated_json = '{\n  "suggested_grade": "8",\n  "level": "Достатній (7-9)",\n  "summary": "Опис професії.",\n  "feedback_comment": "Єгоре, молодець!",\n  "status": "success",\n  "ai_generated_percent":'
+        res1 = extract_json_from_text(truncated_json)
+        self.assertIsNotNone(res1)
+        self.assertEqual(res1.get('suggested_grade'), '8')
+        self.assertEqual(res1.get('feedback_comment'), 'Єгоре, молодець!')
+
+        # Випадок 2: невалідне екранування лапок \'
+        invalid_escape_json = r'{"suggested_grade": "7", "feedback_comment": "Богдане, ти добре виконав завдання (\'не знаю\')."}'
+        res2 = extract_json_from_text(invalid_escape_json)
+        self.assertIsNotNone(res2)
+        self.assertEqual(res2.get('suggested_grade'), '7')
+        self.assertIn('Богдане', res2.get('feedback_comment', ''))
+
+    def test_extract_clean_comment_from_raw_json(self):
+        from feed.utils import extract_clean_comment_from_raw_json
+
+        raw_comment = '🤖 [Рекомендації та відгук ШІ]:\n{\n  "suggested_grade": "8",\n  "feedback_comment": "Чудова робота, продовжуй у тому ж дусі!",\n  "status": "success"\n}'
+        cleaned = extract_clean_comment_from_raw_json(raw_comment)
+        self.assertNotIn('{', cleaned)
+        self.assertNotIn('suggested_grade', cleaned)
+        self.assertIn('Чудова робота, продовжуй у тому ж дусі!', cleaned)
+        self.assertTrue(cleaned.startswith('🤖 [Рекомендації та відгук ШІ]:'))
+
+    def test_submission_comment_save_auto_cleans_json(self):
+        from feed.models import ClassGroup, Assignment, Submission, SubmissionComment, Teacher
+        user = User.objects.create_user(username='t_comment_clean', password='123')
+        teacher = Teacher.objects.create(user=user, full_name='Вчитель')
+        cg = ClassGroup.objects.create(name='7-А')
+        asg = Assignment.objects.create(title='Завдання', teacher=teacher)
+        asg.classes.add(cg)
+        sub = Submission.objects.create(assignment=asg, class_group=cg, last_name='Шевченко', first_name='Тарас')
+
+        # Створюємо коментар, куди помилково потрапив сирий JSON
+        raw_json = '{\n  "suggested_grade": "10",\n  "feedback_comment": "Прекрасний результат, Тарасе!"\n}'
+        comment = SubmissionComment.objects.create(
+            submission=sub,
+            author=user,
+            text=f"🤖 [Рекомендації та відгук ШІ]:\n{raw_json}"
+        )
+        # Коментар повинен автоматично очиститись при збереженні
+        self.assertNotIn('suggested_grade', comment.text)
+        self.assertNotIn('{', comment.text)
+        self.assertIn('Прекрасний результат, Тарасе!', comment.text)
+
+    def test_submission_clean_feedback_for_student_never_returns_raw_json(self):
+        from feed.models import ClassGroup, Assignment, Submission, Teacher
+        user = User.objects.create_user(username='t_sub_clean', password='123')
+        teacher = Teacher.objects.create(user=user, full_name='Вчитель')
+        cg = ClassGroup.objects.create(name='8-А')
+        asg = Assignment.objects.create(title='Завдання 2', teacher=teacher)
+        asg.classes.add(cg)
+        sub = Submission.objects.create(assignment=asg, class_group=cg, last_name='Франко', first_name='Іван')
+
+        # Записуємо сирий JSON у ai_feedback
+        sub.ai_feedback = '{\n  "suggested_grade": "9",\n  "feedback_comment": "Іване, робота дуже змістовна!"\n}'
+        sub.save(update_fields=['ai_feedback'])
+
+        clean = sub.get_clean_ai_feedback_for_student()
+        self.assertNotIn('{', clean)
+        self.assertNotIn('suggested_grade', clean)
+        self.assertIn('Іване, робота дуже змістовна!', clean)
+
+
+
 
 
 

@@ -1908,16 +1908,37 @@ class Submission(models.Model):
         """
         Повертає відгук ШІ, очищений від списку оцінок за групами результатів
         (для відгуку/коментаря вчителя, щоб не розкривати детальні бали іншим учням).
+        Гарантує відсутність сирого JSON чи технічних полів у коментарях для учнів.
         """
         if not self.ai_feedback:
             return ""
-        text = self.ai_feedback
+        text = str(self.ai_feedback).strip()
+        # Захист: якщо ai_feedback містить сирий JSON
+        if text.startswith('{') or '"feedback_comment"' in text or '"suggested_grade"' in text or '"summary"' in text:
+            from feed.utils import extract_clean_comment_from_raw_json
+            extracted = extract_clean_comment_from_raw_json(text)
+            if extracted:
+                return extracted
+
         # Вирізаємо секцію Оцінювання за групами результатів
         pattern = r"📊\s*\*\*Оцінювання за групами результатів.*?(?=(\n\s*\n[✅💡💬⚠️📌]|\Z))"
         cleaned = re.sub(pattern, "", text, flags=re.DOTALL | re.IGNORECASE).strip()
         # Прибираємо окремі рядки оцінок ГР якщо є
         cleaned = re.sub(r"^[•*]\s*ГР\s*\d+:[^\n]+→[^\n]+\n?", "", cleaned, flags=re.MULTILINE | re.IGNORECASE).strip()
         return cleaned or text
+
+    def get_formatted_ai_feedback(self):
+        """
+        Повертає відформатований відгук ШІ для інтерфейсу вчителя (переглядача файлів).
+        Якщо в базі збережено сирий JSON, форматує його у зрозумілий вигляд.
+        """
+        if not self.ai_feedback:
+            return ""
+        text = str(self.ai_feedback).strip()
+        if text.startswith('{') or '"suggested_grade"' in text or '"feedback_comment"' in text:
+            from feed.utils import format_raw_json_feedback_for_display
+            return format_raw_json_feedback_for_display(text)
+        return self.ai_feedback
 
     @property
     def effective_grade_date(self):
@@ -2248,6 +2269,13 @@ class SubmissionComment(models.Model):
                     return f"{self.author.first_name} {self.author.last_name}".strip()
                 return self.author.username
         return 'Вчитель'
+
+    def save(self, *args, **kwargs):
+        # Захист: якщо в коментар потрапив сирий JSON ШІ, автоматично очищаємо до чистого тексту
+        if self.text and (str(self.text).strip().startswith('{') or '"feedback_comment"' in self.text or '"suggested_grade"' in self.text):
+            from feed.utils import extract_clean_comment_from_raw_json
+            self.text = extract_clean_comment_from_raw_json(self.text)
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"Коментар від {self.get_author_name()} до {self.submission}"
