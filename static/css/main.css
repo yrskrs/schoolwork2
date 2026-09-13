@@ -60,7 +60,7 @@
   --transition-slow: 0.4s ease;
 
   /* Сайдбар */
-  --sidebar-width: 260px;
+  --sidebar-width: 240px;
 
   /* Блок опису завдання вчителя (Світла тема) */
   --desc-card-bg: linear-gradient(180deg, #f8faff 0%, #f1f5fd 100%);
@@ -277,25 +277,31 @@ pre, code {
 }
 
 .navbar-search {
-  flex: 1;
-  max-width: 400px;
+  flex: 0 1 240px;
+  max-width: 280px;
   position: relative;
+  transition: flex 0.25s ease, max-width 0.25s ease;
 }
 
 .navbar-search input {
   width: 100%;
-  padding: 8px 12px 8px 36px;
+  padding: 7px 12px 7px 34px;
   border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: var(--radius-full);
   background: rgba(255, 255, 255, 0.08);
   color: #ffffff;
-  font-size: 14px;
+  font-size: 13.5px;
   transition: all var(--transition-fast);
   font-family: inherit;
 }
 
 .navbar-search input::placeholder {
   color: rgba(226, 232, 240, 0.55);
+}
+
+.navbar-search:focus-within {
+  flex: 0 1 340px;
+  max-width: 360px;
 }
 
 .navbar-search input:focus {
@@ -307,18 +313,18 @@ pre, code {
 
 .navbar-search .search-icon {
   position: absolute;
-  left: 12px;
+  left: 11px;
   top: 50%;
   transform: translateY(-50%);
   color: rgba(226, 232, 240, 0.6);
-  font-size: 14px;
+  font-size: 13px;
   pointer-events: none;
 }
 
 .navbar-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   margin-left: auto;
 }
 
@@ -349,14 +355,14 @@ pre, code {
   max-width: 1200px;
   width: 100%;
   margin: 0 auto;
-  padding: 24px 16px;
+  padding: 14px 16px;
   flex: 1 0 auto;
 }
 
 .feed-layout {
   display: grid;
   grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
-  gap: 24px;
+  gap: 16px;
   align-items: start;
   min-width: 0;
   max-width: 100%;
@@ -428,14 +434,14 @@ pre, code {
   border-radius: var(--radius-lg);
   overflow: hidden;
   box-shadow: var(--shadow-sm);
-  margin-bottom: 16px;
+  margin-bottom: 12px;
 }
 
 .sidebar-header {
-  padding: 16px;
-  font-weight: 600;
-  font-size: 13px;
-  letter-spacing: 0.05em;
+  padding: 10px 14px;
+  font-weight: 700;
+  font-size: 12.5px;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--color-text-muted);
   border-bottom: 1px solid var(--color-border);
@@ -449,15 +455,15 @@ pre, code {
 .sidebar-list li button {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 16px;
+  gap: 8px;
+  padding: 7px 12px;
   width: 100%;
   text-align: left;
   border: none;
   background: none;
   cursor: pointer;
   font-family: inherit;
-  font-size: 14px;
+  font-size: 13.5px;
   color: var(--color-text-secondary);
   transition: all var(--transition-fast);
   text-decoration: none;
@@ -727,7 +733,7 @@ pre, code {
 .assignments-feed {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 9px;
 }
 
 .assignment-card {
@@ -753,7 +759,7 @@ pre, code {
 }
 
 .card-body {
-  padding: 16px;
+  padding: 12px 14px;
 }
 
 .card-meta {
@@ -761,7 +767,7 @@ pre, code {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  margin-bottom: 10px;
+  margin-bottom: 6px;
   flex-wrap: wrap;
 }
 
@@ -1020,18 +1026,18 @@ pre, code {
 }
 
 .card-title {
-  font-size: 1rem;
-  font-weight: 600;
+  font-size: 0.98rem;
+  font-weight: 700;
   color: var(--color-text-primary);
-  margin-bottom: 6px;
-  line-height: 1.4;
+  margin-bottom: 4px;
+  line-height: 1.35;
 }
 
 .card-description {
-  font-size: 13.5px;
+  font-size: 13px;
   font-weight: 500;
   color: var(--color-text-primary);
-  line-height: 1.55;
+  line-height: 1.5;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -1040,9 +1046,9 @@ pre, code {
   border: 1px solid var(--desc-card-border);
   border-left: 3px solid var(--desc-card-accent);
   border-radius: var(--radius-sm);
-  padding: 7px 11px;
-  margin-top: 8px;
-  margin-bottom: 6px;
+  padding: 5px 9px;
+  margin-top: 5px;
+  margin-bottom: 4px;
   box-shadow: 0 1px 3px rgba(0,0,0,0.02);
 }
 
@@ -1050,7 +1056,7 @@ pre, code {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 16px;
+  padding: 7px 14px;
   border-top: 1px solid var(--color-border-light);
   gap: 8px;
   flex-wrap: wrap;
@@ -3677,13 +3683,14 @@ body {
   border-radius: 10px;
 }
 
+/* ─── Користувацьке меню та оптимізована навігація вчителя ────────────────────── */
 .user-menu {
   position: relative;
 }
 .user-menu-btn {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   padding: 4px 8px 4px 4px;
   border: 1px solid var(--color-border);
   background: var(--color-surface);
@@ -3691,7 +3698,8 @@ body {
   cursor: pointer;
   font-family: inherit;
   color: var(--color-text-primary);
-  max-width: 220px;
+  max-width: 180px;
+  transition: all var(--transition-fast);
 }
 .user-menu-btn:hover {
   border-color: var(--color-primary);
@@ -3702,7 +3710,7 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.16);
   background: rgba(255, 255, 255, 0.08);
   color: #ffffff;
-  padding: 4px 10px 4px 4px;
+  padding: 3px 8px 3px 3px;
   transition: all var(--transition-fast);
 }
 .navbar .user-menu-btn:hover {
@@ -3713,29 +3721,87 @@ body {
 .navbar .user-menu-name {
   color: #ffffff;
   font-weight: 700;
-}
-.user-menu-name {
-  font-size: 13px;
-  font-weight: 650;
+  font-size: 12.5px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 140px;
+  max-width: 110px;
 }
+.user-menu-chevron {
+  font-size: 10px;
+  opacity: 0.7;
+  color: #ffffff;
+  transition: transform 0.2s ease;
+}
+.user-menu.open .user-menu-chevron {
+  transform: rotate(180deg);
+}
+
 .user-menu-panel {
   display: none;
   position: absolute;
   right: 0;
-  top: calc(100% + 6px);
-  min-width: 220px;
+  top: calc(100% + 8px);
+  width: 250px;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-md);
-  padding: 6px;
-  z-index: 200;
+  border-radius: var(--radius-lg);
+  box-shadow: 0 14px 35px rgba(0, 0, 0, 0.2);
+  padding: 8px;
+  z-index: 1050;
+  animation: rescheduleModalIn 0.15s ease-out;
 }
 .user-menu.open .user-menu-panel { display: block; }
+
+/* Шапка меню користувача */
+.user-menu-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-md);
+  margin-bottom: 4px;
+}
+.user-menu-header-avatar {
+  flex-shrink: 0;
+}
+.user-menu-header-meta {
+  overflow: hidden;
+  flex: 1;
+}
+.user-menu-header-name {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--color-text-primary);
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.user-menu-header-sub {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  margin-top: 2px;
+}
+
+.user-menu-divider {
+  height: 1px;
+  background: var(--color-border);
+  margin: 6px 0;
+}
+
+.user-menu-section-label {
+  font-size: 9.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted);
+  padding: 4px 8px 2px;
+}
+
+.user-menu-link,
 .user-menu-panel a,
 .user-menu-panel button {
   display: flex;
@@ -3743,16 +3809,20 @@ body {
   gap: 8px;
   width: 100%;
   text-align: left;
-  padding: 8px 10px;
+  padding: 6px 10px;
   border: none;
   background: none;
   border-radius: var(--radius-sm);
   font: inherit;
-  font-size: 13px;
+  font-size: 12.5px;
+  font-weight: 600;
   color: var(--color-text-secondary);
   cursor: pointer;
   text-decoration: none;
+  transition: all 0.15s ease;
+  box-sizing: border-box;
 }
+.user-menu-link:hover,
 .user-menu-panel a:hover,
 .user-menu-panel button:hover {
   background: var(--color-bg-secondary);
@@ -3761,13 +3831,158 @@ body {
 .user-menu-panel .danger {
   color: var(--color-danger);
 }
+.user-menu-panel .danger:hover {
+  background: rgba(239, 68, 68, 0.08);
+  color: #dc2626;
+}
+
+/* Блок масштабування шрифту всередині меню користувача */
+.user-menu-font-control {
+  padding: 6px 8px;
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-md);
+  margin: 4px 0;
+}
+.user-menu-font-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--color-text-secondary);
+  margin-bottom: 6px;
+}
+.font-scale-val-badge {
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--color-primary);
+  background: var(--color-surface);
+  padding: 1px 5px;
+  border-radius: 4px;
+  border: 1px solid var(--color-border);
+}
+.user-menu-font-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 3px;
+}
+.user-menu-font-grid .font-scale-choice-btn {
+  font-size: 10.5px;
+  padding: 4px 2px;
+  font-weight: 700;
+  border-radius: 4px;
+  text-align: center;
+  justify-content: center;
+}
+
+.user-menu-version-badge {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 800;
+  background: rgba(99, 102, 241, 0.15);
+  color: var(--color-primary);
+  padding: 1px 6px;
+  border-radius: 8px;
+}
+
+/* ─── Компактний статус-піл розкладу вчителя ─────────────────────────────────── */
+.nav-schedule-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  border-radius: var(--radius-full);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  position: relative;
+  overflow: hidden;
+  white-space: nowrap;
+  flex-shrink: 0;
+  text-decoration: none;
+  line-height: 1;
+  max-width: 175px;
+}
+.nav-schedule-pill:hover {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.35);
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+.nav-schedule-pill.status-in-lesson {
+  background: rgba(16, 185, 129, 0.14);
+  border-color: rgba(16, 185, 129, 0.4);
+}
+.nav-schedule-pill.status-in-break {
+  background: rgba(245, 158, 11, 0.14);
+  border-color: rgba(245, 158, 11, 0.4);
+}
+.schedule-pill-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.schedule-pill-progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 2.5px;
+  transition: width 0.4s ease;
+}
+
+.live-dot-pulse {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.live-dot-pulse.green {
+  background: #10b981;
+  box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+  animation: pulseGreen 2s infinite;
+}
+.live-dot-pulse.amber {
+  background: #f59e0b;
+  box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7);
+  animation: pulseAmber 2s infinite;
+}
+@keyframes pulseGreen {
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+  70% { transform: scale(1); box-shadow: 0 0 0 5px rgba(16, 185, 129, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+}
+@keyframes pulseAmber {
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7); }
+  70% { transform: scale(1); box-shadow: 0 0 0 5px rgba(245, 158, 11, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+}
 
 #mobile-menu-btn { display: none; }
+
+@media (max-width: 1180px) {
+  .navbar-search { flex: 0 1 180px; }
+  .navbar-search:focus-within { flex: 0 1 260px; }
+  .nav-btn-create .nav-btn-text-full { display: none; }
+}
+
+@media (max-width: 992px) {
+  .nav-schedule-pill { max-width: 140px; }
+  .user-menu-name { display: none; }
+}
+
 @media (max-width: 768px) {
   #mobile-menu-btn { display: flex !important; }
   .navbar-search { display: none; }
   .nav-btn-text { display: none; }
   .user-menu-name { display: none; }
+  .nav-schedule-pill { padding: 5px 8px; }
 }
 
 .page-auth .navbar-search { display: none; }
@@ -3863,6 +4078,73 @@ body {
   background: rgba(99, 102, 241, 0.12);
   color: var(--color-primary-text);
   box-shadow: 0 0 0 1px var(--color-primary);
+}
+
+/* ── Віджет масштабування шрифтів (доступність) ── */
+.font-scale-dropdown {
+  animation: fadeIn 0.15s ease-out;
+}
+.font-scale-choice-btn {
+  border: 1px solid var(--color-border) !important;
+  border-radius: var(--radius-sm) !important;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  min-width: 36px;
+  text-align: center;
+}
+.font-scale-choice-btn:hover {
+  border-color: var(--color-primary) !important;
+}
+
+/* ── Кнопка оновлень сайту в навігаційній панелі ── */
+.nav-btn-changelog {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 36px;
+  width: auto;
+  min-width: fit-content;
+  padding: 0 12px;
+  border-radius: var(--radius-full);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: all var(--transition-fast);
+  text-decoration: none;
+  box-sizing: border-box;
+}
+.nav-btn-changelog:hover {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.35);
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+.nav-btn-changelog:active {
+  transform: translateY(0);
+}
+.nav-btn-changelog .changelog-sparkle {
+  font-size: 13px;
+  line-height: 1;
+  display: inline-block;
+}
+.nav-btn-changelog .changelog-version-tag {
+  font-weight: 750;
+  letter-spacing: 0.02em;
+  color: #ffffff;
+  line-height: 1;
+}
+.changelog-version-card {
+  transition: box-shadow 0.2s ease;
+}
+.changelog-version-card:hover {
+  box-shadow: var(--shadow-sm);
 }
 
 

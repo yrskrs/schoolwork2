@@ -46,6 +46,9 @@ logs/*
 Thumbs.db
 desktop.ini
 
+# Static collected files (generated at runtime)
+staticfiles/
+
 # Distribution / packaging
 dist/
 build/

@@ -44,6 +44,12 @@
                         <span>⏱️</span>
                         <span id="live-lesson-time-info">{{ live_lesson_status.time_info }}</span>
                     </div>
+
+                    {% if live_lesson_status.status_type == 'in_lesson' or live_lesson_status.status_type == 'in_break' %}
+                    <div style="margin-top: 6px; width: 100%; max-width: 260px; height: 5px; background: rgba(0,0,0,0.08); border-radius: 3px; overflow: hidden;">
+                        <div id="live-lesson-progress-fill" style="height: 100%; width: {{ live_lesson_status.progress_percent|default:0 }}%; background: {% if live_lesson_status.status_type == 'in_break' %}linear-gradient(90deg, #f59e0b, #d97706){% else %}linear-gradient(90deg, #10b981, #059669){% endif %}; border-radius: 3px; transition: width 0.4s ease;"></div>
+                    </div>
+                    {% endif %}
                 </div>
             </div>
 

@@ -89,6 +89,8 @@
                     </div>
                     {% endwith %}
 
+
+
                     <!-- Відмітка про перенесення уроку вчителем -->
                     {% if assignment.reschedule_logs.first %}
                     {% with last_resched=assignment.reschedule_logs.first %}
@@ -285,6 +287,8 @@
                         {% endif %}
                     </div>
 
+
+
                     <!-- Назва завдання -->
                     <h1 style="font-size:1.6rem;font-weight:800;margin:0 0 16px;color:var(--color-text-primary);line-height:1.3;">
                         {{ assignment.title }}
@@ -297,7 +301,7 @@
                             <span class="desc-icon">📝</span>
                             <span class="assignment-description-title">Завдання до виконання:</span>
                         </div>
-                        <div class="assignment-full-description" id="assignment-desc-content">{{ assignment.description }}</div>
+                        <div class="assignment-full-description rich-text-content" id="assignment-desc-content">{{ assignment.get_formatted_description|safe }}</div>
                     </div>
                     {% endif %}
 
@@ -373,7 +377,7 @@
                                         </button>
                                         {% endif %}
                                         <a href="{% url 'file_download' f.id %}" class="btn btn-secondary btn-sm" style="font-weight:700;display:inline-flex;align-items:center;gap:6px;">
-                                            ⬇️ Завантажити
+                                            ⬇️ Завантажити файл
                                         </a>
                                     </div>
                                 </div>
@@ -511,10 +515,45 @@
                                             {% endif %}
                                         </div>
 
-                                        {% else %}
-                                        <!-- Word / Excel / ODT — звичайний вигляд -->
+                                        {% elif f.extension in '.docx .doc .odt' %}
+                                        <!-- ── DOCX / DOC / ODT: перемикач між документом (PDF) та текстовим виглядом ─── -->
+                                        <div class="docx-tabs" style="margin-bottom:14px;display:flex;gap:10px;border-bottom:2px solid var(--color-border);padding-bottom:10px;align-items:center;flex-wrap:wrap;">
+                                            <button type="button" class="docx-tab-btn active" onclick="switchDocxTab(this, 'doc-preview-{{ forloop.counter }}')"
+                                                style="background:var(--color-primary);color:#fff;border:none;border-radius:8px;padding:7px 18px;font-weight:700;cursor:pointer;font-size:13px;display:inline-flex;align-items:center;gap:6px;transition:all 0.2s;">
+                                                📄 Перегляд документа
+                                            </button>
+                                            {% if f.html_preview %}
+                                            <button type="button" class="docx-tab-btn" onclick="switchDocxTab(this, 'doc-text-{{ forloop.counter }}')"
+                                                style="background:var(--color-bg-secondary);color:var(--color-text-primary);border:1px solid var(--color-border);border-radius:8px;padding:7px 18px;font-weight:600;cursor:pointer;font-size:13px;display:inline-flex;align-items:center;gap:6px;transition:all 0.2s;">
+                                                📝 Текстовий вигляд
+                                            </button>
+                                            {% endif %}
+                                            <a href="{% url 'file_view' f.id %}" target="_blank"
+                                               style="margin-left:auto;text-decoration:none;font-size:12px;font-weight:600;color:var(--color-primary);padding:6px 12px;border-radius:6px;background:var(--color-bg-secondary);border:1px solid var(--color-border);display:inline-flex;align-items:center;gap:6px;">
+                                               ↗ Відкрити на весь екран
+                                            </a>
+                                        </div>
+
+                                        <!-- Вкладка 1: Повноцінний перегляд документа у високій якості через PDF-конвертер -->
+                                        <div id="doc-preview-{{ forloop.counter }}" class="docx-tab-panel" style="display:block;">
+                                            <div style="height:700px;background:#1e293b;border-radius:var(--radius-md);overflow:hidden;position:relative;box-shadow:0 8px 30px rgba(0,0,0,0.12);">
+                                                <iframe data-src="{% url 'file_view' f.id %}#toolbar=1" width="100%" height="100%" style="border:none;width:100%;height:100%;background:#fff;" title="{{ f.original_name }}"></iframe>
+                                            </div>
+                                        </div>
+
+                                        <!-- Вкладка 2: Текстовий розпарсений вигляд -->
                                         {% if f.html_preview %}
-                                        <div style="overflow-x:auto;">
+                                        <div id="doc-text-{{ forloop.counter }}" class="docx-tab-panel" style="display:none;">
+                                            <div style="overflow-x:auto;padding:20px 24px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);line-height:1.7;box-shadow:0 2px 8px rgba(0,0,0,0.02);">
+                                                {{ f.html_preview|safe }}
+                                            </div>
+                                        </div>
+                                        {% endif %}
+
+                                        {% else %}
+                                        <!-- Excel / ODS та інші офісні таблиці -->
+                                        {% if f.html_preview %}
+                                        <div style="overflow-x:auto;padding:12px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);">
                                             {{ f.html_preview|safe }}
                                         </div>
                                         {% endif %}
@@ -895,6 +934,40 @@ function switchPptxTab(btn, panelId) {
     const panel = document.getElementById(panelId);
     if (!panel) return;
     panel.style.display = 'block';
+}
+
+function switchDocxTab(btn, panelId) {
+    const tabsContainer = btn.closest('.docx-tabs');
+    if (!tabsContainer) return;
+    const previewBox = tabsContainer.closest('[id^="inline-file-preview-"]');
+
+    tabsContainer.querySelectorAll('.docx-tab-btn').forEach(function(b) {
+        b.style.background = 'var(--color-bg-secondary)';
+        b.style.color = 'var(--color-text-primary)';
+        b.style.fontWeight = '600';
+        b.style.border = '1px solid var(--color-border)';
+        b.classList.remove('active');
+    });
+    btn.style.background = 'var(--color-primary)';
+    btn.style.color = '#fff';
+    btn.style.fontWeight = '700';
+    btn.style.border = 'none';
+    btn.classList.add('active');
+
+    if (previewBox) {
+        previewBox.querySelectorAll('.docx-tab-panel').forEach(function(p) {
+            p.style.display = 'none';
+        });
+    }
+
+    const panel = document.getElementById(panelId);
+    if (!panel) return;
+    panel.style.display = 'block';
+
+    const iframe = panel.querySelector('iframe[data-src]');
+    if (iframe && !iframe.getAttribute('src')) {
+        iframe.setAttribute('src', iframe.getAttribute('data-src'));
+    }
 }
 
 function changeSlide(playerIdx, delta) {

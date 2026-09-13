@@ -288,8 +288,22 @@
                            id="prev-sub-btn">
                             « Попередня
                         </a>
+                        {% elif prev_submission_fallback %}
+                        <a href="{% url 'view_file' prev_submission_fallback.id %}"
+                           class="btn btn-secondary btn-sm"
+                           title="Попередня робота: {{ prev_submission_fallback.get_student_full_name }} ({{ prev_submission_fallback.assignment.title|default:'Робота'|truncatechars:20 }})"
+                           id="prev-sub-btn">
+                            « Попередня
+                        </a>
+                        {% elif prev_assignment and prev_assignment_first_sub %}
+                        <a href="{% url 'view_file' prev_assignment_first_sub.id %}?assignment={{ prev_assignment.id }}"
+                           class="btn btn-secondary btn-sm"
+                           title="Попереднє завдання: {{ prev_assignment.title|truncatechars:25 }}"
+                           id="prev-sub-btn">
+                            « Попереднє завд.
+                        </a>
                         {% else %}
-                        <button class="btn btn-secondary btn-sm" disabled style="opacity:0.35;">« Попередня</button>
+                        <button class="btn btn-secondary btn-sm" disabled style="opacity:0.35;" title="Це перша робота в системі">« Попередня</button>
                         {% endif %}
 
                         <span style="font-size:11px;font-weight:700;color:var(--color-text-muted);text-transform:uppercase;letter-spacing:0.04em;">
@@ -303,8 +317,29 @@
                            id="next-sub-btn">
                             Наступна »
                         </a>
+                        {% elif next_submission_fallback %}
+                        <a href="{% url 'view_file' next_submission_fallback.id %}"
+                           class="btn btn-primary btn-sm"
+                           title="Наступна робота: {{ next_submission_fallback.get_student_full_name }} ({{ next_submission_fallback.assignment.title|default:'Робота'|truncatechars:20 }}) (Alt + →)"
+                           id="next-sub-btn">
+                            Наступна »
+                        </a>
+                        {% elif next_assignment and next_assignment_first_sub %}
+                        <a href="{% url 'view_file' next_assignment_first_sub.id %}?assignment={{ next_assignment.id }}"
+                           class="btn btn-primary btn-sm"
+                           title="Перейти до першої роботи наступного завдання: {{ next_assignment.title|truncatechars:25 }}"
+                           id="next-sub-btn">
+                            Наступне завд. »
+                        </a>
+                        {% elif next_assignment %}
+                        <a href="{% url 'assignment_submissions' next_assignment.id %}"
+                           class="btn btn-primary btn-sm"
+                           title="Перейти до списку робіт наступного завдання: {{ next_assignment.title|truncatechars:25 }}"
+                           id="next-sub-btn">
+                            Наступне завд. »
+                        </a>
                         {% else %}
-                        <button class="btn btn-secondary btn-sm" disabled style="opacity:0.35;">Наступна »</button>
+                        <button class="btn btn-secondary btn-sm" disabled style="opacity:0.35;" title="Це остання робота в системі">Наступна »</button>
                         {% endif %}
 
                         {% if submission.link %}
@@ -861,7 +896,7 @@
                                 <span class="assignment-desc-badge" style="font-size:10px;">Умова вчителя</span>
                             </div>
                             {% if submission.assignment.description %}
-                            <div class="assignment-full-description" style="font-size:13px;line-height:1.6;padding:12px 14px;">{{ submission.assignment.description }}</div>
+                            <div class="assignment-full-description" style="font-size:13px;line-height:1.6;padding:12px 14px;">{{ submission.assignment.get_formatted_description|safe }}</div>
                             {% endif %}
                             {% if submission.assignment.files.all or submission.assignment.link_url or submission.assignment.all_youtube_videos %}
                             <div style="border-top:1px dashed var(--color-border);padding-top:8px;margin-top:8px;display:flex;flex-direction:column;gap:6px;">

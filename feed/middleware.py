@@ -6,6 +6,7 @@ import sys
 import time
 import traceback
 from datetime import datetime
+from django.utils import timezone
 from threading import Lock
 
 # Зберігає {ip: {'timestamp': ts, 'last_path': path, 'last_time_str': '23:45:00'}}
@@ -74,7 +75,7 @@ class OnlineClientsMiddleware:
                 _active_clients[ip] = {
                     'timestamp': now,
                     'last_path': path if not path.startswith('/feed/check-updates/') else _active_clients.get(ip, {}).get('last_path', '/'),
-                    'last_time_str': datetime.now().strftime('%H:%M:%S')
+                    'last_time_str': timezone.localtime(timezone.now()).strftime('%H:%M:%S')
                 }
 
         try:

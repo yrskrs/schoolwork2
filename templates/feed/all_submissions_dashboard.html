@@ -120,12 +120,47 @@
                 </form>
             </div>
 
+            <!-- ── Панель масового оцінювання ─────────────────────────────────── -->
+            <div id="mass-action-toolbar" style="display:none;background:var(--color-surface);border:2px solid var(--color-primary);border-radius:var(--radius-lg);padding:12px 18px;margin-bottom:16px;box-shadow:0 4px 16px rgba(99,102,241,0.12);animation:fadeIn 0.2s ease;">
+                <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+                    <div style="display:flex;align-items:center;gap:12px;">
+                        <span style="font-weight:800;font-size:13px;color:var(--color-primary);display:inline-flex;align-items:center;gap:6px;">
+                            <span>☑️</span> Вибрано робіт: <strong id="selected-count" style="font-size:15px;color:var(--color-text-primary);">0</strong>
+                        </span>
+                        <button type="button" class="btn btn-secondary btn-sm" onclick="deselectAllSubs()" style="font-size:11px;padding:3px 9px;">
+                            ✕ Зняти вибір
+                        </button>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                        <span style="font-size:12px;font-weight:700;color:var(--color-text-muted);">Виставити оцінку:</span>
+                        <input type="text" id="mass-grade-input" class="form-input" placeholder="1-12" style="width:75px;font-size:12.5px;padding:5px 8px;text-align:center;font-weight:700;" maxlength="15">
+                        <div style="display:flex;gap:4px;">
+                            <button type="button" class="btn btn-secondary btn-sm" style="padding:4px 8px;font-size:11px;font-weight:700;" onclick="setMassGradeValue('12')">12</button>
+                            <button type="button" class="btn btn-secondary btn-sm" style="padding:4px 8px;font-size:11px;font-weight:700;" onclick="setMassGradeValue('11')">11</button>
+                            <button type="button" class="btn btn-secondary btn-sm" style="padding:4px 8px;font-size:11px;font-weight:700;" onclick="setMassGradeValue('10')">10</button>
+                            <button type="button" class="btn btn-secondary btn-sm" style="padding:4px 8px;font-size:11px;font-weight:700;" onclick="setMassGradeValue('Зараховано')">Зараховано</button>
+                            <button type="button" class="btn btn-secondary btn-sm" style="padding:4px 8px;font-size:11px;font-weight:700;color:#d97706;" onclick="setMassGradeValue('Доопрацювати')">Доопрацювати</button>
+                        </div>
+                        <button type="button" class="btn btn-success btn-sm" id="btn-apply-mass-grade" style="font-weight:800;padding:6px 14px;font-size:12px;display:inline-flex;align-items:center;gap:4px;" onclick="applyMassGrade()">
+                            <span>✓</span> Застосувати
+                        </button>
+                        <button type="button" class="btn btn-danger btn-sm" style="font-size:11px;padding:6px 10px;" onclick="applyMassGrade(true)" title="Скинути оцінки для вибраних робіт">
+                            Скинути
+                        </button>
+                    </div>
+                </div>
+                <div id="mass-status-msg" style="font-size:12px;margin-top:6px;display:none;font-weight:600;"></div>
+            </div>
+
             <!-- ── Таблиця зданих робіт (Компактний формат без горизонтального скролу) ── -->
             <div class="submissions-table-wrapper" style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);overflow-x:auto;box-shadow:0 2px 10px rgba(0,0,0,0.03);width:100%;">
                 <table class="submissions-table" style="width:100%;font-size:12px;">
                     <thead>
                         <tr>
-                            <th style="width:18%;padding:8px 8px;">
+                            <th style="width:34px;text-align:center;padding:8px 4px;">
+                                <input type="checkbox" id="select-all-subs" title="Вибрати всі роботи на сторінці" style="cursor:pointer;width:15px;height:15px;" onchange="toggleSelectAllSubs(this)">
+                            </th>
+                            <th style="width:17%;padding:8px 8px;">
                                 <a href="?sort=student&order={% if sort_by == 'student' and sort_order == 'asc' %}desc{% else %}asc{% endif %}&search={{ search_query }}&class={{ selected_class_id|default:'' }}&assignment={{ selected_assignment_id|default:'' }}&grade_filter={{ grade_filter }}&date={{ date_filter }}">
                                     Учень
                                     {% if sort_by == 'student' %}{% if sort_order == 'asc' %}↑{% else %}↓{% endif %}{% endif %}
@@ -137,7 +172,7 @@
                                     {% if sort_by == 'class' %}{% if sort_order == 'asc' %}↑{% else %}↓{% endif %}{% endif %}
                                 </a>
                             </th>
-                            <th style="width:26%;padding:8px 8px;">
+                            <th style="width:25%;padding:8px 8px;">
                                 <a href="?sort=assignment&order={% if sort_by == 'assignment' and sort_order == 'asc' %}desc{% else %}asc{% endif %}&search={{ search_query }}&class={{ selected_class_id|default:'' }}&assignment={{ selected_assignment_id|default:'' }}&grade_filter={{ grade_filter }}&date={{ date_filter }}">
                                     Завдання
                                     {% if sort_by == 'assignment' %}{% if sort_order == 'asc' %}↑{% else %}↓{% endif %}{% endif %}
@@ -162,6 +197,9 @@
                     <tbody>
                         {% for submission in page_obj %}
                         <tr id="row-{{ submission.id }}" {% if submission.is_graded %}style="border-left:3px solid var(--color-success)"{% else %}style="border-left:3px solid var(--color-warning)"{% endif %}>
+                            <td style="text-align:center;padding:6px 4px;">
+                                <input type="checkbox" class="sub-checkbox" value="{{ submission.id }}" onchange="updateMassActionToolbar()" style="cursor:pointer;width:15px;height:15px;">
+                            </td>
                             <td style="padding:6px 8px;white-space:nowrap;">
                                 <div style="display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap;">
                                     <a href="{% url 'student_detail' student_name=submission.last_name|add:'_'|add:submission.first_name %}"
@@ -279,7 +317,7 @@
                         </tr>
                         {% empty %}
                         <tr>
-                            <td colspan="7" style="text-align:center;padding:40px;color:var(--color-text-muted);">
+                            <td colspan="8" style="text-align:center;padding:40px;color:var(--color-text-muted);">
                                 <div style="font-size:48px;margin-bottom:12px;">📭</div>
                                 <div style="font-size:15px;font-weight:700;">Здач не знайдено</div>
                                 <p style="font-size:13px;margin-top:4px;">Спробуйте змінити фільтри або пошуковий запит.</p>
@@ -323,11 +361,36 @@
 <script>
 const CSRF_TOKEN = '{{ csrf_token }}';
 
+function updateBadges(pendingCount, unreadCount) {
+    if (pendingCount !== undefined) {
+        document.querySelectorAll('.nav-badge').forEach(el => {
+            if (pendingCount > 0) {
+                el.textContent = pendingCount;
+                el.style.display = 'inline-block';
+            } else {
+                el.style.display = 'none';
+            }
+        });
+    }
+    if (unreadCount !== undefined) {
+        const pulse = document.querySelector('.nav-badge-pulse');
+        if (pulse) {
+            if (unreadCount > 0) {
+                pulse.textContent = unreadCount;
+                pulse.style.display = 'inline-block';
+            } else {
+                pulse.style.display = 'none';
+            }
+        }
+    }
+}
+
 function quickGrade(subId) {
     const inp = document.getElementById('grade-inp-' + subId);
     const grade = inp.value.trim();
     const disp = document.getElementById('grade-disp-' + subId);
     const status = document.getElementById('qg-status-' + subId);
+    const row = document.getElementById('row-' + subId);
     status.textContent = '⏳';
 
     fetch('/teacher/submission/' + subId + '/grade/', {
@@ -340,12 +403,142 @@ function quickGrade(subId) {
         if (data.status === 'success') {
             disp.textContent = data.grade || '—';
             disp.className = 'grade-badge' + (data.grade ? '' : ' no-grade');
+            if (row) {
+                row.style.borderLeft = data.grade ? '3px solid var(--color-success)' : '3px solid var(--color-warning)';
+            }
             status.textContent = '✓ Збережено';
             status.style.color = 'var(--color-success)';
             setTimeout(() => status.textContent = '', 2000);
+            updateBadges(data.pending_submissions_count, data.unread_notifications_count);
+        } else {
+            status.textContent = '❌ ' + (data.message || 'Помилка');
+            status.style.color = 'var(--color-danger)';
         }
     })
     .catch(() => { status.textContent = '❌ Помилка'; });
+}
+
+function toggleSelectAllSubs(master) {
+    const checkboxes = document.querySelectorAll('.sub-checkbox');
+    checkboxes.forEach(cb => { cb.checked = master.checked; });
+    updateMassActionToolbar();
+}
+
+function deselectAllSubs() {
+    const master = document.getElementById('select-all-subs');
+    if (master) master.checked = false;
+    document.querySelectorAll('.sub-checkbox').forEach(cb => { cb.checked = false; });
+    updateMassActionToolbar();
+}
+
+function updateMassActionToolbar() {
+    const checked = document.querySelectorAll('.sub-checkbox:checked');
+    const toolbar = document.getElementById('mass-action-toolbar');
+    const counter = document.getElementById('selected-count');
+    const master = document.getElementById('select-all-subs');
+    const all = document.querySelectorAll('.sub-checkbox');
+
+    if (counter) counter.textContent = checked.length;
+    if (toolbar) {
+        toolbar.style.display = checked.length > 0 ? 'block' : 'none';
+    }
+    if (master && all.length > 0) {
+        master.checked = (checked.length === all.length);
+        master.indeterminate = (checked.length > 0 && checked.length < all.length);
+    }
+}
+
+function setMassGradeValue(val) {
+    const inp = document.getElementById('mass-grade-input');
+    if (inp) {
+        inp.value = val;
+        inp.focus();
+    }
+}
+
+function applyMassGrade(isClear = false) {
+    const checked = document.querySelectorAll('.sub-checkbox:checked');
+    if (checked.length === 0) {
+        alert('Виберіть хоча б одну роботу для оцінювання.');
+        return;
+    }
+
+    const ids = Array.from(checked).map(cb => cb.value);
+    const gradeInp = document.getElementById('mass-grade-input');
+    const grade = isClear ? '' : (gradeInp ? gradeInp.value.trim() : '');
+
+    if (!isClear && !grade) {
+        alert('Введіть або виберіть оцінку (наприклад, 12, 11, 10 або Зараховано).');
+        if (gradeInp) gradeInp.focus();
+        return;
+    }
+
+    const btn = document.getElementById('btn-apply-mass-grade');
+    const statusMsg = document.getElementById('mass-status-msg');
+    if (btn) btn.disabled = true;
+    if (statusMsg) {
+        statusMsg.style.display = 'block';
+        statusMsg.style.color = 'var(--color-primary)';
+        statusMsg.textContent = '⏳ Оцінювання вибраних робіт...';
+    }
+
+    const params = new URLSearchParams();
+    ids.forEach(id => params.append('submission_ids[]', id));
+    params.append('grade', grade);
+    if (isClear) params.append('action', 'clear');
+
+    fetch('{% url "mass_grade_submissions" %}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'X-CSRFToken': CSRF_TOKEN,
+            'X-Requested-With': 'XMLHttpRequest'
+        },
+        body: params.toString()
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (btn) btn.disabled = false;
+        if (data.status === 'success') {
+            if (statusMsg) {
+                statusMsg.style.color = 'var(--color-success)';
+                statusMsg.textContent = '✓ ' + data.message;
+                setTimeout(() => { statusMsg.style.display = 'none'; }, 4000);
+            }
+
+            data.updated_ids.forEach(id => {
+                const disp = document.getElementById('grade-disp-' + id);
+                const inp = document.getElementById('grade-inp-' + id);
+                const row = document.getElementById('row-' + id);
+
+                if (disp) {
+                    disp.textContent = data.grade || '—';
+                    disp.className = 'grade-badge' + (data.grade ? '' : ' no-grade');
+                }
+                if (inp) {
+                    inp.value = data.grade || '';
+                }
+                if (row) {
+                    row.style.borderLeft = data.grade ? '3px solid var(--color-success)' : '3px solid var(--color-warning)';
+                }
+            });
+
+            updateBadges(data.pending_submissions_count, data.unread_notifications_count);
+            deselectAllSubs();
+        } else {
+            if (statusMsg) {
+                statusMsg.style.color = 'var(--color-danger)';
+                statusMsg.textContent = '❌ ' + (data.message || 'Помилка');
+            }
+        }
+    })
+    .catch(err => {
+        if (btn) btn.disabled = false;
+        if (statusMsg) {
+            statusMsg.style.color = 'var(--color-danger)';
+            statusMsg.textContent = '❌ Помилка мережі при оцінюванні';
+        }
+    });
 }
 </script>
 {% endblock %}

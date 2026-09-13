@@ -333,6 +333,82 @@ def extract_text_from_opendocument(file_path, max_chars=50000):
         return None
 
 
+def extract_images_from_docx(file_path, max_images=4, max_bytes_per_img=8 * 1024 * 1024):
+    """
+    Видобуває вбудовані зображення (скриншоти, фотографії розв'язків тощо)
+    із документа Word (.docx), які зберігаються у zip-папці word/media/.
+    Повертає список словників: [{'name': filename, 'mime_type': mime, 'data': base64_str, 'size_kb': float}].
+    """
+    extracted = []
+    try:
+        with zipfile.ZipFile(file_path, 'r') as z:
+            media_files = [f for f in z.namelist() if f.startswith('word/media/')]
+            img_exts = {
+                '.png': 'image/png',
+                '.jpg': 'image/jpeg',
+                '.jpeg': 'image/jpeg',
+                '.webp': 'image/webp',
+                '.bmp': 'image/bmp',
+                '.gif': 'image/gif'
+            }
+            media_files.sort()
+            for mf in media_files:
+                ext = os.path.splitext(mf)[1].lower()
+                if ext in img_exts:
+                    info = z.getinfo(mf)
+                    if 0 < info.file_size <= max_bytes_per_img:
+                        data = z.read(mf)
+                        b64 = base64.b64encode(data).decode('utf-8')
+                        extracted.append({
+                            'name': os.path.basename(mf),
+                            'mime_type': img_exts[ext],
+                            'data': b64,
+                            'size_kb': len(data) / 1024
+                        })
+                        if len(extracted) >= max_images:
+                            break
+    except Exception:
+        pass
+    return extracted
+
+
+def extract_images_from_odt(file_path, max_images=3, max_bytes_per_img=8 * 1024 * 1024):
+    """
+    Видобуває вбудовані зображення з файлу OpenDocument (.odt), що зберігаються в папці Pictures/.
+    """
+    extracted = []
+    try:
+        with zipfile.ZipFile(file_path, 'r') as z:
+            media_files = [f for f in z.namelist() if f.startswith('Pictures/')]
+            img_exts = {
+                '.png': 'image/png',
+                '.jpg': 'image/jpeg',
+                '.jpeg': 'image/jpeg',
+                '.webp': 'image/webp',
+                '.bmp': 'image/bmp',
+                '.gif': 'image/gif'
+            }
+            media_files.sort()
+            for mf in media_files:
+                ext = os.path.splitext(mf)[1].lower()
+                if ext in img_exts:
+                    info = z.getinfo(mf)
+                    if 0 < info.file_size <= max_bytes_per_img:
+                        data = z.read(mf)
+                        b64 = base64.b64encode(data).decode('utf-8')
+                        extracted.append({
+                            'name': os.path.basename(mf),
+                            'mime_type': img_exts[ext],
+                            'data': b64,
+                            'size_kb': len(data) / 1024
+                        })
+                        if len(extracted) >= max_images:
+                            break
+    except Exception:
+        pass
+    return extracted
+
+
 def extract_text_from_excel(file_path, max_rows=50, max_cols=20):
     """
     Видобуває дані та таблиці з файлу Excel (.xlsx).
@@ -843,7 +919,7 @@ def extract_submission_content(submission):
                 if full_doc_text.strip():
                     text_parts.append(f"Вміст документа Word ({filename}, {file_size_kb:.1f} КБ):\n{full_doc_text}")
                 else:
-                    text_parts.append(f"Документ Word ({filename}) порожній або містить лише графічні елементи.")
+                    text_parts.append(f"Документ Word ({filename}) містить графічні елементи або текст відсутній.")
             except Exception as e:
                 # Fallback to mammoth or XML
                 try:
@@ -853,9 +929,18 @@ def extract_submission_content(submission):
                         if result.value.strip():
                             text_parts.append(f"Вміст документа Word ({filename}):\n{result.value.strip()[:50000]}")
                         else:
-                            text_parts.append(f"[Не вдалося прочитати .docx документ: {e}]")
+                            text_parts.append(f"[Не вдалося прочитати текст .docx: {e}]")
                 except Exception:
-                    text_parts.append(f"[Не вдалося прочитати .docx документ: {e}]")
+                    text_parts.append(f"[Не вдалося прочитати текст .docx: {e}]")
+
+            # 📸 Видобуваємо вбудовані зображення (скриншоти/фото), щоб передати на аналіз Gemini Vision
+            docx_images = extract_images_from_docx(file_path)
+            for d_img in docx_images:
+                inline_media.append({
+                    "mime_type": d_img['mime_type'],
+                    "data": d_img['data']
+                })
+                text_parts.append(f"[У документі Word ({filename}) виявлено вбудоване зображення/скриншот: {d_img['name']} ({d_img['size_kb']:.1f} КБ) — передано на візуальний мультимодальний аналіз ШІ]")
 
         elif ext == '.doc':
             doc_text = extract_text_from_doc(file_path)
@@ -866,7 +951,15 @@ def extract_submission_content(submission):
             if odt_text:
                 text_parts.append(f"Вміст документа OpenDocument (.odt) ({filename}):\n{odt_text}")
             else:
-                text_parts.append(f"[Документ .odt {filename} порожній або не вдалося прочитати]")
+                text_parts.append(f"[Документ .odt {filename} містить лише графічні елементи або порожній]")
+
+            odt_images = extract_images_from_odt(file_path)
+            for o_img in odt_images:
+                inline_media.append({
+                    "mime_type": o_img['mime_type'],
+                    "data": o_img['data']
+                })
+                text_parts.append(f"[У документі OpenDocument ({filename}) виявлено вбудоване зображення: {o_img['name']} ({o_img['size_kb']:.1f} КБ) — передано на візуальний мультимодальний аналіз ШІ]")
 
         elif ext == '.rtf':
             rtf_text = extract_text_from_doc(file_path)
@@ -1092,6 +1185,31 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
         "   - Якщо учень якісно та правильно виконав вказане вчителем завдання (наприклад, тільки 1 вправу з 5 наявних у документі), робота вважається ВИКОНАНОЮ НА 100% У ПОВНОМУ ОБСЯЗІ і заслуговує на найвищий бал (10-12 балів відповідно до якості виконання)."
     )
 
+    # ── КРИТИЧНО: ТОЧНЕ РОЗУМІННЯ СУТІ ЗАВДАННЯ, ЗМІСТОВА ВІДПОВІДНІСТЬ ТА ПОВНОТА ──
+    prompt_lines.append(
+        "🎯 КРИТИЧНЕ ПРАВИЛО: ТОЧНЕ РОЗУМІННЯ СУТІ ЗАВДАННЯ, ЗМІСТОВА ВІДПОВІДНІСТЬ ТА ПОВНОТА:\n"
+        "1. АНАЛІЗ ФОРМАТУ ТА ВИМОГ ЗАВДАННЯ:\n"
+        "   - Уважно проаналізуй поле «УМОВА ТА ВИМОГИ ВЧИТЕЛЯ (ЗАВДАННЯ ДО ВИКОНАННЯ)». З'ясуй, ЩО САМЕ вимагається від учнів:\n"
+        "     * Створити структурований список/перелік дат із подіями;\n"
+        "     * Написати твір-роздум або есе певної структури;\n"
+        "     * Розв'язати блок завдань/задач із записом умови, формул, обчислень і відповіді;\n"
+        "     * Скласти комп'ютерну програму, електронну таблицю, схему чи презентацію за заданими вимогами тощо.\n"
+        "   - Оцінюй відповідність зданої роботи САМЕ ЦІЙ ФОРМІ ТА ЗМІСТУ, а не випадковим ключовим словам чи побіжним фразам!\n\n"
+        "2. СУВОРІ КРИТЕРІЇ ДЛЯ ВИСОКИХ БАЛІВ (10-12 БАЛІВ):\n"
+        "   - Оцінки 10, 11 або 12 балів (Високий рівень) призначаються ВИКЛЮЧНО тоді, коли завдання виконано ПОВНІСТЮ, СТРУКТУРОВАНО, ЗМІСТОВНО ТА САМОСТІЙНО відповідно до поставлених вимог вчителя!\n"
+        "   - КАТЕГОРИЧНО ЗАБОРОНЕНО ставити 10-12 балів за окремі вирвані фрази, фрагментарні начерки чи випадкові згадки слів/дат!\n"
+        "   - НАПРИКЛАД: якщо вимагалося створити перелік/список дат, а учень здав картинку та лише одне коротке речення з датами — це ФРАГМЕНТАРНА спроба! Ставити 10-12 балів за таку роботу КАТЕГОРИЧНО ЗАБОРОНЕНО.\n"
+        "   - Роботи, де завдання виконано лише частково або поверхово (окремі речення замість повного списку/твору, картинка без належного розкриття теми чи розв'язку), оцінюються в межах СЕРЕДНЬОГО РІВНЯ (4-6 балів) або ПОЧАТКОВОГО РІВНЯ (1-3 бали / «Доопрацювати»).\n\n"
+        "3. ВІДСУТНІСТЬ НЕОБХІДНОГО МАТЕРІАЛУ АБО НЕВІДПОВІДНІСТЬ ТЕМІ:\n"
+        "   - Якщо у зданій роботі немає того навчального матеріалу, який вимагався за темою (наприклад, здано лише картинку з кількома словами без виконання розв'язку чи розкриття теми, сторонній контент тощо), оцінюй роботу об'єктивно й критично.\n"
+        "   - Якщо зміст роботи не відповідає темі або суті завдання — призначай статус 'Доопрацювати' (або 1-3 бали, якщо потрібна цифрова оцінка).\n\n"
+        "4. ОБОВ'ЯЗКОВИЙ ЗВОРОТНИЙ ЗВ'ЯЗОК ПРИ ОЦІНЦІ МЕНШЕ 10 БАЛІВ (1-9 або 'Доопрацювати'):\n"
+        "   - Якщо рекомендована оцінка менше 10 балів (або 'Доопрацювати'):\n"
+        "     * Окрім позитивних сторін («strengths»), ТИ ЗОБОВ'ЯЗАНИЙ У РОЗДІЛАХ «weaknesses» ТА «feedback_comment» ЧІТКО Й КОНСТРУКТИВНО ОПИСАТИ В ЗАГАЛЬНОМУ («але в загальному»), що саме не так і чого не вистачає в роботі для повного виконання завдання!\n"
+        "     * Зістав вимогу завдання із фактично зданим результатом: наприклад, узагальнено поясни учню: «Завдання вимагало скласти детальний хронологічний перелік дат із подіями, проте в роботі наведено лише одне речення та ілюстрацію. Для отримання вищого балу необхідно виконати роботу в повному обсязі — скласти повноцінний список ключових дат із назвами подій.»\n"
+        "     * Коментар має бути тактовним, узагальненим («в загальному»), без надмірної прискіпливості до дрібниць, але щоб учень чітко зрозумів причину оцінки та напрямок покращення."
+    )
+
     # ── ОЦІНЮВАННЯ ПРЕЗЕНТАЦІЙ (.pptx, .ppt, .odp) ──────────────────────────
     prompt_lines.append(
         "📽️ ВКАЗІВКИ ДЛЯ ПЕРЕВІРКИ ПРЕЗЕНТАЦІЙ (якщо робота є презентацією):\n"
@@ -1258,6 +1376,14 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
             "  * Робота вважається виконаною у повному обсязі (100%), якщо якісно виконано саме задане вчителем завдання.\n"
         )
 
+    if "ТОЧНЕ РОЗУМІННЯ СУТІ ЗАВДАННЯ" not in system_instruction:
+        system_instruction += (
+            "\n\nТОЧНЕ РОЗУМІННЯ СУТІ ЗАВДАННЯ, ЗМІСТОВА ВІДПОВІДНІСТЬ ТА ЗВОРОТНИЙ ЗВ'ЯЗОК:\n"
+            "- Аналізуй, яку саме форму та зміст вимагає завдання (список дат з подіями, твір, таблиця, задачі тощо).\n"
+            "- Оцінки 10-12 балів ставляться ВИКЛЮЧНО за повне, змістовне та структуроване виконання завдання. Фрагментарні або мінімальні відповіді (одне речення замість списку дат, картинка з парою слів) категорично не можуть отримувати 10-12 балів (максимум 4-6 балів, або 1-3/'Доопрацювати').\n"
+            "- Якщо оцінка менше 10 балів (або 'Доопрацювати'): обов'язково опиши в 'weaknesses' та 'feedback_comment' в загальному, що саме виконано не так і чого не вистачає для досягнення вищого балу.\n"
+        )
+
     # Формування payload для Gemini API
     request_parts = [{"text": "\n".join(prompt_lines)}]
 
@@ -1417,6 +1543,23 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                         if not f_ext:
                             format_warning = "Файл прикріплено без розширення (для належної здачі файл потрібно зберігати з відповідним розширенням, наприклад .py для коду)."
 
+                    # Гарантуємо, що при оцінці менше 10 балів або "Доопрацювати" обов'язково є узагальнені зауваження (weaknesses)
+                    is_sub_ten = False
+                    if suggested_grade == 'Доопрацювати':
+                        is_sub_ten = True
+                    else:
+                        try:
+                            if int(suggested_grade) < 10:
+                                is_sub_ten = True
+                        except (ValueError, TypeError):
+                            pass
+
+                    if is_sub_ten and (not weaknesses or not isinstance(weaknesses, list) or len(weaknesses) == 0):
+                        if summary:
+                            weaknesses = [f"Робота виконана не в повному обсязі або потребує доопрацювання та детальнішого розкриття вимог ({summary})."]
+                        else:
+                            weaknesses = ["Робота виконана не в повному обсязі або потребує доопрацювання: окремі вимоги завдання виконані лише частково."]
+
                     full_feedback_parts = []
                     if format_warning:
                         full_feedback_parts.append(f"⚠️ **Зауваження до формату файлу (вплинуло на оцінку):**\n{format_warning}")
@@ -1519,6 +1662,9 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                         'ai_generated_percent': ai_generated_percent,
                         'ai_generated_confidence': ai_generated_confidence,
                         'ai_generated_details': ai_generated_details,
+                        'strengths': strengths,
+                        'weaknesses': weaknesses,
+                        'feedback_comment': feedback_comment,
                         'feedback': combined_feedback,
                         'clean_feedback': clean_student_feedback,
                         'raw_json': result_json,

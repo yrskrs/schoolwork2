@@ -21,7 +21,7 @@ from .gemini_service import evaluate_submission_with_gemini
 class SchoolNetSubmissionsIntegrationTest(TestCase):
     def setUp(self):
         # Створюємо вчителя
-        self.user = User.objects.create_user(username='teacher1', password='password123', is_staff=True)
+        self.user = User.objects.create_user(username='teacher1', password='password123', is_staff=True, is_superuser=True)
         self.teacher = Teacher.objects.create(
             user=self.user,
             full_name='Коваленко Петро Іванович'
@@ -1368,6 +1368,139 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
         self.assertEqual(data['gr_results'][0]['code'], 'ГР 2')
         self.assertEqual(data['suggested_grade'], '12')
 
+    def test_docx_embedded_image_extraction(self):
+        """Тест видобування вбудованих зображень із файлів Word (.docx) для аналізу ШІ."""
+        import tempfile
+        import zipfile
+        from feed.gemini_service import extract_submission_content
+
+        # Створюємо валідний мінімальний docx (zip-архів) із текстом та картинкою у word/media/
+        dummy_png = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15c4\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
+        dummy_xml = b'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>\xd0\x9f\xd0\xb0\xd1\x80\xd1\x83 \xd1\x81\xd0\xbb\xd1\x96\xd0\xb2 \xd1\x83\xd1\x87\xd0\xbd\xd1\x8f</w:t></w:r></w:p></w:body></w:document>'
+
+        with tempfile.NamedTemporaryFile(suffix='.docx', delete=False) as tmp_f:
+            tmp_path = tmp_f.name
+
+        try:
+            with zipfile.ZipFile(tmp_path, 'w') as z:
+                z.writestr('word/document.xml', dummy_xml)
+                z.writestr('word/media/image1.png', dummy_png)
+
+            with open(tmp_path, 'rb') as f_read:
+                docx_upload = SimpleUploadedFile("student_work.docx", f_read.read(), content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+
+            sub = Submission.objects.create(
+                assignment=self.assignment,
+                first_name='Андрій',
+                last_name='Мельник',
+                class_group=self.class_group,
+                teacher=self.teacher,
+                file=docx_upload
+            )
+
+            text_parts, inline_media, err = extract_submission_content(sub)
+            self.assertIsNone(err)
+            self.assertTrue(any("Пару слів учня" in tp for tp in text_parts))
+            self.assertTrue(any("вбудоване зображення" in tp and "image1.png" in tp for tp in text_parts))
+            self.assertEqual(len(inline_media), 1)
+            self.assertEqual(inline_media[0]['mime_type'], 'image/png')
+            self.assertTrue(len(inline_media[0]['data']) > 0)
+        finally:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+
+    @patch('feed.gemini_service._http_post_json')
+    def test_ai_evaluation_task_completeness_and_sub_ten_feedback(self, mock_post):
+        """Тест контролю повноти виконання завдання та обов'язкового зворотного зв'язку при оцінці < 10."""
+        from feed.gemini_service import evaluate_submission_with_gemini
+
+        ai_set = AISettings.get_solo()
+        ai_set.api_key = 'test-gemini-key'
+        ai_set.save()
+
+        # Завдання вимагає створення списку дат
+        self.assignment.title = "Хронологія подій козацької доби"
+        self.assignment.description = "Складіть повний хронологічний список дат із описом ключових битв та подій козацької доби."
+        self.assignment.save()
+
+        # Учень здав лише пару слів та 1 дату
+        sub = Submission.objects.create(
+            assignment=self.assignment,
+            first_name='Іван',
+            last_name='Франко',
+            class_group=self.class_group,
+            teacher=self.teacher,
+            comment_student='Ось моя робота. 1648 рік - битва під Жовтими Водами.'
+        )
+
+        captured_payloads = []
+        def side_effect(url, payload, timeout=35):
+            captured_payloads.append(payload)
+            return (200, {
+                "candidates": [{
+                    "content": {
+                        "parts": [{
+                            "text": json.dumps({
+                                "suggested_grade": "5",
+                                "level": "Середній (4-6)",
+                                "format_warning": None,
+                                "summary": "Завдання виконано фрагментарно: наведено лише одну дату замість повноцінного списку.",
+                                "strengths": ["Вказано правильний рік для битви під Жовтими Водами"],
+                                "weaknesses": ["Завдання вимагало скласти повний перелік ключових дат, натомість наведено лише одну"],
+                                "feedback_comment": "Добре, що згадано 1648 рік, проте в загальному завдання виконано не повністю. Для вищого балу необхідно скласти повний хронологічний перелік дат подій козацької доби."
+                            })
+                        }]
+                    }
+                }]
+            }, "ok")
+
+        mock_post.side_effect = side_effect
+
+        res = evaluate_submission_with_gemini(sub)
+        self.assertEqual(res['status'], 'success')
+        self.assertEqual(res['suggested_grade'], '5')
+        self.assertIn("Середній", res['level'])
+
+        # Перевірка вмісту запиту до Gemini
+        self.assertTrue(len(captured_payloads) > 0)
+        sent_prompt = captured_payloads[0]['contents'][0]['parts'][0]['text']
+        self.assertIn("ТОЧНЕ РОЗУМІННЯ СУТІ ЗАВДАННЯ", sent_prompt)
+        self.assertIn("ОБОВ'ЯЗКОВИЙ ЗВОРОТНИЙ ЗВ'ЯЗОК ПРИ ОЦІНЦІ МЕНШЕ 10 БАЛІВ", sent_prompt)
+        self.assertIn("Хронологія подій козацької доби", sent_prompt)
+
+        # Перевірка зворотного зв'язку
+        sub.refresh_from_db()
+        self.assertEqual(sub.ai_suggested_grade, '5')
+        self.assertTrue(len(res['weaknesses']) > 0)
+        self.assertIn("Завдання вимагало скласти повний перелік", res['weaknesses'][0])
+        self.assertIn("в загальному", res['feedback_comment'])
+
+        # Тест постінспекції: якщо ШІ повернув оцінку 5 з порожнім weaknesses, постобробка гарантує зауваження
+        def side_effect_empty_weaknesses(url, payload, timeout=35):
+            return (200, {
+                "candidates": [{
+                    "content": {
+                        "parts": [{
+                            "text": json.dumps({
+                                "suggested_grade": "5",
+                                "level": "Середній (4-6)",
+                                "format_warning": None,
+                                "summary": "Поверхневе розкриття теми",
+                                "strengths": ["Охайне оформлення"],
+                                "weaknesses": [],
+                                "feedback_comment": "Потрібно доопрацювати завдання."
+                            })
+                        }]
+                    }
+                }]
+            }, "ok")
+
+        mock_post.side_effect = side_effect_empty_weaknesses
+        res2 = evaluate_submission_with_gemini(sub)
+        self.assertEqual(res2['suggested_grade'], '5')
+        self.assertTrue(len(res2['weaknesses']) > 0)
+        self.assertIn("доопрацювання", res2['weaknesses'][0].lower())
+
     def test_gradebook_multiple_evaluation_dates(self):
         """Тест відображення оцінок за різними датами оцінювання в журналі."""
         from datetime import datetime
@@ -2450,6 +2583,138 @@ class FirstRunSetupTests(TestCase):
 
         resp = self.client.get(reverse('first_run_setup'))
         self.assertRedirects(resp, reverse('teacher_login'))
+
+    def test_today_schedule_api_progress_fields(self):
+        """Перевірка наявності полів візуального прогресу в API розкладу на сьогодні."""
+        import datetime
+        from feed.models import BellSchedule
+        from feed.middleware import set_has_admin
+        User.objects.create_superuser(username='admin_sch_test', password='password123')
+        set_has_admin(True)
+
+        user = User.objects.create_user(username='schedule_prog_teacher', password='password123')
+        teacher = Teacher.objects.create(user=user, full_name='Розкладний Вчитель')
+        self.client.login(username='schedule_prog_teacher', password='password123')
+
+        slot = BellSchedule.objects.create(
+            lesson_number=1,
+            start_time=datetime.time(8, 30),
+            end_time=datetime.time(9, 15),
+            order=1
+        )
+
+        resp = self.client.get('/api/today-schedule/')
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertTrue(data.get('success'))
+        lessons = data.get('lessons', [])
+        self.assertTrue(len(lessons) > 0)
+        first_lesson = lessons[0]
+        self.assertIn('progress_percent', first_lesson)
+        self.assertIn('elapsed_minutes', first_lesson)
+        self.assertIn('duration_minutes', first_lesson)
+        self.assertIn('break_progress_percent', first_lesson)
+
+    def test_student_ai_check_visibility_and_ergonomics(self):
+        """Перевірка видимості кнопки самоперевірки ШІ на сторінці успіху здачі та в деталях роботи."""
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from feed.models import ClassGroup, Subject, Assignment, Submission
+        from feed.middleware import set_has_admin
+        User.objects.create_superuser(username='admin_asg_test', password='password123')
+        set_has_admin(True)
+
+        cg = ClassGroup.objects.create(name='10-А')
+        subj = Subject.objects.create(name='Інформатика', color='#6366f1')
+        user = User.objects.create_user(username='teacher_ai_asg', password='password123')
+        teacher = Teacher.objects.create(user=user, full_name='Вчитель ШІ')
+
+        asg = Assignment.objects.create(
+            title='Тестове завдання з ШІ',
+            description='Виконайте роботу',
+            teacher=teacher,
+            subject=subj,
+            status=Assignment.STATUS_PUBLISHED,
+        )
+        asg.classes.add(cg)
+
+        # Перевірка default=True для allow_student_ai_check
+        self.assertTrue(asg.allow_student_ai_check)
+
+        # Перевірка форми здачі - наявність інформера про ШІ
+        resp_submit = self.client.get(reverse('submit_assignment', args=[asg.pk]))
+        self.assertEqual(resp_submit.status_code, 200)
+        self.assertContains(resp_submit, 'Після здачі доступна перевірка')
+
+        # Створюємо здачу роботи
+        test_file = SimpleUploadedFile('robot.txt', b'Code for AI test', content_type='text/plain')
+        resp_post = self.client.post(reverse('submit_assignment', args=[asg.pk]), {
+            'full_name': 'Шевченко Тарас',
+            'class_group': cg.id,
+            'files': [test_file],
+        }, follow=True)
+
+        self.assertEqual(resp_post.status_code, 200)
+        # Перевірка сторінки submit_success: наявність блоку перевірки ШІ та кнопки
+        self.assertContains(resp_post, 'id="student-selfcheck-block"')
+        self.assertContains(resp_post, 'id="student-ai-check-btn"')
+        self.assertContains(resp_post, 'Перевірити роботу ШІ')
+
+        # Перевірка сторінки деталей зданої роботи submission_detail
+        sub = Submission.objects.filter(assignment=asg).first()
+        self.assertIsNotNone(sub)
+        resp_detail = self.client.get(reverse('submission_detail', args=[sub.id]))
+        self.assertEqual(resp_detail.status_code, 200)
+        self.assertContains(resp_detail, 'id="student-selfcheck-block"')
+        self.assertContains(resp_detail, 'id="student-ai-check-btn"')
+
+    def test_changelog_role_separation_and_condition_default_hidden(self):
+        """Тест розділення історії оновлень для учнів та вчителів і прихованого стану умови."""
+        from feed.middleware import set_has_admin
+        User.objects.create_superuser(username='setup_admin', password='password123', email='admin@test.com')
+        set_has_admin(None)
+
+        # 1. Перевірка для учня / неавторизованого користувача
+        resp_student = self.client.get(reverse('index'))
+        self.assertEqual(resp_student.status_code, 200)
+        # Наявність кнопки оновлень та версії
+        self.assertContains(resp_student, 'id="site-changelog-btn"')
+        self.assertContains(resp_student, 'v2.4')
+        self.assertContains(resp_student, 'id="changelog-modal"')
+        # Учень бачить учнівські оновлення
+        self.assertContains(resp_student, 'Компактна форма здачі робіт')
+        self.assertContains(resp_student, 'Миттєва самоперевірка робіт через ШІ')
+        # Учень НЕ бачить вчительських вкладок чи системних деталей
+        self.assertNotContains(resp_student, 'tab-btn-teacher')
+        self.assertNotContains(resp_student, 'changelog-pane-teacher')
+
+        # 2. Перевірка для авторизованого вчителя
+        teacher_user = User.objects.create_user(username='teach_cl', password='password123')
+        Teacher.objects.create(user=teacher_user, full_name='Вчитель Тестовий')
+        self.client.login(username='teach_cl', password='password123')
+
+        resp_teacher = self.client.get(reverse('index'))
+        self.assertEqual(resp_teacher.status_code, 200)
+        # Вчитель має вкладки для вчителів та для учнів
+        self.assertContains(resp_teacher, 'id="tab-btn-teacher"')
+        self.assertContains(resp_teacher, 'id="tab-btn-student"')
+        self.assertContains(resp_teacher, 'Потокова перевірка робіт без застрягань')
+        self.assertContains(resp_teacher, 'Компактна форма здачі робіт')
+
+        # 3. Перевірка форми здачі: умова завжди прихована за замовчуванням
+        cg = ClassGroup.objects.create(name='9-Б')
+        asg = Assignment.objects.create(
+            title='Завдання для перевірки згортання',
+            teacher=Teacher.objects.first(),
+            status=Assignment.STATUS_PUBLISHED
+        )
+        asg.classes.add(cg)
+        resp_sub = self.client.get(reverse('submit_assignment', args=[asg.pk]))
+        self.assertEqual(resp_sub.status_code, 200)
+        self.assertContains(resp_sub, 'id="submit-task-card"')
+        self.assertContains(resp_sub, 'display:none')
+        self.assertContains(resp_sub, 'id="toggle-condition-btn"')
+        self.assertContains(resp_sub, 'localStorage.removeItem(\'submit_show_condition\')')
+
 
 
 

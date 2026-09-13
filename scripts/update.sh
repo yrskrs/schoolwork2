@@ -1,49 +1,121 @@
 #!/usr/bin/env bash
-# Скрипт оновлення застосунку SchoolNet
-# Забезпечує збереження даних при пересозданні контейнерів.
+# ==============================================================================
+# Скрипт безпечного оновлення застосунку SchoolNet на бойовому сервері
+# Гарантує збереження бази даних (PostgreSQL) та медіа-файлів (учнівських робіт)
+# ==============================================================================
 
-set -e
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
-echo "========================================"
-echo " Оновлення SchoolNet"
-echo "========================================"
+echo "=================================================================="
+echo "          Безпечне оновлення SchoolNet (Docker)"
+echo "=================================================================="
+echo "ℹ️  Існуюча база даних (postgres_data) та медіа-файли (app_media)"
+echo "   знаходяться у захищених томах Docker і НЕ БУДУТЬ втрачені."
+echo "=================================================================="
 
 cd "$PROJECT_ROOT"
 
-# 1. Створення бекапу перед оновленням
-echo "🔄 [1/4] Створення резервної копії перед оновленням..."
-bash ./scripts/backup.sh || {
-    echo "⚠️ Не вдалося створити бекап! Перевірте чи запущені контейнери."
-    read -p "Продовжити оновлення без бекапу? (y/n) " -n 1 -r
-    echo ""
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        echo "Оновлення скасовано."
-        exit 1
-    fi
-}
+# Зчитування параметрів середовища
+APP_PORT="8000"
+DB_USER="schoolnet_user"
+DB_NAME="schoolnet_db"
 
-# 2. Оновлення коду (git pull, якщо це git-репозиторій)
-if [ -d .git ]; then
-    echo "🔄 [2/4] Отримання свіжого коду з GitHub..."
-    git pull
-else
-    echo "ℹ️  Папку .git не знайдено, використовуємо поточний локальний код."
+if [ -f "$PROJECT_ROOT/.env" ]; then
+    ENV_PORT=$(grep -E '^[[:space:]]*APP_PORT=' "$PROJECT_ROOT/.env" | head -n1 | cut -d '=' -f2- | tr -d '\r\n"' | tr -d "'" | tr -d ' ' || true)
+    if [ -n "$ENV_PORT" ]; then APP_PORT="$ENV_PORT"; fi
+    
+    ENV_USER=$(grep -E '^[[:space:]]*POSTGRES_USER=' "$PROJECT_ROOT/.env" | head -n1 | cut -d '=' -f2- | tr -d '\r\n"' | tr -d "'" | tr -d ' ' || true)
+    if [ -n "$ENV_USER" ]; then DB_USER="$ENV_USER"; fi
+    
+    ENV_DB=$(grep -E '^[[:space:]]*POSTGRES_DB=' "$PROJECT_ROOT/.env" | head -n1 | cut -d '=' -f2- | tr -d '\r\n"' | tr -d "'" | tr -d ' ' || true)
+    if [ -n "$ENV_DB" ]; then DB_NAME="$ENV_DB"; fi
 fi
 
-# 3. Перезбирання контейнера та запуск
-echo "🔄 [3/4] Перезбирання Docker образу та запуск..."
+# 1. Автоматичне створення резервної копії перед оновленням
+echo ""
+echo "📦 [1/5] Створення резервної копії перед оновленням..."
+if [ -f "./scripts/backup.sh" ]; then
+    if bash ./scripts/backup.sh; then
+        echo "✅ Резервну копію успішно створено."
+    else
+        echo "⚠️  [УВАГА] Не вдалося створити повний бекап!"
+        read -p "Бажаєте продовжити оновлення БЕЗ бекапу? (y/N): " -r
+        echo ""
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            echo "❌ Оновлення скасовано для захисту даних."
+            exit 1
+        fi
+    fi
+else
+    echo "⚠️  Скрипт ./scripts/backup.sh не знайдено, пропуск автобекапу."
+fi
+
+# 2. Отримання оновлень з GitHub
+echo ""
+echo "📥 [2/5] Отримання оновлень з репозиторію..."
+if [ -d .git ]; then
+    CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "main")
+    echo "   -> Оновлення гілки [$CURRENT_BRANCH]..."
+    git fetch origin "$CURRENT_BRANCH"
+    git merge "origin/$CURRENT_BRANCH" || {
+        echo "⚠️ Не вдалося автоматично об'єднати зміни (можливий конфлікт)."
+        echo "Спробуйте перевірити статус: git status"
+        exit 1
+    }
+else
+    echo "ℹ️  Каталог .git відсутній, використовується поточний код."
+fi
+
+# 3. Перезбирання контейнера застосунку та запуск
+echo ""
+echo "🔨 [3/5] Перезбирання образу застосунку та перезапуск служб..."
 docker compose build app
 docker compose up -d
 
-# 4. Виконання міграцій БД та збір статики
-echo "🔄 [4/4] Застосування міграцій БД та збір статики..."
-echo "Очікування готовності БД..."
-sleep 5
+# 4. Очікування готовності PostgreSQL
+echo ""
+echo "⏳ [4/5] Очікування готовності бази даних PostgreSQL..."
+READY=0
+for i in {1..30}; do
+    if docker compose exec -T postgres pg_isready -U "$DB_USER" -d "$DB_NAME" >/dev/null 2>&1; then
+        READY=1
+        break
+    fi
+    sleep 1
+done
+
+if [ "$READY" -ne 1 ]; then
+    echo "❌ [ПОМИЛКА] База даних PostgreSQL не відповіла за 30 секунд!"
+    exit 1
+fi
+echo "✅ PostgreSQL готовий до виконання міграцій."
+
+# 5. Застосування міграцій та збір статики
+echo ""
+echo "🚀 [5/5] Застосування міграцій БД та збір статики..."
 docker compose exec -T app python manage.py migrate --noinput
 docker compose exec -T app python manage.py collectstatic --noinput
 
-echo "✅ Оновлення успішно завершено!"
-echo "========================================"
+# 6. Фінальна перевірка працездатності (Health Check)
+echo ""
+echo "🔍 Перевірка працездатності SchoolNet..."
+HTTP_STATUS=""
+for i in {1..15}; do
+    HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:${APP_PORT}/" || true)
+    if [ "$HTTP_STATUS" = "200" ] || [ "$HTTP_STATUS" = "302" ]; then
+        break
+    fi
+    sleep 1
+done
+
+echo "=================================================================="
+if [ "$HTTP_STATUS" = "200" ] || [ "$HTTP_STATUS" = "302" ]; then
+    echo "✅ Оновлення успішно завершено! Сервіс працює (HTTP $HTTP_STATUS)."
+else
+    echo "ℹ️  Оновлення завершено. Код відповіді: $HTTP_STATUS"
+fi
+echo "🌐 Адреса сервісу: http://localhost:${APP_PORT}/"
+echo "=================================================================="

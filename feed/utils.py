@@ -62,7 +62,60 @@ def fetch_url_title(url: str, timeout: float = 2.0) -> str:
     except Exception:
         pass
 
-    return ""
+def sanitize_html(raw_html: str) -> str:
+    """
+    Безпечно очищає HTML-розмітку опису завдання від небезпечних тегів та XSS.
+    Дозволяє безпечні теги форматування: p, br, strong, b, em, i, u, s, h1, h2, h3, h4,
+    ul, ol, li, a, span, blockquote, pre, code, mark.
+    Видаляє script, iframe, object, embed, style, event handlers (onclick тощо).
+    """
+    if not raw_html:
+        return ""
+    import re
+    import html as py_html
+    from lxml import html
+
+    ALLOWED_TAGS = {
+        'a', 'b', 'blockquote', 'br', 'code', 'em', 'h1', 'h2', 'h3', 'h4',
+        'i', 'li', 'mark', 'ol', 'p', 'pre', 's', 'span', 'strike', 'strong',
+        'sub', 'sup', 'u', 'ul'
+    }
+    ALLOWED_ATTRS = {'href', 'title', 'target', 'class', 'style'}
+
+    DANGEROUS_TAGS = {'script', 'style', 'iframe', 'object', 'embed', 'applet', 'noscript', 'meta', 'link'}
+    try:
+        doc = html.fromstring(f"<div>{raw_html}</div>")
+        for elem in list(doc.iter()):
+            tag = elem.tag.lower() if isinstance(elem.tag, str) else ''
+            if tag in DANGEROUS_TAGS:
+                elem.drop_tree()
+            elif tag and tag not in ALLOWED_TAGS and tag != 'div':
+                elem.drop_tag()
+            else:
+                for attr, val in list(elem.attrib.items()):
+                    attr_lower = attr.lower()
+                    if attr_lower not in ALLOWED_ATTRS or attr_lower.startswith('on'):
+                        del elem.attrib[attr]
+                    elif attr_lower == 'href':
+                        clean_href = val.strip().lower()
+                        if clean_href.startswith(('javascript:', 'data:', 'vbscript:')):
+                            del elem.attrib[attr]
+                        elif not clean_href.startswith(('http://', 'https://', 'mailto:', '#', '/')):
+                            elem.attrib[attr] = f"https://{val.strip()}"
+                    elif attr_lower == 'style':
+                        val_clean = re.sub(r'(expression|behavior|javascript|vbscript)', '', val, flags=re.I)
+                        elem.attrib[attr] = val_clean
+
+        for a_elem in doc.iter('a'):
+            a_elem.set('target', '_blank')
+            a_elem.set('rel', 'noopener noreferrer')
+
+        cleaned_html = "".join([html.tostring(child, encoding='unicode') for child in doc])
+        if not cleaned_html:
+            cleaned_html = doc.text or ""
+        return cleaned_html.strip()
+    except Exception:
+        return py_html.escape(raw_html)
 
 
 def convert_docx_to_html(file_path: str) -> Tuple[str, Optional[str]]:
@@ -275,14 +328,33 @@ strike => s
         from docx.table import Table as DocxTable
 
         body = doc.element.body
-        for child in body:
-            tag = child.tag.split('}')[-1] if '}' in child.tag else child.tag
-            if tag == 'p':
-                para = Paragraph(child, body)
+
+        def _process_element(elem):
+            t = elem.tag.split('}')[-1] if '}' in elem.tag else elem.tag
+            if t == 'p':
+                para = Paragraph(elem, body)
                 html_parts.append(_render_para(para))
-            elif tag == 'tbl':
-                table = DocxTable(child, body)
+            elif t == 'tbl':
+                table = DocxTable(elem, body)
                 html_parts.append(_render_table(table))
+            elif t in ('sdt', 'sdtContent'):
+                for sub in elem:
+                    _process_element(sub)
+
+        for child in body:
+            _process_element(child)
+
+        # Резервний видобуток тексту: якщо структурований парсинг повернув лише порожні параграфи
+        has_real_text = any(p not in ('<p>&nbsp;</p>', '') for p in html_parts[1:])
+        if not has_real_text:
+            text_nodes = []
+            for t_node in body.iter():
+                if t_node.tag.endswith('}t') and t_node.text and t_node.text.strip():
+                    text_nodes.append(t_node.text.strip())
+            if text_nodes:
+                html_parts = ['<div class="document-page">']
+                for txt in text_nodes:
+                    html_parts.append(f'<p style="margin-bottom:8px;line-height:1.7;">{html.escape(txt)}</p>')
 
         html_parts.append('</div>')
         html_content = '\n'.join(html_parts)
@@ -1064,6 +1136,9 @@ def get_teacher_live_lesson_status(teacher, now_dt=None):
             'current_lesson': None,
             'next_lesson': first_lesson,
             'remaining_minutes': diff,
+            'elapsed_minutes': 0,
+            'duration_minutes': diff,
+            'progress_percent': 0,
         }
 
     # 2. Перевіряємо кожен урок та перерви між ними
@@ -1076,6 +1151,9 @@ def get_teacher_live_lesson_status(teacher, now_dt=None):
         # Урок триває зараз
         if s_min <= now_minutes < e_min:
             rem = e_min - now_minutes
+            duration = max(1, e_min - s_min)
+            elapsed = max(0, min(duration, now_minutes - s_min))
+            progress_pct = int(min(100, (elapsed / duration) * 100))
             next_l = today_lessons[i + 1] if i + 1 < len(today_lessons) else None
             end_str = slot.end_time.strftime('%H:%M')
             return {
@@ -1083,11 +1161,14 @@ def get_teacher_live_lesson_status(teacher, now_dt=None):
                 'status_type': 'in_lesson',
                 'title': f"Зараз {slot.lesson_number}-й урок: {lesson.class_group.name}{subj_str}",
                 'time_info': f"до кінця уроку залишилось {rem} хв (до {end_str})",
-                'badge_text': '🟢 Зараз триває урок',
+                'badge_text': f"🟢 {slot.lesson_number}-й урок ({rem} хв)",
                 'badge_class': 'badge-success',
                 'current_lesson': lesson,
                 'next_lesson': next_l,
                 'remaining_minutes': rem,
+                'elapsed_minutes': elapsed,
+                'duration_minutes': duration,
+                'progress_percent': progress_pct,
             }
 
         # Перерва між уроками
@@ -1096,19 +1177,24 @@ def get_teacher_live_lesson_status(teacher, now_dt=None):
             next_s_min = next_l.bell_slot.start_time.hour * 60 + next_l.bell_slot.start_time.minute
             if e_min <= now_minutes < next_s_min:
                 rem = next_s_min - now_minutes
-                total_break = next_s_min - e_min
+                total_break = max(1, next_s_min - e_min)
+                elapsed_break = max(0, min(total_break, now_minutes - e_min))
+                break_pct = int(min(100, (elapsed_break / total_break) * 100))
                 next_start_str = next_l.bell_slot.start_time.strftime('%H:%M')
                 next_subj = f" ({next_l.subject.name})" if next_l.subject else ""
                 return {
                     'has_schedule': True,
                     'status_type': 'in_break',
                     'title': f"Зараз перерва ({total_break} хв)",
-                    'time_info': f"до початку {next_l.bell_slot.lesson_number}-го уроку ({next_l.class_group.name}{next_subj}) залишилось {rem} хв (о {next_start_str})",
-                    'badge_text': '☕ Перерва',
+                    'time_info': f"до {next_l.bell_slot.lesson_number}-го уроку ({next_l.class_group.name}{next_subj}) залишилось {rem} хв (о {next_start_str})",
+                    'badge_text': f"☕ Перерва ({rem} хв)",
                     'badge_class': 'badge-warning',
                     'current_lesson': None,
                     'next_lesson': next_l,
                     'remaining_minutes': rem,
+                    'elapsed_minutes': elapsed_break,
+                    'duration_minutes': total_break,
+                    'progress_percent': break_pct,
                 }
 
     # 3. Після останнього уроку сьогодні
@@ -1122,6 +1208,9 @@ def get_teacher_live_lesson_status(teacher, now_dt=None):
         'current_lesson': None,
         'next_lesson': None,
         'remaining_minutes': 0,
+        'elapsed_minutes': 0,
+        'duration_minutes': 0,
+        'progress_percent': 100,
     }
 
 
@@ -1158,25 +1247,21 @@ def get_teacher_upcoming_notifications(teacher, now_dt=None):
         # Якщо урок розпочнеться в найближчі 45 хвилин АБО триває прямо зараз
         is_upcoming_or_now = (s_min - 45 <= now_min < e_min)
         if is_upcoming_or_now:
-            # Шукаємо, чи є опубліковане завдання для цього класу на сьогодні/для цього уроку
+            from django.db.models import Q
+            # Шукаємо, чи є опубліковане завдання для цього уроку:
+            # 1) Явна цільова дата уроку на сьогодні
+            # 2) Цільовий день тижня та дзвінковий слот відповідають цьому уроку
+            # 3) Або завдання опубліковане сьогодні для цього класу (без перенесення на інший день)
             has_task = Assignment.objects.filter(
                 teacher=teacher,
                 classes=lesson.class_group,
                 status=Assignment.STATUS_PUBLISHED
             ).filter(
-                published_at__date=today
+                Q(schedule_targets__class_group=lesson.class_group, schedule_targets__target_date=today) |
+                Q(schedule_targets__class_group=lesson.class_group, schedule_targets__target_day_of_week=today_weekday, schedule_targets__bell_slot=lesson.bell_slot) |
+                Q(published_at__date=today, schedule_targets__class_group=lesson.class_group) |
+                Q(published_at__date=today, schedule_targets__isnull=True)
             ).exists()
-
-            if not has_task:
-                has_targeted_task = Assignment.objects.filter(
-                    teacher=teacher,
-                    classes=lesson.class_group,
-                    status=Assignment.STATUS_PUBLISHED,
-                    schedule_targets__class_group=lesson.class_group,
-                    schedule_targets__target_date=today
-                ).exists()
-                if has_targeted_task:
-                    has_task = True
 
             if not has_task:
                 status_text = "зараз триває" if (s_min <= now_min < e_min) else f"почнеться о {slot.start_time.strftime('%H:%M')}"

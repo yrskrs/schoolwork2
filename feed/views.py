@@ -161,7 +161,30 @@ def get_visible_assignments(class_group_id=None):
     if class_group_id:
         qs = qs.filter(classes__id=class_group_id)
 
-    return qs.order_by('-published_at')
+    # ── Сортування за актуальністю ──────────────────────────────────────────────
+    # Спочатку завдання з target_date >= сьогодні (найближчий урок — першим),
+    # потім решта у зворотньо-хронологічному порядку за датою публікації.
+    from django.db.models import Min, Value, DateField
+    from django.db.models.functions import Coalesce
+    import datetime
+    today = timezone.localtime(timezone.now()).date()
+
+    qs = qs.annotate(
+        earliest_future_target=Min(
+            'schedule_targets__target_date',
+        )
+    )
+
+    # Розділяємо на актуальні та неактуальні, потім з'єднуємо
+    # Актуальні: є target_date і вона >= сьогодні
+    upcoming_qs = qs.filter(earliest_future_target__gte=today).order_by('earliest_future_target')
+    rest_qs = qs.filter(Q(earliest_future_target__lt=today) | Q(earliest_future_target__isnull=True)).order_by('-published_at')
+
+    # Повертаємо queryset через union для збереження структури
+    from itertools import chain
+    # Зберігаємо як list для подальшої пагінації
+    # (union() не підтримує prefetch_related, тому повертаємо два qs)
+    return (upcoming_qs, rest_qs)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -212,21 +235,38 @@ def get_calendar_context(year=None, month=None, selected_date_str=None, class_gr
     else:
         next_month, next_year = month + 1, year
 
-    # Отримуємо всі опубліковані завдання для підрахунку на календарі
-    visible_qs = get_visible_assignments(class_group_id)
+    # Отримуємо всі опубліковані завдання для підрахунку на календарі за датою УРОКУ
+    upcoming_qs, rest_qs = get_visible_assignments(class_group_id)
+    # Для календаря порядок неважливий — об'єднуємо
+    from itertools import chain as _chain
+    visible_all = list(_chain(
+        upcoming_qs.prefetch_related('schedule_targets__class_group', 'classes'),
+        rest_qs.prefetch_related('schedule_targets__class_group', 'classes')
+    ))
     if subject_id:
-        visible_qs = visible_qs.filter(subject__id=subject_id)
+        visible_all = [a for a in visible_all if a.subject_id == int(subject_id)]
 
     task_counts = Counter()
-    for a in visible_qs:
-        if a.published_at:
-            p_date = timezone.localtime(a.published_at).date()
-            task_counts[p_date.isoformat()] += 1
-        if a.unarchived_at:
-            u_date = timezone.localtime(a.unarchived_at).date()
-            p_date = timezone.localtime(a.published_at).date() if a.published_at else None
-            if u_date != p_date:
-                task_counts[u_date.isoformat()] += 1
+    for a in visible_all:
+        if class_group_id:
+            # Для обраного класу беремо дату уроку конкретно для цього класу
+            lesson_d = a.get_lesson_date(for_class=class_group_id)
+            if lesson_d:
+                task_counts[lesson_d.isoformat()] += 1
+        else:
+            # Якщо клас не обрано, завдання може бути призначене різним класам на різні дні
+            target_dates = set()
+            targets = list(a.schedule_targets.all())
+            if targets:
+                for t in targets:
+                    if t.target_date:
+                        target_dates.add(t.target_date)
+            if not target_dates:
+                fallback_d = a.get_lesson_date()
+                if fallback_d:
+                    target_dates.add(fallback_d)
+            for td in target_dates:
+                task_counts[td.isoformat()] += 1
 
     cal = calendar.Calendar(firstweekday=0)  # Понеділок (0)
     month_weeks = cal.monthdatescalendar(year, month)
@@ -325,6 +365,28 @@ def _parse_filter_params(request):
     return class_group_id, subject_id, date_str, query
 
 
+def _filter_assignments_by_lesson_date(assignments, dt_val, class_group_id=None):
+    """
+    Фільтрує завдання за датою УРОКУ (на яку призначено завдання), а не датою публікації:
+    1. Якщо вказано конкретний клас - фільтрує за цільовою датою уроку для цього класу
+    2. Якщо клас не вказано - вибирає завдання, у яких на цю дату призначено урок хоча б для одного класу
+    3. Якщо розклад не налаштовано, використовується due_date або дата публікації
+    """
+    if class_group_id:
+        return assignments.filter(
+            Q(schedule_targets__class_group_id=class_group_id, schedule_targets__target_date=dt_val) |
+            Q(schedule_targets__class_group_id=class_group_id, schedule_targets__target_date__isnull=True, due_date=dt_val) |
+            Q(schedule_targets__isnull=True, due_date=dt_val) |
+            Q(schedule_targets__isnull=True, due_date__isnull=True, published_at__date=dt_val)
+        ).distinct()
+    else:
+        return assignments.filter(
+            Q(schedule_targets__target_date=dt_val) |
+            Q(schedule_targets__isnull=True, due_date=dt_val) |
+            Q(schedule_targets__isnull=True, due_date__isnull=True, published_at__date=dt_val)
+        ).distinct()
+
+
 def index(request):
     """
     Головна сторінка — стрічка завдань.
@@ -332,20 +394,24 @@ def index(request):
     """
     class_group_id, subject_id, date_str, query = _parse_filter_params(request)
 
-    assignments = get_visible_assignments(class_group_id)
+    upcoming_qs, rest_qs = get_visible_assignments(class_group_id)
 
     if subject_id:
-        assignments = assignments.filter(subject__id=subject_id)
+        upcoming_qs = upcoming_qs.filter(subject__id=subject_id)
+        rest_qs = rest_qs.filter(subject__id=subject_id)
 
     if date_str:
         from datetime import datetime
         dt_val = datetime.strptime(date_str, '%Y-%m-%d').date()
-        assignments = assignments.filter(
-            Q(published_at__date=dt_val) | Q(unarchived_at__date=dt_val)
-        )
+        upcoming_qs = _filter_assignments_by_lesson_date(upcoming_qs, dt_val, class_group_id)
+        rest_qs = _filter_assignments_by_lesson_date(rest_qs, dt_val, class_group_id)
 
     if query:
-        assignments = search_assignments(assignments, query)
+        upcoming_qs = search_assignments(upcoming_qs, query)
+        rest_qs = search_assignments(rest_qs, query)
+
+    from itertools import chain as _ichain
+    assignments = list(_ichain(upcoming_qs, rest_qs))
 
     # Пагінація (10 завдань на сторінку)
     paginator = Paginator(assignments, 10)
@@ -512,6 +578,7 @@ def assignment_detail(request, pk):
             if ext in ['.docx', '.doc']:
                 preview_type = 'office'
                 html_preview, error_preview = convert_docx_to_html(file_path)
+                pdf_preview_url = get_pdf_preview_url(af)
             elif ext in ['.xlsx', '.xls']:
                 preview_type = 'office'
                 html_preview, error_preview = convert_xlsx_to_html(file_path)
@@ -654,22 +721,27 @@ def feed_fragment(request):
     class_group_id, subject_id, date_str, query = _parse_filter_params(request)
     page_number = request.GET.get('page', 1)
 
-    assignments = get_visible_assignments(class_group_id)
+    upcoming_qs, rest_qs = get_visible_assignments(class_group_id)
 
+    # Застосовуємо додаткові фільтри до обох частин
     if subject_id:
-        assignments = assignments.filter(subject__id=subject_id)
+        upcoming_qs = upcoming_qs.filter(subject__id=subject_id)
+        rest_qs = rest_qs.filter(subject__id=subject_id)
 
     if date_str:
         from datetime import datetime
         dt_val = datetime.strptime(date_str, '%Y-%m-%d').date()
-        assignments = assignments.filter(
-            Q(published_at__date=dt_val) | Q(unarchived_at__date=dt_val)
-        )
+        upcoming_qs = _filter_assignments_by_lesson_date(upcoming_qs, dt_val, class_group_id)
+        rest_qs = _filter_assignments_by_lesson_date(rest_qs, dt_val, class_group_id)
 
     if query:
-        assignments = search_assignments(assignments, query)
+        upcoming_qs = search_assignments(upcoming_qs, query)
+        rest_qs = search_assignments(rest_qs, query)
 
-    paginator = Paginator(assignments, 10)
+    from itertools import chain
+    combined = list(chain(upcoming_qs, rest_qs))
+
+    paginator = Paginator(combined, 10)
     try:
         page_obj = paginator.page(page_number)
     except PageNotAnInteger:
@@ -731,28 +803,29 @@ def feed_check_updates(request):
     """
     class_group_id, subject_id, date_str, query = _parse_filter_params(request)
 
-    assignments = get_visible_assignments(class_group_id)
+    # Для перевірки оновлень не потрібне сортування — робимо прямий запит
+    from django.db.models import Max, Count
+    qs = Assignment.objects.filter(status=Assignment.STATUS_PUBLISHED)
+    if class_group_id:
+        qs = qs.filter(classes__id=class_group_id)
     if subject_id:
-        assignments = assignments.filter(subject__id=subject_id)
+        qs = qs.filter(subject__id=subject_id)
     if date_str:
         from datetime import datetime
         dt_val = datetime.strptime(date_str, '%Y-%m-%d').date()
-        assignments = assignments.filter(
-            Q(published_at__date=dt_val) | Q(unarchived_at__date=dt_val)
-        )
+        qs = _filter_assignments_by_lesson_date(qs, dt_val, class_group_id)
     if query:
-        assignments = assignments.filter(
+        qs = qs.filter(
             Q(title__icontains=query) |
             Q(description__icontains=query) |
             Q(teacher__full_name__icontains=query)
         )
-
-    from django.db.models import Max, Count
-    agg = assignments.aggregate(
+    agg = qs.aggregate(
         total_count=Count('id'),
         max_id=Max('id'),
         max_pub=Max('published_at')
     )
+
 
     pub_ts = int(agg['max_pub'].timestamp()) if agg['max_pub'] else 0
     fingerprint = f"{agg['total_count']}-{agg['max_id'] or 0}-{pub_ts}"
@@ -986,8 +1059,8 @@ def teacher_dashboard(request):
     }
     status_filter = status_map.get(tab, Assignment.STATUS_PUBLISHED)
 
-    from django.db.models import Count, Q as DbQ
-    assignments = Assignment.objects.filter(
+    from django.db.models import Count, Q as DbQ, Min
+    base_qs = Assignment.objects.filter(
         teacher=teacher,
         status=status_filter
     ).prefetch_related('classes', 'files').select_related('subject').annotate(
@@ -997,7 +1070,18 @@ def teacher_dashboard(request):
             filter=DbQ(submissions__grade__isnull=True) | DbQ(submissions__grade=''),
             distinct=True
         )
-    ).order_by('-created_at')
+    )
+
+    # Для вкладки published — сортуємо за актуальністю (target_date >= сьогодні — першими)
+    if status_filter == Assignment.STATUS_PUBLISHED:
+        today = timezone.localtime(timezone.now()).date()
+        base_qs = base_qs.annotate(earliest_target=Min('schedule_targets__target_date'))
+        upcoming = base_qs.filter(earliest_target__gte=today).order_by('earliest_target')
+        rest = base_qs.filter(DbQ(earliest_target__lt=today) | DbQ(earliest_target__isnull=True)).order_by('-created_at')
+        from itertools import chain
+        assignments = list(chain(upcoming, rest))
+    else:
+        assignments = base_qs.order_by('-created_at')
 
     # Пагінація: не більше 20 завдань на одній сторінці
     paginator = Paginator(assignments, 20)
@@ -1024,12 +1108,101 @@ def teacher_dashboard(request):
         'tab': tab,
         'counts': counts,
         'total_ungraded': total_ungraded,
+        'all_classes': ClassGroup.objects.all().order_by('grade', 'letter', 'name'),
     }
 
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.GET.get('fragment') == '1':
         return render(request, 'feed/teacher_dashboard_fragment.html', context)
 
     return render(request, 'feed/teacher_dashboard.html', context)
+
+
+@teacher_required
+def teacher_live_status(request):
+    """
+    AJAX endpoint для динамічного фонового оновлення інтерфейсу вчителя без F5:
+    - Поточний стан уроку за розкладом та зворотний відлік до дзвінка
+    - Центр сповіщень (наявність нових здач робіт або уроків без завдань)
+    - Лічильники завдань на панелі вчителя (опубліковані, чернетки, заплановані, архів)
+    - Лічильник проведених уроків
+    """
+    teacher = getattr(request.user, 'teacher_profile', None)
+    if not teacher and (request.user.is_superuser or request.session.get('superadmin_mode')):
+        teacher = Teacher.objects.first()
+
+    if not teacher:
+        return JsonResponse({'status': 'error', 'message': 'Профіль вчителя не знайдено'}, status=404)
+
+    now_dt = timezone.localtime(timezone.now())
+
+    from .utils import get_teacher_live_lesson_status, get_teacher_upcoming_notifications
+    live_status = get_teacher_live_lesson_status(teacher, now_dt=now_dt)
+    notifs = get_teacher_upcoming_notifications(teacher, now_dt=now_dt)
+    conducted_info = teacher.get_conducted_lessons_info()
+
+    assignments_qs = Assignment.objects.filter(teacher=teacher)
+    counts = {
+        'published': assignments_qs.filter(status=Assignment.STATUS_PUBLISHED).count(),
+        'draft': assignments_qs.filter(status=Assignment.STATUS_DRAFT).count(),
+        'scheduled': assignments_qs.filter(status=Assignment.STATUS_SCHEDULED).count(),
+        'archived': assignments_qs.filter(status=Assignment.STATUS_ARCHIVED).count(),
+    }
+
+    if request.user.is_superuser or request.session.get('superadmin_mode'):
+        pending_count = Submission.objects.filter(Q(grade__isnull=True) | Q(grade='')).count()
+    else:
+        pending_count = Submission.objects.filter(
+            assignment__teacher=teacher
+        ).filter(
+            Q(grade__isnull=True) | Q(grade='')
+        ).count()
+
+    unread_count = len([n for n in notifs if n.get('type') == 'missing_task'])
+
+    notif_list = []
+    for n in notifs:
+        notif_list.append({
+            'id': n.get('id', ''),
+            'type': n.get('type', ''),
+            'icon': n.get('icon', '🔔'),
+            'title': n.get('title', ''),
+            'message': n.get('message', ''),
+            'action_url': n.get('action_url', ''),
+            'action_label': n.get('action_label', ''),
+            'badge': n.get('badge', ''),
+            'badge_class': n.get('badge_class', ''),
+            'time_str': n.get('time_str', ''),
+        })
+
+    live_data = {
+        'has_schedule': live_status.get('has_schedule', False),
+        'status_type': live_status.get('status_type', 'no_schedule'),
+        'badge_text': live_status.get('badge_text', ''),
+        'badge_class': live_status.get('badge_class', ''),
+        'title': live_status.get('title', ''),
+        'time_info': live_status.get('time_info', ''),
+        'remaining_minutes': live_status.get('remaining_minutes', 0),
+        'elapsed_minutes': live_status.get('elapsed_minutes', 0),
+        'duration_minutes': live_status.get('duration_minutes', 0),
+        'progress_percent': live_status.get('progress_percent', 0),
+        'current_lesson_class_id': live_status.get('current_lesson').class_group_id if live_status.get('current_lesson') else None,
+        'current_lesson_class_name': live_status.get('current_lesson').class_group.name if live_status.get('current_lesson') else '',
+        'next_lesson_class_id': live_status.get('next_lesson').class_group_id if live_status.get('next_lesson') else None,
+        'next_lesson_class_name': live_status.get('next_lesson').class_group.name if live_status.get('next_lesson') else '',
+    }
+
+    return JsonResponse({
+        'status': 'success',
+        'timestamp': now_dt.isoformat(),
+        'time_str': now_dt.strftime('%H:%M'),
+        'live_status': live_data,
+        'notifications': notif_list,
+        'notifications_count': len(notifs),
+        'unread_notifications_count': unread_count,
+        'pending_submissions_count': pending_count,
+        'counts': counts,
+        'conducted_lessons': conducted_info,
+    })
 
 
 
@@ -1086,34 +1259,60 @@ def assignment_create(request):
                         title=ytitle.strip()
                     )
 
+            # ── Санітизація опису завдання від XSS
+            from .utils import sanitize_html
+            if assignment.description:
+                assignment.description = sanitize_html(assignment.description)
+                assignment.save(update_fields=['description'])
+
             # ── Зберігаємо прив'язку до розкладу уроків для класів
             teacher_lesson_schedules = TeacherLessonSchedule.objects.filter(teacher=teacher).select_related('bell_slot', 'class_group')
+            base_date = timezone.localtime(assignment.published_at or timezone.now()).date()
+            curr_dow = base_date.weekday() + 1
+
             for class_obj in assignment.classes.all():
                 target_val = request.POST.get(f"class_schedule_target_{class_obj.id}", 'auto')
+                target_date_val = request.POST.get(f"class_schedule_target_date_{class_obj.id}", '').strip()
+
+                day_num = None
+                slot_id = None
+                computed_target_date = None
+
                 if target_val and target_val.startswith('slot_'):
                     parts = target_val.split('_')
                     if len(parts) == 3:
                         day_num = int(parts[1])
                         slot_id = int(parts[2])
-                        AssignmentScheduleTarget.objects.update_or_create(
-                            assignment=assignment,
-                            class_group=class_obj,
-                            defaults={
-                                'target_day_of_week': day_num,
-                                'bell_slot_id': slot_id
-                            }
-                        )
                 elif target_val == 'auto':
                     cls_sch = teacher_lesson_schedules.filter(class_group=class_obj).first()
                     if cls_sch:
-                        AssignmentScheduleTarget.objects.update_or_create(
-                            assignment=assignment,
-                            class_group=class_obj,
-                            defaults={
-                                'target_day_of_week': cls_sch.day_of_week,
-                                'bell_slot_id': cls_sch.bell_slot_id
-                            }
-                        )
+                        day_num = cls_sch.day_of_week
+                        slot_id = cls_sch.bell_slot_id
+                elif target_val == 'none':
+                    AssignmentScheduleTarget.objects.filter(assignment=assignment, class_group=class_obj).delete()
+                    continue
+
+                if target_date_val:
+                    try:
+                        import datetime
+                        computed_target_date = datetime.datetime.strptime(target_date_val, '%Y-%m-%d').date()
+                    except Exception:
+                        pass
+                elif day_num:
+                    import datetime
+                    diff = (day_num - curr_dow) % 7
+                    computed_target_date = base_date + datetime.timedelta(days=diff)
+
+                if day_num or slot_id or computed_target_date:
+                    AssignmentScheduleTarget.objects.update_or_create(
+                        assignment=assignment,
+                        class_group=class_obj,
+                        defaults={
+                            'target_day_of_week': day_num,
+                            'bell_slot_id': slot_id,
+                            'target_date': computed_target_date,
+                        }
+                    )
 
             status_labels = {
                 Assignment.STATUS_PUBLISHED: 'опубліковано',
@@ -1189,6 +1388,10 @@ def assignment_edit(request, pk):
 
             # Зберігаємо оновлене завдання
             assignment = form.save_with_status(teacher=teacher)
+            from .utils import sanitize_html
+            if assignment.description:
+                assignment.description = sanitize_html(assignment.description)
+                assignment.save(update_fields=['description'])
 
             # ── Зберігаємо дефолтні налаштування ШІ
             ai_preset_id = request.POST.get('default_ai_preset')
@@ -1237,34 +1440,52 @@ def assignment_edit(request, pk):
 
             # ── Оновлюємо прив'язку до розкладу уроків
             teacher_lesson_schedules_all = TeacherLessonSchedule.objects.filter(teacher=teacher).select_related('bell_slot', 'class_group')
+            base_date = timezone.localtime(assignment.published_at or timezone.now()).date()
+            curr_dow = base_date.weekday() + 1
+
             for class_obj in assignment.classes.all():
                 target_val = request.POST.get(f"class_schedule_target_{class_obj.id}", 'auto')
+                target_date_val = request.POST.get(f"class_schedule_target_date_{class_obj.id}", '').strip()
+
+                day_num = None
+                slot_id = None
+                computed_target_date = None
+
                 if target_val and target_val.startswith('slot_'):
                     parts = target_val.split('_')
                     if len(parts) == 3:
                         day_num = int(parts[1])
                         slot_id = int(parts[2])
-                        AssignmentScheduleTarget.objects.update_or_create(
-                            assignment=assignment,
-                            class_group=class_obj,
-                            defaults={
-                                'target_day_of_week': day_num,
-                                'bell_slot_id': slot_id
-                            }
-                        )
                 elif target_val == 'auto':
                     cls_sch = teacher_lesson_schedules_all.filter(class_group=class_obj).first()
                     if cls_sch:
-                        AssignmentScheduleTarget.objects.update_or_create(
-                            assignment=assignment,
-                            class_group=class_obj,
-                            defaults={
-                                'target_day_of_week': cls_sch.day_of_week,
-                                'bell_slot_id': cls_sch.bell_slot_id
-                            }
-                        )
+                        day_num = cls_sch.day_of_week
+                        slot_id = cls_sch.bell_slot_id
                 elif target_val == 'none':
                     AssignmentScheduleTarget.objects.filter(assignment=assignment, class_group=class_obj).delete()
+                    continue
+
+                if target_date_val:
+                    try:
+                        import datetime
+                        computed_target_date = datetime.datetime.strptime(target_date_val, '%Y-%m-%d').date()
+                    except Exception:
+                        pass
+                elif day_num:
+                    import datetime
+                    diff = (day_num - curr_dow) % 7
+                    computed_target_date = base_date + datetime.timedelta(days=diff)
+
+                if day_num or slot_id or computed_target_date:
+                    AssignmentScheduleTarget.objects.update_or_create(
+                        assignment=assignment,
+                        class_group=class_obj,
+                        defaults={
+                            'target_day_of_week': day_num,
+                            'bell_slot_id': slot_id,
+                            'target_date': computed_target_date,
+                        }
+                    )
 
             messages.success(request, f'Завдання "{assignment.title}" оновлено! ✅')
             return redirect('teacher_dashboard')
@@ -1274,6 +1495,7 @@ def assignment_edit(request, pk):
 
     teacher_lesson_schedules = list(TeacherLessonSchedule.objects.filter(teacher=teacher).select_related('bell_slot', 'class_group').order_by('day_of_week', 'bell_slot__lesson_number'))
     existing_targets = {t.class_group_id: (t.target_day_of_week, t.bell_slot_id) for t in assignment.schedule_targets.all()}
+    existing_target_dates = {t.class_group_id: (t.target_date.strftime('%Y-%m-%d') if t.target_date else '') for t in assignment.schedule_targets.all()}
     for sch in teacher_lesson_schedules:
         sch.is_selected_for_assignment = (existing_targets.get(sch.class_group_id) == (sch.day_of_week, sch.bell_slot_id))
 
@@ -1287,6 +1509,7 @@ def assignment_edit(request, pk):
         'is_edit': True,
         'criteria_presets': criteria_presets,
         'teacher_lesson_schedules': teacher_lesson_schedules,
+        'existing_target_dates': existing_target_dates,
     }
     return render(request, 'feed/assignment_form.html', context)
 
@@ -1342,7 +1565,12 @@ def assignment_unarchive(request, pk):
 def assignment_duplicate(request, pk):
     """
     Дублювання завдання.
-    Створює нову чернетку на основі обраного завдання без слова [Копія].
+    Створює повноцінне нове завдання-копію в БД:
+    - Копіює назву, опис (з форматуванням), предмети, вкладені файли, посилання, YouTube відео, налаштування ШІ.
+    - НЕ копіює ID, дату створення, здачі учнів, оцінки, коментарі учнів, логи активності.
+    - Дозволяє вказати новий цільовий клас, урок та дату для копії.
+    - Створює відповідний AssignmentScheduleTarget, щоб новий урок відображався в розкладі та календарі.
+    - Не змінює оригінальне завдання.
     """
     teacher = request.user.teacher_profile
     if request.user.is_superuser or request.session.get('superadmin_mode'):
@@ -1356,6 +1584,25 @@ def assignment_duplicate(request, pk):
     elif clean_title.startswith('Копія '):
         clean_title = clean_title[len('Копія '):]
 
+    # Дозволяємо вказати нову власну назву для копії
+    custom_title = request.POST.get('duplicate_title', '').strip()
+    if custom_title:
+        clean_title = custom_title
+
+    # Визначаємо класи для копії: якщо передано у POST — беремо їх, інакше класи оригіналу
+    selected_class_ids = request.POST.getlist('duplicate_classes') or request.POST.getlist('duplicate_classes[]')
+    if not selected_class_ids and request.POST.get('duplicate_class'):
+        selected_class_ids = [request.POST.get('duplicate_class')]
+
+    if not selected_class_ids:
+        target_classes = list(original.classes.all())
+    else:
+        target_classes = list(ClassGroup.objects.filter(id__in=selected_class_ids))
+
+    publish_now = (request.POST.get('publish_now') == '1' or request.POST.get('action') == 'publish')
+    new_status = Assignment.STATUS_PUBLISHED if publish_now else Assignment.STATUS_DRAFT
+    now = timezone.now()
+
     # Створюємо дублікат
     duplicate = Assignment.objects.create(
         teacher=teacher,
@@ -1367,15 +1614,15 @@ def assignment_duplicate(request, pk):
         link_url=original.link_url,
         link_label=original.link_label,
         due_date=original.due_date,
-        status=Assignment.STATUS_DRAFT,
+        status=new_status,
         duplicated_from=original,
-        published_at=None,
+        published_at=now if publish_now else None,
         default_ai_preset=original.default_ai_preset,
         default_ai_grs=original.default_ai_grs,
         allow_student_ai_check=original.allow_student_ai_check,
         allow_ai_usage=original.allow_ai_usage,
     )
-    duplicate.classes.set(original.classes.all())
+    duplicate.classes.set(target_classes)
 
     # Копіюємо файли (посилання на ті самі файли, без фізичного копіювання)
     for f in original.files.all():
@@ -1401,8 +1648,81 @@ def assignment_duplicate(request, pk):
             title=ytb.title,
         )
 
-    messages.success(request, f'Створено дублікат завдання "{duplicate.title}". Можна відредагувати та опублікувати.')
-    return redirect('assignment_edit', pk=duplicate.pk)
+    # Зберігаємо прив'язку до уроку(ів) для нового завдання
+    base_date = timezone.localtime(now).date()
+    curr_dow = base_date.weekday() + 1
+    teacher_lesson_schedules = TeacherLessonSchedule.objects.filter(teacher=teacher).select_related('bell_slot')
+
+    for class_obj in target_classes:
+        target_slot_val = request.POST.get(f"duplicate_target_slot_{class_obj.id}") or request.POST.get("duplicate_target_slot")
+        target_date_val = request.POST.get(f"duplicate_target_date_{class_obj.id}") or request.POST.get("duplicate_target_date")
+
+        day_num = None
+        slot_id = None
+        target_date = None
+
+        if target_slot_val:
+            if target_slot_val.startswith('slot_'):
+                parts = target_slot_val.split('_')
+                if len(parts) == 3:
+                    day_num = int(parts[1])
+                    slot_id = int(parts[2])
+                elif len(parts) == 2:
+                    slot_id = int(parts[1])
+            elif target_slot_val.isdigit():
+                slot_id = int(target_slot_val)
+
+        if not slot_id and not day_num:
+            orig_target = original.schedule_targets.filter(class_group=class_obj).first()
+            if orig_target:
+                day_num = orig_target.target_day_of_week
+                slot_id = orig_target.bell_slot_id
+            else:
+                cls_sch = teacher_lesson_schedules.filter(class_group=class_obj).first()
+                if cls_sch:
+                    day_num = cls_sch.day_of_week
+                    slot_id = cls_sch.bell_slot_id
+
+        if target_date_val:
+            try:
+                import datetime
+                target_date = datetime.datetime.strptime(target_date_val.strip(), '%Y-%m-%d').date()
+            except Exception:
+                pass
+        elif day_num:
+            import datetime
+            diff = (day_num - curr_dow) % 7
+            target_date = base_date + datetime.timedelta(days=diff)
+
+        if target_date:
+            day_num = target_date.weekday() + 1
+
+        if day_num or slot_id or target_date:
+            AssignmentScheduleTarget.objects.create(
+                assignment=duplicate,
+                class_group=class_obj,
+                target_day_of_week=day_num,
+                bell_slot_id=slot_id,
+                target_date=target_date
+            )
+
+    is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.GET.get('format') == 'json'
+    if is_ajax:
+        return JsonResponse({
+            'status': 'success',
+            'duplicate_id': duplicate.pk,
+            'title': duplicate.title,
+            'status_label': 'Опубліковано' if publish_now else 'Чернетка',
+            'message': f'Створено копію завдання «{duplicate.title}»! ✅',
+            'redirect_url': reverse('teacher_dashboard') if publish_now else reverse('assignment_edit', args=[duplicate.pk])
+        })
+
+    if publish_now:
+        messages.success(request, f'Створено та опубліковано копію завдання «{duplicate.title}»! ✅')
+        return redirect('teacher_dashboard')
+    else:
+        messages.success(request, f'Створено копію завдання «{duplicate.title}». Можна відредагувати та опублікувати.')
+        return redirect('assignment_edit', pk=duplicate.pk)
 
 
 @teacher_required
@@ -1773,13 +2093,21 @@ def file_view(request, file_id):
         import os
         from django.conf import settings
         
-        # Якщо запит йде на PDF прев'ю сконвертованого офісного файлу
-        if request.GET.get('preview_pdf') == '1':
-            path = os.path.join(settings.MEDIA_ROOT, 'previews', f"{file_obj.id}.pdf")
-            mime_type = 'application/pdf'
+        path = file_obj.file.path
+        ext = os.path.splitext(path)[1].lower()
+
+        # Якщо запит йде на PDF прев'ю АБО це документ Office (.docx, .doc, .pptx, .odt), який браузер не показує нативно
+        if request.GET.get('preview_pdf') == '1' or ext in ['.docx', '.doc', '.pptx', '.ppt', '.odt']:
+            get_pdf_preview_url(file_obj)
+            pdf_path = os.path.join(settings.MEDIA_ROOT, 'previews', f"{file_obj.id}.pdf")
+            if os.path.exists(pdf_path):
+                path = pdf_path
+                mime_type = 'application/pdf'
+            else:
+                mime_type, _ = mimetypes.guess_type(path)
+                if not mime_type:
+                    mime_type = 'application/octet-stream'
         else:
-            path = file_obj.file.path
-            ext = os.path.splitext(path)[1].lower()
             if ext == '.pdf':
                 mime_type = 'application/pdf'
             elif ext in ['.jpg', '.jpeg']:
@@ -2082,7 +2410,7 @@ def client_heartbeat(request):
         _active_clients[ip] = {
             'timestamp': now,
             'last_path': current_path,
-            'last_time_str': datetime.now().strftime('%H:%M:%S')
+            'last_time_str': timezone.localtime(timezone.now()).strftime('%H:%M:%S')
         }
     return HttpResponse("OK")
 
@@ -2182,17 +2510,28 @@ def submit_success(request, pk):
     duplicate_type = request.session.pop('submission_duplicate_type', None)
 
     # Визначаємо останню здачу для кнопки самоперевірки учня
-    latest_submission_id = request.session.pop('last_submission_id', None)
+    latest_submission_id = request.session.get('last_submission_id', None)
     latest_submission = None
     can_student_ai_check = False
     ai_check_already_used = False
-    if assignment.allow_student_ai_check and latest_submission_id:
+
+    if not latest_submission_id and request.user.is_authenticated and hasattr(request.user, 'student_profile'):
+        sub = Submission.objects.filter(assignment=assignment, student=request.user.student_profile, is_latest_attempt=True).order_by('-submitted_at').first()
+        if sub:
+            latest_submission_id = sub.id
+
+    if not latest_submission_id:
+        recent_sub = Submission.objects.filter(assignment=assignment, is_latest_attempt=True).order_by('-submitted_at').first()
+        if recent_sub and (timezone.now() - recent_sub.submitted_at).total_seconds() < 600:
+            latest_submission_id = recent_sub.id
+
+    if latest_submission_id:
         try:
             latest_submission = Submission.objects.get(pk=latest_submission_id, assignment=assignment)
             if latest_submission.has_used_student_ai_check_for_assignment():
                 can_student_ai_check = False
                 ai_check_already_used = True
-            else:
+            elif assignment.allow_student_ai_check:
                 can_student_ai_check = True
         except Submission.DoesNotExist:
             pass
@@ -2363,9 +2702,19 @@ def submission_detail(request, submission_id):
     )
     comments = submission.comments.all().select_related('author').order_by('created_at')
 
+    can_student_ai_check = False
+    ai_check_already_used = False
+    if submission.assignment and submission.assignment.allow_student_ai_check and not submission.grade:
+        if submission.has_used_student_ai_check_for_assignment():
+            ai_check_already_used = True
+        else:
+            can_student_ai_check = True
+
     return render(request, 'feed/submission_detail.html', {
         'submission': submission,
         'comments': comments,
+        'can_student_ai_check': can_student_ai_check,
+        'ai_check_already_used': ai_check_already_used,
     })
 
 
@@ -2447,10 +2796,14 @@ def view_file(request, submission_id):
                 return redirect('view_file', submission_id=submission_id)
 
     # Логіка навігації (Попередня / Наступна робота)
-    assignment_id = request.GET.get('assignment') or (submission.assignment.id if submission.assignment else None)
-    if assignment_id:
-        nav_qs = Submission.objects.filter(assignment_id=assignment_id).order_by('-submitted_at')
+    # Якщо передано явний параметр ?assignment= - навігуємось у межах цього завдання.
+    # Якщо параметр відсутній (прямий перехід або з «Усіх робіт») - навігуємось по всьому загальному потоку робіт вчителя.
+    explicit_assignment_param = request.GET.get('assignment')
+    if explicit_assignment_param:
+        nav_qs = Submission.objects.filter(assignment_id=explicit_assignment_param).order_by('-submitted_at')
+        assignment_id = explicit_assignment_param
     else:
+        assignment_id = None
         if request.user.is_superuser:
             nav_qs = Submission.objects.all().order_by('-submitted_at')
         else:
@@ -2466,6 +2819,46 @@ def view_file(request, submission_id):
     except ValueError:
         prev_submission = None
         next_submission = None
+
+    # Додатковий фолбек для переходу до робіт/завдань:
+    # Якщо в межах поточного списку робіт більше немає, шукаємо наступну роботу в загальному потоці
+    next_submission_fallback = None
+    prev_submission_fallback = None
+    if not next_submission:
+        all_teacher_subs = list(
+            (Submission.objects.all() if request.user.is_superuser else Submission.objects.filter(Q(assignment__teacher=teacher) | Q(teacher=teacher)))
+            .order_by('-submitted_at')
+        )
+        try:
+            all_cur_idx = [s.id for s in all_teacher_subs].index(submission.id)
+            if all_cur_idx < len(all_teacher_subs) - 1:
+                next_submission_fallback = all_teacher_subs[all_cur_idx + 1]
+            if all_cur_idx > 0:
+                prev_submission_fallback = all_teacher_subs[all_cur_idx - 1]
+        except ValueError:
+            pass
+
+    # Навігація між завданнями (Попереднє / Наступне завдання)
+    prev_assignment = None
+    next_assignment = None
+    next_assignment_first_sub = None
+    prev_assignment_first_sub = None
+    if submission.assignment:
+        if request.user.is_superuser:
+            asgn_qs = Assignment.objects.all().order_by('-created_at')
+        else:
+            asgn_qs = Assignment.objects.filter(teacher=teacher).order_by('-created_at')
+        asgn_list = list(asgn_qs)
+        try:
+            cur_asgn_idx = [a.id for a in asgn_list].index(submission.assignment.id)
+            if cur_asgn_idx < len(asgn_list) - 1:
+                next_assignment = asgn_list[cur_asgn_idx + 1]
+                next_assignment_first_sub = Submission.objects.filter(assignment=next_assignment).order_by('-submitted_at').first()
+            if cur_asgn_idx > 0:
+                prev_assignment = asgn_list[cur_asgn_idx - 1]
+                prev_assignment_first_sub = Submission.objects.filter(assignment=prev_assignment).order_by('-submitted_at').first()
+        except ValueError:
+            pass
 
     # Отримуємо всі прикріплені файли здачі
     submission_files = list(submission.files.all())
@@ -2671,6 +3064,12 @@ def view_file(request, submission_id):
         'embed_info': embed_info,
         'prev_submission': prev_submission,
         'next_submission': next_submission,
+        'next_submission_fallback': next_submission_fallback,
+        'prev_submission_fallback': prev_submission_fallback,
+        'prev_assignment': prev_assignment,
+        'next_assignment': next_assignment,
+        'next_assignment_first_sub': next_assignment_first_sub,
+        'prev_assignment_first_sub': prev_assignment_first_sub,
         'comments': comments,
         'assignment': submission.assignment,
         'assignment_id': assignment_id,
@@ -3183,13 +3582,149 @@ def grade_submission(request, sub_id):
         submission=submission
     )
 
+    # Оновлюємо актуальний лічильник робіт без оцінки для інтерфейсу вчителя
+    if request.user.is_superuser or request.session.get('superadmin_mode'):
+        remaining_pending = Submission.objects.filter(Q(grade__isnull=True) | Q(grade='')).count()
+    elif teacher:
+        remaining_pending = Submission.objects.filter(
+            assignment__teacher=teacher
+        ).filter(
+            Q(grade__isnull=True) | Q(grade='')
+        ).count()
+    else:
+        remaining_pending = 0
+
+    from .utils import get_teacher_upcoming_notifications
+    notifs = get_teacher_upcoming_notifications(teacher) if teacher else []
+    unread_count = len([n for n in notifs if n.get('type') == 'missing_task'])
+
     return JsonResponse({
         'status': 'success',
         'grade': submission.grade or '',
         'is_graded': bool(submission.grade),
         'coauthors_graded': coauthors_graded,
         'message': log_msg,
+        'pending_submissions_count': remaining_pending,
+        'unread_notifications_count': unread_count,
     })
+
+
+@teacher_required
+def mass_grade_submissions(request):
+    """
+    AJAX / POST: Масове виставлення оцінок кільком здачам робіт одночасно.
+    Оновлює оцінку для вибраних здач, автоматично синхронізує оцінку зі співавторами,
+    логує дію та повертає оновлені лічильники сповіщень.
+    """
+    if request.method != 'POST':
+        return JsonResponse({'status': 'error', 'message': 'Method not allowed'}, status=405)
+
+    teacher = getattr(request.user, 'teacher_profile', None)
+    if not teacher and (request.user.is_superuser or request.session.get('superadmin_mode')):
+        teacher = Teacher.objects.first()
+
+    payload = {}
+    if request.content_type == 'application/json' or (request.body and not request.POST):
+        try:
+            import json
+            payload = json.loads(request.body.decode('utf-8'))
+        except Exception:
+            payload = {}
+
+    sub_ids = request.POST.getlist('submission_ids[]') or request.POST.getlist('submission_ids')
+    if not sub_ids and payload.get('submission_ids'):
+        val = payload.get('submission_ids')
+        sub_ids = val if isinstance(val, list) else [val]
+
+    if not sub_ids:
+        raw_ids = request.POST.get('submission_ids', '')
+        if raw_ids:
+            sub_ids = [s.strip() for s in str(raw_ids).split(',') if s.strip().isdigit()]
+
+    if not sub_ids:
+        return JsonResponse({'status': 'error', 'message': 'Не вибрано жодної роботи'}, status=400)
+
+    grade = str(request.POST.get('grade') or payload.get('grade') or '').strip()
+    action = str(request.POST.get('action') or payload.get('action') or 'grade')
+    if action == 'clear':
+        grade = ''
+
+    if not grade and action != 'clear':
+        return JsonResponse({'status': 'error', 'message': 'Вкажіть оцінку для виставлення'}, status=400)
+
+    try:
+        sub_int_ids = [int(i) for i in sub_ids]
+    except (ValueError, TypeError):
+        return JsonResponse({'status': 'error', 'message': 'Некоректні ідентифікатори здач'}, status=400)
+
+    if request.user.is_superuser or request.session.get('superadmin_mode'):
+        subs = list(Submission.objects.filter(id__in=sub_int_ids).select_related('assignment', 'class_group'))
+    else:
+        subs = list(Submission.objects.filter(
+            id__in=sub_int_ids
+        ).filter(
+            Q(assignment__teacher=teacher) | Q(teacher=teacher)
+        ).select_related('assignment', 'class_group'))
+
+    now = timezone.now()
+    updated_subs = []
+    coauthors_all = []
+
+    for sub in subs:
+        sub.grade = grade or None
+        sub.graded_by = request.user
+        if grade:
+            sub.graded_at = now
+        sub.save(update_fields=['grade', 'graded_by', 'graded_at'])
+        updated_subs.append(sub.id)
+
+        if grade:
+            coauthors = sync_grades_to_coauthors(sub, grade, request.user)
+            if coauthors:
+                coauthors_all.extend(coauthors)
+
+        log_msg = f"Масове оцінювання: {sub.get_student_full_name()} -> {grade or 'оцінку знято'}"
+        log_submission_activity(request.user, 'grading', log_msg, submission=sub)
+
+    # Перераховуємо актуальний лічильник робіт без оцінки
+    if request.user.is_superuser or request.session.get('superadmin_mode'):
+        remaining_pending = Submission.objects.filter(Q(grade__isnull=True) | Q(grade='')).count()
+    elif teacher:
+        remaining_pending = Submission.objects.filter(
+            assignment__teacher=teacher
+        ).filter(
+            Q(grade__isnull=True) | Q(grade='')
+        ).count()
+    else:
+        remaining_pending = 0
+
+    from .utils import get_teacher_upcoming_notifications
+    notifs = get_teacher_upcoming_notifications(teacher) if teacher else []
+    unread_count = len([n for n in notifs if n.get('type') == 'missing_task'])
+
+    return JsonResponse({
+        'status': 'success',
+        'success': True,
+        'updated_count': len(updated_subs),
+        'graded_count': len(updated_subs),
+        'updated_ids': updated_subs,
+        'grade': grade or '',
+        'coauthors_graded': coauthors_all,
+        'pending_submissions_count': remaining_pending,
+        'unread_notifications_count': unread_count,
+        'notifications': [{
+            'id': n.get('id', ''),
+            'type': n.get('type', ''),
+            'icon': n.get('icon', '🔔'),
+            'title': n.get('title', ''),
+            'message': n.get('message', ''),
+            'action_url': n.get('action_url', ''),
+            'badge': n.get('badge', ''),
+            'badge_class': n.get('badge_class', ''),
+        } for n in notifs],
+        'message': f'Успішно оцінено {len(updated_subs)} робіт (оцінка: {grade or "знято"}).',
+    })
+
 
 
 @teacher_required
@@ -4085,7 +4620,7 @@ def archive_old_activity_logs(days=30):
     filepath = os.path.join(logs_dir, filename)
 
     if os.path.exists(filepath):
-        filename = f"Архів_логів_{min_date}_{max_date}_{int(datetime.now().timestamp())}.csv"
+        filename = f"Архів_логів_{min_date}_{max_date}_{int(timezone.now().timestamp())}.csv"
         filepath = os.path.join(logs_dir, filename)
 
     rows = [["ID", "Час", "Користувач", "Тип дії", "Опис", "ID роботи"]]
@@ -4310,7 +4845,7 @@ def archive_submissions_to_master_zip(teacher_name, teacher_submissions):
             ["Прізвище", "Ім'я", "Клас", "Вчитель", "Дата здачі", "Оцінка", "Файл/Посилання", "Коментарі", "Дата архівації"]
         ]
 
-    archived_at_str = datetime.now().strftime("%d.%m.%Y %H:%M")
+    archived_at_str = timezone.localtime(timezone.now()).strftime("%d.%m.%Y %H:%M")
     files_to_delete = []
 
     with zipfile.ZipFile(temp_zip_path, 'w', zipfile.ZIP_DEFLATED) as new_zip:
@@ -4635,7 +5170,7 @@ def download_database_backup(request):
     import io
 
     db_path = settings.DATABASES['default'].get('NAME')
-    today_str = datetime.now().strftime('%Y-%m-%d_%H-%M')
+    today_str = timezone.localtime(timezone.now()).strftime('%Y-%m-%d_%H-%M')
 
     if db_path and os.path.exists(str(db_path)):
         backup_filename = f"schoolnet_backup_{today_str}.sqlite3"
@@ -5317,6 +5852,51 @@ def ai_check_single_submission(request, submission_id):
     return redirect('view_file', submission_id=submission.id)
 
 
+@teacher_required
+def api_classes_list(request):
+    """Повертає список усіх класів школи для випадаючих списків та модальних вікон."""
+    from .models import ClassGroup
+    classes = ClassGroup.objects.all().order_by('grade', 'letter', 'name')
+    return JsonResponse({
+        'status': 'ok',
+        'classes': [{'id': c.id, 'name': c.name, 'grade': c.grade, 'letter': c.letter} for c in classes]
+    })
+
+
+@teacher_required
+def api_teacher_schedules(request):
+    """
+    Повертає розклад уроків вчителя (TeacherLessonSchedule) у форматі JSON,
+    згрупований по класах. Використовується в модальному вікні дублювання
+    для динамічного відображення прив'язки до розкладу для кожного класу.
+    """
+    teacher = request.user.teacher_profile
+    schedules = TeacherLessonSchedule.objects.filter(
+        teacher=teacher
+    ).select_related('bell_slot', 'class_group').order_by('class_group__grade', 'class_group__letter', 'day_of_week', 'bell_slot__lesson_number')
+
+    day_names = {1: 'Понеділок', 2: 'Вівторок', 3: 'Середа', 4: 'Четвер', 5: "П'ятниця", 6: 'Субота', 7: 'Неділя'}
+
+    # Групуємо по class_group_id
+    by_class = {}
+    for sch in schedules:
+        cid = sch.class_group_id
+        if cid not in by_class:
+            by_class[cid] = []
+        slot = sch.bell_slot
+        by_class[cid].append({
+            'day_of_week': sch.day_of_week,
+            'day_name': day_names.get(sch.day_of_week, ''),
+            'bell_slot_id': slot.id if slot else None,
+            'lesson_number': slot.lesson_number if slot else None,
+            'start_time': slot.start_time.strftime('%H:%M') if slot and slot.start_time else '',
+            'end_time': slot.end_time.strftime('%H:%M') if slot and slot.end_time else '',
+            'label': f"{day_names.get(sch.day_of_week, '')}, {slot.lesson_number}-й урок ({slot.start_time.strftime('%H:%M')})" if slot and slot.start_time else day_names.get(sch.day_of_week, ''),
+            'value': f"slot_{sch.day_of_week}_{slot.id}" if slot else f"day_{sch.day_of_week}",
+        })
+
+    return JsonResponse({'status': 'ok', 'schedules_by_class': by_class})
+
 
 @teacher_required
 def ai_batch_check_view(request):
@@ -5885,9 +6465,26 @@ def api_today_schedule(request):
                 break_rem = next_s_min - now_minutes
                 active_status = 'in_break'
 
+        elapsed_minutes = 0
+        progress_percent = 0
         if is_current:
             active_status = 'in_lesson'
             current_lesson_num = slot.lesson_number
+            dur = max(1, e_min - s_min)
+            elapsed_minutes = max(0, min(dur, now_minutes - s_min))
+            progress_percent = min(100, max(0, int(round((elapsed_minutes / dur) * 100))))
+        elif is_past:
+            elapsed_minutes = slot.duration_minutes
+            progress_percent = 100
+
+        break_duration = 0
+        break_elapsed = 0
+        break_progress_pct = 0
+        if is_break_now:
+            next_s_min = bell_slots[i + 1].start_time.hour * 60 + bell_slots[i + 1].start_time.minute
+            break_duration = max(1, next_s_min - e_min)
+            break_elapsed = max(0, min(break_duration, now_minutes - e_min))
+            break_progress_pct = min(100, max(0, int(round((break_elapsed / break_duration) * 100))))
 
         rem_minutes = max(0, e_min - now_minutes) if is_current else 0
 
@@ -5906,9 +6503,14 @@ def api_today_schedule(request):
             'is_past': is_past,
             'is_future': is_future,
             'rem_minutes': rem_minutes,
+            'elapsed_minutes': elapsed_minutes,
+            'progress_percent': progress_percent,
             'break_after': break_min,
             'is_break_now': is_break_now,
             'break_rem_minutes': break_rem,
+            'break_duration_minutes': break_duration,
+            'break_elapsed_minutes': break_elapsed,
+            'break_progress_percent': break_progress_pct,
         })
 
     conducted_info = teacher.get_conducted_lessons_info() if teacher else None
@@ -5923,6 +6525,7 @@ def api_today_schedule(request):
         'lessons': lessons,
         'conducted_info': conducted_info,
     })
+
 
 
 @teacher_required

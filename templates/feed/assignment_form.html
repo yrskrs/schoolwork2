@@ -69,16 +69,84 @@
                                 <p class="form-hint">Коротко і зрозуміло сформулюйте назву уроку або лабораторної роботи</p>
                             </div>
 
-                            <!-- Опис -->
+                            <!-- Опис завдання з форматуванням тексту -->
                             <div class="form-group" style="margin:0;">
-                                <label class="form-label" for="{{ form.description.id_for_label }}">
-                                    📝 Опис завдання
-                                </label>
-                                {{ form.description }}
+                                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                                    <label class="form-label" for="{{ form.description.id_for_label }}" style="margin:0;font-weight:700;">
+                                        📝 Опис та вказівки до завдання
+                                    </label>
+                                    <button type="button" class="btn btn-secondary btn-sm" id="btn-toggle-editor-mode" onclick="toggleEditorSourceMode()" style="font-size:11px;padding:2px 8px;font-weight:600;" title="Перемкнути між візуальним редактором та HTML-кодом">
+                                        &lt;/&gt; HTML / Візуально
+                                    </button>
+                                </div>
+
+                                <!-- Панель інструментів форматування (WYSIWYG Toolbar) -->
+                                <div class="wysiwyg-toolbar" id="wysiwyg-toolbar" style="display:flex;flex-wrap:wrap;gap:4px;background:var(--color-bg-secondary);border:1px solid var(--color-border);border-bottom:none;border-top-left-radius:var(--radius-md);border-top-right-radius:var(--radius-md);padding:6px 10px;align-items:center;">
+                                    <button type="button" class="editor-btn" onclick="execEditorCommand('bold')" title="Жирний (Ctrl+B)" style="font-weight:900;padding:4px 8px;font-size:13px;border:1px solid var(--color-border);border-radius:4px;background:var(--color-surface);cursor:pointer;color:var(--color-text-primary);">
+                                        <strong>Ж</strong>
+                                    </button>
+                                    <button type="button" class="editor-btn" onclick="execEditorCommand('italic')" title="Курсив (Ctrl+I)" style="font-style:italic;padding:4px 8px;font-size:13px;border:1px solid var(--color-border);border-radius:4px;background:var(--color-surface);cursor:pointer;color:var(--color-text-primary);">
+                                        <em>К</em>
+                                    </button>
+                                    <button type="button" class="editor-btn" onclick="execEditorCommand('underline')" title="Підкреслений (Ctrl+U)" style="text-decoration:underline;padding:4px 8px;font-size:13px;border:1px solid var(--color-border);border-radius:4px;background:var(--color-surface);cursor:pointer;color:var(--color-text-primary);">
+                                        <u>Ч</u>
+                                    </button>
+                                    <button type="button" class="editor-btn" onclick="execEditorCommand('strikeThrough')" title="Закреслений" style="text-decoration:line-through;padding:4px 8px;font-size:13px;border:1px solid var(--color-border);border-radius:4px;background:var(--color-surface);cursor:pointer;color:var(--color-text-primary);">
+                                        S
+                                    </button>
+                                    <span style="width:1px;height:20px;background:var(--color-border);margin:0 4px;"></span>
+
+                                    <!-- Маркер виділення -->
+                                    <button type="button" class="editor-btn" onclick="highlightSelectedText()" title="Виділити жовтим маркером" style="padding:4px 8px;font-size:12px;font-weight:700;border:1px solid var(--color-border);border-radius:4px;background:#fef08a;color:#854d0e;cursor:pointer;">
+                                        🖍️ Маркер
+                                    </button>
+
+                                    <!-- Заголовки та абзаци -->
+                                    <button type="button" class="editor-btn" onclick="execEditorFormatBlock('h2')" title="Великий заголовок (H2)" style="padding:4px 8px;font-size:12px;font-weight:800;border:1px solid var(--color-border);border-radius:4px;background:var(--color-surface);cursor:pointer;color:var(--color-text-primary);">
+                                        H2
+                                    </button>
+                                    <button type="button" class="editor-btn" onclick="execEditorFormatBlock('h3')" title="Середній заголовок (H3)" style="padding:4px 8px;font-size:12px;font-weight:700;border:1px solid var(--color-border);border-radius:4px;background:var(--color-surface);cursor:pointer;color:var(--color-text-primary);">
+                                        H3
+                                    </button>
+                                    <button type="button" class="editor-btn" onclick="execEditorFormatBlock('p')" title="Звичайний абзац" style="padding:4px 8px;font-size:12px;font-weight:600;border:1px solid var(--color-border);border-radius:4px;background:var(--color-surface);cursor:pointer;color:var(--color-text-primary);">
+                                        ¶ Абзац
+                                    </button>
+                                    <span style="width:1px;height:20px;background:var(--color-border);margin:0 4px;"></span>
+
+                                    <!-- Списки -->
+                                    <button type="button" class="editor-btn" onclick="execEditorCommand('insertUnorderedList')" title="Маркований список" style="padding:4px 8px;font-size:13px;border:1px solid var(--color-border);border-radius:4px;background:var(--color-surface);cursor:pointer;color:var(--color-text-primary);">
+                                        • Список
+                                    </button>
+                                    <button type="button" class="editor-btn" onclick="execEditorCommand('insertOrderedList')" title="Нумерований список" style="padding:4px 8px;font-size:13px;border:1px solid var(--color-border);border-radius:4px;background:var(--color-surface);cursor:pointer;color:var(--color-text-primary);">
+                                        1. Список
+                                    </button>
+                                    <span style="width:1px;height:20px;background:var(--color-border);margin:0 4px;"></span>
+
+                                    <!-- Посилання -->
+                                    <button type="button" class="editor-btn" onclick="insertEditorLink()" title="Вставити посилання" style="padding:4px 8px;font-size:12px;font-weight:700;border:1px solid var(--color-border);border-radius:4px;background:var(--color-surface);cursor:pointer;color:var(--color-primary);">
+                                        🔗 Лінк
+                                    </button>
+                                    <!-- Очистити форматування -->
+                                    <button type="button" class="editor-btn" onclick="execEditorCommand('removeFormat')" title="Очистити форматування виділеного тексту" style="padding:4px 8px;font-size:12px;border:1px solid var(--color-border);border-radius:4px;background:var(--color-surface);cursor:pointer;color:var(--color-text-muted);">
+                                        🧹 Очистити
+                                    </button>
+                                </div>
+
+                                <!-- Візуальна робоча область редактора -->
+                                <div id="rich-editor" contenteditable="true" role="textbox" aria-multiline="true"
+                                     style="min-height:180px;max-height:500px;overflow-y:auto;padding:14px 16px;border:1px solid var(--color-border);border-bottom-left-radius:var(--radius-md);border-bottom-right-radius:var(--radius-md);background:var(--color-surface);color:var(--color-text-primary);line-height:1.6;font-size:14px;outline:none;">
+                                </div>
+
+                                <!-- Сховане оригінальне поле форми для передачі даних на бекенд -->
+                                <div style="display:none;" id="form-description-textarea-wrap">
+                                    {{ form.description }}
+                                </div>
                                 {% if form.description.errors %}
                                 <p class="form-error">{{ form.description.errors.0 }}</p>
                                 {% endif %}
-                                <p class="form-hint">Вкажіть умову задачі, номери вправ з підручника, вимоги до оформлення тощо.</p>
+                                <p class="form-hint" style="margin-top:6px;">
+                                    💡 Ви можете виділяти фрагменти тексту та застосовувати <strong>жирний шрифт</strong>, <em>курсив</em>, <u>підкреслення</u>, маркер, списки та посилання.
+                                </p>
                             </div>
                         </div>
 
@@ -147,12 +215,12 @@
                                 
                                 <div id="schedule-targets-grid" style="display:flex;flex-direction:column;gap:8px;">
                                     {% for class_obj in form.classes.field.queryset %}
-                                    <div class="schedule-target-row" id="target-row-class-{{ class_obj.id }}" style="display:none;align-items:center;gap:12px;padding:8px 12px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:6px;flex-wrap:wrap;">
-                                        <span style="font-weight:750;font-size:13px;min-width:70px;color:var(--color-text-primary);">
+                                    <div class="schedule-target-row" id="target-row-class-{{ class_obj.id }}" style="display:none;align-items:center;gap:10px;padding:8px 12px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:6px;flex-wrap:wrap;">
+                                        <span style="font-weight:750;font-size:13px;min-width:65px;color:var(--color-text-primary);">
                                             🏫 {{ class_obj.name }}:
                                         </span>
-                                        <div style="flex:1;min-width:220px;">
-                                            <select name="class_schedule_target_{{ class_obj.id }}" class="form-select" style="font-size:12.5px;padding:5px 8px;">
+                                        <div style="flex:1;min-width:200px;">
+                                            <select name="class_schedule_target_{{ class_obj.id }}" class="form-select" style="font-size:12.5px;padding:5px 8px;width:100%;">
                                                 <option value="auto">⚡ Автоматично (найближчий урок за розкладом)</option>
                                                 {% for sch in teacher_lesson_schedules %}
                                                     {% if sch.class_group_id == class_obj.id %}
@@ -163,6 +231,10 @@
                                                 {% endfor %}
                                                 <option value="none">🌐 Без прив'язки до дня розкладу</option>
                                             </select>
+                                        </div>
+                                        <div style="display:flex;align-items:center;gap:6px;">
+                                            <span style="font-size:11.5px;color:var(--color-text-muted);white-space:nowrap;">📅 Дата:</span>
+                                            <input type="date" name="class_schedule_target_date_{{ class_obj.id }}" class="form-input" style="font-size:12px;padding:4px 8px;width:130px;" title="Конкретна дата уроку для {{ class_obj.name }}" value="{% for cid, dt in existing_target_dates.items %}{% if cid == class_obj.id %}{{ dt|date:'Y-m-d' }}{% endif %}{% endfor %}">
                                         </div>
                                     </div>
                                     {% endfor %}
@@ -707,7 +779,113 @@ document.addEventListener('DOMContentLoaded', function() {
         cb.addEventListener('change', syncScheduleTargetRows);
     });
     syncScheduleTargetRows();
+
+    // ── WYSIWYG Rich Text Editor Setup ─────────────────────────────────────
+    var descTextarea = document.getElementById('{{ form.description.id_for_label }}') || document.querySelector('textarea[name="description"]');
+    var richEditor = document.getElementById('rich-editor');
+
+    if (richEditor && descTextarea) {
+        richEditor.innerHTML = descTextarea.value || '';
+
+        richEditor.addEventListener('input', function() {
+            descTextarea.value = richEditor.innerHTML;
+        });
+        richEditor.addEventListener('blur', function() {
+            descTextarea.value = richEditor.innerHTML;
+        });
+
+        var parentForm = richEditor.closest('form');
+        if (parentForm) {
+            parentForm.addEventListener('submit', function() {
+                if (window.isHtmlSourceMode) {
+                    richEditor.innerHTML = descTextarea.value;
+                } else {
+                    descTextarea.value = richEditor.innerHTML;
+                }
+            });
+        }
+    }
 });
+
+window.isHtmlSourceMode = false;
+
+function execEditorCommand(cmd, val) {
+    var richEditor = document.getElementById('rich-editor');
+    var descTextarea = document.querySelector('textarea[name="description"]');
+    if (window.isHtmlSourceMode || !richEditor) return;
+    richEditor.focus();
+    document.execCommand(cmd, false, val || null);
+    if (descTextarea) descTextarea.value = richEditor.innerHTML;
+}
+
+function execEditorFormatBlock(tag) {
+    var richEditor = document.getElementById('rich-editor');
+    var descTextarea = document.querySelector('textarea[name="description"]');
+    if (window.isHtmlSourceMode || !richEditor) return;
+    richEditor.focus();
+    document.execCommand('formatBlock', false, '<' + tag + '>');
+    if (descTextarea) descTextarea.value = richEditor.innerHTML;
+}
+
+function highlightSelectedText() {
+    var richEditor = document.getElementById('rich-editor');
+    var descTextarea = document.querySelector('textarea[name="description"]');
+    if (window.isHtmlSourceMode || !richEditor) return;
+    richEditor.focus();
+    var selection = window.getSelection();
+    if (!selection.rangeCount || selection.isCollapsed) {
+        alert('Виділіть фрагмент тексту для підсвічування маркером.');
+        return;
+    }
+    var range = selection.getRangeAt(0);
+    var mark = document.createElement('mark');
+    mark.style.cssText = 'background:#fef08a;color:#854d0e;padding:1px 4px;border-radius:3px;';
+    try {
+        mark.appendChild(range.extractContents());
+        range.insertNode(mark);
+        selection.removeAllRanges();
+        if (descTextarea) descTextarea.value = richEditor.innerHTML;
+    } catch (e) {
+        document.execCommand('hiliteColor', false, '#fef08a');
+        if (descTextarea) descTextarea.value = richEditor.innerHTML;
+    }
+}
+
+function insertEditorLink() {
+    var richEditor = document.getElementById('rich-editor');
+    var descTextarea = document.querySelector('textarea[name="description"]');
+    if (window.isHtmlSourceMode || !richEditor) return;
+    richEditor.focus();
+    var url = prompt('Введіть посилання (URL):', 'https://');
+    if (url && url.trim()) {
+        document.execCommand('createLink', false, url.trim());
+        if (descTextarea) descTextarea.value = richEditor.innerHTML;
+    }
+}
+
+function toggleEditorSourceMode() {
+    var richEditor = document.getElementById('rich-editor');
+    var descTextarea = document.querySelector('textarea[name="description"]');
+    var wrap = document.getElementById('form-description-textarea-wrap');
+    var toolbar = document.getElementById('wysiwyg-toolbar');
+    if (!richEditor || !descTextarea) return;
+
+    window.isHtmlSourceMode = !window.isHtmlSourceMode;
+
+    if (window.isHtmlSourceMode) {
+        descTextarea.value = richEditor.innerHTML;
+        richEditor.style.display = 'none';
+        if (wrap) wrap.style.display = 'block';
+        descTextarea.style.minHeight = '180px';
+        descTextarea.style.width = '100%';
+        if (toolbar) toolbar.style.opacity = '0.5';
+    } else {
+        richEditor.innerHTML = descTextarea.value;
+        if (wrap) wrap.style.display = 'none';
+        richEditor.style.display = 'block';
+        if (toolbar) toolbar.style.opacity = '1';
+    }
+}
 </script>
 {% endblock %}
 

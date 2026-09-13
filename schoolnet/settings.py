@@ -66,8 +66,20 @@ WSGI_APPLICATION = 'schoolnet.wsgi.application'
 
 # ─── База даних ────────────────────────────────────────────────────────────────
 # Використовуємо DATABASE_URL з .env, або за замовчуванням локальний SQLite
+db_url_env = os.environ.get('DATABASE_URL')
+if db_url_env and '@postgres' in db_url_env:
+    import socket
+    try:
+        socket.gethostbyname('postgres')
+    except (socket.gaierror, OSError):
+        db_url_env = db_url_env.replace('@postgres:5432', '@127.0.0.1:5433').replace('@postgres', '@127.0.0.1:5433')
+
 DATABASES = {
-    'default': dj_database_url.config(
+    'default': dj_database_url.parse(
+        db_url_env,
+        conn_max_age=600,
+        conn_health_checks=True,
+    ) if db_url_env else dj_database_url.config(
         default=f"sqlite:///{BASE_DIR / 'schoolnet.sqlite3'}",
         conn_max_age=600,
         conn_health_checks=True,

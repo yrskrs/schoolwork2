@@ -244,9 +244,10 @@ class Teacher(models.Model):
 
     def get_calculated_conducted_lessons(self, semester_start_date=None):
         """
-        Автоматично підраховує кількість проведених уроків вчителем:
-        Проходить по всіх навчальних днях від початку навчального року (за замовчуванням 1 вересня)
-        до сьогодні, враховуючи уроки за розкладом TeacherLessonSchedule, час завершення яких вже минув.
+        Підраховує кількість проведених уроків на основі ОПУБЛІКОВАНИХ ЗАВДАНЬ вчителя.
+        Враховуються уроки, час яких уже настав (або минув) від початку навчального року / семестру,
+        і для яких є опубліковане завдання (Assignment.STATUS_PUBLISHED).
+        Чернетки, видалені або неопубліковані завдання суворо ігноруються.
         """
         import datetime
         from django.utils import timezone
@@ -263,30 +264,44 @@ class Teacher(models.Model):
         if semester_start_date > today:
             semester_start_date = today
 
-        schedules = list(self.lesson_schedules.select_related('bell_slot').all())
-        if not schedules:
-            return 0
+        from .models import Assignment
+        published_assignments = self.assignments.filter(
+            status=Assignment.STATUS_PUBLISHED
+        ).prefetch_related('schedule_targets__class_group', 'schedule_targets__bell_slot', 'classes')
 
-        day_slots = {}
-        for s in schedules:
-            if s.bell_slot and s.bell_slot.end_time:
-                day_slots.setdefault(s.day_of_week, []).append(s.bell_slot)
+        conducted_count = 0
+        counted_lessons = set()  # (class_id, date, slot_number, assignment_id)
 
-        total_count = 0
-        curr = semester_start_date
-        while curr <= today:
-            weekday = curr.weekday() + 1  # 1..7
-            slots = day_slots.get(weekday, [])
-            if curr < today:
-                total_count += len(slots)
-            elif curr == today:
-                for slot in slots:
-                    end_min = slot.end_time.hour * 60 + slot.end_time.minute
-                    if now_minutes >= end_min:
-                        total_count += 1
-            curr += datetime.timedelta(days=1)
+        for assignment in published_assignments:
+            targets = list(assignment.schedule_targets.all())
+            if targets:
+                for target in targets:
+                    t_date = target.target_date
+                    if not t_date:
+                        t_date = timezone.localtime(assignment.published_at).date() if assignment.published_at else None
+                    if not t_date or t_date < semester_start_date or t_date > today:
+                        continue
+                    slot = target.bell_slot
+                    slot_num = slot.lesson_number if slot else 0
+                    if t_date == today and slot and slot.start_time:
+                        s_min = slot.start_time.hour * 60 + slot.start_time.minute
+                        if now_minutes < s_min:
+                            continue  # Урок ще не розпочався сьогодні
 
-        return total_count
+                    lesson_key = (target.class_group_id, t_date, slot_num, assignment.id)
+                    if lesson_key not in counted_lessons:
+                        counted_lessons.add(lesson_key)
+                        conducted_count += 1
+            else:
+                pub_date = timezone.localtime(assignment.published_at).date() if assignment.published_at else None
+                if pub_date and semester_start_date <= pub_date <= today:
+                    for cls in assignment.classes.all():
+                        lesson_key = (cls.id, pub_date, 0, assignment.id)
+                        if lesson_key not in counted_lessons:
+                            counted_lessons.add(lesson_key)
+                            conducted_count += 1
+
+        return conducted_count
 
     def get_conducted_lessons_info(self):
         """
@@ -310,6 +325,17 @@ class Teacher(models.Model):
             'calculated_count': calc,
             'manual_count': None,
         }
+
+    @property
+    def pending_reviews_count(self):
+        """Кількість неперевірених/неоцінених робіт учнів по завданнях цього вчителя."""
+        from django.db.models import Q
+        from .models import Submission
+        return Submission.objects.filter(
+            assignment__teacher=self
+        ).filter(
+            Q(grade__isnull=True) | Q(grade='')
+        ).count()
 
 
 # ─── Розклад дзвінків ────────────────────────────────────────────────────────
@@ -574,7 +600,7 @@ class Assignment(models.Model):
     # ── Самоперевірка учнем (Student AI Self-Check) ───────────────────────────
     allow_student_ai_check = models.BooleanField(
         'Дозволити учням самоперевірку ШІ',
-        default=False,
+        default=True,
         help_text='Якщо True — учень може 1 раз перевірити здану роботу через ШІ'
     )
     allow_ai_usage = models.BooleanField(
@@ -738,6 +764,109 @@ class Assignment(models.Model):
     def is_published_yesterday(self):
         """Чи опубліковано вчора."""
         return self.days_ago == 1
+
+    def get_lesson_date(self, for_class=None):
+        """
+        Повертає цільову дату уроку (об'єкт date) для завдання.
+        Використовується календарем, фільтрами та інформерами замість дати публікації.
+        """
+        import datetime
+        from django.utils import timezone
+
+        targets = list(self.schedule_targets.select_related('bell_slot', 'class_group').all())
+        if for_class:
+            c_id = getattr(for_class, 'id', for_class)
+            for t in targets:
+                if t.class_group_id == c_id:
+                    if t.target_date:
+                        return t.target_date
+                    if t.target_day_of_week:
+                        base_dt = self.published_at or self.created_at or timezone.now()
+                        base_d = timezone.localtime(base_dt).date()
+                        diff = (t.target_day_of_week - (base_d.weekday() + 1)) % 7
+                        return base_d + datetime.timedelta(days=diff)
+        else:
+            today = timezone.localtime(timezone.now()).date()
+            dates = [t.target_date for t in targets if t.target_date]
+            if dates:
+                if today in dates:
+                    return today
+                future_dates = [d for d in dates if d > today]
+                if future_dates:
+                    return min(future_dates)
+                return max(dates)
+
+        if self.due_date:
+            return self.due_date
+        if self.published_at:
+            return timezone.localtime(self.published_at).date()
+        if self.created_at:
+            return timezone.localtime(self.created_at).date()
+        return timezone.localtime(timezone.now()).date()
+
+    def get_all_targets_info(self):
+        """
+        Повертає структурований список цільових уроків для КОЖНОГО призначеного класу.
+        Забезпечує роздільне відображення інформації (наприклад: 7-А — Пн 10:00, 7-Б — Пн 12:00, 7-В — Вт 09:00).
+        Поля is_today та is_upcoming використовуються для підсвічування актуального класу в стрічці.
+        """
+        from django.utils import timezone as tz
+        today = tz.localtime(tz.now()).date()
+
+        res = []
+        targets = {st.class_group_id: st for st in self.schedule_targets.select_related('bell_slot', 'class_group')}
+        uk_weekdays = {1: 'Понеділок', 2: 'Вівторок', 3: 'Середа', 4: 'Четвер', 5: "П'ятниця", 6: 'Субота', 7: 'Неділя'}
+
+        for cls in self.classes.all():
+            st = targets.get(cls.id)
+            if st:
+                slot = st.bell_slot
+                time_str = slot.start_time.strftime('%H:%M') if (slot and slot.start_time) else ''
+                slot_info = f"{slot.lesson_number}-й ур." if slot else ""
+                day_name = uk_weekdays.get(st.target_day_of_week, '')
+                date_str = st.target_date.strftime('%d.%m') if st.target_date else ''
+                parts = [p for p in [cls.name, date_str or day_name, slot_info, time_str] if p]
+                is_today = (st.target_date == today) if st.target_date else False
+                is_upcoming = (st.target_date is not None and st.target_date > today) if st.target_date else False
+                res.append({
+                    'class_id': cls.id,
+                    'class_name': cls.name,
+                    'date': st.target_date,
+                    'date_str': date_str,
+                    'day_name': day_name,
+                    'time_str': time_str,
+                    'slot_info': slot_info,
+                    'has_target': True,
+                    'is_today': is_today,
+                    'is_upcoming': is_upcoming,
+                    'summary': ' — '.join(parts)
+                })
+            else:
+                res.append({
+                    'class_id': cls.id,
+                    'class_name': cls.name,
+                    'date': None,
+                    'date_str': '',
+                    'day_name': '',
+                    'time_str': '',
+                    'slot_info': '',
+                    'has_target': False,
+                    'is_today': False,
+                    'is_upcoming': False,
+                    'summary': cls.name
+                })
+        return res
+
+
+    def get_formatted_description(self):
+        """Повертає безпечний санітизований HTML опис завдання для відображення."""
+        if not self.description:
+            return ""
+        from .utils import sanitize_html
+        if "<" in self.description and ">" in self.description:
+            return sanitize_html(self.description)
+        from django.utils.html import escape, linebreaks
+        return linebreaks(escape(self.description))
 
     def get_relevance_badge(self, for_class=None):
         """
@@ -1530,10 +1659,11 @@ def submission_upload_path(instance, filename):
     """
     import os
     from datetime import datetime
+    from django.utils import timezone
     if hasattr(instance, 'submitted_at') and instance.submitted_at:
-        date_str = instance.submitted_at.strftime('%d.%m.%Y')
+        date_str = timezone.localtime(instance.submitted_at).strftime('%d.%m.%Y')
     else:
-        date_str = datetime.now().strftime('%d.%m.%Y')
+        date_str = timezone.localtime(timezone.now()).strftime('%d.%m.%Y')
 
     student_name = f"{instance.last_name}_{instance.first_name}"
     class_name = instance.class_group.name if instance.class_group else 'unknown'
@@ -2218,6 +2348,12 @@ DEFAULT_NUS_SYSTEM_PROMPT = """Ти — висококваліфікований
   * КАТЕГОРИЧНО ЗАБОРОНЕНО знижувати бал або писати зауваження про «невиконання решти завдань» — вони вважаються незаданими!
   * Робота вважається виконаною у повному обсязі (100%), якщо якісно виконано саме задане вчителем завдання.
 
+ТОЧНЕ РОЗУМІННЯ СУТІ ЗАВДАННЯ, ЗМІСТОВА ВІДПОВІДНІСТЬ ТА ПОВНОТА ВИКОНАННЯ:
+1. Аналіз форми та очікуваного результату: уважно з'ясуй, що саме вимагає завдання (наприклад, структурований список дат з подіями, твір/есе, розв'язання задач із формулами, таблиця тощо). Оцінюй роботу за відповідністю саме цій формі та змісту, а не випадковим ключовим словам.
+2. Суворість для оцінок Високого рівня (10-12 балів): 10-12 балів призначаються ВИКЛЮЧНО за повне, змістовне та структуроване виконання. КАТЕГОРИЧНО ЗАБОРОНЕНО ставити 10-12 балів за фрагментарну відповідь чи поодинокі фрази (наприклад, якщо вимагався список дат, а учень здав одне речення з датою чи картинку з парою слів — така робота є фрагментарною і оцінюється не вище Середнього рівня, тобто 4-6 балів).
+3. Відсутність навчального матеріалу або невідповідність темі: якщо учень здав сторонню картинку, порожній чи нерелевантний файл — оцінюй на 1-3 бали або став "Доопрацювати".
+4. Обов'язковий узагальнений зворотний зв'язок при оцінці менше 10 балів: якщо оцінка менше 10 балів (або "Доопрацювати"), окрім "strengths", ТИ ЗОБОВ'ЯЗАНИЙ у полях "weaknesses" та "feedback_comment" чітко й тактовно описати в загальному ("але в загальному"), що саме виконано не так і чого не вистачає для досягнення вищого балу (порівняти вимогу завдання з фактично зданим результатом).
+
 ТЕХНІЧНІ ВИМОГИ ТА ПРАВИЛА ДЛЯ ПОЛЯ "format_warning":
 - Поле "format_warning" призначене ВИКЛЮЧНО ДЛЯ ТЕХНІЧНИХ ДЕФЕКТІВ РОЗШИРЕННЯ ЧИ ТИПУ ФАЙЛУ (а НЕ для змісту роботи чи зображених об'єктів!):
   1. Якщо завдання з програмування (наприклад, Python, JS, C++ тощо), код повинен бути збережений у файлі з належним розширенням (наприклад, .py для Python, .html для веб, .cpp для C++).
@@ -2499,6 +2635,12 @@ DEFAULT_TRADITIONAL_SYSTEM_PROMPT = """Ти — суворий та об'єкт�
   * КАТЕГОРИЧНО ЗАБОРОНЕНО знижувати бал або писати зауваження про «невиконання решти завдань» — вони вважаються незаданими!
   * Робота вважається виконаною у повному обсязі (100%), якщо якісно виконано саме задане вчителем завдання.
 
+ТОЧНЕ РОЗУМІННЯ СУТІ ЗАВДАННЯ, ЗМІСТОВА ВІДПОВІДНІСТЬ ТА ПОВНОТА ВИКОНАННЯ:
+1. Аналіз форми та очікуваного результату: уважно з'ясуй, що саме вимагає завдання (хронологічний список дат з подіями, твір/есе, розв'язання задач із формулами, таблиця тощо). Оцінюй роботу за відповідністю саме цій формі та змісту.
+2. Суворість для оцінок Високого рівня (10-12 балів): 10-12 балів призначаються ВИКЛЮЧНО за повне, змістовне та структуроване виконання. Заборонено ставити 10-12 балів за фрагментарну відповідь чи поодинокі фрази (наприклад, 1 речення з датою замість списку дат або картинка з парою слів оцінюється не вище 4-6 балів).
+3. Відсутність навчального матеріалу або невідповідність темі: якщо здано сторонню картинку, порожній чи нерелевантний файл — оцінюй на 1-3 бали або став "Доопрацювати".
+4. Обов'язковий узагальнений зворотний зв'язок при оцінці менше 10 балів: якщо оцінка менше 10 балів (або "Доопрацювати"), окрім "strengths", ТИ ЗОБОВ'ЯЗАНИЙ у полях "weaknesses" та "feedback_comment" чітко й тактовно описати в загальному ("але в загальному"), що саме виконано не так і чого не вистачає для досягнення вищого балу.
+
 ТЕХНІЧНІ ВИМОГИ ТА ПРАВИЛА ДЛЯ ПОЛЯ "format_warning":
 - Поле "format_warning" стосується ВИКЛЮЧНО технічного розширення або типу файлу (відсутнє розширення, .txt замість коду .py чи таблиці .xlsx). Якщо є технічний дефект файлу — зафіксуй у "format_warning", додай у "weaknesses" та знизь оцінку на 1-2 бали.
 - СУВОРЕ ПРАВИЛО: Якщо формат файлу технічно коректний (наприклад, валідне фото .jpg/.png, документ .docx/.pdf тощо), але є помилки у змісті роботи (наприклад, на фото не той об'єкт, чужа тема або неправильний розв'язок) — "format_warning": null. Усі змістовні зауваження вказуй у "weaknesses" та "feedback_comment".
@@ -2537,6 +2679,12 @@ DEFAULT_NUS_GR_SYSTEM_PROMPT = """Ти — висококваліфікован�
   * Оцінюй ВИКЛЮЧНО вказане вчителем завдання.
   * КАТЕГОРИЧНО ЗАБОРОНЕНО знижувати бал або писати зауваження про «невиконання решти завдань» — вони вважаються незаданими!
   * Робота вважається виконаною у повному обсязі (100%), якщо якісно виконано саме задане вчителем завдання.
+
+ТОЧНЕ РОЗУМІННЯ СУТІ ЗАВДАННЯ, ЗМІСТОВА ВІДПОВІДНІСТЬ ТА ПОВНОТА ВИКОНАННЯ:
+1. Аналіз форми та очікуваного результату: уважно з'ясуй, що саме вимагає завдання (хронологічний список дат з подіями, твір/есе, розв'язання задач із формулами, таблиця тощо). Оцінюй роботу за відповідністю саме цій формі та змісту.
+2. Суворість для оцінок Високого рівня (10-12 балів): 10-12 балів призначаються ВИКЛЮЧНО за повне, змістовне та структуроване виконання. Заборонено ставити 10-12 балів за фрагментарну відповідь чи поодинокі фрази (наприклад, 1 речення з датою замість списку дат або картинка з парою слів оцінюється не вище 4-6 балів).
+3. Відсутність навчального матеріалу або невідповідність темі: якщо здано сторонню картинку, порожній чи нерелевантний файл — оцінюй на 1-3 бали або став "Доопрацювати".
+4. Обов'язковий узагальнений зворотний зв'язок при оцінці менше 10 балів: якщо оцінка менше 10 балів (або "Доопрацювати"), окрім "strengths", ТИ ЗОБОВ'ЯЗАНИЙ у полях "weaknesses" та "feedback_comment" чітко й тактовно описати в загальному ("але в загальному"), що саме виконано не так і чого не вистачає для досягнення вищого балу.
 
 ТЕХНІЧНІ ВИМОГИ ТА ПРАВИЛА ДЛЯ ПОЛЯ "format_warning":
 - Поле "format_warning" стосується ВИКЛЮЧНО технічного дефекту розширення чи типу файлу (файл без розширення, здано .txt замість коду .py чи таблиці .xlsx). Якщо є технічний дефект — зафіксуй у "format_warning", додай у "weaknesses" та знизь оцінку на 1-2 бали.

@@ -38,12 +38,29 @@
                 {% if assignment.is_individual %}
                 <span class="individual-tag">👤 {{ assignment.student_display }}</span>
                 {% else %}
+                {% with targets=assignment.get_all_targets_info %}
+                {% if targets %}
+                    {% for tgt in targets %}
+                    {% if tgt.has_target %}
+                    <span class="class-tag"
+                          title="{% if tgt.date %}{{ tgt.date|date:'d.m.Y' }}{% if tgt.time_str %} о {{ tgt.time_str }}{% endif %}{% elif tgt.time_str %}{{ tgt.time_str }}{% endif %}"
+                          style="{% if tgt.is_today %}background:rgba(34,197,94,0.15);border-color:rgba(34,197,94,0.4);color:#16a34a;{% elif tgt.is_upcoming %}background:rgba(99,102,241,0.1);border-color:rgba(99,102,241,0.3);{% endif %}">
+                        {{ tgt.class_name }}{% if tgt.date %} <span style="font-weight:500;opacity:0.85;font-size:11px;">{{ tgt.date|date:"d.m" }}{% if tgt.slot_info %} ({{ tgt.slot_info }}){% endif %}</span>{% elif tgt.slot_info %} <span style="font-weight:500;opacity:0.8;font-size:11px;">({{ tgt.slot_info }})</span>{% endif %}{% if tgt.is_today %} <span style="font-size:10px;">🟢</span>{% endif %}
+                    </span>
+                    {% else %}
+                    <span class="class-tag">{{ tgt.class_name }}</span>
+                    {% endif %}
+                    {% endfor %}
+                {% else %}
                 {% for class in assignment.classes.all %}
                 <span class="class-tag">{{ class.name }}</span>
                 {% empty %}
                 <span class="text-muted">Всі класи</span>
                 {% endfor %}
                 {% endif %}
+                {% endwith %}
+                {% endif %}{# end is_individual #}
+
 
                 <!-- Дата -->
                 <span>📅 {{ assignment.created_at|date:"d.m.Y H:i" }}</span>
@@ -158,13 +175,11 @@
                     ✏️
                 </a>
 
-                <!-- Дублювати -->
-                <form method="POST" action="{% url 'assignment_duplicate' assignment.pk %}" style="display:inline">
-                    {% csrf_token %}
-                    <button type="submit" class="btn btn-secondary btn-sm btn-icon" title="Дублювати завдання">
-                        📋
-                    </button>
-                </form>
+                <!-- Дублювати (з можливістю вибору уроку, класу та дати) -->
+                <button type="button" class="btn btn-secondary btn-sm btn-icon" title="Створити копію завдання на новий урок"
+                        onclick="openDuplicateModal({{ assignment.pk }}, '{{ assignment.title|escapejs }}', [{% for c in assignment.classes.all %}{{ c.id }}{% if not forloop.last %},{% endif %}{% endfor %}], '{{ assignment.subject.name|default:""|escapejs }}')">
+                    📋
+                </button>
 
                 <!-- Архівувати (тільки для опублікованих) -->
                 {% if assignment.status == 'published' %}

@@ -1,7 +1,8 @@
 """
 Глобальні контекстні процесори для шаблонів SchoolNet.
 """
-from .models import Submission, School, BellSchedule, AssignmentRescheduleLog, Teacher
+from .models import Submission, School, BellSchedule, AssignmentRescheduleLog, Teacher, ClassGroup
+from .changelog import SITE_VERSION, SITE_VERSION_SHORT, CHANGELOG_DATA
 
 def teacher_stats_context(request):
     """
@@ -10,7 +11,9 @@ def teacher_stats_context(request):
     - current_school: дані поточного навчального закладу.
     - is_superadmin_mode: чи увімкнено активний режим супер-адміністратора для поточного сеансу.
     - all_bell_slots: всі налаштовані дзвінки школи.
+    - all_classes: всі класи школи.
     - reschedule_reason_choices: типи причин перенесення занять.
+    - site_version, site_version_full, changelog_data: версія та історія змін сайту.
     """
     is_super_mode = False
     if request.user.is_authenticated and request.user.is_superuser:
@@ -21,13 +24,18 @@ def teacher_stats_context(request):
         'current_school': None,
         'is_superadmin_mode': is_super_mode,
         'all_bell_slots': [],
+        'all_classes': [],
         'reschedule_reason_choices': AssignmentRescheduleLog.REASON_CHOICES,
         'teacher_conducted_lessons': None,
+        'site_version': SITE_VERSION_SHORT,
+        'site_version_full': SITE_VERSION,
+        'changelog_data': CHANGELOG_DATA,
     }
 
     try:
         context['current_school'] = School.objects.first()
         context['all_bell_slots'] = list(BellSchedule.objects.all().order_by('lesson_number'))
+        context['all_classes'] = list(ClassGroup.objects.all().order_by('grade', 'letter', 'name'))
     except Exception:
         pass
 

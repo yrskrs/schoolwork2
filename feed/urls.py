@@ -14,6 +14,8 @@ urlpatterns = [
     path('api/client-disconnect/', views.client_disconnect, name='client_disconnect'),
     path('assignment/<int:pk>/', views.assignment_detail, name='assignment_detail'),
     path('clear-class/', views.clear_class_filter, name='clear_class_filter'),
+    path('api/classes/', views.api_classes_list, name='api_classes_list'),
+    path('api/teacher-schedules/', views.api_teacher_schedules, name='api_teacher_schedules'),
 
     # ── Здача робіт та кабінет учня ───────────────────────────────────────────
     path('assignment/<int:pk>/submit/', views.submit_assignment, name='submit_assignment'),
@@ -50,8 +52,10 @@ urlpatterns = [
 
     # ── Оцінювання та коментарі (AJAX) ───────────────────────────────────────
     path('teacher/submission/<int:sub_id>/grade/', views.grade_submission, name='grade_submission'),
+    path('teacher/submissions/mass-grade/', views.mass_grade_submissions, name='mass_grade_submissions'),
     path('teacher/submission/<int:sub_id>/comment/', views.add_submission_comment, name='add_submission_comment'),
     path('teacher/submission/<int:sub_id>/delete/', views.delete_submission, name='delete_submission'),
+    path('api/teacher/live-status/', views.teacher_live_status, name='teacher_live_status'),
 
     # ── Електронний журнал оцінок та експорт у CSV ───────────────────────────
     path('teacher/gradebook/', views.gradebook, name='gradebook'),

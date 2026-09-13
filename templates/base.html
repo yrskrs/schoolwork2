@@ -13,6 +13,13 @@
                 document.documentElement.style.backgroundColor = '#f8fafc';
                 document.documentElement.style.colorScheme = 'light';
             }
+            try {
+                var fs = localStorage.getItem('sn-font-scale') || '100';
+                var scaleVal = parseInt(fs, 10);
+                if (isNaN(scaleVal) || scaleVal < 90 || scaleVal > 120) scaleVal = 100;
+                document.documentElement.setAttribute('data-font-scale', scaleVal.toString());
+                document.documentElement.style.zoom = (scaleVal / 100).toString();
+            } catch(e) {}
         })();
     </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -70,32 +77,83 @@
             <a href="{% url 'student_submissions_portal' %}" class="nav-link-quiet" title="Мої здані роботи">
                 📥 <span class="nav-btn-text">Мої роботи</span>
             </a>
+
+            <!-- 🔤 Масштабування шрифтів сайту (для учнів/гостей) -->
+            <div class="font-scale-wrapper" style="position:relative;display:inline-flex;align-items:center;">
+                <button type="button" id="font-scale-toggle-btn" class="theme-toggle" aria-label="Змінити розмір шрифту" title="Розмір тексту (Шрифт: 90% - 120%)" onclick="toggleFontScaleMenu(event)">
+                    <span style="font-size:13px;font-weight:800;letter-spacing:-0.5px;">A<span style="font-size:10.5px;font-weight:700;">a</span></span>
+                </button>
+                <div id="font-scale-dropdown" class="font-scale-dropdown" style="display:none;position:absolute;top:calc(100% + 6px);right:0;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);box-shadow:0 10px 25px rgba(0,0,0,0.18);padding:8px 10px;min-width:185px;z-index:1050;">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+                        <span style="font-size:10.5px;font-weight:800;color:var(--color-text-muted);text-transform:uppercase;letter-spacing:0.04em;">Розмір тексту</span>
+                        <span id="font-scale-active-badge-guest" class="font-scale-val-badge">100%</span>
+                    </div>
+                    <div style="display:grid;grid-template-columns:repeat(4, 1fr);gap:4px;margin-bottom:6px;">
+                        <button type="button" onclick="applyFontScale(90)" class="btn btn-sm font-scale-choice-btn" data-scale="90" title="90% (Компактний)" style="font-size:11px;padding:4px 2px;font-weight:700;">90%</button>
+                        <button type="button" onclick="applyFontScale(100)" class="btn btn-sm font-scale-choice-btn" data-scale="100" title="100% (Стандартний)" style="font-size:11px;padding:4px 2px;font-weight:700;">100%</button>
+                        <button type="button" onclick="applyFontScale(110)" class="btn btn-sm font-scale-choice-btn" data-scale="110" title="110% (Збільшений)" style="font-size:11px;padding:4px 2px;font-weight:700;">110%</button>
+                        <button type="button" onclick="applyFontScale(120)" class="btn btn-sm font-scale-choice-btn" data-scale="120" title="120% (Великий)" style="font-size:11px;padding:4px 2px;font-weight:700;">120%</button>
+                    </div>
+                    <div style="display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--color-border);padding-top:6px;font-size:11px;">
+                        <span style="color:var(--color-text-muted);">Безпечні межі</span>
+                        <button type="button" onclick="applyFontScale(100)" style="background:none;border:none;color:var(--color-primary);cursor:pointer;font-weight:700;font-size:11px;padding:0;">Скинути</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ✨ Оновлення та версія сайту (Changelog для учнів) -->
+            <button type="button" 
+                    id="site-changelog-btn" 
+                    class="nav-btn-changelog" 
+                    onclick="openChangelogModal()" 
+                    title="Що нового на сайті (версія {{ site_version_full|default:'2.4.0' }})" 
+                    aria-label="Оновлення та історія змін сайту">
+                <span class="changelog-sparkle" aria-hidden="true">✨</span>
+                <span class="changelog-version-tag">{{ site_version|default:"v2.4" }}</span>
+            </button>
             {% endif %}
 
             {% if user.is_authenticated and user.teacher_profile %}
-            <!-- 📅 Кнопка «Розклад на сьогодні» з живим індикатором уроку (лише для вчителів) -->
+            <!-- 📅 Компактний статус-піл розкладу для вчителя -->
             <button type="button" 
                     id="today-schedule-nav-btn" 
-                    class="nav-btn-schedule" 
+                    class="nav-schedule-pill {% if live_lesson_status and live_lesson_status.status_type == 'in_lesson' %}status-in-lesson{% elif live_lesson_status and live_lesson_status.status_type == 'in_break' %}status-in-break{% endif %}" 
                     onclick="openTodayScheduleModal()" 
-                    title="Розклад уроків на сьогодні"
-                    style="display:inline-flex;align-items:center;gap:6px;padding:5px 11px;font-size:12.5px;font-weight:700;border-radius:var(--radius-md);border:1px solid var(--color-border);background:var(--color-surface);color:var(--color-text-primary);cursor:pointer;transition:all 0.15s ease;">
-                <span>📅</span>
-                <span class="nav-btn-text">
+                    title="{% if live_lesson_status and live_lesson_status.title %}{{ live_lesson_status.title }} — {{ live_lesson_status.time_info }}{% else %}Розклад уроків на сьогодні{% endif %}">
+                <span class="schedule-pill-icon">
+                    {% if live_lesson_status and live_lesson_status.status_type == 'in_lesson' %}
+                        <span class="live-dot-pulse green"></span>
+                    {% elif live_lesson_status and live_lesson_status.status_type == 'in_break' %}
+                        <span class="live-dot-pulse amber"></span>
+                    {% else %}
+                        📅
+                    {% endif %}
+                </span>
+                <span class="nav-btn-text" id="live-bell-text">
                     {% if live_lesson_status and live_lesson_status.status_type == 'in_lesson' %}
                         <span style="color:#10b981;">{{ live_lesson_status.badge_text }}</span>
                     {% elif live_lesson_status and live_lesson_status.status_type == 'in_break' %}
                         <span style="color:#f59e0b;">{{ live_lesson_status.badge_text }}</span>
                     {% else %}
-                        Розклад на сьогодні
+                        Розклад
                     {% endif %}
                 </span>
+                <div id="nav-schedule-progress-bar" class="schedule-pill-progress" style="width:{% if live_lesson_status and live_lesson_status.progress_percent %}{{ live_lesson_status.progress_percent }}{% else %}0{% endif %}%;display:{% if live_lesson_status and live_lesson_status.status_type in 'in_lesson in_break' %}block{% else %}none{% endif %};background:{% if live_lesson_status and live_lesson_status.status_type == 'in_break' %}#f59e0b{% else %}#10b981{% endif %};"></div>
             </button>
-            {% endif %}
 
-            <button id="theme-toggle-btn" class="theme-toggle" type="button" aria-label="Перемикач теми">🌙</button>
+            <!-- ➕ Створити нове завдання (компактна дія) -->
+            <a href="{% url 'assignment_create' %}" class="btn btn-primary btn-sm nav-btn-create" style="font-weight:700;display:inline-flex;align-items:center;gap:5px;padding:5px 11px;border-radius:var(--radius-md);text-decoration:none;" title="Створити нове навчальне завдання">
+                <span>➕</span> <span class="nav-btn-text nav-btn-text-full">Завдання</span>
+            </a>
 
-            {% if user.is_authenticated and user.teacher_profile %}
+            <!-- 📋 Перехід до кабінету вчителя -->
+            <a href="{% url 'teacher_dashboard' %}" class="nav-link-quiet nav-btn-dashboard" title="Панель вчителя">
+                <span>📋</span> <span class="nav-btn-text">Панель</span>
+                {% if pending_submissions_count and pending_submissions_count > 0 %}
+                <span class="nav-badge">{{ pending_submissions_count }}</span>
+                {% endif %}
+            </a>
+
             <!-- 🔔 Центр сповіщень вчителя -->
             <div class="notifications-dropdown-wrapper" id="notifications-menu" style="position:relative;">
                 <button type="button" class="theme-toggle" id="notifications-btn" aria-label="Центр сповіщень" aria-expanded="false" style="position:relative;display:flex;align-items:center;justify-content:center;font-size:16px;" title="Центр сповіщень">
@@ -169,44 +227,112 @@
                     </div>
                 </div>
             </div>
+            {% endif %}
 
-            <a href="{% url 'assignment_create' %}" class="btn btn-primary btn-sm" style="font-weight:700;display:inline-flex;align-items:center;gap:5px;padding:5px 12px;border-radius:var(--radius-md);text-decoration:none;" title="Створити нове навчальне завдання">
-                <span>➕</span> <span class="nav-btn-text">Нове завдання</span>
-            </a>
-            <a href="{% url 'teacher_dashboard' %}" class="nav-link-quiet" title="Панель вчителя">
-                📋 <span class="nav-btn-text">Панель</span>
-                {% if pending_submissions_count and pending_submissions_count > 0 %}
-                <span class="nav-badge">{{ pending_submissions_count }}</span>
-                {% endif %}
-            </a>
+            <!-- 🌙 Швидкий перемикач теми (для всіх користувачів в 1 клік) -->
+            <button id="theme-toggle-btn" class="theme-toggle" type="button" aria-label="Перемикач теми" title="Змінити тему (Світла / Темна)">🌙</button>
+
+            {% if user.is_authenticated and user.teacher_profile %}
+            <!-- 👤 Меню профілю вчителя (з інтегрованими системними налаштуваннями) -->
             <div class="user-menu" id="user-menu">
-                <button type="button" class="user-menu-btn" id="user-menu-btn" aria-haspopup="true" aria-expanded="false">
+                <button type="button" class="user-menu-btn" id="user-menu-btn" aria-haspopup="true" aria-expanded="false" title="{{ user.teacher_profile.full_name|default:user.username }}">
                     {% if user.teacher_profile.avatar_image %}
-                    <img src="{{ user.teacher_profile.avatar_image.url }}" alt="" class="avatar-mini-img" style="width:28px;height:28px;border-radius:50%;object-fit:cover;">
+                    <img src="{{ user.teacher_profile.avatar_image.url }}" alt="" class="avatar-mini-img" style="width:28px;height:28px;border-radius:50%;object-fit:cover;flex-shrink:0;">
                     {% else %}
-                    <span class="avatar-mini" style="background:{{ user.teacher_profile.avatar_color|default:'#6366f1' }};width:28px;height:28px;font-size:11px;display:inline-flex;align-items:center;justify-content:center;color:#fff;border-radius:50%;">
+                    <span class="avatar-mini" style="background:{{ user.teacher_profile.avatar_color|default:'#6366f1' }};width:28px;height:28px;font-size:11px;display:inline-flex;align-items:center;justify-content:center;color:#fff;border-radius:50%;flex-shrink:0;">
                         {{ user.teacher_profile.get_initials|default:"В" }}
                     </span>
                     {% endif %}
                     <span class="user-menu-name">{{ user.teacher_profile.full_name|default:user.username }}</span>
+                    <span class="user-menu-chevron" aria-hidden="true">▾</span>
                 </button>
                 <div class="user-menu-panel" role="menu">
-                    <a href="{% url 'teacher_dashboard' %}">📋 Мої завдання</a>
-                    <a href="{% url 'all_submissions_dashboard' %}">📥 Здані роботи</a>
-                    <a href="{% url 'gradebook' %}">📊 Журнал</a>
-                    <a href="{% url 'teacher_students' %}">👥 Учні та класи</a>
-                    <a href="{% url 'teacher_settings' %}">⚙️ Налаштування</a>
+                    <!-- Шапка профілю в меню -->
+                    <div class="user-menu-header">
+                        <div class="user-menu-header-avatar">
+                            {% if user.teacher_profile.avatar_image %}
+                            <img src="{{ user.teacher_profile.avatar_image.url }}" alt="" style="width:34px;height:34px;border-radius:50%;object-fit:cover;">
+                            {% else %}
+                            <span class="avatar-mini" style="background:{{ user.teacher_profile.avatar_color|default:'#6366f1' }};width:34px;height:34px;font-size:13px;display:inline-flex;align-items:center;justify-content:center;color:#fff;border-radius:50%;">
+                                {{ user.teacher_profile.get_initials|default:"В" }}
+                            </span>
+                            {% endif %}
+                        </div>
+                        <div class="user-menu-header-meta">
+                            <div class="user-menu-header-name">{{ user.teacher_profile.full_name|default:user.username }}</div>
+                            <div class="user-menu-header-sub">{% if is_superadmin_mode %}👑 Супер-адміністратор{% else %}👨‍🏫 Вчитель{% endif %}</div>
+                        </div>
+                    </div>
+
+                    <div class="user-menu-divider"></div>
+
+                    <!-- Робочий простір -->
+                    <div class="user-menu-section-label">Робочий простір</div>
+                    <a href="{% url 'teacher_dashboard' %}" class="user-menu-link">
+                        <span>📋</span> <span>Мої завдання</span>
+                    </a>
+                    <a href="{% url 'all_submissions_dashboard' %}" class="user-menu-link">
+                        <span>📥</span> <span>Здані роботи</span>
+                        {% if pending_submissions_count and pending_submissions_count > 0 %}
+                        <span class="nav-badge" style="margin-left:auto;">{{ pending_submissions_count }}</span>
+                        {% endif %}
+                    </a>
+                    <a href="{% url 'gradebook' %}" class="user-menu-link">
+                        <span>📊</span> <span>Журнал оцінок</span>
+                    </a>
+                    <a href="{% url 'teacher_students' %}" class="user-menu-link">
+                        <span>👥</span> <span>Учні та класи</span>
+                    </a>
+
+                    <div class="user-menu-divider"></div>
+
+                    <!-- Налаштування кабінету -->
+                    <div class="user-menu-section-label">Кабінет</div>
+                    <a href="{% url 'teacher_settings' %}" class="user-menu-link">
+                        <span>⚙️</span> <span>Налаштування</span>
+                    </a>
                     {% if user.is_superuser and not is_superadmin_mode %}
-                    <a href="{% url 'enter_superadmin_mode' %}">👑 Режим адміна</a>
+                    <a href="{% url 'enter_superadmin_mode' %}" class="user-menu-link">
+                        <span>👑</span> <span>Режим адміна</span>
+                    </a>
                     {% endif %}
-                    <form method="POST" action="{% url 'teacher_logout' %}">
+
+                    <div class="user-menu-divider"></div>
+
+                    <!-- Вигляд та доступність -->
+                    <div class="user-menu-section-label">Вигляд та система</div>
+                    <div class="user-menu-font-control">
+                        <div class="user-menu-font-header">
+                            <span>🔤 Масштаб тексту</span>
+                            <span id="font-scale-active-badge" class="font-scale-val-badge">100%</span>
+                        </div>
+                        <div class="user-menu-font-grid">
+                            <button type="button" onclick="applyFontScale(90)" class="btn btn-sm font-scale-choice-btn" data-scale="90" title="90% (Компактний)">90%</button>
+                            <button type="button" onclick="applyFontScale(100)" class="btn btn-sm font-scale-choice-btn" data-scale="100" title="100% (Стандартний)">100%</button>
+                            <button type="button" onclick="applyFontScale(110)" class="btn btn-sm font-scale-choice-btn" data-scale="110" title="110% (Збільшений)">110%</button>
+                            <button type="button" onclick="applyFontScale(120)" class="btn btn-sm font-scale-choice-btn" data-scale="120" title="120% (Великий)">120%</button>
+                        </div>
+                    </div>
+
+                    <button type="button" class="user-menu-link" onclick="openChangelogModal()" style="border:none;background:none;width:100%;cursor:pointer;">
+                        <span class="changelog-sparkle" aria-hidden="true">✨</span>
+                        <span>Що нового</span>
+                        <span class="user-menu-version-badge">{{ site_version|default:"v2.4" }}</span>
+                    </button>
+
+                    <div class="user-menu-divider"></div>
+
+                    <!-- Вихід -->
+                    <form method="POST" action="{% url 'teacher_logout' %}" style="margin:0;">
                         {% csrf_token %}
-                        <button type="submit" class="danger">Вийти</button>
+                        <button type="submit" class="user-menu-link danger" style="width:100%;">
+                            <span>🚪</span> <span>Вийти</span>
+                        </button>
                     </form>
                 </div>
             </div>
             {% else %}
-            <a href="{% url 'teacher_login' %}" class="btn btn-secondary btn-sm">Вхід</a>
+            <a href="{% url 'teacher_login' %}" class="btn btn-secondary btn-sm" style="font-weight:700;">Вхід</a>
             {% endif %}
         </div>
     </div>
@@ -252,6 +378,63 @@
 {% block extra_scripts %}{% endblock %}
 
 <script>
+    // ── Управління масштабуванням шрифтів (Безпечні межі 90% - 120%) ──
+    function toggleFontScaleMenu(e) {
+        if (e) e.stopPropagation();
+        const dd = document.getElementById('font-scale-dropdown');
+        if (!dd) return;
+        const isHidden = (dd.style.display === 'none' || !dd.style.display);
+        dd.style.display = isHidden ? 'block' : 'none';
+    }
+
+    function applyFontScale(scaleVal) {
+        scaleVal = parseInt(scaleVal, 10);
+        if (isNaN(scaleVal) || scaleVal < 90 || scaleVal > 120) scaleVal = 100;
+
+        document.documentElement.setAttribute('data-font-scale', scaleVal.toString());
+        document.documentElement.style.zoom = (scaleVal / 100).toString();
+
+        try { localStorage.setItem('sn-font-scale', scaleVal.toString()); } catch(e) {}
+
+        updateFontScaleUI(scaleVal);
+    }
+
+    function updateFontScaleUI(currentScale) {
+        document.querySelectorAll('#font-scale-active-badge, #font-scale-active-badge-guest, .font-scale-val-badge').forEach(function(badge) {
+            badge.textContent = currentScale + '%';
+        });
+
+        document.querySelectorAll('.font-scale-choice-btn').forEach(btn => {
+            const s = parseInt(btn.getAttribute('data-scale'), 10);
+            if (s === currentScale) {
+                btn.classList.add('btn-primary');
+                btn.classList.remove('btn-secondary');
+            } else {
+                btn.classList.add('btn-secondary');
+                btn.classList.remove('btn-primary');
+            }
+        });
+    }
+
+    document.addEventListener('click', function(e) {
+        const dd = document.getElementById('font-scale-dropdown');
+        const toggleBtn = document.getElementById('font-scale-toggle-btn');
+        if (dd && dd.style.display === 'block') {
+            if (!dd.contains(e.target) && (!toggleBtn || !toggleBtn.contains(e.target))) {
+                dd.style.display = 'none';
+            }
+        }
+    });
+
+    document.addEventListener('DOMContentLoaded', function() {
+        let curScale = 100;
+        try {
+            curScale = parseInt(localStorage.getItem('sn-font-scale') || '100', 10);
+        } catch(e) {}
+        if (isNaN(curScale) || curScale < 90 || curScale > 120) curScale = 100;
+        updateFontScaleUI(curScale);
+    });
+
     function sendClientHeartbeat() {
         var currentPath = window.location.pathname + window.location.search;
         fetch('/api/heartbeat/?path=' + encodeURIComponent(currentPath), {
@@ -272,7 +455,11 @@
 {% if user.is_authenticated and user.teacher_profile %}
 {% include 'feed/components/today_schedule_modal.html' %}
 {% include 'feed/components/conducted_lessons_modal.html' %}
+<script src="{% static 'js/teacher_live_poll.js' %}"></script>
 {% endif %}
+
+<!-- 📜 Модальне вікно оновлень сайту -->
+{% include 'feed/components/changelog_modal.html' %}
 
 </body>
 </html>
