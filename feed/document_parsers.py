@@ -57,6 +57,22 @@ def extract_text_from_document(file_path_or_file_obj, original_filename=None):
             return _extract_from_plain_text(file_bytes)
         elif ext == '.doc':
             return _extract_from_doc_fallback(file_bytes)
+        elif ext in ['.mdb', '.accdb']:
+            from .access_utils import extract_access_text_for_ai
+            if isinstance(file_path_or_file_obj, str) and os.path.exists(file_path_or_file_obj):
+                res = extract_access_text_for_ai(file_path_or_file_obj)
+                return res, True, None
+            else:
+                import tempfile
+                with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp_acc:
+                    tmp_acc.write(file_bytes)
+                    tmp_acc_path = tmp_acc.name
+                try:
+                    res = extract_access_text_for_ai(tmp_acc_path)
+                    return res, True, None
+                finally:
+                    if os.path.exists(tmp_acc_path):
+                        os.remove(tmp_acc_path)
         else:
             # Спробуємо як docx, потім як excel, потім як plain text
             try:

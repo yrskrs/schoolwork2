@@ -523,3 +523,462 @@ class ComprehensiveScenariosTest(TestCase):
         # 23. Копія потрапила в правильну дату календаря
         resp_cal_new = self.client.get(reverse('index'), {'date': new_lesson_date.strftime('%Y-%m-%d')})
         self.assertContains(resp_cal_new, 'Оригінальне завдання')
+
+    def test_multi_class_schedule_status_and_card_aging(self):
+        """
+        Тестування вимоги:
+        1. Одне завдання для кількох класів з різними уроками.
+        2. Відображення статусу кожного класу (актуальний світиться зеленим, пройдений — сірим).
+        3. Динамічний перехід актуальності між класами у бейджі.
+        4. Блок картки НЕ сіріє, поки не пройшли всі уроки, і стає чорно-білим (card-age-older)
+           лише після проходження всіх уроків.
+        """
+        today = timezone.localtime(timezone.now()).date()
+        yesterday = today - datetime.timedelta(days=1)
+        tomorrow = today + datetime.timedelta(days=1)
+        four_days_ago = today - datetime.timedelta(days=4)
+
+        # Створюємо завдання, опубліковане 5 днів тому
+        assignment = Assignment.objects.create(
+            teacher=self.teacher,
+            subject=self.subject,
+            title='Фізика: Закон Ома для кількох класів',
+            description='Лабораторна робота',
+            status=Assignment.STATUS_PUBLISHED,
+            published_at=timezone.now() - datetime.timedelta(days=5)
+        )
+        assignment.classes.add(self.class_7a, self.class_7b)
+
+        # 7-А мав урок вчора
+        target_7a = AssignmentScheduleTarget.objects.create(
+            assignment=assignment,
+            class_group=self.class_7a,
+            target_date=yesterday,
+            target_day_of_week=yesterday.weekday() + 1,
+            bell_slot=self.bell_1
+        )
+        # 7-Б має урок сьогодні (або завтра)
+        target_7b = AssignmentScheduleTarget.objects.create(
+            assignment=assignment,
+            class_group=self.class_7b,
+            target_date=tomorrow,
+            target_day_of_week=tomorrow.weekday() + 1,
+            bell_slot=self.bell_2
+        )
+
+        # --- Перевірка старіння картки: хоча публікація була 5 днів тому,
+        # уроки ще не закінчились (7-Б на завтра), тому картка свіжа (card-age-today)! ---
+        self.assertEqual(assignment.days_since_all_lessons_passed, 0)
+        self.assertEqual(assignment.age_card_class, 'card-age-today')
+
+        # --- Перевірка статусів класів у get_all_targets_info() ---
+        targets_info = assignment.get_all_targets_info()
+        info_by_cls = {t['class_name']: t for t in targets_info}
+
+        # 7-А: пройдений урок -> status 'past', badge_class 'class-status-past' (сірий)
+        self.assertEqual(info_by_cls['7-А']['status'], 'past')
+        self.assertEqual(info_by_cls['7-А']['badge_class'], 'class-status-past')
+        self.assertTrue(info_by_cls['7-А']['is_past'])
+
+        # 7-Б: майбутній урок -> status 'upcoming', badge_class 'class-status-upcoming'
+        self.assertEqual(info_by_cls['7-Б']['status'], 'upcoming')
+        self.assertEqual(info_by_cls['7-Б']['badge_class'], 'class-status-upcoming')
+        self.assertTrue(info_by_cls['7-Б']['is_upcoming'])
+
+        # --- Перевірка динамічного бейджа: для 7-А урок пройшов, але для 7-Б актуальний на завтра ---
+        badge = assignment.get_relevance_badge()
+        self.assertEqual(badge['badge_class'], 'badge-relevance-upcoming')
+        self.assertIn('7-Б', badge['badge_text'])
+
+        # --- Тепер 7-Б має урок СЬОГОДНІ пізніше (наприклад, увечері) ---
+        bell_evening = BellSchedule.objects.create(
+            lesson_number=8,
+            start_time=datetime.time(23, 0),
+            end_time=datetime.time(23, 45)
+        )
+        target_7b.target_date = today
+        target_7b.target_day_of_week = today.weekday() + 1
+        target_7b.bell_slot = bell_evening
+        target_7b.save()
+
+        # Картка залишається сьогоднішньою (0 днів)
+        self.assertEqual(assignment.days_since_all_lessons_passed, 0)
+        self.assertEqual(assignment.age_card_class, 'card-age-today')
+
+        badge_today = assignment.get_relevance_badge()
+        self.assertEqual(badge_today['badge_class'], 'badge-relevance-today')
+        self.assertIn('7-Б', badge_today['badge_text'])
+
+        # --- Тепер 7-Б має урок ПРЯМО ЗАРАЗ ---
+        now_time = timezone.localtime(timezone.now()).time()
+        start_m = max(0, now_time.hour * 60 + now_time.minute - 10)
+        end_m = min(23 * 60 + 59, now_time.hour * 60 + now_time.minute + 30)
+        bell_now = BellSchedule.objects.create(
+            lesson_number=9,
+            start_time=datetime.time(start_m // 60, start_m % 60),
+            end_time=datetime.time(end_m // 60, end_m % 60)
+        )
+        target_7b.bell_slot = bell_now
+        target_7b.save()
+
+        badge_now = assignment.get_relevance_badge()
+        self.assertEqual(badge_now['badge_class'], 'badge-relevance-now')
+        self.assertIn('7-Б', badge_now['badge_text'])
+
+        # Статус 7-Б у get_all_targets_info() світиться зеленим (now)
+        targets_info_now = assignment.get_all_targets_info()
+        info_now = {t['class_name']: t for t in targets_info_now}
+        self.assertEqual(info_now['7-Б']['status'], 'now')
+        self.assertEqual(info_now['7-Б']['badge_class'], 'class-status-now')
+        self.assertTrue(info_now['7-Б']['is_now'])
+
+        # А 7-А залишається сірим (past)
+        self.assertEqual(info_now['7-А']['status'], 'past')
+        self.assertEqual(info_now['7-А']['badge_class'], 'class-status-past')
+
+        # --- Тепер обидва уроки пройшли 4 дні тому ---
+        target_7a.target_date = four_days_ago
+        target_7a.save()
+        target_7b.target_date = four_days_ago
+        target_7b.save()
+
+        # Тепер усі уроки пройшли 4 дні тому -> картка переходить у card-age-older (чорно-біла)
+        self.assertEqual(assignment.days_since_all_lessons_passed, 4)
+        self.assertEqual(assignment.age_card_class, 'card-age-older')
+
+        # Бейдж відображає завершення всіх уроків
+        badge_past = assignment.get_relevance_badge()
+        self.assertEqual(badge_past['badge_class'], 'badge-relevance-past')
+        self.assertEqual(badge_past['badge_text'], '✓ Всі уроки пройшли')
+
+        # Перевірка рендерингу у головній стрічці
+        resp_feed = self.client.get(reverse('index'))
+        self.assertEqual(resp_feed.status_code, 200)
+        self.assertContains(resp_feed, 'Фізика: Закон Ома для кількох класів')
+        self.assertContains(resp_feed, 'class-status-past')
+
+    def test_card_description_markup_rendered_without_raw_tags(self):
+        """
+        Перевірка, що розмітка (<b>, <strong>, Markdown тощо) коректно рендериться на головній сторінці
+        як відформатований текст, а не виводиться як сирі символи тегів (наприклад, <b>лгнаеапнго</b>).
+        """
+        assignment_html = Assignment.objects.create(
+            teacher=self.teacher,
+            subject=self.subject,
+            title='Завдання з HTML-розміткою',
+            description='<p>Важлива тема: <b>лгнаеапнго</b> та <i>курсив</i></p>',
+            status=Assignment.STATUS_PUBLISHED,
+            published_at=timezone.now()
+        )
+        assignment_html.classes.add(self.class_7a)
+
+        assignment_md = Assignment.objects.create(
+            teacher=self.teacher,
+            subject=self.subject,
+            title='Завдання з Markdown-розміткою',
+            description='Тут є **жирний текст** та *курсив*',
+            status=Assignment.STATUS_PUBLISHED,
+            published_at=timezone.now()
+        )
+        assignment_md.classes.add(self.class_7a)
+
+        # 1. Метод моделі get_card_description повертає безпечний HTML з тегами
+        desc_html = assignment_html.get_card_description()
+        self.assertIn('<b>лгнаеапнго</b>', desc_html)
+        self.assertIn('<i>курсив</i>', desc_html)
+        self.assertNotIn('<p>', desc_html)
+
+        desc_md = assignment_md.get_card_description()
+        self.assertIn('<b>жирний текст</b>', desc_md)
+        self.assertIn('<i>курсив</i>', desc_md)
+        self.assertNotIn('**', desc_md)
+
+        # 2. На головній сторінці теги не ескейпляться як &lt;b&gt; (сирий текст)
+        resp = self.client.get(reverse('index'))
+        self.assertEqual(resp.status_code, 200)
+        content = resp.content.decode('utf-8')
+        self.assertNotIn('&lt;b&gt;лгнаеапнго&lt;/b&gt;', content)
+        self.assertIn('<b>лгнаеапнго</b>', content)
+        self.assertIn('<b>жирний текст</b>', content)
+
+        # 3. У feed_fragment також коректно
+        resp_frag = self.client.get(reverse('feed_fragment'))
+        self.assertEqual(resp_frag.status_code, 200)
+        content_frag = resp_frag.content.decode('utf-8')
+        self.assertNotIn('&lt;b&gt;лгнаеапнго&lt;/b&gt;', content_frag)
+        self.assertIn('<b>лгнаеапнго</b>', content_frag)
+
+    def test_filtered_submissions_navigation_in_file_viewer(self):
+        """
+        Тест збереження фільтрів при перевірці робіт у File Viewer:
+        - Фільтрація за класом, темою/завданням, датою та статусом
+        - Навігація «Попередня» / «Наступна» виключно в межах відфільтрованого списку
+        - Відсутність фолбеку на роботи інших класів/завдань при активному фільтрі
+        - Повернення «Назад» з точним збереженням активних фільтрів
+        """
+        # Створюємо спільне завдання для 7-А та 7-Б
+        assignment = Assignment.objects.create(
+            teacher=self.teacher,
+            subject=self.subject,
+            title='Практична робота з фільтрацією',
+            status=Assignment.STATUS_PUBLISHED,
+            published_at=timezone.now()
+        )
+        assignment.classes.add(self.class_7a, self.class_7b)
+
+        now = timezone.now()
+        # 2 здачі для 7-А
+        sub_7a_1 = Submission.objects.create(
+            assignment=assignment,
+            class_group=self.class_7a,
+            teacher=self.teacher,
+            first_name='Андрій',
+            last_name='Шевченко',
+            comment_student='Робота 1 7-А',
+            submitted_at=now - datetime.timedelta(minutes=30),
+            is_latest_attempt=True
+        )
+        sub_7a_2 = Submission.objects.create(
+            assignment=assignment,
+            class_group=self.class_7a,
+            teacher=self.teacher,
+            first_name='Богдан',
+            last_name='Хмельницький',
+            comment_student='Робота 2 7-А',
+            submitted_at=now - datetime.timedelta(minutes=20),
+            is_latest_attempt=True
+        )
+        # 2 здачі для 7-Б
+        sub_7b_1 = Submission.objects.create(
+            assignment=assignment,
+            class_group=self.class_7b,
+            teacher=self.teacher,
+            first_name='Василь',
+            last_name='Стус',
+            comment_student='Робота 1 7-Б',
+            submitted_at=now - datetime.timedelta(minutes=10),
+            is_latest_attempt=True
+        )
+        sub_7b_2 = Submission.objects.create(
+            assignment=assignment,
+            class_group=self.class_7b,
+            teacher=self.teacher,
+            first_name='Григорій',
+            last_name='Сковорода',
+            comment_student='Робота 2 7-Б',
+            submitted_at=now,
+            is_latest_attempt=True
+        )
+
+        self.client.login(username='scenario_teacher', password='Password123!')
+
+        # 1. Перевірка дашборду всіх здач з фільтром за класом 7-А
+        dash_url = f"{reverse('all_submissions_dashboard')}?class={self.class_7a.id}"
+        resp_dash = self.client.get(dash_url)
+        self.assertEqual(resp_dash.status_code, 200)
+        self.assertIn('filter_querystring', resp_dash.context)
+        self.assertIn(f'class={self.class_7a.id}', resp_dash.context['filter_querystring'])
+        self.assertIn('from=all_submissions', resp_dash.context['filter_querystring'])
+
+        # Посилання «Перевірити» в таблиці містить параметри фільтра
+        expected_sub1_url = f"{reverse('view_file', args=[sub_7a_1.id])}?class={self.class_7a.id}&amp;from=all_submissions"
+        self.assertContains(resp_dash, expected_sub1_url)
+
+        # 2. Відкриваємо першу роботу (sub_7a_2, оскільки order_by -submitted_at) з фільтром 7-А
+        vf_url = f"{reverse('view_file', args=[sub_7a_2.id])}?class={self.class_7a.id}&from=all_submissions"
+        resp_vf = self.client.get(vf_url)
+        self.assertEqual(resp_vf.status_code, 200)
+
+        # Перевірка контексту черги
+        self.assertTrue(resp_vf.context['is_filtered'])
+        self.assertEqual(resp_vf.context['queue_total'], 2)
+        self.assertEqual(resp_vf.context['queue_pos'], 1)
+        self.assertIn('7-А', resp_vf.context['queue_filter_desc'])
+
+        # Наступною має бути sub_7a_1, а не sub_7b_1 чи sub_7b_2!
+        self.assertIsNotNone(resp_vf.context['next_submission'])
+        self.assertEqual(resp_vf.context['next_submission'].id, sub_7a_1.id)
+        self.assertIsNone(resp_vf.context['prev_submission'])
+
+        # Кнопка повернення має вести до all_submissions_dashboard з фільтром 7-А
+        self.assertEqual(resp_vf.context['back_url'], f"{reverse('all_submissions_dashboard')}?class={self.class_7a.id}")
+        self.assertContains(resp_vf, f"{reverse('all_submissions_dashboard')}?class={self.class_7a.id}")
+
+        # Посилання «Наступна » містить параметри фільтрації
+        expected_next_url = f"{reverse('view_file', args=[sub_7a_1.id])}?class={self.class_7a.id}&amp;from=all_submissions"
+        self.assertContains(resp_vf, expected_next_url)
+
+        # 3. Переходимо до останньої роботи 7-А (sub_7a_1)
+        vf_last_url = f"{reverse('view_file', args=[sub_7a_1.id])}?class={self.class_7a.id}&from=all_submissions"
+        resp_vf_last = self.client.get(vf_last_url)
+        self.assertEqual(resp_vf_last.status_code, 200)
+        self.assertEqual(resp_vf_last.context['queue_pos'], 2)
+        self.assertEqual(resp_vf_last.context['prev_submission'].id, sub_7a_2.id)
+
+        # Критично: наступної роботи НЕМАЄ і fallback відключено (не стрибає на 7-Б)!
+        self.assertIsNone(resp_vf_last.context['next_submission'])
+        self.assertIsNone(resp_vf_last.context['next_submission_fallback'])
+        self.assertContains(resp_vf_last, 'Всі роботи у вибраному фільтрі перевірено')
+
+        # 4. Перевірка переходу зі сторінки здач завдання assignment_submissions
+        asgn_sub_url = f"{reverse('assignment_submissions', args=[assignment.id])}?class={self.class_7b.id}"
+        resp_asgn_sub = self.client.get(asgn_sub_url)
+        self.assertEqual(resp_asgn_sub.status_code, 200)
+        self.assertIn(f'class={self.class_7b.id}', resp_asgn_sub.context['filter_querystring'])
+        self.assertIn(f'assignment={assignment.id}', resp_asgn_sub.context['filter_querystring'])
+        self.assertIn('from=assignment_submissions', resp_asgn_sub.context['filter_querystring'])
+
+        # Відкриття роботи 7-Б повертає кнопку назад до assignment_submissions
+        vf_7b_url = f"{reverse('view_file', args=[sub_7b_2.id])}?{resp_asgn_sub.context['filter_querystring']}"
+        resp_vf_7b = self.client.get(vf_7b_url)
+        self.assertEqual(resp_vf_7b.status_code, 200)
+        self.assertEqual(
+            resp_vf_7b.context['back_url'],
+            f"{reverse('assignment_submissions', args=[assignment.id])}?class={self.class_7b.id}&assignment={assignment.id}"
+        )
+        self.assertEqual(resp_vf_7b.context['queue_total'], 2)
+        self.assertEqual(resp_vf_7b.context['next_submission'].id, sub_7b_1.id)
+
+        # 5. Перевірка фільтрації за статусом «ungraded» (без оцінки)
+        sub_7a_1.grade = '11'
+        sub_7a_1.save(update_fields=['grade'])
+
+        # Тепер серед робіт 7-А без оцінки залишилась лише sub_7a_2
+        vf_ungraded_url = f"{reverse('view_file', args=[sub_7a_2.id])}?class={self.class_7a.id}&grade_filter=ungraded"
+        resp_ungraded = self.client.get(vf_ungraded_url)
+        self.assertEqual(resp_ungraded.status_code, 200)
+        self.assertEqual(resp_ungraded.context['queue_total'], 1)
+        self.assertIsNone(resp_ungraded.context['next_submission'])
+        self.assertIn('Без оцінки', resp_ungraded.context['queue_filter_desc'])
+
+        # 6. Перевірка фільтрації за датою
+        today_str = now.strftime('%Y-%m-%d')
+        vf_date_url = f"{reverse('view_file', args=[sub_7a_2.id])}?date={today_str}"
+        resp_date = self.client.get(vf_date_url)
+        self.assertEqual(resp_date.status_code, 200)
+        self.assertTrue(resp_date.context['is_filtered'])
+        self.assertIn(today_str.split('-')[0], resp_date.context['queue_filter_desc'])
+
+    def test_collective_work_submission_and_grade_sync(self):
+        """
+        Тест здачі колективної (групової) роботи з кількома співавторами:
+        1. Здача роботи учнем з додаванням 2 співавторів через форму.
+        2. Перевірка створення зв'язаних робіт у базі даних та позначення як колективна робота.
+        3. Перевірка відображення статусу колективної роботи в інтерфейсі перегляду файлів.
+        4. Виставлення оцінки вчителем першій роботі -> оцінка автоматично ставиться всім співавторам.
+        5. Зміна оцінки через роботу співавтора -> синхронізація оцінки до основної та решти учасників.
+        6. Перевірка відображення оцінки для всіх учасників у журналі gradebook.
+        """
+        from io import BytesIO
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        assignment = Assignment.objects.create(
+            title='Колективний проєкт з інформатики',
+            description='Створіть спільний проєкт у групі.',
+            teacher=self.teacher,
+            subject=self.subject,
+            status=Assignment.STATUS_PUBLISHED
+        )
+        assignment.classes.add(self.class_7a)
+
+        # 1. Учень здає роботу із двома співавторами
+        submit_url = reverse('submit_assignment', args=[assignment.id])
+        fake_file = SimpleUploadedFile("project.txt", b"Group work contents", content_type="text/plain")
+
+        post_data = {
+            'full_name': 'Шевченко Тарас',
+            'class_group': self.class_7a.id,
+            'files': [fake_file],
+            'comment_student': 'Здаємо наш спільний командний проєкт.',
+            'coauthors': ['Франко Іван', 'Леся Українка', ''],  # Включаючи порожнє поле для перевірки очистки
+        }
+
+        resp = self.client.post(submit_url, post_data)
+        self.assertEqual(resp.status_code, 302)
+
+        # 2. Перевіряємо створені роботи
+        subs = list(Submission.objects.filter(assignment=assignment, class_group=self.class_7a))
+        self.assertEqual(len(subs), 3)
+
+        primary_sub = Submission.objects.get(assignment=assignment, last_name='Шевченко', first_name='Тарас')
+        self.assertTrue(primary_sub.is_group_work)
+        self.assertTrue(primary_sub.is_collective_work())
+        self.assertIsNone(primary_sub.primary_submission)
+
+        coauthors_display = primary_sub.get_group_members_display()
+        self.assertIn('Шевченко Тарас', coauthors_display)
+        self.assertIn('Франко Іван', coauthors_display)
+
+        # Перевіряємо наявність робіт для співавторів
+        franko_sub = Submission.objects.filter(assignment=assignment, last_name='Франко').first()
+        self.assertIsNotNone(franko_sub)
+        self.assertTrue(franko_sub.is_group_work)
+        self.assertTrue(franko_sub.is_collective_work())
+        self.assertEqual(franko_sub.primary_submission, primary_sub)
+
+        lesya_sub = Submission.objects.filter(assignment=assignment, last_name__in=['Леся', 'Українка']).first()
+        self.assertIsNotNone(lesya_sub)
+        self.assertTrue(lesya_sub.is_group_work)
+        self.assertEqual(lesya_sub.primary_submission, primary_sub)
+
+        # 3. Вчитель входить у систему та відкриває переглядач роботи первинного автора
+        self.client.login(username='scenario_teacher', password='Password123!')
+        vf_url = reverse('view_file', args=[primary_sub.id])
+        resp_vf = self.client.get(vf_url)
+        self.assertEqual(resp_vf.status_code, 200)
+        self.assertContains(resp_vf, 'Колективна робота')
+        self.assertContains(resp_vf, 'Франко Іван')
+
+        # 4. Вчитель оцінює роботу primary_sub оцінкою «11»
+        grade_resp = self.client.post(vf_url, {
+            'action': 'grade',
+            'grade': '11',
+            'submission_id': primary_sub.id,
+        }, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+
+        self.assertEqual(grade_resp.status_code, 200)
+        grade_json = grade_resp.json()
+        self.assertEqual(grade_json['status'], 'success')
+        self.assertEqual(grade_json['grade'], '11')
+        self.assertTrue(len(grade_json['coauthors_graded']) >= 2)
+
+        # Перевіряємо оновлення оцінок у базі для всіх трьох учнів
+        primary_sub.refresh_from_db()
+        franko_sub.refresh_from_db()
+        lesya_sub.refresh_from_db()
+
+        self.assertEqual(primary_sub.grade, '11')
+        self.assertEqual(franko_sub.grade, '11')
+        self.assertEqual(lesya_sub.grade, '11')
+        self.assertEqual(franko_sub.graded_by, self.user)
+        self.assertEqual(lesya_sub.graded_by, self.user)
+
+        # 5. Зворотна синхронізація: вчитель відкриває роботу Франка і змінює оцінку на «12»
+        vf_franko_url = reverse('view_file', args=[franko_sub.id])
+        grade_resp2 = self.client.post(vf_franko_url, {
+            'action': 'grade',
+            'grade': '12',
+            'submission_id': franko_sub.id,
+        }, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(grade_resp2.status_code, 200)
+
+        primary_sub.refresh_from_db()
+        franko_sub.refresh_from_db()
+        lesya_sub.refresh_from_db()
+
+        self.assertEqual(primary_sub.grade, '12')
+        self.assertEqual(franko_sub.grade, '12')
+        self.assertEqual(lesya_sub.grade, '12')
+
+        # 6. Перевіряємо електронний журнал (gradebook)
+        gb_url = f"{reverse('gradebook')}?class={self.class_7a.id}"
+        resp_gb = self.client.get(gb_url)
+        self.assertEqual(resp_gb.status_code, 200)
+        self.assertContains(resp_gb, 'Шевченко')
+        self.assertContains(resp_gb, 'Франко')
+        self.assertContains(resp_gb, '12')
+
+
+
+
+

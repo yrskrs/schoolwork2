@@ -328,39 +328,53 @@
                             <!-- Існуючі файли при редагуванні -->
                             {% if is_edit and existing_files %}
                             <div class="form-group" style="margin-bottom:16px;">
-                                <label class="form-label" style="font-weight:700;">Поточні прикріплені файли:</label>
-                                <div class="existing-files">
+                                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:6px;">
+                                    <label class="form-label" style="font-weight:700;margin:0;">Поточні прикріплені файли:</label>
+                                    <span style="font-size:12px;color:var(--color-text-muted);">🎯 Оберіть файл з умовою для ШІ (якщо потрібно)</span>
+                                </div>
+                                <div class="existing-files" style="display:flex;flex-direction:column;gap:6px;">
                                     {% for file in existing_files %}
-                                    <div class="existing-file-item" style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:var(--radius-md);">
-                                        <div style="display:flex;align-items:center;gap:8px;">
+                                    <div class="existing-file-item" style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:var(--radius-md);gap:8px;flex-wrap:wrap;">
+                                        <div style="display:flex;align-items:center;gap:8px;min-width:0;flex:1;">
                                             <span>{{ file.get_file_icon }}</span>
-                                            <span class="file-name" style="font-weight:700;font-size:13px;">{{ file.original_name }}</span>
-                                            <span class="text-muted text-sm">{{ file.get_size_display }}</span>
+                                            <span class="file-name" style="font-weight:700;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ file.original_name }}</span>
+                                            <span class="text-muted text-sm">({{ file.get_size_display }})</span>
                                         </div>
-                                        <label class="delete-file-label" style="color:var(--color-danger);font-weight:700;font-size:12px;cursor:pointer;display:flex;align-items:center;gap:4px;">
-                                            <input type="checkbox" name="delete_files" value="{{ file.id }}" class="delete-file-checkbox">
-                                            🗑 Видалити
-                                        </label>
+                                        <div style="display:flex;align-items:center;gap:12px;flex-shrink:0;">
+                                            <label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;font-size:11.5px;font-weight:700;color:var(--color-primary);background:rgba(99,102,241,0.08);padding:3px 8px;border-radius:4px;border:1px solid rgba(99,102,241,0.25);" title="Позначити цей файл як основну умову завдання для ШІ">
+                                                <input type="radio" name="ai_task_file" value="existing:{{ file.id }}" {% if file.is_task_source_for_ai %}checked{% endif %} class="ai-task-radio" onchange="setAiTaskFileSelection(this.value)">
+                                                <span>🎯 Умова для ШІ</span>
+                                            </label>
+                                            <label class="delete-file-label" style="color:var(--color-danger);font-weight:700;font-size:12px;cursor:pointer;display:flex;align-items:center;gap:4px;">
+                                                <input type="checkbox" name="delete_files" value="{{ file.id }}" class="delete-file-checkbox">
+                                                🗑 Видалити
+                                            </label>
+                                        </div>
                                     </div>
                                     {% endfor %}
                                 </div>
                             </div>
                             {% endif %}
 
-                            <!-- Завантаження нових файлів -->
+                            <!-- Завантаження нових файлів (Накопичувальний вибір з різних папок) -->
                             <div class="form-group" style="margin:0;">
-                                <label class="form-label" style="font-weight:700;">
-                                    {% if is_edit %}Додати нові файли{% else %}Файли завдань (PDF, Word, Excel, презентації, фото, коди){% endif %}
-                                </label>
+                                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:6px;">
+                                    <label class="form-label" style="font-weight:700;margin:0;">
+                                        {% if is_edit %}Додати нові файли{% else %}Файли завдань (PDF, Word, Excel, презентації, фото, коди){% endif %}
+                                    </label>
+                                    <span style="font-size:12px;color:var(--color-text-muted);" id="files-summary-count">
+                                        💡 Можна додавати файли по одному або групами з різних папок
+                                    </span>
+                                </div>
                                 <div class="file-upload-area" id="upload-area" role="button" tabindex="0"
                                      aria-label="Натисніть або перетягніть файли для завантаження"
-                                     style="border:2px dashed var(--color-border);border-radius:var(--radius-lg);padding:24px;text-align:center;background:var(--color-bg-secondary);cursor:pointer;transition:all 0.2s;">
-                                    <div class="upload-icon" style="font-size:36px;margin-bottom:8px;">📁</div>
-                                    <div class="upload-text" style="font-weight:800;font-size:14px;color:var(--color-text-primary);">Натисніть або перетягніть файли сюди</div>
-                                    <div class="upload-hint" style="font-size:12px;color:var(--color-text-muted);margin-top:4px;">Будь-які типи файлів: PDF, DOCX, XLSX, PPTX, JPG, PNG, ZIP, PY, HTML тощо.</div>
-                                    <input type="file" id="id_files" name="files" multiple class="form-file-input">
+                                     style="border:2px dashed var(--color-border);border-radius:var(--radius-lg);padding:22px;text-align:center;background:var(--color-bg-secondary);cursor:pointer;transition:all 0.2s;">
+                                    <div class="upload-icon" style="font-size:36px;margin-bottom:6px;">📁</div>
+                                    <div class="upload-text" id="upload-text-label" style="font-weight:800;font-size:14px;color:var(--color-text-primary);">Натисніть або перетягніть файли сюди</div>
+                                    <div class="upload-hint" style="font-size:12px;color:var(--color-text-muted);margin-top:4px;">Будь-які формати: PDF, DOCX, XLSX, PPTX, JPG, PNG, ZIP, PY тощо. При додаванні файлів із різних папок попередні файли НЕ зникають!</div>
+                                    <input type="file" id="id_files" name="files" multiple class="form-file-input" style="display:none;">
                                 </div>
-                                <!-- Попередній перегляд файлів -->
+                                <!-- Попередній перегляд доданих файлів із можливістю видалення кожного та вибору файлу для ШІ -->
                                 <div id="upload-preview" class="upload-preview" style="margin-top:10px;"></div>
                             </div>
 
@@ -522,52 +536,213 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     updateScheduledState();
 
-    // 3. Завантаження файлів (Drag & Drop + preview)
+    // 3. Накопичувальне завантаження файлів (Drag & Drop + вибір з різних папок + видалення по одному + позначка для ШІ)
     var uploadArea = document.getElementById('upload-area');
     var fileInput = document.getElementById('id_files');
     var preview = document.getElementById('upload-preview');
+    var summaryCount = document.getElementById('files-summary-count');
+    var uploadTextLabel = document.getElementById('upload-text-label');
 
-    if (uploadArea && fileInput) {
-        uploadArea.addEventListener('click', function() { fileInput.click(); });
-        ['dragenter', 'dragover'].forEach(function(e) {
-            uploadArea.addEventListener(e, function(evt) {
-                evt.preventDefault();
-                uploadArea.style.borderColor = 'var(--color-primary)';
-                uploadArea.style.background = 'rgba(99,102,241,0.06)';
-            });
+    // Клієнтське сховище для накопичення файлів з різних папок
+    var assignmentFilesStore = new DataTransfer();
+    var currentAiTaskFile = '';
+
+    // Перевіряємо чи є вже обраний файл серед існуючих
+    var initialChecked = document.querySelector('.ai-task-radio:checked');
+    if (initialChecked) {
+        currentAiTaskFile = initialChecked.value;
+    }
+
+    function formatBytes(bytes) {
+        if (!bytes || bytes === 0) return '0 Б';
+        if (bytes < 1024) return bytes + ' Б';
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' КБ';
+        return (bytes / (1024 * 1024)).toFixed(1) + ' МБ';
+    }
+
+    function getFileIcon(filename) {
+        var parts = filename.split('.');
+        var ext = parts.length > 1 ? parts.pop().toLowerCase() : '';
+        if (['jpg', 'jpeg', 'png', 'webp', 'gif', 'svg', 'bmp', 'heic'].includes(ext)) return '🖼️';
+        if (['pdf'].includes(ext)) return '📕';
+        if (['doc', 'docx', 'odt', 'rtf'].includes(ext)) return '📘';
+        if (['xls', 'xlsx', 'ods', 'csv', 'tsv'].includes(ext)) return '📊';
+        if (['ppt', 'pptx', 'odp'].includes(ext)) return '📽️';
+        if (['zip', 'rar', '7z', 'tar', 'gz'].includes(ext)) return '🗜️';
+        if (['py', 'js', 'html', 'css', 'ts', 'json', 'cpp', 'c', 'java', 'cs', 'sql', 'sh'].includes(ext)) return '💻';
+        if (['sb3'].includes(ext)) return '🐱';
+        if (['hex'].includes(ext)) return '⚡';
+        return '📄';
+    }
+
+    function addFilesToStore(fileList) {
+        if (!fileList || !fileList.length) return;
+        for (var i = 0; i < fileList.length; i++) {
+            var f = fileList[i];
+            var duplicate = false;
+            for (var j = 0; j < assignmentFilesStore.files.length; j++) {
+                if (assignmentFilesStore.files[j].name === f.name && assignmentFilesStore.files[j].size === f.size) {
+                    duplicate = true;
+                    break;
+                }
+            }
+            if (!duplicate) {
+                assignmentFilesStore.items.add(f);
+            }
+        }
+        if (fileInput) {
+            fileInput.files = assignmentFilesStore.files;
+        }
+        renderNewFilesUI();
+    }
+
+    window.removeAssignmentNewFile = function(index) {
+        var newStore = new DataTransfer();
+        var removedFile = assignmentFilesStore.files[index];
+        for (var i = 0; i < assignmentFilesStore.files.length; i++) {
+            if (i !== index) {
+                newStore.items.add(assignmentFilesStore.files[i]);
+            }
+        }
+        assignmentFilesStore = newStore;
+        if (fileInput) {
+            fileInput.files = assignmentFilesStore.files;
+        }
+        if (removedFile && currentAiTaskFile === 'new:' + removedFile.name) {
+            currentAiTaskFile = '';
+        }
+        renderNewFilesUI();
+    };
+
+    window.setAiTaskFileSelection = function(val) {
+        currentAiTaskFile = val;
+        document.querySelectorAll('.ai-task-radio').forEach(function(rb) {
+            rb.checked = (rb.value === val);
         });
-        ['dragleave', 'drop'].forEach(function(e) {
-            uploadArea.addEventListener(e, function(evt) {
-                evt.preventDefault();
+        renderNewFilesUI();
+    };
+
+    function renderNewFilesUI() {
+        if (!preview) return;
+        preview.innerHTML = '';
+
+        var totalFiles = assignmentFilesStore.files.length;
+        if (totalFiles === 0) {
+            if (summaryCount) summaryCount.innerHTML = '💡 Можна додавати файли по одному або групами з різних папок';
+            if (uploadTextLabel) uploadTextLabel.textContent = 'Натисніть або перетягніть файли сюди';
+            if (uploadArea) {
                 uploadArea.style.borderColor = 'var(--color-border)';
                 uploadArea.style.background = 'var(--color-bg-secondary)';
+            }
+            return;
+        }
+
+        var totalBytes = 0;
+        for (var k = 0; k < totalFiles; k++) {
+            totalBytes += assignmentFilesStore.files[k].size;
+        }
+
+        if (uploadArea) {
+            uploadArea.style.borderColor = 'var(--color-success)';
+            uploadArea.style.background = 'rgba(16, 185, 129, 0.05)';
+        }
+        if (uploadTextLabel) {
+            uploadTextLabel.innerHTML = '➕ Додати ще файли (з цієї або іншої папки)';
+        }
+        if (summaryCount) {
+            var countLabel = totalFiles === 1 ? '1 новий файл' : (totalFiles < 5 ? totalFiles + ' нові файли' : totalFiles + ' нових файлів');
+            summaryCount.innerHTML = '📎 Обрано нових файлів: <strong>' + countLabel + '</strong> (' + formatBytes(totalBytes) + ')';
+        }
+
+        var headerNotice = document.createElement('div');
+        headerNotice.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;font-size:12px;font-weight:700;color:var(--color-text-primary);flex-wrap:wrap;gap:6px;';
+        headerNotice.innerHTML = '<span>📋 Додані нові файли (' + totalFiles + '):</span>' +
+            '<span style="font-size:11.5px;color:var(--color-text-muted);font-weight:normal;">🎯 Позначте радіокнопку для ШІ, якщо саме в цьому файлі є умова</span>';
+        preview.appendChild(headerNotice);
+
+        var list = document.createElement('div');
+        list.style.cssText = 'display:flex;flex-direction:column;gap:6px;';
+
+        Array.from(assignmentFilesStore.files).forEach(function(f, idx) {
+            var item = document.createElement('div');
+            var isAiChecked = (currentAiTaskFile === 'new:' + f.name);
+            item.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--color-surface);border:1px solid ' + (isAiChecked ? 'var(--color-primary)' : 'var(--color-border)') + ';border-radius:6px;font-size:13px;gap:8px;flex-wrap:wrap;transition:all 0.15s;';
+            if (isAiChecked) {
+                item.style.background = 'rgba(99,102,241,0.04)';
+            }
+
+            var safeName = f.name.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+            var leftCol = '<div style="display:flex;align-items:center;gap:8px;min-width:0;flex:1;">' +
+                '<span style="font-size:16px;">' + getFileIcon(f.name) + '</span>' +
+                '<span style="font-weight:700;color:var(--color-text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + safeName + '">' + safeName + '</span>' +
+                '<span style="color:var(--color-text-muted);font-size:11.5px;white-space:nowrap;">(' + formatBytes(f.size) + ')</span>' +
+            '</div>';
+
+            var rightCol = '<div style="display:flex;align-items:center;gap:12px;flex-shrink:0;">' +
+                '<label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;font-size:11.5px;font-weight:700;color:var(--color-primary);background:rgba(99,102,241,0.08);padding:3px 8px;border-radius:4px;border:1px solid rgba(99,102,241,0.25);" title="Вказати цей файл як основну умову завдання для ШІ">' +
+                    '<input type="radio" name="ai_task_file" value="new:' + safeName + '" ' + (isAiChecked ? 'checked' : '') + ' onchange="setAiTaskFileSelection(this.value)" class="ai-task-radio">' +
+                    '<span>🎯 Умова для ШІ</span>' +
+                '</label>' +
+                '<button type="button" onclick="removeAssignmentNewFile(' + idx + ')" style="background:none;border:none;color:var(--color-danger);cursor:pointer;font-weight:800;font-size:14px;padding:2px 6px;border-radius:4px;transition:background 0.15s;" title="Видалити цей файл зі списку">✕</button>' +
+            '</div>';
+
+            item.innerHTML = leftCol + rightCol;
+            list.appendChild(item);
+        });
+
+        preview.appendChild(list);
+    }
+
+    if (uploadArea && fileInput) {
+        uploadArea.addEventListener('click', function(e) {
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON') return;
+            fileInput.click();
+        });
+
+        ['dragenter', 'dragover'].forEach(function(evtName) {
+            uploadArea.addEventListener(evtName, function(evt) {
+                evt.preventDefault();
+                uploadArea.style.borderColor = 'var(--color-primary)';
+                uploadArea.style.background = 'rgba(99,102,241,0.08)';
             });
         });
+
+        ['dragleave', 'drop'].forEach(function(evtName) {
+            uploadArea.addEventListener(evtName, function(evt) {
+                evt.preventDefault();
+                if (assignmentFilesStore.files.length > 0) {
+                    uploadArea.style.borderColor = 'var(--color-success)';
+                    uploadArea.style.background = 'rgba(16, 185, 129, 0.05)';
+                } else {
+                    uploadArea.style.borderColor = 'var(--color-border)';
+                    uploadArea.style.background = 'var(--color-bg-secondary)';
+                }
+            });
+        });
+
         uploadArea.addEventListener('drop', function(evt) {
-            if (evt.dataTransfer.files.length) {
-                fileInput.files = evt.dataTransfer.files;
-                renderFilePreview(fileInput.files);
+            evt.preventDefault();
+            if (evt.dataTransfer.files && evt.dataTransfer.files.length) {
+                addFilesToStore(evt.dataTransfer.files);
             }
         });
+
         fileInput.addEventListener('change', function() {
-            renderFilePreview(fileInput.files);
+            if (this.files && this.files.length) {
+                addFilesToStore(this.files);
+            }
+            this.value = '';
         });
     }
 
-    function renderFilePreview(files) {
-        if (!preview) return;
-        preview.innerHTML = '';
-        if (!files || !files.length) return;
-
-        var list = document.createElement('div');
-        list.style.cssText = 'display:flex;flex-direction:column;gap:6px;margin-top:8px;';
-        Array.from(files).forEach(function(f) {
-            var item = document.createElement('div');
-            item.style.cssText = 'display:flex;justify-content:space-between;padding:8px 12px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:6px;font-size:13px;';
-            item.innerHTML = '<span>📄 <strong>' + f.name + '</strong></span><span style="color:var(--color-text-muted);">' + (f.size / 1024).toFixed(1) + ' KB</span>';
-            list.appendChild(item);
+    // При відправці форми гарантуємо передачу всіх накопичених файлів
+    var formEl = document.getElementById('assignment-form');
+    if (formEl && fileInput) {
+        formEl.addEventListener('submit', function() {
+            if (assignmentFilesStore.files.length > 0) {
+                fileInput.files = assignmentFilesStore.files;
+            }
         });
-        preview.appendChild(list);
     }
 });
 

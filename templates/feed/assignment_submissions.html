@@ -190,6 +190,11 @@
                                         🤖 Ознаки ШІ ({{ submission.get_ai_generated_confidence_display|default:submission.ai_generated_confidence }})
                                     </span>
                                 {% endif %}
+                                {% if submission.is_collective_work %}
+                                    <span class="badge" style="background:#e0e7ff;color:#3730a3;border:1px solid #c7d2fe;font-size:10.5px;font-weight:700;padding:2px 6px;" title="Колективна робота. Учасники: {{ submission.get_group_members_display|join:', ' }}">
+                                        👥 Колективна робота
+                                    </span>
+                                {% endif %}
                             </div>
                             <div class="submission-meta" style="font-size:12px;color:var(--color-text-muted);display:flex;gap:10px;margin-top:2px;">
                                 <span>🏫 {{ submission.class_group.name }}</span>
@@ -219,7 +224,7 @@
                                 <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;">
                                     {% for sf in submission.files.all %}
                                     <div style="display:inline-flex;align-items:center;background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:var(--radius-sm);overflow:hidden;">
-                                        <a href="{% url 'view_file' submission.id %}?file_id={{ sf.id }}" class="btn btn-sm" style="font-size:12px;padding:5px 10px;border:none;background:none;color:var(--color-text-primary);display:inline-flex;align-items:center;gap:6px;text-decoration:none;" title="Відкрити '{{ sf.original_name }}' у File Viewer">
+                                        <a href="{% url 'view_file' submission.id %}?file_id={{ sf.id }}{% if filter_querystring %}&{{ filter_querystring }}{% endif %}" class="btn btn-sm" style="font-size:12px;padding:5px 10px;border:none;background:none;color:var(--color-text-primary);display:inline-flex;align-items:center;gap:6px;text-decoration:none;" title="Відкрити '{{ sf.original_name }}' у File Viewer">
                                             <span>{{ sf.get_file_icon }}</span>
                                             <span style="font-weight:700;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ sf.original_name|default:sf.file.name }}</span>
                                             <span style="font-size:10.5px;color:var(--color-text-muted);">({{ sf.get_size_display }})</span>
@@ -233,7 +238,7 @@
                             </div>
                             {% elif submission.file %}
                             <div style="display:inline-flex;align-items:center;background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:var(--radius-sm);overflow:hidden;">
-                                <a href="{% url 'view_file' submission.id %}" class="btn btn-sm" style="font-size:12px;padding:5px 10px;border:none;background:none;color:var(--color-text-primary);display:inline-flex;align-items:center;gap:6px;text-decoration:none;">
+                                <a href="{% url 'view_file' submission.id %}{% if filter_querystring %}?{{ filter_querystring }}{% endif %}" class="btn btn-sm" style="font-size:12px;padding:5px 10px;border:none;background:none;color:var(--color-text-primary);display:inline-flex;align-items:center;gap:6px;text-decoration:none;">
                                     <span>{{ submission.get_file_icon }}</span>
                                     <span style="font-weight:700;">{{ submission.get_file_name }}</span>
                                     <span style="font-size:10.5px;color:var(--color-text-muted);">({{ submission.get_file_size_display }})</span>
@@ -246,7 +251,7 @@
 
                             {% if submission.link %}
                             <div style="margin-top:6px;">
-                                <a href="{% url 'view_file' submission.id %}" class="btn btn-secondary btn-sm" style="font-size:12px;margin-left:4px;">
+                                <a href="{% url 'view_file' submission.id %}{% if filter_querystring %}?{{ filter_querystring }}{% endif %}" class="btn btn-secondary btn-sm" style="font-size:12px;margin-left:4px;">
                                     🔗 Переглянути посилання
                                 </a>
                             </div>
@@ -289,7 +294,7 @@
                                         <span style="margin-left:8px;font-size:11.5px;color:#059669;">✅ Оцінка: <strong>{{ prev.grade }}</strong></span>
                                         {% endif %}
                                     </div>
-                                    <a href="{% url 'view_file' prev.id %}" class="btn btn-secondary btn-sm" style="font-size:11px;padding:2px 8px;" title="Переглянути матеріали спроби #{{ prev.resubmission_attempt }}">
+                                    <a href="{% url 'view_file' prev.id %}{% if filter_querystring %}?{{ filter_querystring }}{% endif %}" class="btn btn-secondary btn-sm" style="font-size:11px;padding:2px 8px;" title="Переглянути матеріали спроби #{{ prev.resubmission_attempt }}">
                                         👁️ Переглянути спробу #{{ prev.resubmission_attempt }} ↗
                                     </a>
                                 </div>
@@ -370,7 +375,7 @@
 
 
                             <!-- Кнопка повної перевірки -->
-                            <a href="{% url 'view_file' submission.id %}" class="btn btn-success btn-sm" style="width:100%;text-align:center;font-weight:700;margin-top:4px;">
+                            <a href="{% url 'view_file' submission.id %}{% if filter_querystring %}?{{ filter_querystring }}{% endif %}" class="btn btn-success btn-sm" style="width:100%;text-align:center;font-weight:700;margin-top:4px;">
                                 👁️ Перевірити роботу
                             </a>
                         </div>

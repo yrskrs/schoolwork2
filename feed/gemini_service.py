@@ -409,6 +409,121 @@ def extract_images_from_odt(file_path, max_images=3, max_bytes_per_img=8 * 1024 
     return extracted
 
 
+def extract_images_from_pptx(file_path, max_images=6, max_bytes_per_img=8 * 1024 * 1024):
+    """
+    Видобуває вбудовані зображення (слайди, схеми, фотографії, графіки)
+    із презентації PowerPoint (.pptx), які зберігаються у zip-папці ppt/media/.
+    Повертає список словників: [{'name': filename, 'mime_type': mime, 'data': base64_str, 'size_kb': float}].
+    """
+    extracted = []
+    try:
+        with zipfile.ZipFile(file_path, 'r') as z:
+            media_files = [f for f in z.namelist() if f.startswith('ppt/media/')]
+            img_exts = {
+                '.png': 'image/png',
+                '.jpg': 'image/jpeg',
+                '.jpeg': 'image/jpeg',
+                '.webp': 'image/webp',
+                '.bmp': 'image/bmp',
+                '.gif': 'image/gif',
+                '.svg': 'image/svg+xml',
+            }
+            media_files.sort()
+            for mf in media_files:
+                ext = os.path.splitext(mf)[1].lower()
+                if ext in img_exts:
+                    info = z.getinfo(mf)
+                    if 0 < info.file_size <= max_bytes_per_img:
+                        data = z.read(mf)
+                        b64 = base64.b64encode(data).decode('utf-8')
+                        extracted.append({
+                            'name': os.path.basename(mf),
+                            'mime_type': img_exts[ext],
+                            'data': b64,
+                            'size_kb': len(data) / 1024
+                        })
+                        if len(extracted) >= max_images:
+                            break
+    except Exception:
+        pass
+    return extracted
+
+
+def extract_images_from_xlsx(file_path, max_images=4, max_bytes_per_img=8 * 1024 * 1024):
+    """
+    Видобуває вбудовані зображення, діаграми та графіки з електронної таблиці Excel (.xlsx),
+    які зберігаються у zip-папці xl/media/.
+    """
+    extracted = []
+    try:
+        with zipfile.ZipFile(file_path, 'r') as z:
+            media_files = [f for f in z.namelist() if f.startswith('xl/media/')]
+            img_exts = {
+                '.png': 'image/png',
+                '.jpg': 'image/jpeg',
+                '.jpeg': 'image/jpeg',
+                '.webp': 'image/webp',
+                '.bmp': 'image/bmp',
+                '.gif': 'image/gif',
+            }
+            media_files.sort()
+            for mf in media_files:
+                ext = os.path.splitext(mf)[1].lower()
+                if ext in img_exts:
+                    info = z.getinfo(mf)
+                    if 0 < info.file_size <= max_bytes_per_img:
+                        data = z.read(mf)
+                        b64 = base64.b64encode(data).decode('utf-8')
+                        extracted.append({
+                            'name': os.path.basename(mf),
+                            'mime_type': img_exts[ext],
+                            'data': b64,
+                            'size_kb': len(data) / 1024
+                        })
+                        if len(extracted) >= max_images:
+                            break
+    except Exception:
+        pass
+    return extracted
+
+
+def extract_images_from_zip(file_path, max_images=6, max_bytes_per_img=8 * 1024 * 1024):
+    """
+    Видобуває графічні файли (фотографії зошитів, скриншоти тощо) з zip-архіву учня або вчителя.
+    """
+    extracted = []
+    try:
+        with zipfile.ZipFile(file_path, 'r') as z:
+            img_exts = {
+                '.png': 'image/png',
+                '.jpg': 'image/jpeg',
+                '.jpeg': 'image/jpeg',
+                '.webp': 'image/webp',
+                '.bmp': 'image/bmp',
+                '.gif': 'image/gif',
+            }
+            names = [f for f in z.namelist() if not f.startswith('__MACOSX') and not os.path.basename(f).startswith('.')]
+            names.sort()
+            for mf in names:
+                ext = os.path.splitext(mf)[1].lower()
+                if ext in img_exts:
+                    info = z.getinfo(mf)
+                    if 0 < info.file_size <= max_bytes_per_img:
+                        data = z.read(mf)
+                        b64 = base64.b64encode(data).decode('utf-8')
+                        extracted.append({
+                            'name': os.path.basename(mf),
+                            'mime_type': img_exts[ext],
+                            'data': b64,
+                            'size_kb': len(data) / 1024
+                        })
+                        if len(extracted) >= max_images:
+                            break
+    except Exception:
+        pass
+    return extracted
+
+
 def extract_text_from_excel(file_path, max_rows=50, max_cols=20):
     """
     Видобуває дані та таблиці з файлу Excel (.xlsx).
@@ -802,9 +917,17 @@ def extract_submission_content(submission):
     text_parts = []
     inline_media = []
 
-    # 1. Текстовий коментар учня
+    # Автоматично розпізнаємо та прив'язуємо співавторів із коментаря учня (якщо є)
     if submission.comment_student:
-        text_parts.append(f"Коментар/відповідь учня:\n{submission.comment_student.strip()}")
+        try:
+            from .student_matcher import auto_bind_coauthors_from_comment
+            auto_bind_coauthors_from_comment(submission)
+        except Exception:
+            pass
+
+    # 1. Текстовий коментар учня (обов'язково читається ШІ)
+    if submission.comment_student:
+        text_parts.append(f"Коментар/пояснення учня до роботи:\n«{submission.comment_student.strip()}»")
         # Перевіряємо, чи учень не додав посилання у коментарі
         url_match = re.search(r'https?://[^\s<>"\']+', submission.comment_student)
         if url_match and not submission.link:
@@ -969,6 +1092,14 @@ def extract_submission_content(submission):
         elif ext in ['.xlsx', '.xls']:
             excel_text = extract_text_from_excel(file_path)
             text_parts.append(f"Вміст таблиці Excel ({filename}, {file_size_kb:.1f} КБ):\n{excel_text}")
+            if ext == '.xlsx':
+                xlsx_imgs = extract_images_from_xlsx(file_path)
+                for x_img in xlsx_imgs:
+                    inline_media.append({
+                        "mime_type": x_img['mime_type'],
+                        "data": x_img['data']
+                    })
+                    text_parts.append(f"[У таблиці Excel ({filename}) виявлено діаграму/графік: {x_img['name']} ({x_img['size_kb']:.1f} КБ) — передано на візуальний аналіз ШІ]")
 
         elif ext == '.ods':
             ods_text = extract_text_from_opendocument(file_path)
@@ -978,10 +1109,25 @@ def extract_submission_content(submission):
         elif ext in ['.pptx', '.ppt']:
             pptx_text = extract_text_from_powerpoint(file_path)
             text_parts.append(f"Вміст презентації PowerPoint ({filename}, {file_size_kb:.1f} КБ):\n{pptx_text}")
+            if ext == '.pptx':
+                pptx_imgs = extract_images_from_pptx(file_path)
+                for p_img in pptx_imgs:
+                    inline_media.append({
+                        "mime_type": p_img['mime_type'],
+                        "data": p_img['data']
+                    })
+                    text_parts.append(f"[У презентації PowerPoint ({filename}) виявлено вбудоване зображення/слайд: {p_img['name']} ({p_img['size_kb']:.1f} КБ) — передано на візуальний аналіз ШІ]")
 
         elif ext == '.odp':
             odp_text = extract_text_from_opendocument(file_path)
             text_parts.append(f"Вміст презентації OpenDocument (.odp) ({filename}):\n{odp_text or '[Порожня презентація]'}")
+            odp_imgs = extract_images_from_odt(file_path)
+            for o_img in odp_imgs:
+                inline_media.append({
+                    "mime_type": o_img['mime_type'],
+                    "data": o_img['data']
+                })
+                text_parts.append(f"[У презентації OpenDocument ({filename}) виявлено вбудоване зображення: {o_img['name']} ({o_img['size_kb']:.1f} КБ) — передано на візуальний аналіз ШІ]")
 
         # ── Є. ЗОБРАЖЕННЯ (ФОТО ЗОШИТІВ, СКРІНШОТИ, СХЕМИ) ───────────────────
         elif ext in ['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif', '.tiff', '.tif', '.svg', '.heic', '.heif']:
@@ -1009,6 +1155,14 @@ def extract_submission_content(submission):
         elif ext in ['.zip', '.rar', '.7z', '.tar', '.gz', '.tgz']:
             archive_summary = extract_text_from_archive(file_path, ext)
             text_parts.append(f"Вміст прикріпленого архіву ({filename}, {file_size_kb:.1f} КБ):\n{archive_summary}")
+            if ext == '.zip':
+                zip_imgs = extract_images_from_zip(file_path)
+                for z_img in zip_imgs:
+                    inline_media.append({
+                        "mime_type": z_img['mime_type'],
+                        "data": z_img['data']
+                    })
+                    text_parts.append(f"[В архіві ({filename}) знайдено зображення/фото розв'язку: {z_img['name']} ({z_img['size_kb']:.1f} КБ) — передано на візуальний аналіз ШІ]")
 
         # ── З. SCRATCH 3 ПРОЄКТИ (.sb3) ───────────────────────────────────────
         elif ext == '.sb3':
@@ -1252,7 +1406,20 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
         "3. ЯКЩО ВЧИТЕЛЬ У ПОЛІ «ЗАВДАННЯ ДО ВИКОНАННЯ» ВКАЗАВ ЗРОБИТИ ЛИШЕ ПЕВНЕ КОНКРЕТНЕ ЗАВДАННЯ (наприклад: «виконати тільки завдання 2», «зробити вправу 3», «розв'язати номер 4», «виконати лише одне завдання...» тощо):\n"
         "   - ТИ ЗОБОВ'ЯЗАНИЙ ОЦІНЮВАТИ ВИКЛЮЧНО ТЕ КОНКРЕТНЕ ЗАВДАННЯ/ВПРАВУ, ЯКЕ ЗАДАВ ВЧИТЕЛЬ!\n"
         "   - СУВОРО ТА КАТЕГОРИЧНО ЗАБОРОНЕНО знижувати оцінку, занижувати рівень досягнень або писати у «weaknesses» чи «feedback_comment», що робота неповна або що «учень не виконав завдання 1, 3, 4, 5». Всі інші завдання з файлу вважаються НЕЗАДАНИМИ!\n"
-        "   - Якщо учень якісно та правильно виконав вказане вчителем завдання (наприклад, тільки 1 вправу з 5 наявних у документі), робота вважається ВИКОНАНОЮ НА 100% У ПОВНОМУ ОБСЯЗІ і заслуговує на найвищий бал (10-12 балів відповідно до якості виконання)."
+        "   - Якщо учень якісно та правильно виконав вказане вчителем завдання (наприклад, тільки 1 вправу з 5 наявних у документі), робота вважається ВИКОНАНОЮ НА 100% У ПОВНОМУ ОБСЯЗІ і заслуговує на найвищий бал (10-12 балів відповідно до якості виконання).\n"
+        "4. БАГАТОЗАДАЧНІ УМОВИ ТА ПРАВИЛА ВИБОРУ ЗАВДАНЬ («виконати будь-яке завдання на вибір», «одне на вибір» тощо):\n"
+        "   - Якщо вчитель дозволив учням обрати будь-яке завдання з файлу умови:\n"
+        "     * КРОК 1: ШІ спочатку уважно перевіряє, чи зазначив учень, яке саме завдання він виконував: у полі «ВАЖЛИВИЙ КОМЕНТАР / ПОЯСНЕННЯ УЧНЯ» (наприклад: «виконував завдання 2», «робив вправу 3», «завдання №1»), у назві прикріпленого файлу або у тексті відповіді.\n"
+        "     * КРОК 2 (якщо учень зазначив обране завдання): ШІ оцінює саме це завдання за повними критеріями без жодного зниження оцінки за вибір.\n"
+        "     * КРОК 3 (якщо учень НЕ зазначив, яке саме завдання він виконував):\n"
+        "       - ШІ повинен самостійно проаналізувати зміст зданої роботи, зіставити його із завданнями з файлу умови та автоматично визначити найбільш імовірне завдання.\n"
+        "       - ⚠️ ОБОВ'ЯЗКОВО у полях 'weaknesses', 'feedback_comment' та 'summary' чітко зазначити: «Зверніть увагу: ви не вказали, яке саме завдання з умови на вибір ви виконували (визначено як Завдання X). Відсутність зазначення обраного завдання вплинула на оцінку (знижено бал за дотримання вимог оформлення).»\n"
+        "       - ⚠️ ЗНИЗИТИ оцінку на 1-2 бали через недотримання вимоги зазначити обране завдання.\n"
+        "5. КОЛИ ШІ НЕ ЗРОЗУМІВ, ЯКЕ ЗАВДАННЯ ВИКОНАНО АБО РОБОТА НЕ ВІДПОВІДАЄ ЖОДНОМУ ЗАВДАННЮ:\n"
+        "   - Якщо зміст роботи не підходить під жодне завдання з умови, або здано незрозумілий контент, через який неможливо визначити завдання:\n"
+        "     * Встанови 'suggested_grade': 'Доопрацювати', 'level': 'Початковий', 'unclear_task': true.\n"
+        "     * У полі 'format_warning' ОБОВ'ЯЗКОВО поверни: «Не зрозуміло, яке саме завдання виконане. Будь ласка, вкажіть номер завдання в коментарі або перевірте прикріплений файл.»\n"
+        "     * У полях 'summary' та 'feedback_comment' розгорнуто поясни учневі, що за зданими матеріалами не вдалося визначити, яке завдання розв'язувалося, і роботу повернуто на доопрацювання."
     )
 
     # ── КРИТИЧНО: ТОЧНЕ РОЗУМІННЯ СУТІ ЗАВДАННЯ, ЗМІСТОВА ВІДПОВІДНІСТЬ ТА ПОВНОТА ──
@@ -1290,19 +1457,62 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
 
     # Витягуємо вміст прикріплених вчителем файлів до завдання (щоб ШІ знав повну умову завдання)
     if assignment and assignment.files.exists():
+        primary_task_content = []
         teacher_files_content = []
         for af in assignment.files.all():
             if af.file and os.path.exists(af.file.path):
                 af_name = af.original_name or os.path.basename(af.file.name)
+                af_ext = af.get_extension()
+                is_ai_task = getattr(af, 'is_task_source_for_ai', False)
+
+                # Якщо файл позначено як головне джерело умови і це зображення чи PDF — передаємо його до inline_media для Gemini Vision
+                if is_ai_task:
+                    if af_ext in ['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif']:
+                        try:
+                            mime_t = mimetypes.guess_type(af.file.path)[0] or 'image/jpeg'
+                            with open(af.file.path, 'rb') as f_img:
+                                inline_media.append({
+                                    "mime_type": mime_t,
+                                    "data": base64.b64encode(f_img.read()).decode('utf-8')
+                                })
+                        except Exception:
+                            pass
+                    elif af_ext == '.pdf':
+                        try:
+                            if os.path.getsize(af.file.path) <= 16 * 1024 * 1024:
+                                with open(af.file.path, 'rb') as f_pdf:
+                                    inline_media.append({
+                                        "mime_type": "application/pdf",
+                                        "data": base64.b64encode(f_pdf.read()).decode('utf-8')
+                                    })
+                        except Exception:
+                            pass
+
                 af_text = get_normalized_file_content(af.file.path, af.file.name)
-                if af_text:
-                    teacher_files_content.append(f"• Файл завдання вчителя «{af_name}»:\n{af_text[:12000]}")
+                if is_ai_task:
+                    header = f"🎯 ГОЛОВНИЙ ФАЙЛ З УМОВОЮ ЗАВДАННЯ ВІД ВЧИТЕЛЯ «{af_name}» (вчитель зазначив цей файл як першоджерело умови завдання):"
+                    if af_text:
+                        primary_task_content.append(f"{header}\n{af_text[:15000]}")
+                    else:
+                        primary_task_content.append(f"{header} ({af_ext}) [графічний/бінарний файл передано на візуальний аналіз ШІ]")
                 else:
-                    teacher_files_content.append(f"• Прикріплений вчителем файл «{af_name}» ({af.get_extension()})")
+                    if af_text:
+                        teacher_files_content.append(f"• Допоміжний файл вчителя «{af_name}»:\n{af_text[:12000]}")
+                    else:
+                        teacher_files_content.append(f"• Прикріплений вчителем файл «{af_name}» ({af_ext})")
+
+        if primary_task_content:
+            prompt_lines.append("\n═══════════════════════════════════════════════════════════════════")
+            prompt_lines.append("🎯 ОСНОВНИЙ ФАЙЛ З УМОВОЮ ЗАВДАННЯ ДЛЯ ШІ (ВКАЗАНО ВЧИТЕЛЕМ):")
+            prompt_lines.append("Вчитель окремо позначив цей файл як першоджерело умови завдання!")
+            prompt_lines.append("ШІ повинен оцінювати роботу учня на підставі конкретних завдань і вимог саме із цього файлу:")
+            prompt_lines.extend(primary_task_content)
+            prompt_lines.append("═══════════════════════════════════════════════════════════════════\n")
+
         if teacher_files_content:
             prompt_lines.append("\n═══════════════════════════════════════════════════════════════════")
             prompt_lines.append("МАТЕРІАЛИ ДО УРОКУ / ДОВІДКОВІ ФАЙЛИ ВЧИТЕЛЯ:")
-            prompt_lines.append("⚠️ УВАГА ДЛЯ ШІ: Текст нижче — це лише вихідні допоміжні/роздаткові матеріали уроку (підручник, методичка, шаблон або список вправ). Обов'язковий обсяг завдань для учня визначається ВИКЛЮЧНО полем «УМОВА ТА ВИМОГИ ВЧИТЕЛЯ (ЗАВДАННЯ ДО ВИКОНАННЯ)» вище!")
+            prompt_lines.append("⚠️ УВАГА ДЛЯ ШІ: Текст нижче — це додаткові допоміжні/роздаткові матеріали уроку (підручник, методичка, шаблон або список вправ). Обов'язковий обсяг завдань для учня визначається ВИКЛЮЧНО полем «УМОВА ТА ВИМОГИ ВЧИТЕЛЯ (ЗАВДАННЯ ДО ВИКОНАННЯ)» та основним файлом умови!")
             prompt_lines.append("Якщо у файлі міститься 5 завдань, а вчитель вимагав виконати лише одне конкретне — оцінюй виключно це одне завдання! Решта завдань з файлу вважаються незаданими.")
             prompt_lines.extend(teacher_files_content)
             prompt_lines.append("═══════════════════════════════════════════════════════════════════\n")
@@ -1404,29 +1614,34 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
     )
     prompt_lines.append("═══════════════════════════════════════════════════════════════════\n")
 
-    # ── ПЕРЕВІРКА НА СПІВАВТОРІВ (ГРУПОВА РОБОТА) ─────────────────────────────
-    if submission.comment_student:
-        try:
-            from .student_matcher import extract_coauthors_from_comment
-            coauthors = extract_coauthors_from_comment(
-                submission.comment_student,
-                submission.class_group,
-                submission.last_name,
-                submission.first_name
-            )
-            if coauthors:
-                coauthors_str = ", ".join(f"{c['last_name']} {c['first_name']}" for c in coauthors)
-                prompt_lines.append(f"👥 ГРУПОВА РОБОТА / СПІВАВТОРИ: У коментарі учень вказав, що над роботою спільно працювали: {coauthors_str}. Оцінюй роботу як спільний командний проєкт.")
-        except Exception:
-            pass
+    # ── ПЕРЕВІРКА НА СПІВАВТОРІВ ТА КОЛЕКТИВНУ РОБОТУ ─────────────────────────
+    try:
+        from .student_matcher import auto_bind_coauthors_from_comment
+        auto_bind_coauthors_from_comment(submission)
+    except Exception:
+        pass
+
+    if submission.is_group_work or submission.group_authors:
+        authors_str = submission.group_authors or submission.get_student_full_name()
+        prompt_lines.append(
+            f"👥 КОЛЕКТИВНА РОБОТА / СПІВАВТОРИ: Роботу виконано спільно командою учнів ({authors_str}). "
+            "Оцінюй виконання як командний проєкт, враховуючи спільний внесок."
+        )
+
+    # ── ВРАХУВАННЯ КОМЕНТАРЯ УЧНЯ ─────────────────────────────────────────────
+    if submission.comment_student and submission.comment_student.strip():
+        prompt_lines.append(
+            f"💬 ВАЖЛИВИЙ КОМЕНТАР / ПОЯСНЕННЯ УЧНЯ:\n«{submission.comment_student.strip()}»\n"
+            "⚠️ ШІ ЗОБОВ'ЯЗАНИЙ УВАЖНО ПРОЧИТАТИ ЦЕЙ КОМЕНТАР: учень міг написати тут важливі пояснення ходу виконання, текстову відповідь до завдання чи інші суттєві деталі."
+        )
 
     prompt_lines.append(f"\nДАНІ УЧНЯ: {submission.get_student_full_name()} ({class_name})")
     prompt_lines.append("ВИКОНАНА РОБОТА УЧНЯ ДЛЯ ОЦІНЮВАННЯ:")
     prompt_lines.extend(text_parts)
     if is_traditional:
-        prompt_lines.append(f"\nПроаналізуй роботу за класичною (традиційною) 12-бальною системою ({preset_name_display}) та обов'язково поверни JSON з полями: suggested_grade (тільки ціле число 1-12 або 'Доопрацювати'), level, format_warning (рядок із зауваженням або null), summary, strengths (масив), weaknesses (масив), feedback_comment, ai_generated_percent (число 0-100), ai_generated_detected (true/false), ai_generated_confidence ('none'/'low'/'medium'/'high'), ai_generated_details (рядок або null). Поле 'gr_results' поверни порожнім масивом [] або null, оскільки групи результатів НЕ використовуються в класичній системі.")
+        prompt_lines.append(f"\nПроаналізуй роботу за класичною (традиційною) 12-бальною системою ({preset_name_display}) та обов'язково поверни JSON з полями: suggested_grade (тільки ціле число 1-12 або 'Доопрацювати'), level, format_warning (рядок із зауваженням або null), unclear_task (true/false), summary, strengths (масив), weaknesses (масив), feedback_comment, ai_generated_percent (число 0-100), ai_generated_detected (true/false), ai_generated_confidence ('none'/'low'/'medium'/'high'), ai_generated_details (рядок або null). Поле 'gr_results' поверни порожнім масивом [] або null, оскільки групи результатів НЕ використовуються в класичній системі.")
     else:
-        prompt_lines.append(f"\nПроаналізуй роботу згідно з обраними критеріями ({preset_name_display}) та обов'язково поверни JSON з полями: suggested_grade (тільки ціле число 1-12 або 'Доопрацювати'), level, format_warning (рядок із зауваженням або null), summary, strengths (масив), weaknesses (масив), feedback_comment, gr_results (масив об'єктів з code, name, grade, level, comment), ai_generated_percent (число 0-100), ai_generated_detected (true/false), ai_generated_confidence ('none'/'low'/'medium'/'high'), ai_generated_details (рядок або null). Усі оцінки обов'язково мають бути цілими числами (без десятих часток), заокругленими на користь учня.")
+        prompt_lines.append(f"\nПроаналізуй роботу згідно з обраними критеріями ({preset_name_display}) та обов'язково поверни JSON з полями: suggested_grade (тільки ціле число 1-12 або 'Доопрацювати'), level, format_warning (рядок із зауваженням або null), unclear_task (true/false), summary, strengths (масив), weaknesses (масив), feedback_comment, gr_results (масив об'єктів з code, name, grade, level, comment), ai_generated_percent (число 0-100), ai_generated_detected (true/false), ai_generated_confidence ('none'/'low'/'medium'/'high'), ai_generated_details (рядок або null). Усі оцінки обов'язково мають бути цілими числами (без десятих часток), заокругленими на користь учня.")
 
     if custom_prompt:
         system_instruction = custom_prompt.strip()
@@ -1444,6 +1659,15 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
             "  * Оцінюй ВИКЛЮЧНО вказане вчителем завдання.\n"
             "  * КАТЕГОРИЧНО ЗАБОРОНЕНО знижувати бал або писати зауваження про «невиконання решти завдань» — вони вважаються незаданими!\n"
             "  * Робота вважається виконаною у повному обсязі (100%), якщо якісно виконано саме задане вчителем завдання.\n"
+        )
+
+    if "БАГАТОЗАДАЧНІ УМОВИ ТА ПРАВИЛА ВИБОРУ" not in system_instruction:
+        system_instruction += (
+            "\n\nБАГАТОЗАДАЧНІ УМОВИ ТА ПРАВИЛА ВИБОРУ ЗАВДАНЬ («виконати будь-яке завдання на вибір»):\n"
+            "- Якщо вчитель дозволив вибір: спочатку перевір, чи вказав учень номер завдання в коментарі або файлі.\n"
+            "- Якщо учень зазначив завдання — оцінюй його без зниження оцінки за вибір.\n"
+            "- Якщо учень НЕ зазначив, яке завдання обрав: автоматично визнач завдання за змістом, ОБОВ'ЯЗКОВО вкажи у відгуку, що учень не вказав завдання і це вплинуло на оцінку, та ЗНИЗЬ бал на 1-2.\n"
+            "- Якщо НЕ ЗРОЗУМІЛО, яке завдання виконане: постав 'Доопрацювати', 'unclear_task': true, у 'format_warning' напиши: «Не зрозуміло, яке саме завдання виконане. Будь ласка, вкажіть номер завдання в коментарі або перевірте прикріплений файл.»\n"
         )
 
     if "ТОЧНЕ РОЗУМІННЯ СУТІ ЗАВДАННЯ" not in system_instruction:
@@ -1590,6 +1814,30 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                         except (ValueError, TypeError):
                             pass
 
+                    # Визначаємо, чи вдалося ШІ зрозуміти, яке завдання виконано
+                    raw_unclear = result_json.get('unclear_task')
+                    unclear_task = bool(raw_unclear and str(raw_unclear).lower() not in ['false', '0', 'none', 'null'])
+
+                    fw_lower = (format_warning or '').lower()
+                    sum_lower = (summary or '').lower()
+                    fb_lower = (feedback_comment or '').lower()
+
+                    if not unclear_task:
+                        if ('не зрозуміло' in fw_lower and 'завдан' in fw_lower) or ('незрозуміло' in fw_lower and 'завдан' in fw_lower):
+                            unclear_task = True
+                        elif ('не зрозуміло' in sum_lower and 'завдан' in sum_lower) or ('незрозуміло' in sum_lower and 'завдан' in sum_lower):
+                            unclear_task = True
+                        elif ('не зрозуміло, яке саме завдання' in fb_lower) or ('не зрозуміло яке завдання' in fb_lower) or ('незрозуміло, яке завдання' in fb_lower):
+                            unclear_task = True
+
+                    if unclear_task:
+                        suggested_grade = 'Доопрацювати'
+                        if not format_warning or not (('не зрозуміло' in fw_lower or 'незрозуміло' in fw_lower) and 'завдан' in fw_lower):
+                            format_warning = "Не зрозуміло, яке саме завдання виконане. Будь ласка, вкажіть номер завдання (наприклад, «Виконував завдання 2») у коментарі до здачі та надішліть роботу повторно."
+                        unclear_weakness = "Не зрозуміло, яке саме завдання виконане з наданого списку завдань в умові вчителя (не вказано в роботі чи коментарі)."
+                        if unclear_weakness not in weaknesses:
+                            weaknesses.insert(0, unclear_weakness)
+
                     # Захист: якщо ШІ помилково помістив змістовне зауваження (не про технічний тип/розширення файлу)
                     # у поле format_warning, переносимо його до списку зауважень (weaknesses)
                     if format_warning:
@@ -1600,10 +1848,11 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                             '.zip', 'розширенням', 'контейнер', 'тип файл', 'типу файл',
                             'не має розширення', 'без розширення', 'некоректне розширення'
                         ]
-                        is_technical = any(k in fw_lower for k in technical_keywords)
+                        is_unclear_task_msg = (('не зрозуміло' in fw_lower or 'незрозуміло' in fw_lower) and 'завдан' in fw_lower)
+                        is_technical = any(k in fw_lower for k in technical_keywords) or is_unclear_task_msg
                         has_content_keywords = any(k in fw_lower for k in ['замість', 'людин', 'не та тема', 'не той об\'єкт', 'не відповідає темі', 'інший малюнок', 'інше фото'])
 
-                        if not is_technical or (has_content_keywords and not any(ext in fw_lower for ext in ['.py', '.doc', '.xlsx', '.txt', 'розширен'])):
+                        if not is_technical or (has_content_keywords and not is_unclear_task_msg and not any(ext in fw_lower for ext in ['.py', '.doc', '.xlsx', '.txt', 'розширен'])):
                             if format_warning not in weaknesses:
                                 weaknesses.append(format_warning)
                             format_warning = ''
@@ -1725,6 +1974,8 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                         'suggested_grade': suggested_grade,
                         'level': level,
                         'format_warning': format_warning,
+                        'unclear_task': unclear_task,
+                        'summary': summary,
                         'is_traditional': is_traditional,
                         'gr_results': [] if is_traditional else clean_gr_results,
                         'gr_avg': None if is_traditional else avg_gr_grade,
@@ -1751,6 +2002,10 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                     clean_feedback = extract_clean_comment_from_raw_json(raw_text)
                     formatted_feedback = format_raw_json_feedback_for_display(raw_text)
 
+                    unclear_task = ('не зрозуміло' in formatted_feedback.lower() and 'завдан' in formatted_feedback.lower()) or ('незрозуміло' in formatted_feedback.lower() and 'завдан' in formatted_feedback.lower())
+                    if unclear_task:
+                        suggested_grade = 'Доопрацювати'
+
                     submission.ai_suggested_grade = suggested_grade
                     submission.ai_feedback = formatted_feedback
                     submission.ai_model_used = model_name
@@ -1766,6 +2021,9 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                         'clean_feedback': clean_feedback,
                         'feedback_comment': clean_feedback,
                         'suggested_grade': suggested_grade,
+                        'unclear_task': unclear_task,
+                        'format_warning': "Не зрозуміло, яке саме завдання виконане. Будь ласка, вкажіть номер завдання у коментарі до здачі та надішліть роботу повторно." if unclear_task else "",
+                        'summary': clean_feedback,
                         'model_used': model_name
                     }
 

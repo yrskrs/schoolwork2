@@ -70,17 +70,26 @@
 
         {% elif latest_submission and latest_submission.student_ai_checked %}
         <!-- Якщо ШІ вже був запущений раніше, показуємо збережений результат -->
-        <div style="background:var(--color-surface);border:1.5px solid rgba(99,102,241,0.3);border-radius:var(--radius-lg);overflow:hidden;margin-bottom:14px;">
+        <div style="background:var(--color-surface);border:1.5px solid {% if latest_submission.student_ai_grade == 'Доопрацювати' %}rgba(245,158,11,0.5){% else %}rgba(99,102,241,0.3){% endif %};border-radius:var(--radius-lg);overflow:hidden;margin-bottom:14px;">
             <div style="padding:12px 18px;background:linear-gradient(135deg,rgba(99,102,241,0.08),rgba(139,92,246,0.08));border-bottom:1px solid var(--color-border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
                 <div style="font-weight:800;font-size:14px;color:var(--color-text-primary);display:flex;align-items:center;gap:6px;">
                     <span>🤖</span> <span>Попередня оцінка ШІ (Google Gemini)</span>
                 </div>
                 <div>
-                    <span style="font-size:13px;font-weight:900;padding:3px 10px;border-radius:12px;background:rgba(16,185,129,0.15);color:#059669;">
+                    <span style="font-size:13px;font-weight:900;padding:3px 10px;border-radius:12px;{% if latest_submission.student_ai_grade == 'Доопрацювати' %}background:#fef3c7;color:#d97706;border:1px solid #fcd34d;{% else %}background:rgba(16,185,129,0.15);color:#059669;{% endif %}">
                         {{ latest_submission.student_ai_grade|default:"—" }}{% if latest_submission.student_ai_level %} ({{ latest_submission.student_ai_level }}){% endif %}
                     </span>
                 </div>
             </div>
+            {% if "не зрозуміло" in latest_submission.student_ai_summary|lower or "незрозуміло" in latest_submission.student_ai_summary|lower or "не зрозуміло" in latest_submission.student_ai_feedback|lower or "незрозуміло" in latest_submission.student_ai_feedback|lower %}
+            <div style="background:#fffbeb;border-bottom:1px solid #fde68a;padding:12px 18px;display:flex;align-items:flex-start;gap:10px;">
+                <span style="font-size:20px;line-height:1;">⚠️</span>
+                <div>
+                    <div style="font-weight:800;font-size:13px;color:#b45309;margin-bottom:2px;">Не зрозуміло, яке завдання виконане</div>
+                    <div style="font-size:12px;color:#92400e;line-height:1.4;">ШІ не зміг визначити конкретне завдання з умови. Вкажіть номер завдання (наприклад, «Виконував завдання 2») у коментарі до здачі та надішліть роботу повторно.</div>
+                </div>
+            </div>
+            {% endif %}
             {% if latest_submission.student_ai_feedback or latest_submission.student_ai_summary %}
             <div style="padding:12px 18px;font-size:13px;color:var(--color-text-secondary);line-height:1.45;">
                 {{ latest_submission.student_ai_summary|default:latest_submission.student_ai_feedback }}
@@ -158,6 +167,11 @@
                                 {% if sub.is_resubmission or sub.resubmission_attempt > 1 %}
                                 <span class="badge" style="background:#d1fae5;color:#065f46;border:1px solid #a7f3d0;font-size:10px;font-weight:800;padding:1px 5px;">
                                     🔄 Спроба #{{ sub.resubmission_attempt }}
+                                </span>
+                                {% endif %}
+                                {% if sub.is_collective_work %}
+                                <span class="badge" style="background:#e0e7ff;color:#3730a3;border:1px solid #c7d2fe;font-size:10px;font-weight:700;padding:1px 5px;" title="Колективна робота: {{ sub.get_group_members_display|join:', ' }}">
+                                    👥 Колективна робота
                                 </span>
                                 {% endif %}
                             </div>
@@ -267,6 +281,24 @@ function runStudentAICheck(subId) {
             '</div>';
         }
 
+        var unclearTaskHtml = '';
+        var isUnclear = Boolean(
+            data.unclear_task ||
+            (data.format_warning && (data.format_warning.toLowerCase().indexOf('не зрозуміло') !== -1 || data.format_warning.toLowerCase().indexOf('незрозуміло') !== -1)) ||
+            (data.summary && (data.summary.toLowerCase().indexOf('не зрозуміло, яке саме завдання') !== -1 || data.summary.toLowerCase().indexOf('не зрозуміло яке завдання') !== -1))
+        );
+        if (isUnclear) {
+            var warnDetail = data.format_warning || (data.summary && data.summary.toLowerCase().indexOf('не зрозуміло') !== -1 ? data.summary : 'ШІ не зміг визначити, яке саме завдання з наданої вчителем умови ви виконували.');
+            unclearTaskHtml = '<div style="margin-bottom:14px;padding:12px 14px;background:#fffbeb;border:1.5px solid #f59e0b;border-radius:var(--radius-sm);display:flex;align-items:flex-start;gap:10px;">' +
+                '<span style="font-size:22px;line-height:1;">⚠️</span>' +
+                '<div>' +
+                    '<div style="font-weight:800;font-size:13.5px;color:#b45309;margin-bottom:3px;">Не зрозуміло, яке завдання виконане</div>' +
+                    '<div style="font-size:12px;color:#92400e;line-height:1.4;">' + warnDetail + '</div>' +
+                    '<div style="font-size:11.5px;color:#b45309;margin-top:4px;font-weight:600;">💡 Порада: вкажіть у коментарі до здачі номер завдання (наприклад: <em>«Виконував завдання 2»</em>) та надішліть роботу повторно.</div>' +
+                '</div>' +
+            '</div>';
+        }
+
         var html = '<div style="background:var(--color-surface);border:1.5px solid rgba(99,102,241,0.3);border-radius:var(--radius-lg);overflow:hidden;">' +
             '<div style="padding:14px 18px;background:linear-gradient(135deg,rgba(99,102,241,0.06),rgba(139,92,246,0.06));border-bottom:1px solid var(--color-border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">' +
             '<div style="font-weight:800;font-size:15px;color:var(--color-text-primary);display:flex;align-items:center;gap:6px;">' +
@@ -278,6 +310,7 @@ function runStudentAICheck(subId) {
             '</div>' +
             '</div>' +
             '<div style="padding:16px 18px;">' +
+            unclearTaskHtml +
             aiDetectionHtml +
             (data.summary ? '<div style="font-size:13px;color:var(--color-text-secondary);line-height:1.5;margin-bottom:10px;padding:10px 14px;background:var(--color-bg-secondary);border-radius:var(--radius-sm);">' + data.summary + '</div>' : '') +
             (grHtml ? '<div style="font-weight:800;font-size:12.5px;color:var(--color-text-primary);margin-bottom:6px;">📊 Оцінки за групами результатів:</div>' + grHtml : '') +

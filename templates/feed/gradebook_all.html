@@ -39,8 +39,9 @@
                             <th>Учень</th>
                             <th style="text-align:center;">Клас</th>
                             <th>Завдання</th>
-                            <th style="text-align:center;">Дата оцінювання</th>
+                            <th style="text-align:center;">Дата завдання</th>
                             <th style="text-align:center;">Дата здачі</th>
+                            <th style="text-align:center;">Дата оцінювання</th>
                             <th style="text-align:center;">Оцінка</th>
                             <th style="text-align:center;">Дії</th>
                         </tr>
@@ -66,18 +67,23 @@
                                 {% else %}—{% endif %}
                             </td>
                             <td style="text-align:center;">
+                                <span style="font-size:13px;font-weight:600;color:var(--color-text-primary);" title="Дата уроку/завдання">
+                                    {{ sub.effective_grade_date|date:"d.m.Y" }}
+                                </span>
+                            </td>
+                            <td style="text-align:center;font-size:13px;color:var(--color-text-muted);">
+                                {{ sub.submitted_at|date:"d.m.Y H:i" }}
+                            </td>
+                            <td style="text-align:center;">
                                 {% if sub.graded_at %}
                                 <span style="font-size:13px;font-weight:700;color:var(--color-success);" title="Оцінено вчителем">
                                     {{ sub.graded_at|date:"d.m.Y H:i" }}
                                 </span>
                                 {% else %}
-                                <span style="font-size:13px;color:var(--color-text-muted);" title="Дата здачі (graded_at не зафіксовано)">
-                                    {{ sub.submitted_at|date:"d.m.Y H:i" }}
+                                <span style="font-size:13px;color:var(--color-text-muted);" title="Ще не оцінено">
+                                    —
                                 </span>
                                 {% endif %}
-                            </td>
-                            <td style="text-align:center;font-size:13px;color:var(--color-text-muted);">
-                                {{ sub.submitted_at|date:"d.m.Y H:i" }}
                             </td>
                             <td style="text-align:center;">
                                 <div style="display:flex;align-items:center;justify-content:center;gap:6px;">

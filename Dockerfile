@@ -9,6 +9,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     antiword \
     libreoffice-nogui \
     poppler-utils \
+    mdbtools \
     fonts-dejavu-core \
     fonts-liberation \
     && rm -rf /var/lib/apt/lists/*

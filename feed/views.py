@@ -248,25 +248,8 @@ def get_calendar_context(year=None, month=None, selected_date_str=None, class_gr
 
     task_counts = Counter()
     for a in visible_all:
-        if class_group_id:
-            # Для обраного класу беремо дату уроку конкретно для цього класу
-            lesson_d = a.get_lesson_date(for_class=class_group_id)
-            if lesson_d:
-                task_counts[lesson_d.isoformat()] += 1
-        else:
-            # Якщо клас не обрано, завдання може бути призначене різним класам на різні дні
-            target_dates = set()
-            targets = list(a.schedule_targets.all())
-            if targets:
-                for t in targets:
-                    if t.target_date:
-                        target_dates.add(t.target_date)
-            if not target_dates:
-                fallback_d = a.get_lesson_date()
-                if fallback_d:
-                    target_dates.add(fallback_d)
-            for td in target_dates:
-                task_counts[td.isoformat()] += 1
+        for td in a.get_target_dates(for_class=class_group_id):
+            task_counts[td.isoformat()] += 1
 
     cal = calendar.Calendar(firstweekday=0)  # Понеділок (0)
     month_weeks = cal.monthdatescalendar(year, month)
@@ -367,24 +350,24 @@ def _parse_filter_params(request):
 
 def _filter_assignments_by_lesson_date(assignments, dt_val, class_group_id=None):
     """
-    Фільтрує завдання за датою УРОКУ (на яку призначено завдання), а не датою публікації:
-    1. Якщо вказано конкретний клас - фільтрує за цільовою датою уроку для цього класу
-    2. Якщо клас не вказано - вибирає завдання, у яких на цю дату призначено урок хоча б для одного класу
-    3. Якщо розклад не налаштовано, використовується due_date або дата публікації
+    Фільтрує завдання за датою УРОКУ (на яку призначено завдання), гармонізовано з календарем.
+    Гарантує 100% відповідність між бейджами календаря та результатами видачі завдань:
+    якщо в календарі день показує наявність завдання, при переході на цей день завдання завжди відображається.
     """
-    if class_group_id:
-        return assignments.filter(
-            Q(schedule_targets__class_group_id=class_group_id, schedule_targets__target_date=dt_val) |
-            Q(schedule_targets__class_group_id=class_group_id, schedule_targets__target_date__isnull=True, due_date=dt_val) |
-            Q(schedule_targets__isnull=True, due_date=dt_val) |
-            Q(schedule_targets__isnull=True, due_date__isnull=True, published_at__date=dt_val)
-        ).distinct()
-    else:
-        return assignments.filter(
-            Q(schedule_targets__target_date=dt_val) |
-            Q(schedule_targets__isnull=True, due_date=dt_val) |
-            Q(schedule_targets__isnull=True, due_date__isnull=True, published_at__date=dt_val)
-        ).distinct()
+    from datetime import datetime, date as _date
+    if isinstance(dt_val, str):
+        try:
+            dt_val = datetime.strptime(dt_val, '%Y-%m-%d').date()
+        except Exception:
+            return assignments.none()
+    elif hasattr(dt_val, 'date') and not isinstance(dt_val, _date):
+        dt_val = dt_val.date()
+
+    matching_ids = []
+    for a in assignments.prefetch_related('schedule_targets', 'classes'):
+        if dt_val in a.get_target_dates(for_class=class_group_id):
+            matching_ids.append(a.id)
+    return assignments.filter(id__in=matching_ids)
 
 
 def index(request):
@@ -440,6 +423,10 @@ def index(request):
         class_group_id=class_group_id,
         subject_id=subject_id
     )
+
+    if class_group_id:
+        for a in page_obj.object_list:
+            a._for_class_id = class_group_id
 
     context = {
         'assignments': page_obj.object_list,
@@ -763,6 +750,10 @@ def feed_fragment(request):
             selected_date_display = f"{w_name}, {dt.strftime('%d.%m.%Y')}"
         except Exception:
             pass
+
+    if class_group_id:
+        for a in page_obj.object_list:
+            a._for_class_id = class_group_id
 
     context = {
         'assignments': page_obj.object_list,
@@ -1234,11 +1225,14 @@ def assignment_create(request):
             assignment.save(update_fields=['default_ai_preset', 'default_ai_grs', 'allow_student_ai_check', 'allow_ai_usage'])
 
             # Зберігаємо всі прикріплені файли
+            ai_task_file = request.POST.get('ai_task_file', '').strip()
             for f in request.FILES.getlist('files'):
+                is_task = bool(ai_task_file and (ai_task_file == f"new:{f.name}" or ai_task_file == f.name))
                 AssignmentFile.objects.create(
                     assignment=assignment,
                     file=f,
-                    original_name=f.name
+                    original_name=f.name,
+                    is_task_source_for_ai=is_task,
                 )
 
             # Зберігаємо додаткові посилання
@@ -1410,12 +1404,24 @@ def assignment_edit(request, pk):
             assignment.allow_ai_usage = bool(request.POST.get('allow_ai_usage'))
             assignment.save(update_fields=['default_ai_preset', 'default_ai_grs', 'allow_student_ai_check', 'allow_ai_usage'])
 
+            # Оновлюємо позначку головного файлу для ШІ
+            ai_task_file = request.POST.get('ai_task_file', '').strip()
+            AssignmentFile.objects.filter(assignment=assignment).update(is_task_source_for_ai=False)
+            if ai_task_file.startswith('existing:'):
+                try:
+                    exist_id = int(ai_task_file.split(':', 1)[1])
+                    AssignmentFile.objects.filter(assignment=assignment, id=exist_id).update(is_task_source_for_ai=True)
+                except (ValueError, IndexError):
+                    pass
+
             # Додаємо нові файли
             for f in request.FILES.getlist('files'):
+                is_task = bool(ai_task_file and (ai_task_file == f"new:{f.name}" or ai_task_file == f.name))
                 AssignmentFile.objects.create(
                     assignment=assignment,
                     file=f,
-                    original_name=f.name
+                    original_name=f.name,
+                    is_task_source_for_ai=is_task,
                 )
 
             # Оновлюємо додаткові посилання (перезаписуємо)
@@ -1630,6 +1636,7 @@ def assignment_duplicate(request, pk):
             assignment=duplicate,
             file=f.file,
             original_name=f.original_name,
+            is_task_source_for_ai=f.is_task_source_for_ai,
         )
 
     # Копіюємо додаткові посилання
@@ -2604,12 +2611,17 @@ def student_ai_self_check(request, submission_id):
     import json as _json
     is_traditional = bool(result.get('is_traditional') or (assignment.default_ai_preset and assignment.default_ai_preset.evaluation_type == 'traditional'))
     gr_results = [] if is_traditional else result.get('gr_results', [])
+    unclear_task = bool(result.get('unclear_task'))
+    format_warning = result.get('format_warning', '')
 
     submission.student_ai_checked = True
     submission.student_ai_checked_at = timezone.now()
     submission.student_ai_grade = str(result.get('suggested_grade', ''))
     submission.student_ai_level = result.get('level', '')
-    submission.student_ai_summary = result.get('summary', '')
+    summary_text = result.get('summary', '')
+    if unclear_task and not summary_text:
+        summary_text = "Не зрозуміло, яке завдання виконане. Будь ласка, вкажіть номер завдання у коментарі до здачі."
+    submission.student_ai_summary = summary_text
     submission.student_ai_feedback = result.get('feedback_comment', '')
     submission.student_ai_gr_results = _json.dumps(gr_results, ensure_ascii=False) if (gr_results and not is_traditional) else ''
     submission.save(update_fields=[
@@ -2617,6 +2629,22 @@ def student_ai_self_check(request, submission_id):
         'student_ai_grade', 'student_ai_level', 'student_ai_summary',
         'student_ai_feedback', 'student_ai_gr_results',
     ])
+
+    # Якщо це колективна робота — синхронізуємо чернову перевірку для всіх зв'язаних співавторів
+    if submission.is_group_work:
+        from django.db.models import Q
+        root_pk = submission.primary_submission_id or submission.pk
+        Submission.objects.filter(
+            Q(primary_submission_id=root_pk) | Q(pk=root_pk)
+        ).exclude(pk=submission.pk).update(
+            student_ai_checked=True,
+            student_ai_checked_at=submission.student_ai_checked_at,
+            student_ai_grade=submission.student_ai_grade,
+            student_ai_level=submission.student_ai_level,
+            student_ai_summary=submission.student_ai_summary,
+            student_ai_feedback=submission.student_ai_feedback,
+            student_ai_gr_results=submission.student_ai_gr_results,
+        )
 
     # Готуємо відповідь для учня (без технічних полів)
     student_gr_view = []
@@ -2635,6 +2663,8 @@ def student_ai_self_check(request, submission_id):
         'level': submission.student_ai_level,
         'summary': submission.student_ai_summary,
         'feedback': submission.student_ai_feedback,
+        'unclear_task': unclear_task,
+        'format_warning': format_warning,
         'is_traditional': is_traditional,
         'gr_results': student_gr_view,
         'ai_generated_detected': submission.ai_generated_detected,
@@ -2680,14 +2710,21 @@ def accept_student_ai_grade(request, sub_id):
         'graded_by', 'graded_at', 'student_ai_accepted',
     ])
 
+    # Синхронізуємо оцінку зі співавторами колективної роботи
+    coauthors_graded = sync_grades_to_coauthors(submission, submission.grade, request.user)
+
+    log_msg = f"Вчитель прийняв оцінку учнівської самоперевірки ШІ: «{submission.assignment.title if submission.assignment else ''}» — {submission.grade}"
+    if coauthors_graded:
+        log_msg += f" (також виставлено оцінку співавторам: {', '.join(coauthors_graded)})"
+
     log_submission_activity(
         request.user,
         'grade',
-        f"Вчитель прийняв оцінку учнівської самоперевірки ШІ: «{submission.assignment.title if submission.assignment else ''}» — {submission.grade}",
+        log_msg,
         submission=submission
     )
 
-    return JsonResponse({'ok': True, 'grade': submission.grade})
+    return JsonResponse({'ok': True, 'grade': submission.grade, 'coauthors_graded': coauthors_graded})
 
 
 
@@ -2772,7 +2809,10 @@ def view_file(request, submission_id):
                         }
                     })
                 messages.success(request, 'Коментар додано!')
-                return redirect('view_file', submission_id=submission_id)
+                redirect_url = reverse('view_file', kwargs={'submission_id': submission_id})
+                if request.GET:
+                    redirect_url = f"{redirect_url}?{request.GET.urlencode()}"
+                return redirect(redirect_url)
 
         elif action == 'grade':
             grade = request.POST.get('grade', '').strip()
@@ -2782,83 +2822,204 @@ def view_file(request, submission_id):
                 submission.graded_at = timezone.now()
                 submission.save(update_fields=['grade', 'graded_by', 'graded_at'])
 
+                coauthors_graded = sync_grades_to_coauthors(submission, grade, request.user)
+
+                log_msg = f"Вчитель {teacher.full_name} оцінив роботу {submission.get_student_full_name()}: {grade}"
+                if coauthors_graded:
+                    log_msg += f" (також виставлено оцінку співавторам: {', '.join(coauthors_graded)})"
+
                 log_submission_activity(
                     request.user,
                     'grading',
-                    f"Вчитель {teacher.full_name} оцінив роботу {submission.get_student_full_name()}: {grade}",
+                    log_msg,
                     submission=submission
                 )
 
                 if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-                    return JsonResponse({'status': 'success', 'grade': grade})
+                    return JsonResponse({
+                        'status': 'success',
+                        'grade': grade,
+                        'coauthors_graded': coauthors_graded,
+                    })
 
-                messages.success(request, f'Оцінку {grade} успішно збережено!')
-                return redirect('view_file', submission_id=submission_id)
+                succ_msg = f'Оцінку {grade} успішно збережено!'
+                if coauthors_graded:
+                    succ_msg += f" Оцінку також виставлено співавторам: {', '.join(coauthors_graded)}."
+                messages.success(request, succ_msg)
+                redirect_url = reverse('view_file', kwargs={'submission_id': submission_id})
+                if request.GET:
+                    redirect_url = f"{redirect_url}?{request.GET.urlencode()}"
+                return redirect(redirect_url)
 
-    # Логіка навігації (Попередня / Наступна робота)
-    # Якщо передано явний параметр ?assignment= - навігуємось у межах цього завдання.
-    # Якщо параметр відсутній (прямий перехід або з «Усіх робіт») - навігуємось по всьому загальному потоку робіт вчителя.
+    # ── Логіка черги та навігації (Попередня / Наступна робота) ───────────────
+    # Зчитуємо фільтри: клас, завдання, статус оцінювання, дата, пошук, режим, сортування
+    class_filter = request.GET.get('class')
     explicit_assignment_param = request.GET.get('assignment')
+    date_filter = request.GET.get('date', '').strip()
+    grade_filter = request.GET.get('grade_filter', 'all')
+    search_query = request.GET.get('search', '').strip()
+    show_mode = request.GET.get('mode')
+    sort_by = request.GET.get('sort', 'date')
+    sort_order = request.GET.get('order', 'desc')
+
+    selected_class_id = None
+    if class_filter:
+        try:
+            selected_class_id = int(class_filter)
+        except (ValueError, TypeError):
+            selected_class_id = None
+
+    assignment_id = None
     if explicit_assignment_param:
-        nav_qs = Submission.objects.filter(assignment_id=explicit_assignment_param).order_by('-submitted_at')
-        assignment_id = explicit_assignment_param
+        try:
+            assignment_id = int(explicit_assignment_param)
+        except (ValueError, TypeError):
+            assignment_id = None
+
+    # Базовий queryset робіт вчителя
+    if request.user.is_superuser:
+        nav_qs = Submission.objects.all()
     else:
-        assignment_id = None
-        if request.user.is_superuser:
-            nav_qs = Submission.objects.all().order_by('-submitted_at')
-        else:
-            nav_qs = Submission.objects.filter(
-                Q(assignment__teacher=teacher) | Q(teacher=teacher)
-            ).order_by('-submitted_at')
+        nav_qs = Submission.objects.filter(
+            Q(assignment__teacher=teacher) | Q(teacher=teacher)
+        )
+
+    nav_qs = nav_qs.select_related('assignment', 'class_group', 'teacher')
+
+    filter_desc_parts = []
+
+    if selected_class_id:
+        nav_qs = nav_qs.filter(class_group_id=selected_class_id)
+        cls_obj = ClassGroup.objects.filter(id=selected_class_id).first()
+        if cls_obj:
+            filter_desc_parts.append(f"Клас {cls_obj.name}")
+
+    if assignment_id:
+        nav_qs = nav_qs.filter(assignment_id=assignment_id)
+        asgn_obj = Assignment.objects.filter(id=assignment_id).first()
+        if asgn_obj and request.GET.get('from') != 'assignment_submissions':
+            filter_desc_parts.append(f"«{asgn_obj.title[:25]}»")
+
+    if date_filter:
+        try:
+            from datetime import datetime as dt
+            filter_date = dt.strptime(date_filter, '%Y-%m-%d').date()
+            nav_qs = nav_qs.filter(submitted_at__date=filter_date)
+            filter_desc_parts.append(f"Дата {filter_date.strftime('%d.%m.%Y')}")
+        except (ValueError, TypeError):
+            date_filter = ''
+
+    if grade_filter == 'ungraded':
+        # Включаємо поточну роботу, щоб виставлення оцінки не викидало вчителя з черги під час перегляду
+        nav_qs = nav_qs.filter(Q(grade__isnull=True) | Q(grade='') | Q(id=submission.id))
+        filter_desc_parts.append("Без оцінки")
+    elif grade_filter == 'graded':
+        nav_qs = nav_qs.filter((~Q(grade__isnull=True) & ~Q(grade='')) | Q(id=submission.id))
+        filter_desc_parts.append("Оцінені")
+
+    if search_query:
+        nav_qs = fuzzy_search_submissions(nav_qs, search_query)
+        filter_desc_parts.append(f"«{search_query}»")
+
+    if show_mode == 'grouped':
+        nav_qs = nav_qs.filter(Q(is_latest_attempt=True) | Q(id=submission.id))
+
+    # Сортування
+    if sort_by == 'student':
+        order = ['-last_name', '-first_name'] if sort_order == 'desc' else ['last_name', 'first_name']
+    elif sort_by == 'class':
+        order = ['-class_group__name'] if sort_order == 'desc' else ['class_group__name']
+    elif sort_by == 'assignment':
+        order = ['-assignment__title'] if sort_order == 'desc' else ['assignment__title']
+    elif sort_by == 'grade':
+        order = ['-grade'] if sort_order == 'desc' else ['grade']
+    else:
+        order = ['-submitted_at'] if sort_order == 'desc' else ['submitted_at']
+
+    nav_qs = nav_qs.order_by(*order)
+
+    # Визначаємо, чи активна фільтрація вибірки
+    is_filtered = bool(selected_class_id or date_filter or (grade_filter and grade_filter != 'all') or search_query or assignment_id or show_mode)
 
     submission_list = list(nav_qs)
     try:
         current_index = [s.id for s in submission_list].index(submission.id)
         prev_submission = submission_list[current_index - 1] if current_index > 0 else None
         next_submission = submission_list[current_index + 1] if current_index < len(submission_list) - 1 else None
+        queue_pos = current_index + 1
     except ValueError:
         prev_submission = None
         next_submission = None
+        queue_pos = None
+
+    queue_total = len(submission_list)
+    queue_filter_desc = " • ".join(filter_desc_parts) if filter_desc_parts else ""
+
+    # Параметри для посилань вперед/назад та кнопки повернення
+    nav_params = request.GET.copy()
+    nav_params.pop('file_id', None)
+    nav_query_string = nav_params.urlencode()
+
+    back_from = request.GET.get('from')
+    back_params = request.GET.copy()
+    back_params.pop('file_id', None)
+    back_params.pop('from', None)
+    back_querystring = back_params.urlencode()
+
+    if back_from == 'all_submissions' or not submission.assignment:
+        back_url = reverse('all_submissions_dashboard')
+        back_label = "← До всіх здач"
+    elif back_from == 'assignment_submissions' or submission.assignment:
+        back_url = reverse('assignment_submissions', args=[submission.assignment.id])
+        back_label = "← До здач завдання"
+    else:
+        back_url = reverse('all_submissions_dashboard')
+        back_label = "← До списку здач"
+
+    if back_querystring:
+        back_url = f"{back_url}?{back_querystring}"
 
     # Додатковий фолбек для переходу до робіт/завдань:
-    # Якщо в межах поточного списку робіт більше немає, шукаємо наступну роботу в загальному потоці
+    # ТІЛЬКИ якщо НЕ встановлено жодних фільтрів вибірки, шукаємо наступну роботу в загальному потоці
     next_submission_fallback = None
     prev_submission_fallback = None
-    if not next_submission:
-        all_teacher_subs = list(
-            (Submission.objects.all() if request.user.is_superuser else Submission.objects.filter(Q(assignment__teacher=teacher) | Q(teacher=teacher)))
-            .order_by('-submitted_at')
-        )
-        try:
-            all_cur_idx = [s.id for s in all_teacher_subs].index(submission.id)
-            if all_cur_idx < len(all_teacher_subs) - 1:
-                next_submission_fallback = all_teacher_subs[all_cur_idx + 1]
-            if all_cur_idx > 0:
-                prev_submission_fallback = all_teacher_subs[all_cur_idx - 1]
-        except ValueError:
-            pass
-
-    # Навігація між завданнями (Попереднє / Наступне завдання)
     prev_assignment = None
     next_assignment = None
     next_assignment_first_sub = None
     prev_assignment_first_sub = None
-    if submission.assignment:
-        if request.user.is_superuser:
-            asgn_qs = Assignment.objects.all().order_by('-created_at')
-        else:
-            asgn_qs = Assignment.objects.filter(teacher=teacher).order_by('-created_at')
-        asgn_list = list(asgn_qs)
-        try:
-            cur_asgn_idx = [a.id for a in asgn_list].index(submission.assignment.id)
-            if cur_asgn_idx < len(asgn_list) - 1:
-                next_assignment = asgn_list[cur_asgn_idx + 1]
-                next_assignment_first_sub = Submission.objects.filter(assignment=next_assignment).order_by('-submitted_at').first()
-            if cur_asgn_idx > 0:
-                prev_assignment = asgn_list[cur_asgn_idx - 1]
-                prev_assignment_first_sub = Submission.objects.filter(assignment=prev_assignment).order_by('-submitted_at').first()
-        except ValueError:
-            pass
+
+    if not is_filtered:
+        if not next_submission:
+            all_teacher_subs = list(
+                (Submission.objects.all() if request.user.is_superuser else Submission.objects.filter(Q(assignment__teacher=teacher) | Q(teacher=teacher)))
+                .order_by('-submitted_at')
+            )
+            try:
+                all_cur_idx = [s.id for s in all_teacher_subs].index(submission.id)
+                if all_cur_idx < len(all_teacher_subs) - 1:
+                    next_submission_fallback = all_teacher_subs[all_cur_idx + 1]
+                if all_cur_idx > 0:
+                    prev_submission_fallback = all_teacher_subs[all_cur_idx - 1]
+            except ValueError:
+                pass
+
+        # Навігація між завданнями (Попереднє / Наступне завдання)
+        if submission.assignment:
+            if request.user.is_superuser:
+                asgn_qs = Assignment.objects.all().order_by('-created_at')
+            else:
+                asgn_qs = Assignment.objects.filter(teacher=teacher).order_by('-created_at')
+            asgn_list = list(asgn_qs)
+            try:
+                cur_asgn_idx = [a.id for a in asgn_list].index(submission.assignment.id)
+                if cur_asgn_idx < len(asgn_list) - 1:
+                    next_assignment = asgn_list[cur_asgn_idx + 1]
+                    next_assignment_first_sub = Submission.objects.filter(assignment=next_assignment).order_by('-submitted_at').first()
+                if cur_asgn_idx > 0:
+                    prev_assignment = asgn_list[cur_asgn_idx - 1]
+                    prev_assignment_first_sub = Submission.objects.filter(assignment=prev_assignment).order_by('-submitted_at').first()
+            except ValueError:
+                pass
 
     # Отримуємо всі прикріплені файли здачі
     submission_files = list(submission.files.all())
@@ -3077,6 +3238,13 @@ def view_file(request, submission_id):
         'criteria_presets': criteria_presets,
         'default_preset': default_preset,
         'dup_info': dup_info,
+        'is_filtered': is_filtered,
+        'queue_pos': queue_pos,
+        'queue_total': queue_total,
+        'queue_filter_desc': queue_filter_desc,
+        'nav_query_string': nav_query_string,
+        'back_url': back_url,
+        'back_label': back_label,
     }
     return render(request, 'feed/file_viewer.html', context)
 
@@ -3343,6 +3511,12 @@ def assignment_submissions(request, pk):
 
     unsubmitted_students.sort(key=lambda x: (x['class_name'], x['last_name'].lower()))
 
+    filter_params = request.GET.copy()
+    filter_params.pop('page', None)
+    filter_params['assignment'] = str(assignment.pk)
+    filter_params['from'] = 'assignment_submissions'
+    filter_querystring = filter_params.urlencode()
+
     context = {
         'assignment': assignment,
         'page_obj': page_obj,
@@ -3358,6 +3532,7 @@ def assignment_submissions(request, pk):
         'grade_dist': grade_dist,
         'avg_score': avg_score,
         'unsubmitted_students': unsubmitted_students,
+        'filter_querystring': filter_querystring,
     }
     return render(request, 'feed/assignment_submissions.html', context)
 
@@ -3450,6 +3625,11 @@ def all_submissions_dashboard(request):
     total = paginator.count
     graded = all_sub.exclude(grade__isnull=True).exclude(grade='').count()
 
+    filter_params = request.GET.copy()
+    filter_params.pop('page', None)
+    filter_params['from'] = 'all_submissions'
+    filter_querystring = filter_params.urlencode()
+
     context = {
         'page_obj': page_obj,
         'total_count': total,
@@ -3465,33 +3645,89 @@ def all_submissions_dashboard(request):
         'sort_by': sort_by,
         'sort_order': sort_order,
         'teacher': teacher,
+        'filter_querystring': filter_querystring,
     }
     return render(request, 'feed/all_submissions_dashboard.html', context)
 
 
 def sync_grades_to_coauthors(submission, grade, graded_by_user):
     """
-    Автоматично проставляє оцінку всім співавторам групової роботи без повторень.
+    Автоматично проставляє оцінку всім співавторам групової (колективної) роботи без повторень.
     Повертає список імен оновлених/створених робіт співавторів.
     """
-    from .student_matcher import extract_coauthors_from_comment, is_same_student_identity
-    from .models import Submission, Student
+    from .student_matcher import extract_coauthors_from_comment, is_same_student_identity, resolve_canonical_student_name
+    from .models import Submission, SubmissionFile, Student
 
     if not submission.assignment or not grade:
         return []
 
-    coauthors = extract_coauthors_from_comment(
+    graded_names = []
+    processed_identities = set()
+
+    # Додаємо поточну роботу до вже оброблених
+    curr_key = f"{submission.last_name.strip().lower()}_{submission.first_name.strip().lower()}"
+    processed_identities.add(curr_key)
+
+    # 1. Знаходимо кореневу роботу та всі зв'язані через primary_submission
+    root = submission.primary_submission if submission.primary_submission else submission
+    linked_subs = []
+    if root.id != submission.id:
+        linked_subs.append(root)
+    for cs in root.coauthor_submissions.all():
+        if cs.id != submission.id and cs not in linked_subs:
+            linked_subs.append(cs)
+
+    # 2. Оновлюємо вже зв'язані здачі
+    for ls in linked_subs:
+        ls_key = f"{ls.last_name.strip().lower()}_{ls.first_name.strip().lower()}"
+        if ls_key in processed_identities:
+            continue
+        processed_identities.add(ls_key)
+
+        ls.grade = grade
+        ls.graded_by = graded_by_user
+        ls.graded_at = submission.graded_at or timezone.now()
+        if submission.teacher_comment:
+            ls.teacher_comment = submission.teacher_comment
+        ls.save(update_fields=['grade', 'graded_by', 'graded_at', 'teacher_comment'])
+        graded_names.append(ls.get_student_full_name())
+
+    # 3. Додатково перевіряємо текстові списки (group_authors та коментар учня) для повної сумісності
+    candidate_coauthors = []
+
+    # 3.1. З group_authors кореневої або поточної роботи
+    authors_text = root.group_authors or submission.group_authors
+    if authors_text:
+        for a_name in authors_text.split(','):
+            a_clean = a_name.strip()
+            if not a_clean:
+                continue
+            a_ln, a_fn = resolve_canonical_student_name(a_clean, class_group=submission.class_group)
+            if not a_ln and not a_fn:
+                continue
+            cand_k = f"{a_ln.lower()}_{a_fn.lower()}"
+            if cand_k not in processed_identities:
+                candidate_coauthors.append({
+                    'last_name': a_ln,
+                    'first_name': a_fn,
+                    'full_name': f"{a_ln} {a_fn}".strip(),
+                    'student': None,
+                })
+
+    # 3.2. З коментаря учня
+    comment_coauthors = extract_coauthors_from_comment(
         submission.comment_student,
         class_group=submission.class_group,
         exclude_last_name=submission.last_name,
         exclude_first_name=submission.first_name,
     )
+    for cco in comment_coauthors:
+        cand_k = f"{cco['last_name'].lower()}_{cco['first_name'].lower()}"
+        if cand_k not in processed_identities and not any(is_same_student_identity(cco['last_name'], cco['first_name'], c['last_name'], c['first_name']) for c in candidate_coauthors):
+            candidate_coauthors.append(cco)
 
-    graded_names = []
-    processed_identities = set()
-
-    for co in coauthors:
-        co_st = co.get('student')
+    # 4. Обробляємо знайдених кандидатів, якщо для них ще не було зв'язаного запису
+    for co in candidate_coauthors:
         co_ln = co['last_name']
         co_fn = co['first_name']
 
@@ -3500,7 +3736,13 @@ def sync_grades_to_coauthors(submission, grade, graded_by_user):
             continue
         processed_identities.add(ident_key)
 
-        # Шукаємо чи є вже здача від цього співавтора на це завдання
+        co_st = co.get('student')
+        if not co_st:
+            for s in Student.objects.filter(class_group=submission.class_group):
+                if is_same_student_identity(co_ln, co_fn, s.last_name, s.first_name):
+                    co_st = s
+                    break
+
         existing_sub = None
         if co_st:
             existing_sub = Submission.objects.filter(
@@ -3518,10 +3760,15 @@ def sync_grades_to_coauthors(submission, grade, graded_by_user):
         if existing_sub:
             existing_sub.grade = grade
             existing_sub.graded_by = graded_by_user
-            existing_sub.graded_at = timezone.now()
+            existing_sub.graded_at = submission.graded_at or timezone.now()
             if submission.teacher_comment:
                 existing_sub.teacher_comment = submission.teacher_comment
-            existing_sub.save(update_fields=['grade', 'graded_by', 'graded_at', 'teacher_comment'])
+            if not existing_sub.primary_submission and root.id != existing_sub.id:
+                existing_sub.primary_submission = root
+                existing_sub.is_group_work = True
+                existing_sub.save(update_fields=['grade', 'graded_by', 'graded_at', 'teacher_comment', 'primary_submission', 'is_group_work'])
+            else:
+                existing_sub.save(update_fields=['grade', 'graded_by', 'graded_at', 'teacher_comment'])
             graded_names.append(existing_sub.get_student_full_name())
         else:
             new_sub = Submission.objects.create(
@@ -3533,16 +3780,28 @@ def sync_grades_to_coauthors(submission, grade, graded_by_user):
                 teacher=submission.teacher,
                 file=submission.file,
                 link=submission.link,
-                comment_student=f"Групова робота (спільно з {submission.get_student_full_name()})",
+                comment_student=f"Колективна робота (спільно з {submission.get_student_full_name()})",
                 teacher_comment=submission.teacher_comment,
+                is_group_work=True,
+                group_authors=root.group_authors or submission.group_authors,
+                primary_submission=root,
                 grade=grade,
                 graded_by=graded_by_user,
-                graded_at=timezone.now(),
+                graded_at=submission.graded_at or timezone.now(),
                 ai_suggested_grade=submission.ai_suggested_grade,
                 ai_score_level=submission.ai_score_level,
                 ai_feedback=submission.ai_feedback,
                 ai_status=submission.ai_status,
+                is_latest_attempt=True,
             )
+            # Прив'язуємо файли якщо є
+            if hasattr(submission, 'files') and submission.files.exists():
+                for sf in submission.files.all():
+                    SubmissionFile.objects.create(
+                        submission=new_sub,
+                        file=sf.file,
+                        original_name=sf.original_name
+                    )
             graded_names.append(new_sub.get_student_full_name())
 
     return graded_names
@@ -4320,7 +4579,7 @@ def gradebook(request):
     else:
         class_groups = list(teacher.classes.all().order_by('grade', 'letter'))
 
-    selected_class_id = request.GET.get('class_group')
+    selected_class_id = request.GET.get('class_group') or request.GET.get('class')
     view_mode = request.GET.get('view')
 
     if view_mode == 'all_grades':
@@ -4376,8 +4635,11 @@ def gradebook(request):
     for sub in submissions:
         d = sub.effective_grade_date
         dates.add(d)
-        if d not in date_assignments and sub.assignment:
-            date_assignments[d] = sub.assignment.title
+        if sub.assignment:
+            if d not in date_assignments:
+                date_assignments[d] = []
+            if sub.assignment.title not in date_assignments[d]:
+                date_assignments[d].append(sub.assignment.title)
 
     sorted_dates = sorted(dates)
 
@@ -4516,9 +4778,11 @@ def gradebook(request):
 
     dates_meta = []
     for d in filtered_dates:
+        titles = date_assignments.get(d, [])
+        title_str = ", ".join(titles) if titles else f"Заняття {d.strftime('%d.%m.%Y')}"
         dates_meta.append({
             'date': d,
-            'title': date_assignments.get(d, f"Заняття {d.strftime('%d.%m.%Y')}"),
+            'title': title_str,
         })
 
     view_mode = request.GET.get('view_mode', 'journal')
@@ -4533,7 +4797,7 @@ def gradebook(request):
         'sorted_dates': filtered_dates,
         'all_available_dates': sorted_dates,
         'dates_meta': dates_meta,
-        'date_assignments': date_assignments,
+        'date_assignments': {d: ", ".join(titles) for d, titles in date_assignments.items()},
         'class_avg': class_avg,
         'view_mode': view_mode,
         'total_submissions': len(submissions),
@@ -4577,17 +4841,19 @@ def export_grades(request):
 
     import csv
     writer = csv.writer(response)
-    writer.writerow(['Прізвище', "Ім'я", 'Клас', 'Завдання', 'Вчитель', 'Дата здачі', 'Дата оцінювання', 'Оцінка'])
+    writer.writerow(['Прізвище', "Ім'я", 'Клас', 'Завдання', 'Дата завдання', 'Вчитель', 'Дата здачі', 'Дата оцінювання', 'Оцінка'])
 
     for sub in submissions:
         assignment_title = sub.assignment.title if sub.assignment else '-'
         teacher_name = sub.teacher.full_name if sub.teacher else (sub.assignment.teacher.full_name if sub.assignment else '-')
-        graded_at_str = sub.graded_at.strftime('%d.%m.%Y %H:%M') if sub.graded_at else sub.submitted_at.strftime('%d.%m.%Y %H:%M')
+        graded_at_str = sub.graded_at.strftime('%d.%m.%Y %H:%M') if sub.graded_at else ''
+        assign_date_str = sub.effective_grade_date.strftime('%d.%m.%Y')
         writer.writerow([
             sub.last_name,
             sub.first_name,
             sub.class_group.name if sub.class_group else '',
             assignment_title,
+            assign_date_str,
             teacher_name,
             sub.submitted_at.strftime('%d.%m.%Y %H:%M'),
             graded_at_str,

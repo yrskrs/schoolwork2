@@ -217,6 +217,11 @@
                                     {% if submission.ai_generated_detected %}
                                     <span class="badge" style="background:{% if submission.is_ai_allowed %}#ecfdf5;color:#065f46;border:1px solid #a7f3d0;{% else %}#fef2f2;color:#991b1b;border:1px solid #fecaca;{% endif %}font-size:9.5px;padding:1px 4px;font-weight:700;" title="{% if submission.is_ai_allowed %}Ознаки ШІ (дозволено вчителем){% else %}Ознаки ШІ (самостійна робота, заборонено){% endif %}: {{ submission.ai_generated_details }}">🤖 ШІ</span>
                                     {% endif %}
+                                    {% if submission.is_collective_work %}
+                                    <span class="badge" style="background:#e0e7ff;color:#3730a3;border:1px solid #c7d2fe;font-size:9.5px;padding:1px 4px;font-weight:700;" title="Колективна робота. Учасники: {{ submission.get_group_members_display|join:', ' }}">
+                                        👥 Колективна робота
+                                    </span>
+                                    {% endif %}
                                 </div>
                             </td>
                             <td style="padding:6px 4px;text-align:center;white-space:nowrap;">
@@ -236,25 +241,25 @@
                             <td style="padding:6px 4px;text-align:center;white-space:nowrap;">
                                 {% if submission.files.all %}
                                     {% if submission.files.all|length > 1 %}
-                                    <a href="{% url 'view_file' submission.id %}"
+                                    <a href="{% url 'view_file' submission.id %}{% if filter_querystring %}?{{ filter_querystring }}{% endif %}"
                                        class="btn btn-secondary btn-sm" style="font-size:11px;padding:2px 6px;gap:2px;font-weight:700;" title="Прикріплено {{ submission.files.all|length }} файли ({{ submission.get_total_files_size_display }})">
                                         📎 <span style="font-size:10px;">{{ submission.files.all|length }} файли</span>
                                     </a>
                                     {% else %}
                                     {% with sf=submission.files.first %}
-                                    <a href="{% url 'view_file' submission.id %}?file_id={{ sf.id }}"
+                                    <a href="{% url 'view_file' submission.id %}?file_id={{ sf.id }}{% if filter_querystring %}&{{ filter_querystring }}{% endif %}"
                                        class="btn btn-secondary btn-sm" style="font-size:11px;padding:2px 6px;gap:2px;" title="{{ sf.original_name|default:sf.file.name }}">
                                         {{ sf.get_file_icon }} <span style="font-size:10px;">Файл</span>
                                     </a>
                                     {% endwith %}
                                     {% endif %}
                                 {% elif submission.file %}
-                                <a href="{% url 'view_file' submission.id %}"
+                                <a href="{% url 'view_file' submission.id %}{% if filter_querystring %}?{{ filter_querystring }}{% endif %}"
                                    class="btn btn-secondary btn-sm" style="font-size:11px;padding:2px 6px;gap:2px;" title="{{ submission.file.name }}">
                                     {{ submission.get_file_icon }} <span style="font-size:10px;">Файл</span>
                                 </a>
                                 {% elif submission.link %}
-                                <a href="{% url 'view_file' submission.id %}" class="btn btn-secondary btn-sm" style="font-size:11px;padding:2px 6px;gap:2px;" title="{{ submission.link }}">
+                                <a href="{% url 'view_file' submission.id %}{% if filter_querystring %}?{{ filter_querystring }}{% endif %}" class="btn btn-secondary btn-sm" style="font-size:11px;padding:2px 6px;gap:2px;" title="{{ submission.link }}">
                                     🔗 <span style="font-size:10px;">Лінк</span>
                                 </a>
                                 {% else %}
@@ -303,7 +308,7 @@
 
                             <td style="padding:6px 6px;text-align:center;white-space:nowrap;">
                                 <div style="display:inline-flex;gap:3px;align-items:center;justify-content:center;">
-                                    <a href="{% url 'view_file' submission.id %}"
+                                    <a href="{% url 'view_file' submission.id %}{% if filter_querystring %}?{{ filter_querystring }}{% endif %}"
                                        class="btn btn-primary btn-sm" style="font-size:11px;font-weight:700;padding:3px 7px;gap:2px;" title="Відкрити перевірку роботи">
                                         👁️ Перевірити
                                     </a>

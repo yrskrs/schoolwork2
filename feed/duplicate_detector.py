@@ -53,6 +53,17 @@ def get_normalized_file_content(file_path, original_filename=None):
             lines = [line.strip() for line in text_summary.splitlines() if line.strip()]
             return "\n".join(lines)
 
+    # Спеціальна обробка Microsoft Access (.mdb, .accdb)
+    if ext in ['.mdb', '.accdb']:
+        try:
+            from .access_utils import extract_access_text_for_ai
+            access_text = extract_access_text_for_ai(file_path)
+            if access_text:
+                lines = [line.strip() for line in access_text.splitlines() if line.strip()]
+                return "\n".join(lines)
+        except Exception:
+            pass
+
     # Спробуємо розпарсити через універсальний екстрактор документів
     text, success, _ = extract_text_from_document(file_path, filename)
     if success and text:

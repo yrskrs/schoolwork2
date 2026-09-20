@@ -1502,41 +1502,66 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
         self.assertIn("доопрацювання", res2['weaknesses'][0].lower())
 
     def test_gradebook_multiple_evaluation_dates(self):
-        """Тест відображення оцінок за різними датами оцінювання в журналі."""
+        """
+        Тест відображення оцінок за датами завдань у журналі, навіть якщо вчитель
+        виставив оцінки в один і той самий день (наприклад, у п'ятницю).
+        """
         from datetime import datetime
         from django.utils import timezone
         self.client.login(username='teacher1', password='password123')
 
-        dt1 = timezone.make_aware(datetime(2026, 9, 1, 10, 0, 0))
-        dt2 = timezone.make_aware(datetime(2026, 9, 5, 12, 0, 0))
+        d1 = timezone.make_aware(datetime(2026, 9, 1, 9, 0, 0))
+        d2 = timezone.make_aware(datetime(2026, 9, 5, 9, 0, 0))
+        eval_dt = timezone.make_aware(datetime(2026, 9, 8, 16, 30, 0))  # Вчитель перевіряє пізніше
 
-        # Дві роботи, здані одного дня, але оцінені в різні дати
+        # Два різних завдання на різні дати
+        assign1 = Assignment.objects.create(
+            teacher=self.teacher,
+            subject=self.subject,
+            title='Завдання за понеділок',
+            status=Assignment.STATUS_PUBLISHED,
+            published_at=d1
+        )
+        assign1.classes.add(self.class_group)
+
+        assign2 = Assignment.objects.create(
+            teacher=self.teacher,
+            subject=self.subject,
+            title='Завдання за п\'ятницю',
+            status=Assignment.STATUS_PUBLISHED,
+            published_at=d2
+        )
+        assign2.classes.add(self.class_group)
+
+        # Обидві роботи оцінені в один і той самий день (eval_dt)
         sub1 = Submission.objects.create(
-            assignment=self.assignment,
+            assignment=assign1,
             first_name='Петро',
             last_name='Коваленко',
             class_group=self.class_group,
             teacher=self.teacher,
             grade='10',
-            graded_at=dt1
+            graded_at=eval_dt
         )
         sub2 = Submission.objects.create(
-            assignment=self.assignment,
+            assignment=assign2,
             first_name='Петро',
             last_name='Коваленко',
             class_group=self.class_group,
             teacher=self.teacher,
             grade='11',
-            graded_at=dt2
+            graded_at=eval_dt
         )
 
         resp = self.client.get(reverse('gradebook') + f'?class_group={self.class_group.id}&view_mode=journal')
         self.assertEqual(resp.status_code, 200)
-        # Журнал повинен мати дві різні дати оцінювання (01.09 та 05.09)
+        # Журнал повинен мати дві різні дати завдань (01.09 та 05.09), а не дату оцінювання
         self.assertContains(resp, '01.09')
         self.assertContains(resp, '05.09')
         self.assertContains(resp, '10')
         self.assertContains(resp, '11')
+        # Підказка повинна містити дату оцінювання
+        self.assertContains(resp, 'Оцінено: 08.09.2026')
 
         # Перевірка сторінки всіх оцінок
         resp_all = self.client.get(reverse('gradebook') + '?view=all_grades')
@@ -1545,16 +1570,34 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
         self.assertContains(resp_all, '05.09.2026')
 
     def test_gradebook_filters_and_rework_badge(self):
-        """Тест фільтрації за датою, діапазоном оцінок та відображення значка 'Д' (Доопрацювати)."""
+        """Тест фільтрації за датою завдання, діапазоном оцінок та відображення значка 'Д' (Доопрацювати)."""
         from datetime import datetime
         from django.utils import timezone
         self.client.login(username='teacher1', password='password123')
 
         dt1 = timezone.make_aware(datetime(2026, 9, 10, 10, 0, 0))
-        dt2 = timezone.make_aware(datetime(2026, 9, 20, 12, 0, 0))
+        dt2 = timezone.make_aware(datetime(2026, 9, 25, 12, 0, 0))
+
+        assign1 = Assignment.objects.create(
+            teacher=self.teacher,
+            subject=self.subject,
+            title='Завдання 10 вересня',
+            status=Assignment.STATUS_PUBLISHED,
+            published_at=dt1
+        )
+        assign1.classes.add(self.class_group)
+
+        assign2 = Assignment.objects.create(
+            teacher=self.teacher,
+            subject=self.subject,
+            title='Завдання 25 вересня',
+            status=Assignment.STATUS_PUBLISHED,
+            published_at=dt2
+        )
+        assign2.classes.add(self.class_group)
 
         sub_high = Submission.objects.create(
-            assignment=self.assignment,
+            assignment=assign1,
             first_name='Оксана',
             last_name='Шевченко',
             class_group=self.class_group,
@@ -1563,7 +1606,7 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
             graded_at=dt1
         )
         sub_rework = Submission.objects.create(
-            assignment=self.assignment,
+            assignment=assign2,
             first_name='Іван',
             last_name='Бондар',
             class_group=self.class_group,
@@ -1579,11 +1622,11 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
         self.assertContains(resp_j, 'Д')
         self.assertContains(resp_j, 'Доопрацювати')
 
-        # 2. Фільтр за конкретним днем (single_date=2026-09-10)
+        # 2. Фільтр за конкретним днем завдання (single_date=2026-09-10)
         resp_day = self.client.get(reverse('gradebook') + f'?class_group={self.class_group.id}&single_date=2026-09-10')
         self.assertEqual(resp_day.status_code, 200)
         self.assertContains(resp_day, '10.09')
-        self.assertNotContains(resp_day, '20.09')
+        self.assertNotContains(resp_day, '25.09')
 
         # 3. Фільтр за діапазоном оцінок (grade_filter=rework)
         resp_rework = self.client.get(reverse('gradebook') + f'?class_group={self.class_group.id}&grade_filter=rework')
@@ -2678,9 +2721,10 @@ class FirstRunSetupTests(TestCase):
         self.assertEqual(resp_student.status_code, 200)
         # Наявність кнопки оновлень та версії
         self.assertContains(resp_student, 'id="site-changelog-btn"')
-        self.assertContains(resp_student, 'v2.4')
+        self.assertContains(resp_student, 'v2.5')
         self.assertContains(resp_student, 'id="changelog-modal"')
         # Учень бачить учнівські оновлення
+        self.assertContains(resp_student, 'Виконання завдань на вибір та захист від зниження балу')
         self.assertContains(resp_student, 'Компактна форма здачі робіт')
         self.assertContains(resp_student, 'Миттєва самоперевірка робіт через ШІ')
         # Учень НЕ бачить вчительських вкладок чи системних деталей
@@ -2785,6 +2829,428 @@ class AIRawJSONProtectionTests(TestCase):
         self.assertNotIn('{', clean)
         self.assertNotIn('suggested_grade', clean)
         self.assertIn('Іване, робота дуже змістовна!', clean)
+
+
+class AssignmentFileAIAndCoauthorTests(TestCase):
+    """
+    Тести для:
+    1. Позначення файлу з умовою для ШІ при створенні, редагуванні та дублюванні завдання.
+    2. Видобування зображень із файлів презентацій, таблиць та архівів.
+    3. Автоматичного розпізнавання співавторів із коментаря учня та створення зв'язаної здачі.
+    """
+
+    def setUp(self):
+        from feed.models import Subject
+        self.user = User.objects.create_user(username='teacher_ai_test', password='password123', is_staff=True, is_superuser=True)
+        self.teacher = Teacher.objects.create(user=self.user, full_name='Вчитель Інформатики')
+        self.class_group = ClassGroup.objects.create(grade=9, letter='А', name='9-А')
+        self.teacher.classes.add(self.class_group)
+        self.subject = Subject.objects.create(name='Інформатика')
+        self.teacher.subjects.add(self.subject)
+        self.student1 = Student.objects.create(last_name='Коваленко', first_name='Данило', class_group=self.class_group)
+        self.student2 = Student.objects.create(last_name='Мельник', first_name='Софія', class_group=self.class_group)
+
+    def test_ai_task_file_designation_and_duplicate(self):
+        from feed.models import Assignment, AssignmentFile
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        self.client.login(username='teacher_ai_test', password='password123')
+
+        f1 = SimpleUploadedFile("task_description.docx", b"Task condition text in docx", content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+        f2 = SimpleUploadedFile("appendix.pdf", b"%PDF-1.4 additional materials", content_type="application/pdf")
+
+        # 1. Створення завдання з позначенням task_description.docx як умови для ШІ
+        resp = self.client.post(reverse('assignment_create'), {
+            'subject': self.subject.id,
+            'title': 'Практична робота з інформатики',
+            'description': 'Опис практичної роботи',
+            'classes': [self.class_group.id],
+            'publish_choice': 'now',
+            'files': [f1, f2],
+            'ai_task_file': 'new:task_description.docx',
+        })
+        self.assertEqual(resp.status_code, 302)
+
+        asg = Assignment.objects.get(title='Практична робота з інформатики')
+        files = list(asg.files.all())
+        self.assertEqual(len(files), 2)
+
+        f_task = asg.files.get(original_name='task_description.docx')
+        f_app = asg.files.get(original_name='appendix.pdf')
+        self.assertTrue(f_task.is_task_source_for_ai)
+        self.assertFalse(f_app.is_task_source_for_ai)
+
+        # 2. Редагування завдання: змінюємо головну умову для ШІ на appendix.pdf
+        resp_edit = self.client.post(reverse('assignment_edit', args=[asg.pk]), {
+            'subject': self.subject.id,
+            'title': 'Практична робота з інформатики (оновлено)',
+            'classes': [self.class_group.id],
+            'publish_choice': 'now',
+            'ai_task_file': f'existing:{f_app.id}',
+        })
+        self.assertEqual(resp_edit.status_code, 302)
+
+        f_task.refresh_from_db()
+        f_app.refresh_from_db()
+        self.assertFalse(f_task.is_task_source_for_ai)
+        self.assertTrue(f_app.is_task_source_for_ai)
+
+        # 3. Дублювання завдання: перевіряємо збереження is_task_source_for_ai
+        resp_dup = self.client.post(reverse('assignment_duplicate', args=[asg.pk]), {
+            'duplicate_title': 'Практична робота (копія)',
+            'duplicate_classes': [self.class_group.id],
+            'publish_choice': 'now',
+        })
+        self.assertEqual(resp_dup.status_code, 302)
+
+        dup_asg = Assignment.objects.get(title='Практична робота (копія)')
+        dup_app = dup_asg.files.get(original_name='appendix.pdf')
+        dup_task = dup_asg.files.get(original_name='task_description.docx')
+        self.assertTrue(dup_app.is_task_source_for_ai)
+        self.assertFalse(dup_task.is_task_source_for_ai)
+
+    def test_auto_bind_coauthors_from_student_comment(self):
+        from feed.models import Assignment, Submission
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        asg = Assignment.objects.create(
+            subject=self.subject,
+            title='Командний проєкт',
+            teacher=self.teacher,
+            status=Assignment.STATUS_PUBLISHED
+        )
+        asg.classes.add(self.class_group)
+
+        dummy_file = SimpleUploadedFile("project.py", b"print('Hello from team')", content_type="text/plain")
+
+        # Учень здає роботу і в коментарі вказує співавтора
+        resp_sub = self.client.post(reverse('submit_assignment', args=[asg.pk]), {
+            'full_name': 'Коваленко Данило',
+            'class_group': self.class_group.id,
+            'comment_student': 'Виконували практичну разом з Мельник Софія, все протестували.',
+            'files': [dummy_file],
+        })
+        self.assertEqual(resp_sub.status_code, 302)
+
+        # Перевіряємо основну здачу
+        sub1 = Submission.objects.get(assignment=asg, student=self.student1)
+        self.assertTrue(sub1.is_group_work)
+        self.assertIn('Коваленко Данило', sub1.group_authors)
+        self.assertIn('Мельник Софія', sub1.group_authors)
+
+        # Перевіряємо автоматично створену зв'язану здачу для Мельник Софії
+        sub2 = Submission.objects.filter(assignment=asg, student=self.student2).first()
+        self.assertIsNotNone(sub2)
+        self.assertEqual(sub2.primary_submission, sub1)
+        self.assertTrue(sub2.is_group_work)
+        self.assertIn('Мельник Софія', sub2.group_authors)
+        self.assertEqual(sub2.files.count(), 1)
+
+    def test_extract_images_from_pptx_and_zip(self):
+        import io
+        import zipfile
+        import tempfile
+        import os
+        from feed.gemini_service import extract_images_from_pptx, extract_images_from_zip, extract_images_from_xlsx
+
+        # Створюємо фіктивний .pptx з вбудованим зображенням у ppt/media/
+        with tempfile.NamedTemporaryFile(suffix='.pptx', delete=False) as tmp_pptx:
+            pptx_path = tmp_pptx.name
+            with zipfile.ZipFile(tmp_pptx, 'w') as z:
+                z.writestr('ppt/slides/slide1.xml', '<xml>Slide 1</xml>')
+                z.writestr('ppt/media/image1.png', b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDRtest')
+
+        try:
+            extracted_pptx = extract_images_from_pptx(pptx_path)
+            self.assertEqual(len(extracted_pptx), 1)
+            self.assertEqual(extracted_pptx[0]['name'], 'image1.png')
+            self.assertEqual(extracted_pptx[0]['mime_type'], 'image/png')
+            self.assertTrue(len(extracted_pptx[0]['data']) > 0)
+        finally:
+            if os.path.exists(pptx_path):
+                os.remove(pptx_path)
+
+        # Створюємо фіктивний .zip з графічним файлом
+        with tempfile.NamedTemporaryFile(suffix='.zip', delete=False) as tmp_zip:
+            zip_path = tmp_zip.name
+            with zipfile.ZipFile(tmp_zip, 'w') as z:
+                z.writestr('solution.py', 'print(1)')
+                z.writestr('screenshot.jpg', b'\xff\xd8\xff\xe0\x00\x10JFIFtest')
+
+        try:
+            extracted_zip = extract_images_from_zip(zip_path)
+            self.assertEqual(len(extracted_zip), 1)
+            self.assertEqual(extracted_zip[0]['name'], 'screenshot.jpg')
+            self.assertEqual(extracted_zip[0]['mime_type'], 'image/jpeg')
+        finally:
+            if os.path.exists(zip_path):
+                os.remove(zip_path)
+
+    def test_access_utils_mdb_and_accdb_parsing(self):
+        """Тест утиліт обробки БД Microsoft Access (.mdb та .accdb) через mdbtools."""
+        import tempfile
+        from unittest.mock import patch, MagicMock
+        from feed.access_utils import (
+            _get_database_version_mdbtools,
+            _get_entries_mdbtools,
+            _get_query_sql_mdbtools,
+            extract_access_text_for_ai
+        )
+
+        with tempfile.NamedTemporaryFile(suffix='.accdb', delete=False) as tmp:
+            tmp_path = tmp.name
+            tmp.write(b'\x00' * 100)
+
+        try:
+            # 1. Тест визначення версії БД
+            with patch('subprocess.run') as mock_run:
+                mock_run.return_value = MagicMock(returncode=0, stdout=b'ACE14\n', stderr=b'')
+                ver = _get_database_version_mdbtools(tmp_path)
+                self.assertIn('Access 2010', ver)
+                self.assertIn('ACE 14.0', ver)
+
+                mock_run.return_value = MagicMock(returncode=0, stdout=b'JET4\n', stderr=b'')
+                ver_jet = _get_database_version_mdbtools(tmp_path)
+                self.assertIn('Access 2000-2003', ver_jet)
+
+            # 2. Тест вилучення об'єктів (таблиці, запити, форми, звіти)
+            with patch('subprocess.run') as mock_run:
+                def side_effect(cmd, *args, **kwargs):
+                    if 'mdb-tables' in cmd:
+                        if '-ttable' in cmd or ('-t' in cmd and cmd[cmd.index('-t') + 1] == 'table'):
+                            return MagicMock(returncode=0, stdout=b'Students\nGrades\n', stderr=b'')
+                        elif '-tquery' in cmd or ('-t' in cmd and cmd[cmd.index('-t') + 1] == 'query'):
+                            return MagicMock(returncode=0, stdout=b'TopStudents\n', stderr=b'')
+                        elif '-tform' in cmd or ('-t' in cmd and cmd[cmd.index('-t') + 1] == 'form'):
+                            return MagicMock(returncode=0, stdout=b'MainForm\n', stderr=b'')
+                        elif '-treport' in cmd or ('-t' in cmd and cmd[cmd.index('-t') + 1] == 'report'):
+                            return MagicMock(returncode=0, stdout=b'AnnualReport\n', stderr=b'')
+                    elif 'mdb-queries' in cmd:
+                        return MagicMock(returncode=0, stdout=b'SELECT * FROM Students WHERE Grade >= 10;\n', stderr=b'')
+                    elif 'mdb-ver' in cmd:
+                        return MagicMock(returncode=0, stdout=b'ACE16\n', stderr=b'')
+                    elif 'mdb-export' in cmd:
+                        return MagicMock(returncode=0, stdout=b'"id";"name"\n"1";"Ivan"\n"2";"Olena"\n', stderr=b'')
+                    elif 'mdb-schema' in cmd:
+                        return MagicMock(returncode=0, stdout=b'CREATE TABLE Students (id Long Integer, name Text (50));\n', stderr=b'')
+                    return MagicMock(returncode=0, stdout=b'', stderr=b'')
+
+                mock_run.side_effect = side_effect
+
+                tables, err_tbl = _get_entries_mdbtools(tmp_path, 'table')
+                self.assertIsNone(err_tbl)
+                self.assertEqual(tables, ['Students', 'Grades'])
+
+                queries, err_q = _get_entries_mdbtools(tmp_path, 'query')
+                self.assertIsNone(err_q)
+                self.assertEqual(queries, ['TopStudents'])
+
+                sql = _get_query_sql_mdbtools(tmp_path, 'TopStudents')
+                self.assertIn('SELECT * FROM Students', sql)
+
+                ai_text = extract_access_text_for_ai(tmp_path)
+                self.assertIn('Microsoft Access', ai_text)
+                self.assertIn('Таблиць (Tables): 2', ai_text)
+                self.assertIn('Запитів (Queries): 1', ai_text)
+                self.assertIn('Екранних форм (Forms): 1', ai_text)
+                self.assertIn('Звітів (Reports): 1', ai_text)
+                self.assertIn('SELECT * FROM Students WHERE Grade >= 10', ai_text)
+        finally:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+
+    def test_duplicate_and_parser_support_access(self):
+        """Тест інтеграції Access (.mdb та .accdb) у систему перевірки дублікатів та парсери документів."""
+        import tempfile
+        from unittest.mock import patch
+        from feed.duplicate_detector import get_normalized_file_content
+        from feed.document_parsers import extract_text_from_document
+
+        with tempfile.NamedTemporaryFile(suffix='.mdb', delete=False) as tmp:
+            tmp_path = tmp.name
+            tmp.write(b'\x00' * 50)
+
+        try:
+            with patch('feed.access_utils.extract_access_text_for_ai', return_value='TABLE Students id name DATA 1 Ivan'):
+                sim_text = get_normalized_file_content(tmp_path)
+                self.assertIn('Students', sim_text)
+
+                doc_text, success, _ = extract_text_from_document(tmp_path)
+                self.assertTrue(success)
+                self.assertIn('Students', doc_text)
+        finally:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+
+    @patch('feed.gemini_service._http_post_json')
+    def test_ai_evaluation_unclear_task_and_choice_rule(self, mock_http_post):
+        """Тест ШІ: якщо завдання не зрозуміло, виставляється 'Доопрацювати' та формується format_warning і unclear_task=True."""
+        from .models import AISettings
+        from .gemini_service import evaluate_submission_with_gemini
+
+        settings = AISettings.get_solo()
+        settings.api_key = 'fake-api-key'
+        settings.is_enabled = True
+        settings.save()
+
+        # Мокаємо відповідь, коли ШІ не зміг визначити, яке саме завдання виконане
+        mock_data = {
+            "candidates": [
+                {
+                    "content": {
+                        "parts": [
+                            {
+                                "text": json.dumps({
+                                    "suggested_grade": "Доопрацювати",
+                                    "level": "Початковий (1-3)",
+                                    "summary": "Не зрозуміло, яке саме завдання виконане з умови вчителя.",
+                                    "format_warning": "Не зрозуміло, яке саме завдання виконане.",
+                                    "unclear_task": True,
+                                    "strengths": [],
+                                    "weaknesses": ["Не зрозуміло, яке завдання виконане"],
+                                    "feedback_comment": "Вкажіть номер завдання у коментарі."
+                                })
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+        mock_http_post.return_value = (200, mock_data, json.dumps(mock_data))
+
+        asg = Assignment.objects.create(
+            teacher=self.teacher,
+            subject=self.subject,
+            title='Тестове завдання з багатьма задачами',
+            description='Виконайте будь-яке завдання на вибір з файлу (Завдання 1 або Завдання 2).'
+        )
+        asg.classes.add(self.class_group)
+
+        sub = Submission.objects.create(
+            assignment=asg,
+            first_name='Михайло',
+            last_name='Бондар',
+            class_group=self.class_group,
+            comment_student='Ось моя робота.'
+        )
+
+        res = evaluate_submission_with_gemini(sub)
+        self.assertEqual(res['status'], 'success')
+        self.assertEqual(res['suggested_grade'], 'Доопрацювати')
+        self.assertTrue(res['unclear_task'])
+        self.assertIn('Не зрозуміло, яке саме завдання виконане', res['format_warning'])
+
+        sub.refresh_from_db()
+        self.assertEqual(sub.ai_suggested_grade, 'Доопрацювати')
+
+    @patch('feed.gemini_service.evaluate_submission_with_gemini')
+    def test_student_ai_self_check_unclear_task_json_and_template(self, mock_eval):
+        """Тест endpoint student_ai_self_check повертає unclear_task=True та відповідні попередження."""
+        asg = Assignment.objects.create(
+            teacher=self.teacher,
+            subject=self.subject,
+            title='Тестове завдання для самоперевірки',
+            description='Опис завдання',
+            status=Assignment.STATUS_PUBLISHED,
+            allow_student_ai_check=True
+        )
+        asg.classes.add(self.class_group)
+
+        sub = Submission.objects.create(
+            assignment=asg,
+            first_name='Софія',
+            last_name='Мельник',
+            class_group=self.class_group,
+            comment_student='Здаю файл'
+        )
+
+        mock_eval.return_value = {
+            'status': 'success',
+            'suggested_grade': 'Доопрацювати',
+            'level': 'Початковий (1-3)',
+            'summary': 'Не зрозуміло, яке завдання виконане',
+            'feedback_comment': 'Вкажіть номер виконаного завдання',
+            'unclear_task': True,
+            'format_warning': 'Не зрозуміло, яке завдання виконане. Будь ласка, вкажіть номер завдання у коментарі.',
+            'is_traditional': True,
+            'gr_results': []
+        }
+
+        # POST до student_ai_self_check
+        resp = self.client.post(reverse('student_ai_self_check', args=[sub.id]), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertTrue(data['ok'])
+        self.assertEqual(data['grade'], 'Доопрацювати')
+        self.assertTrue(data['unclear_task'])
+        self.assertIn('Не зрозуміло, яке завдання виконане', data['format_warning'])
+
+        # Перевіряємо, що в базі збережено
+        sub.refresh_from_db()
+        self.assertTrue(sub.student_ai_checked)
+        self.assertEqual(sub.student_ai_grade, 'Доопрацювати')
+
+        # Перевіряємо сторінку submit_success та submission_detail (шаблони містять попередження)
+        detail_resp = self.client.get(reverse('submission_detail', args=[sub.id]))
+        self.assertEqual(detail_resp.status_code, 200)
+        self.assertContains(detail_resp, 'Не зрозуміло, яке завдання виконане')
+
+        succ_resp = self.client.get(reverse('submit_success', args=[asg.id]))
+        self.assertEqual(succ_resp.status_code, 200)
+        self.assertContains(succ_resp, 'Не зрозуміло, яке завдання виконане')
+
+    def test_calendar_badge_count_always_matches_filtered_feed(self):
+        """Тест повної відповідності між бейджами календаря та видачею завдань при кліку на будь-яку дату."""
+        from feed.views import get_calendar_context, _filter_assignments_by_lesson_date, get_visible_assignments
+        from feed.models import AssignmentScheduleTarget
+        from datetime import datetime, timedelta
+
+        # Створюємо завдання з днем тижня у розкладі (без фіксованої target_date)
+        asg = Assignment.objects.create(
+            teacher=self.teacher,
+            subject=self.subject,
+            title='Завдання розкладу середи',
+            description='Опис уроку',
+            status=Assignment.STATUS_PUBLISHED,
+            published_at=timezone.now()
+        )
+        asg.classes.add(self.class_group)
+        # target_day_of_week = 3 (Середа)
+        AssignmentScheduleTarget.objects.create(
+            assignment=asg,
+            class_group=self.class_group,
+            target_day_of_week=3
+        )
+
+        cal = get_calendar_context()
+        found_day = None
+        for week in cal['weeks']:
+            for day in week:
+                if day['has_tasks']:
+                    dt_str = day['date_str']
+                    dt_val = datetime.strptime(dt_str, '%Y-%m-%d').date()
+                    up, rest = get_visible_assignments()
+                    up_f = _filter_assignments_by_lesson_date(up, dt_val)
+                    rest_f = _filter_assignments_by_lesson_date(rest, dt_val)
+                    total_filtered = up_f.count() + rest_f.count()
+                    # Кількість у календарі повинна точно збігатися з кількістю відфільтрованих завдань
+                    self.assertEqual(day['tasks_count'], total_filtered)
+                    if asg.id in [a.id for a in list(up_f) + list(rest_f)]:
+                        found_day = dt_str
+
+        self.assertIsNotNone(found_day, "Завдання з днем тижня не з'явилося в календарі")
+
+        # Перевіряємо завантаження сторінки через HTTP
+        resp = self.client.get(f'/?date={found_day}')
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, 'Завдання розкладу середи')
+        self.assertNotContains(resp, 'Завдань не знайдено на вибрану дату')
+
+        resp_frag = self.client.get(f'/feed/fragment/?date={found_day}')
+        self.assertEqual(resp_frag.status_code, 200)
+        self.assertContains(resp_frag, 'Завдання розкладу середи')
+        self.assertNotContains(resp_frag, 'Завдань не знайдено на вибрану дату')
+
 
 
 

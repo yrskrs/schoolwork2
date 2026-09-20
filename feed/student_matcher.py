@@ -464,3 +464,114 @@ def extract_coauthors_from_comment(
                         })
 
     return found_coauthors
+
+
+def auto_bind_coauthors_from_comment(submission) -> List[Dict[str, Any]]:
+    """
+    Автоматично розпізнає співавторів у коментарі учня до зданої роботи (submission.comment_student),
+    встановлює ознаку колективної роботи (is_group_work=True, group_authors) та створює зв'язані
+    записи Submission для знайдених співавторів (якщо вони ще не створені).
+    """
+    if not submission or not submission.comment_student or not submission.comment_student.strip():
+        return []
+
+    from django.db.models import Q
+    from .models import Submission, SubmissionFile, Student
+
+    # Знаходимо згаданих у коментарі учнів
+    coauthors = extract_coauthors_from_comment(
+        submission.comment_student,
+        class_group=submission.class_group,
+        exclude_last_name=submission.last_name,
+        exclude_first_name=submission.first_name
+    )
+    if not coauthors:
+        return []
+
+    # Формуємо актуальний список імен усіх авторів
+    current_authors = [a.strip() for a in (submission.group_authors or '').split(',') if a.strip()]
+    author_full = submission.get_student_full_name()
+    if author_full and author_full not in current_authors:
+        current_authors.append(author_full)
+
+    for co in coauthors:
+        co_full = co.get('full_name') or f"{co['last_name']} {co['first_name']}".strip()
+        already_present = False
+        for ca in current_authors:
+            ca_ln, ca_fn = resolve_canonical_student_name(ca, submission.class_group)
+            if is_same_student_identity(co['last_name'], co['first_name'], ca_ln, ca_fn):
+                already_present = True
+                break
+        if not already_present and co_full:
+            current_authors.append(co_full)
+
+    new_group_authors = ", ".join(current_authors)
+
+    fields_to_update = []
+    if not submission.is_group_work:
+        submission.is_group_work = True
+        fields_to_update.append('is_group_work')
+    if submission.group_authors != new_group_authors:
+        submission.group_authors = new_group_authors
+        fields_to_update.append('group_authors')
+
+    if fields_to_update:
+        submission.save(update_fields=fields_to_update)
+
+    # Прив'язуємо / створюємо Submission для кожного знайденого співавтора
+    for co in coauthors:
+        co_st = co.get('student')
+        co_ln = co['last_name']
+        co_fn = co['first_name']
+
+        if not co_st and submission.class_group:
+            for s in Student.objects.filter(class_group=submission.class_group):
+                if is_same_student_identity(co_ln, co_fn, s.last_name, s.first_name):
+                    co_st = s
+                    break
+            if not co_st:
+                co_st = Student.objects.create(
+                    last_name=co_ln or "Учень",
+                    first_name=co_fn,
+                    class_group=submission.class_group
+                )
+            co['student'] = co_st
+
+        # Перевіряємо чи вже є здача у цього співавтора
+        existing_sub = None
+        if co_st:
+            existing_sub = Submission.objects.filter(
+                assignment=submission.assignment,
+                class_group=submission.class_group
+            ).filter(
+                Q(primary_submission=submission) |
+                Q(student=co_st) |
+                (Q(last_name__iexact=co_ln) & Q(first_name__iexact=co_fn))
+            ).first()
+
+        if not existing_sub:
+            peer_comment = f"Колективна робота (спільно з {submission.get_student_full_name()}): {submission.comment_student.strip()}"
+            peer_sub = Submission.objects.create(
+                assignment=submission.assignment,
+                student=co_st,
+                last_name=co_ln,
+                first_name=co_fn,
+                class_group=submission.class_group,
+                teacher=submission.teacher,
+                file=submission.file,
+                link=submission.link,
+                comment_student=peer_comment,
+                is_group_work=True,
+                group_authors=new_group_authors,
+                primary_submission=submission,
+                is_latest_attempt=True,
+            )
+            # Копіюємо SubmissionFile
+            for sf in submission.files.all():
+                SubmissionFile.objects.create(
+                    submission=peer_sub,
+                    file=sf.file,
+                    original_name=sf.original_name
+                )
+
+    return coauthors

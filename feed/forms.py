@@ -445,8 +445,8 @@ class AssignmentForm(forms.ModelForm):
         files_uploaded = cleaned_data.get('files', [])
 
         # Перевіряємо що є хоча б щось
-        if not description and not link_url and not files_uploaded:
-
+        has_existing_files = bool(self.instance and self.instance.pk and self.instance.files.exists())
+        if not description and not link_url and not files_uploaded and not has_existing_files:
             raise ValidationError(
                 'Додайте хоча б одне з: опис завдання, посилання або файл.'
             )
@@ -611,14 +611,42 @@ class SubmissionForm(forms.Form):
 
         cleaned_data['all_files'] = all_uploaded
 
-        if not all_uploaded and not link:
+        # Обробка списку співавторів (до 5 осіб, без дублікатів та автора)
+        if hasattr(self.data, 'getlist'):
+            raw_coauthors = self.data.getlist('coauthors') or self.data.getlist('coauthors[]')
+        else:
+            raw_coauthors = self.data.get('coauthors', [])
+            if isinstance(raw_coauthors, str):
+                raw_coauthors = [raw_coauthors]
+        cleaned_coauthors = []
+        full_name_input = (cleaned_data.get('full_name') or '').strip().lower()
+        seen_co = set()
+        if full_name_input:
+            seen_co.add(full_name_input)
+
+        for co in raw_coauthors:
+            c_str = (co or '').strip()
+            if not c_str:
+                continue
+            c_lower = c_str.lower()
+            if c_lower in seen_co:
+                continue
+            seen_co.add(c_lower)
+            cleaned_coauthors.append(c_str)
+            if len(cleaned_coauthors) >= 5:
+                break
+
+        cleaned_data['coauthors'] = cleaned_coauthors
+
+        comment_st = cleaned_data.get('comment_student')
+        if not all_uploaded and not link and not (comment_st and comment_st.strip()):
             raise forms.ValidationError(
-                'Будь ласка, завантажте файл(и) роботи або вкажіть посилання.'
+                'Будь ласка, завантажте файл(и) роботи, вкажіть посилання або надайте відповідь у полі коментаря.'
             )
         return cleaned_data
 
     def save(self, assignment):
-        """Зберігає здачу роботи з кількома файлами, інтелектуальною нормалізацією та прив'язкою до учня."""
+        """Зберігає здачу роботи з кількома файлами, підтримкою колективної роботи (співавторів) та прив'язкою до учня."""
         from .models import Submission, SubmissionFile, Student
         from .student_matcher import resolve_canonical_student_name, is_same_student_identity
         from .utils import optimize_uploaded_file
@@ -630,6 +658,7 @@ class SubmissionForm(forms.Form):
         )
 
         all_files = self.cleaned_data.get('all_files') or []
+        coauthors_list = self.cleaned_data.get('coauthors') or []
 
         # Знаходимо або створюємо запис Student для учня
         student_obj = None
@@ -643,6 +672,38 @@ class SubmissionForm(forms.Form):
                 first_name=first_name,
                 class_group=class_grp
             )
+
+        # Резолвимо дані для кожного співавтора
+        resolved_coauthors = []
+        all_authors_display = [f"{last_name} {first_name}".strip()]
+        for co_raw in coauthors_list:
+            co_ln, co_fn = resolve_canonical_student_name(co_raw, class_group=class_grp)
+            if not co_ln and not co_fn:
+                continue
+            if is_same_student_identity(co_ln, co_fn, last_name, first_name):
+                continue
+            co_st = None
+            for s in Student.objects.filter(class_group=class_grp):
+                if is_same_student_identity(co_ln, co_fn, s.last_name, s.first_name):
+                    co_st = s
+                    break
+            if not co_st:
+                co_st = Student.objects.create(
+                    last_name=co_ln or "Учень",
+                    first_name=co_fn,
+                    class_group=class_grp
+                )
+            co_full = f"{co_ln} {co_fn}".strip()
+            resolved_coauthors.append({
+                'student': co_st,
+                'last_name': co_ln,
+                'first_name': co_fn,
+                'full_name': co_full
+            })
+            all_authors_display.append(co_full)
+
+        is_group = bool(resolved_coauthors)
+        group_authors_str = ", ".join(all_authors_display) if is_group else ""
 
         # Визначаємо, чи учень здає роботу повторно (перездача / робота над помилками)
         from django.db.models import Q
@@ -666,6 +727,8 @@ class SubmissionForm(forms.Form):
             file=None,  # Прив'язуємо нижче без дублювання файлу на диску
             link=self.cleaned_data.get('link') or None,
             comment_student=self.cleaned_data.get('comment_student') or None,
+            is_group_work=is_group,
+            group_authors=group_authors_str,
             is_resubmission=is_resub,
             resubmission_attempt=attempt_num,
             previous_submission=latest_prev,
@@ -703,6 +766,62 @@ class SubmissionForm(forms.Form):
         if saved_sub_files and saved_sub_files[0].file:
             submission.file.name = saved_sub_files[0].file.name
             submission.save(update_fields=['file'])
+
+        # Створюємо зв'язані роботи для кожного співавтора (колективна робота)
+        if is_group:
+            for co in resolved_coauthors:
+                co_st = co['student']
+                co_ln = co['last_name']
+                co_fn = co['first_name']
+
+                # Перевіряємо чи є попередня спроба у цього співавтора
+                q_co_prev = Q(assignment=assignment, class_group=class_grp)
+                if co_st:
+                    q_co_prev &= (Q(student=co_st) | (Q(last_name__iexact=co_ln) & Q(first_name__iexact=co_fn)))
+                else:
+                    q_co_prev &= (Q(last_name__iexact=co_ln) & Q(first_name__iexact=co_fn))
+
+                co_prev_subs = list(Submission.objects.filter(q_co_prev).order_by('-submitted_at'))
+                co_is_resub = len(co_prev_subs) > 0
+                co_attempt_num = len(co_prev_subs) + 1
+                co_latest_prev = co_prev_subs[0] if co_prev_subs else None
+
+                co_comment = f"Колективна робота (спільно з {submission.get_student_full_name()})"
+                if self.cleaned_data.get('comment_student'):
+                    co_comment += f": {self.cleaned_data.get('comment_student')}"
+
+                co_sub = Submission.objects.create(
+                    assignment=assignment,
+                    student=co_st,
+                    last_name=co_ln,
+                    first_name=co_fn,
+                    class_group=class_grp,
+                    teacher=submission.teacher,
+                    file=submission.file,
+                    link=submission.link,
+                    comment_student=co_comment,
+                    is_group_work=True,
+                    group_authors=group_authors_str,
+                    primary_submission=submission,
+                    is_resubmission=co_is_resub,
+                    resubmission_attempt=co_attempt_num,
+                    previous_submission=co_latest_prev,
+                    is_latest_attempt=True,
+                )
+                if co_prev_subs:
+                    Submission.objects.filter(id__in=[p.id for p in co_prev_subs]).update(is_latest_attempt=False)
+
+                # Прив'язуємо файли до роботи співавтора
+                for sf in saved_sub_files:
+                    SubmissionFile.objects.create(
+                        submission=co_sub,
+                        file=sf.file,
+                        original_name=sf.original_name
+                    )
+
+        # Автоматичне розпізнавання та прив'язка співавторів з коментаря учня
+        from .student_matcher import auto_bind_coauthors_from_comment
+        auto_bind_coauthors_from_comment(submission)
 
         return submission
 

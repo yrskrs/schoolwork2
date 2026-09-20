@@ -249,14 +249,17 @@
                     
                     <!-- Навігація назад та назва поточного файлу -->
                     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-                        {% if assignment %}
-                        <a href="{% url 'assignment_submissions' assignment.id %}" class="btn btn-secondary btn-sm" style="font-weight:700;">
-                            ← До списку здач
+                        <a href="{{ back_url|default:'/teacher/submissions/' }}" class="btn btn-secondary btn-sm" style="font-weight:700;">
+                            {{ back_label|default:'← До списку здач' }}
                         </a>
-                        {% else %}
-                        <a href="{% url 'all_submissions_dashboard' %}" class="btn btn-secondary btn-sm" style="font-weight:700;">
-                            ← До всіх здач
-                        </a>
+
+                        {% if is_filtered %}
+                        <div class="fv-filter-badge" style="display:inline-flex;align-items:center;gap:6px;background:rgba(99,102,241,0.12);border:1px solid rgba(99,102,241,0.3);color:var(--color-primary);padding:3px 10px;border-radius:20px;font-size:11.5px;font-weight:700;" title="Активна фільтрація черги перевірки">
+                            <span>🎯 {{ queue_filter_desc|default:"Фільтр" }}</span>
+                            {% if queue_pos and queue_total %}
+                            <span style="background:var(--color-primary);color:#fff;padding:1px 7px;border-radius:10px;font-size:10.5px;font-weight:800;">{{ queue_pos }} / {{ queue_total }}</span>
+                            {% endif %}
+                        </div>
                         {% endif %}
 
                         <span style="font-weight:800;font-size:13.5px;color:var(--color-text-primary);display:inline-flex;align-items:center;gap:6px;">
@@ -282,20 +285,20 @@
                     <!-- Потокова перевірка (Попередня / Наступна робота) + Дії -->
                     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
                         {% if prev_submission %}
-                        <a href="{% url 'view_file' prev_submission.id %}{% if assignment_id %}?assignment={{ assignment_id }}{% endif %}"
+                        <a href="{% url 'view_file' prev_submission.id %}{% if nav_query_string %}?{{ nav_query_string }}{% endif %}"
                            class="btn btn-secondary btn-sm"
                            title="Попередня робота учня в потоці (Alt + ←)"
                            id="prev-sub-btn">
                             « Попередня
                         </a>
-                        {% elif prev_submission_fallback %}
+                        {% elif not is_filtered and prev_submission_fallback %}
                         <a href="{% url 'view_file' prev_submission_fallback.id %}"
                            class="btn btn-secondary btn-sm"
                            title="Попередня робота: {{ prev_submission_fallback.get_student_full_name }} ({{ prev_submission_fallback.assignment.title|default:'Робота'|truncatechars:20 }})"
                            id="prev-sub-btn">
                             « Попередня
                         </a>
-                        {% elif prev_assignment and prev_assignment_first_sub %}
+                        {% elif not is_filtered and prev_assignment and prev_assignment_first_sub %}
                         <a href="{% url 'view_file' prev_assignment_first_sub.id %}?assignment={{ prev_assignment.id }}"
                            class="btn btn-secondary btn-sm"
                            title="Попереднє завдання: {{ prev_assignment.title|truncatechars:25 }}"
@@ -303,7 +306,7 @@
                             « Попереднє завд.
                         </a>
                         {% else %}
-                        <button class="btn btn-secondary btn-sm" disabled style="opacity:0.35;" title="Це перша робота в системі">« Попередня</button>
+                        <button class="btn btn-secondary btn-sm" disabled style="opacity:0.35;" title="{% if is_filtered %}Це перша робота у вибраному фільтрі{% else %}Це перша робота в системі{% endif %}">« Попередня</button>
                         {% endif %}
 
                         <span style="font-size:11px;font-weight:700;color:var(--color-text-muted);text-transform:uppercase;letter-spacing:0.04em;">
@@ -311,27 +314,27 @@
                         </span>
 
                         {% if next_submission %}
-                        <a href="{% url 'view_file' next_submission.id %}{% if assignment_id %}?assignment={{ assignment_id }}{% endif %}"
+                        <a href="{% url 'view_file' next_submission.id %}{% if nav_query_string %}?{{ nav_query_string }}{% endif %}"
                            class="btn btn-primary btn-sm"
                            title="Наступна робота учня в потоці (Alt + →)"
                            id="next-sub-btn">
                             Наступна »
                         </a>
-                        {% elif next_submission_fallback %}
+                        {% elif not is_filtered and next_submission_fallback %}
                         <a href="{% url 'view_file' next_submission_fallback.id %}"
                            class="btn btn-primary btn-sm"
                            title="Наступна робота: {{ next_submission_fallback.get_student_full_name }} ({{ next_submission_fallback.assignment.title|default:'Робота'|truncatechars:20 }}) (Alt + →)"
                            id="next-sub-btn">
                             Наступна »
                         </a>
-                        {% elif next_assignment and next_assignment_first_sub %}
+                        {% elif not is_filtered and next_assignment and next_assignment_first_sub %}
                         <a href="{% url 'view_file' next_assignment_first_sub.id %}?assignment={{ next_assignment.id }}"
                            class="btn btn-primary btn-sm"
                            title="Перейти до першої роботи наступного завдання: {{ next_assignment.title|truncatechars:25 }}"
                            id="next-sub-btn">
                             Наступне завд. »
                         </a>
-                        {% elif next_assignment %}
+                        {% elif not is_filtered and next_assignment %}
                         <a href="{% url 'assignment_submissions' next_assignment.id %}"
                            class="btn btn-primary btn-sm"
                            title="Перейти до списку робіт наступного завдання: {{ next_assignment.title|truncatechars:25 }}"
@@ -339,7 +342,7 @@
                             Наступне завд. »
                         </a>
                         {% else %}
-                        <button class="btn btn-secondary btn-sm" disabled style="opacity:0.35;" title="Це остання робота в системі">Наступна »</button>
+                        <button class="btn btn-secondary btn-sm" disabled style="opacity:0.35;" title="{% if is_filtered %}Всі роботи у вибраному фільтрі перевірено{% else %}Це остання робота в системі{% endif %}">Наступна »</button>
                         {% endif %}
 
                         {% if submission.link %}
@@ -753,6 +756,26 @@
                         </div>
                         {% endif %}
 
+                        <!-- Колективна (групова) робота -->
+                        {% if submission.is_collective_work %}
+                        <div style="background:rgba(99,102,241,0.08);border:1.5px solid rgba(99,102,241,0.3);border-radius:var(--radius-sm);padding:8px 10px;margin-top:4px;">
+                            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+                                <span style="font-weight:800;color:var(--color-primary);display:inline-flex;align-items:center;gap:4px;font-size:12px;">
+                                    <span>👥</span> <span>Колективна робота</span>
+                                </span>
+                                <span class="badge" style="background:rgba(99,102,241,0.15);color:var(--color-primary);font-size:10px;font-weight:800;padding:1px 5px;">
+                                    Група
+                                </span>
+                            </div>
+                            <div style="font-size:11.5px;color:var(--color-text-primary);line-height:1.35;">
+                                <strong style="color:var(--color-text-secondary);">Учасники:</strong> {{ submission.get_group_members_display|join:", " }}
+                            </div>
+                            <div style="font-size:10px;color:var(--color-text-muted);margin-top:3px;">
+                                💡 Оцінка автоматично виставляється всім учасникам групи.
+                            </div>
+                        </div>
+                        {% endif %}
+
                         <!-- Статус спроби здачі (якщо це повторна здача або є історія) -->
                         {% if submission.is_resubmission or submission.resubmission_attempt > 1 %}
                         <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:2px;">
@@ -805,7 +828,7 @@
                         <div>Учень здав оновлену роботу (роботу над помилками).</div>
                         {% for subseq in submission.subsequent_submissions.all %}
                         <div style="margin-top:4px;">
-                            <a href="{% url 'view_file' subseq.id %}{% if assignment_id %}?assignment={{ assignment_id }}{% endif %}" class="btn btn-sm btn-primary" style="font-size:11px;font-weight:700;padding:3px 8px;display:inline-flex;align-items:center;gap:4px;text-decoration:none;">
+                            <a href="{% url 'view_file' subseq.id %}{% if nav_query_string %}?{{ nav_query_string }}{% endif %}" class="btn btn-sm btn-primary" style="font-size:11px;font-weight:700;padding:3px 8px;display:inline-flex;align-items:center;gap:4px;text-decoration:none;">
                                 <span>👉 Відкрити актуальну здачу (Спроба #{{ subseq.resubmission_attempt }})</span>
                             </a>
                         </div>
@@ -820,7 +843,7 @@
                             <strong style="color:#059669;display:flex;align-items:center;gap:4px;">
                                 <span>📜</span> <span>Попередня спроба #{{ submission.previous_submission.resubmission_attempt|default:"1" }}</span>
                             </strong>
-                            <a href="{% url 'view_file' submission.previous_submission.id %}{% if assignment_id %}?assignment={{ assignment_id }}{% endif %}" style="font-size:11px;font-weight:700;color:var(--color-primary);text-decoration:none;">
+                            <a href="{% url 'view_file' submission.previous_submission.id %}{% if nav_query_string %}?{{ nav_query_string }}{% endif %}" style="font-size:11px;font-weight:700;color:var(--color-primary);text-decoration:none;">
                                 👁️ Відкрити ↗
                             </a>
                         </div>

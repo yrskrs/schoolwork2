@@ -705,9 +705,72 @@ class Assignment(models.Model):
         return max(0, delta)
 
     @property
+    def days_since_all_lessons_passed(self):
+        """
+        Кількість днів з моменту завершення ВСІХ запланованих уроків завдання для всіх призначених класів.
+        - Поки хоча б один клас має урок сьогодні або в майбутньому -> повертає 0 (картка активна, не сіріє).
+        - Якщо всі уроки пройшли -> повертає дні від дати найпізнішого проведеного уроку.
+        - Якщо уроків у розкладі немає -> повертає дні від due_date або published_at.
+        """
+        from django.utils import timezone
+        import datetime
+
+        now = timezone.localtime(timezone.now())
+        today = now.date()
+
+        targets = list(self.schedule_targets.select_related('bell_slot', 'class_group').all())
+        lesson_dates = []
+
+        if targets:
+            for t in targets:
+                t_date = t.target_date
+                if not t_date and t.target_day_of_week:
+                    base_dt = self.published_at or self.created_at or timezone.now()
+                    base_d = timezone.localtime(base_dt).date()
+                    diff = (t.target_day_of_week - (base_d.weekday() + 1)) % 7
+                    t_date = base_d + datetime.timedelta(days=diff)
+                if t_date:
+                    lesson_dates.append(t_date)
+        elif self.teacher and self.classes.exists():
+            t_schedules = TeacherLessonSchedule.objects.filter(
+                teacher=self.teacher,
+                class_group__in=self.classes.all()
+            )
+            for ts in t_schedules:
+                base_dt = self.published_at or self.created_at or timezone.now()
+                base_d = timezone.localtime(base_dt).date()
+                diff = (ts.day_of_week - (base_d.weekday() + 1)) % 7
+                lesson_dates.append(base_d + datetime.timedelta(days=diff))
+
+        if lesson_dates:
+            # Якщо хоча б один урок сьогодні або в майбутньому — картка повністю активна
+            for ld in lesson_dates:
+                if ld >= today:
+                    return 0
+            # Усі уроки пройшли — рахуємо дні від найпізнішого
+            latest_date = max(lesson_dates)
+            return max(0, (today - latest_date).days)
+
+        if self.due_date:
+            if self.due_date >= today:
+                return 0
+            return max(0, (today - self.due_date).days)
+
+        if self.published_at:
+            pub_date = timezone.localtime(self.published_at).date()
+            return max(0, (today - pub_date).days)
+
+        return 0
+
+    @property
     def age_card_class(self):
-        """CSS-клас візуального затемнення / старіння картки завдання."""
-        days = self.days_ago
+        """
+        CSS-клас візуального затемнення / старіння картки завдання.
+        Прив'язується до часу уроку, на який було опубліковане завдання.
+        Картка починає старіти (ставати чорно-білою) ТІЛЬКИ після того,
+        як пройшли всі уроки для всіх призначених класів.
+        """
+        days = self.days_since_all_lessons_passed
         if days == 0:
             return "card-age-today"
         elif days == 1:
@@ -785,9 +848,27 @@ class Assignment(models.Model):
                         base_d = timezone.localtime(base_dt).date()
                         diff = (t.target_day_of_week - (base_d.weekday() + 1)) % 7
                         return base_d + datetime.timedelta(days=diff)
+            # Якщо для класу немає прив'язки в schedule_targets, перевіряємо TeacherLessonSchedule
+            if self.teacher_id:
+                t_sch = TeacherLessonSchedule.objects.filter(
+                    teacher_id=self.teacher_id, class_group_id=c_id
+                ).first()
+                if t_sch and t_sch.day_of_week:
+                    base_dt = self.published_at or self.created_at or timezone.now()
+                    base_d = timezone.localtime(base_dt).date()
+                    diff = (t_sch.day_of_week - (base_d.weekday() + 1)) % 7
+                    return base_d + datetime.timedelta(days=diff)
         else:
             today = timezone.localtime(timezone.now()).date()
-            dates = [t.target_date for t in targets if t.target_date]
+            dates = []
+            for t in targets:
+                if t.target_date:
+                    dates.append(t.target_date)
+                elif t.target_day_of_week:
+                    base_dt = self.published_at or self.created_at or timezone.now()
+                    base_d = timezone.localtime(base_dt).date()
+                    diff = (t.target_day_of_week - (base_d.weekday() + 1)) % 7
+                    dates.append(base_d + datetime.timedelta(days=diff))
             if dates:
                 if today in dates:
                     return today
@@ -804,14 +885,95 @@ class Assignment(models.Model):
             return timezone.localtime(self.created_at).date()
         return timezone.localtime(timezone.now()).date()
 
-    def get_all_targets_info(self):
+    def get_target_dates(self, for_class=None):
+        """
+        Повертає множину дат (set of date), до яких належить це завдання.
+        - Якщо for_class вказано: повертає дату уроку для цього конкретного класу.
+        - Якщо for_class не вказано: повертає дати уроків для всіх призначених класів.
+        - Якщо розклад не налаштовано: повертає due_date або дату публікації.
+        Гарантує повну синхронізацію між віджетом календаря та списком завдань.
+        """
+        import datetime
+        from django.utils import timezone
+        dates = set()
+        targets = list(self.schedule_targets.select_related('bell_slot', 'class_group').all())
+
+        if for_class:
+            c_id = getattr(for_class, 'id', for_class)
+            for t in targets:
+                if t.class_group_id == c_id:
+                    if t.target_date:
+                        dates.add(t.target_date)
+                    elif t.target_day_of_week:
+                        base_dt = self.published_at or self.created_at or timezone.now()
+                        base_d = timezone.localtime(base_dt).date()
+                        diff = (t.target_day_of_week - (base_d.weekday() + 1)) % 7
+                        dates.add(base_d + datetime.timedelta(days=diff))
+                    break
+
+            if not dates and self.teacher_id:
+                t_sch = TeacherLessonSchedule.objects.filter(
+                    teacher_id=self.teacher_id, class_group_id=c_id
+                ).first()
+                if t_sch and t_sch.day_of_week:
+                    base_dt = self.published_at or self.created_at or timezone.now()
+                    base_d = timezone.localtime(base_dt).date()
+                    diff = (t_sch.day_of_week - (base_d.weekday() + 1)) % 7
+                    dates.add(base_d + datetime.timedelta(days=diff))
+
+            if not dates:
+                if self.due_date:
+                    dates.add(self.due_date)
+                elif self.published_at:
+                    dates.add(timezone.localtime(self.published_at).date())
+                elif self.created_at:
+                    dates.add(timezone.localtime(self.created_at).date())
+        else:
+            if targets:
+                for t in targets:
+                    if t.target_date:
+                        dates.add(t.target_date)
+                    elif t.target_day_of_week:
+                        base_dt = self.published_at or self.created_at or timezone.now()
+                        base_d = timezone.localtime(base_dt).date()
+                        diff = (t.target_day_of_week - (base_d.weekday() + 1)) % 7
+                        dates.add(base_d + datetime.timedelta(days=diff))
+
+            # Якщо є призначені класи без targets, перевіряємо TeacherLessonSchedule
+            target_class_ids = {t.class_group_id for t in targets}
+            for cls in self.classes.all():
+                if cls.id not in target_class_ids and self.teacher_id:
+                    t_sch = TeacherLessonSchedule.objects.filter(
+                        teacher_id=self.teacher_id, class_group=cls
+                    ).first()
+                    if t_sch and t_sch.day_of_week:
+                        base_dt = self.published_at or self.created_at or timezone.now()
+                        base_d = timezone.localtime(base_dt).date()
+                        diff = (t_sch.day_of_week - (base_d.weekday() + 1)) % 7
+                        dates.add(base_d + datetime.timedelta(days=diff))
+
+            if not dates:
+                if self.due_date:
+                    dates.add(self.due_date)
+                elif self.published_at:
+                    dates.add(timezone.localtime(self.published_at).date())
+                elif self.created_at:
+                    dates.add(timezone.localtime(self.created_at).date())
+
+        return dates
+
+    def get_all_targets_info(self, for_class=None):
         """
         Повертає структурований список цільових уроків для КОЖНОГО призначеного класу.
         Забезпечує роздільне відображення інформації (наприклад: 7-А — Пн 10:00, 7-Б — Пн 12:00, 7-В — Вт 09:00).
-        Поля is_today та is_upcoming використовуються для підсвічування актуального класу в стрічці.
+        Поля status, is_now, is_today, is_past, is_upcoming використовуються для підсвічування
+        актуального класу в стрічці (зеленим) та сірим для пройденого уроку.
         """
+        import datetime
         from django.utils import timezone as tz
-        today = tz.localtime(tz.now()).date()
+        now_dt = tz.localtime(tz.now())
+        today = now_dt.date()
+        current_time = now_dt.time()
 
         res = []
         targets = {st.class_group_id: st for st in self.schedule_targets.select_related('bell_slot', 'class_group')}
@@ -819,42 +981,122 @@ class Assignment(models.Model):
 
         for cls in self.classes.all():
             st = targets.get(cls.id)
+            slot = None
+            day_name = ''
+            date_str = ''
+            time_str = ''
+            slot_info = ''
+            target_date = None
+            has_target = False
+
             if st:
+                has_target = True
                 slot = st.bell_slot
                 time_str = slot.start_time.strftime('%H:%M') if (slot and slot.start_time) else ''
                 slot_info = f"{slot.lesson_number}-й ур." if slot else ""
                 day_name = uk_weekdays.get(st.target_day_of_week, '')
-                date_str = st.target_date.strftime('%d.%m') if st.target_date else ''
-                parts = [p for p in [cls.name, date_str or day_name, slot_info, time_str] if p]
-                is_today = (st.target_date == today) if st.target_date else False
-                is_upcoming = (st.target_date is not None and st.target_date > today) if st.target_date else False
-                res.append({
-                    'class_id': cls.id,
-                    'class_name': cls.name,
-                    'date': st.target_date,
-                    'date_str': date_str,
-                    'day_name': day_name,
-                    'time_str': time_str,
-                    'slot_info': slot_info,
-                    'has_target': True,
-                    'is_today': is_today,
-                    'is_upcoming': is_upcoming,
-                    'summary': ' — '.join(parts)
-                })
+                target_date = st.target_date
+                if not target_date and st.target_day_of_week:
+                    base_dt = self.published_at or self.created_at or tz.now()
+                    base_d = tz.localtime(base_dt).date()
+                    diff = (st.target_day_of_week - (base_d.weekday() + 1)) % 7
+                    target_date = base_d + datetime.timedelta(days=diff)
+                date_str = target_date.strftime('%d.%m') if target_date else ''
+            elif self.teacher:
+                t_sch = TeacherLessonSchedule.objects.filter(
+                    teacher=self.teacher, class_group=cls
+                ).select_related('bell_slot').first()
+                if t_sch:
+                    has_target = True
+                    slot = t_sch.bell_slot
+                    time_str = slot.start_time.strftime('%H:%M') if (slot and slot.start_time) else ''
+                    slot_info = f"{slot.lesson_number}-й ур." if slot else ""
+                    day_name = uk_weekdays.get(t_sch.day_of_week, '')
+                    base_dt = self.published_at or self.created_at or tz.now()
+                    base_d = tz.localtime(base_dt).date()
+                    diff = (t_sch.day_of_week - (base_d.weekday() + 1)) % 7
+                    target_date = base_d + datetime.timedelta(days=diff)
+                    date_str = target_date.strftime('%d.%m') if target_date else ''
+
+            is_now = False
+            is_today = False
+            is_upcoming = False
+            is_past = False
+            status = 'none'
+
+            if target_date:
+                if target_date == today:
+                    is_today = True
+                    if slot and slot.start_time and slot.end_time:
+                        if slot.start_time <= current_time <= slot.end_time:
+                            is_now = True
+                            status = 'now'
+                        elif current_time > slot.end_time:
+                            is_past = True
+                            status = 'past'
+                        else:
+                            is_upcoming = True
+                            status = 'today'
+                    else:
+                        status = 'today'
+                elif target_date > today:
+                    is_upcoming = True
+                    status = 'upcoming'
+                else:
+                    is_past = True
+                    status = 'past'
             else:
-                res.append({
-                    'class_id': cls.id,
-                    'class_name': cls.name,
-                    'date': None,
-                    'date_str': '',
-                    'day_name': '',
-                    'time_str': '',
-                    'slot_info': '',
-                    'has_target': False,
-                    'is_today': False,
-                    'is_upcoming': False,
-                    'summary': cls.name
-                })
+                ref_date = self.due_date or (tz.localtime(self.published_at).date() if self.published_at else None)
+                if ref_date:
+                    if ref_date == today:
+                        is_today = True
+                        status = 'today'
+                    elif ref_date > today:
+                        is_upcoming = True
+                        status = 'upcoming'
+                    else:
+                        is_past = True
+                        status = 'past'
+
+            if status == 'now':
+                badge_class = 'class-status-now'
+                status_label = 'Зараз'
+            elif status == 'today':
+                badge_class = 'class-status-today'
+                status_label = 'Сьогодні'
+            elif status == 'upcoming':
+                badge_class = 'class-status-upcoming'
+                status_label = day_name or date_str or 'Скоро'
+            elif status == 'past':
+                badge_class = 'class-status-past'
+                status_label = 'Пройдено'
+            else:
+                badge_class = 'class-status-default'
+                status_label = ''
+
+            parts = [p for p in [cls.name, date_str or day_name, slot_info, time_str] if p]
+            c_id = getattr(for_class, 'id', for_class) if for_class else None
+            is_selected = bool(c_id and cls.id == c_id)
+
+            res.append({
+                'class_id': cls.id,
+                'class_name': cls.name,
+                'date': target_date,
+                'date_str': date_str,
+                'day_name': day_name,
+                'time_str': time_str,
+                'slot_info': slot_info,
+                'has_target': has_target,
+                'status': status,
+                'status_label': status_label,
+                'badge_class': badge_class,
+                'is_now': is_now,
+                'is_today': is_today,
+                'is_upcoming': is_upcoming,
+                'is_past': is_past,
+                'is_selected': is_selected,
+                'summary': ' — '.join(parts) or cls.name
+            })
         return res
 
 
@@ -868,148 +1110,199 @@ class Assignment(models.Model):
         from django.utils.html import escape, linebreaks
         return linebreaks(escape(self.description))
 
+    def get_card_description(self, max_chars=160):
+        """
+        Повертає безпечний короткий опис для картки завдання в стрічці:
+        - Рендерить розмітку (жирний, курсив тощо) так, щоб вона відображалася стилізовано,
+          а не виводилася сирими HTML-тегами (наприклад <b>...</b>).
+        - Згладжує блочні теги (p, h1-h6, div, li) у компактний інлайн-текст.
+        - Підтримує Markdown (**жирний**, *курсив*).
+        - Безпечно санітизує від XSS та безпечно обрізає до max_chars з балансом закриття тегів.
+        """
+        if not self.description:
+            return ""
+        import re
+        from django.utils.html import escape
+        from django.utils.text import Truncator
+        from .utils import sanitize_html
+
+        raw = self.description.strip()
+        if not raw:
+            return ""
+
+        # Якщо є Markdown-розмітка без HTML, перетворимо в базовий HTML
+        if "<" not in raw:
+            if "**" in raw:
+                raw = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', raw)
+            if "*" in raw:
+                raw = re.sub(r'(?<!\*)\*([^*]+?)\*(?!\*)', r'<i>\1</i>', raw)
+
+        if "<" in raw and ">" in raw:
+            # Спрощуємо блочні теги для акуратного 2-рядкового попереднього перегляду
+            simplified = re.sub(r'</?(?:p|div|h[1-6]|blockquote)[^>]*>', ' ', raw)
+            simplified = re.sub(r'<li[^>]*>', ' • ', simplified)
+            simplified = re.sub(r'</li>', ' ', simplified)
+            simplified = re.sub(r'</?(?:ul|ol)[^>]*>', ' ', simplified)
+            simplified = re.sub(r'<br\s*/?>', ' ', simplified)
+            simplified = re.sub(r'\s+', ' ', simplified).strip()
+            clean_html = sanitize_html(simplified)
+            truncator = Truncator(clean_html)
+            return truncator.chars(max_chars, html=True)
+        else:
+            truncator = Truncator(escape(raw))
+            return truncator.chars(max_chars, html=False)
+
     def get_relevance_badge(self, for_class=None):
         """
-        Визначає контекстну актуальність завдання для учня/класу:
+        Визначає контекстну актуальність завдання для класу або стрічки загалом:
         Повертає словник:
-        - badge_text: '🟢 Сьогодні на уроці' | '⚡ Зараз на уроці (3-й ур.)' | '📅 На четвер (4-й ур.)' | '✓ Пройдений урок'
+        - badge_text: '⚡ Зараз на уроці (3-й ур.)' | '🟢 Сьогодні на уроці: 7-А (2-й ур.)' | '📅 На завтра: 7-Б' | '✓ Всі уроки пройшли'
         - badge_class: 'badge-relevance-now' | 'badge-relevance-today' | 'badge-relevance-upcoming' | 'badge-relevance-past'
         - is_now: bool
         - is_today: bool
         - target_info: рядок з детальною інформацією
         """
+        import datetime
         from django.utils import timezone
         now = timezone.localtime(timezone.now())
         today = now.date()
-        today_weekday = today.weekday() + 1  # 1 = Monday ... 7 = Sunday
-        current_time = now.time()
 
-        # 1. Перевіряємо явну прив'язку через AssignmentScheduleTarget
-        targets = self.schedule_targets.all()
-        target = None
+        if not for_class and hasattr(self, '_for_class_id') and self._for_class_id:
+            for_class = self._for_class_id
+
+        targets_info = self.get_all_targets_info(for_class=for_class)
+
         if for_class:
-            target = targets.filter(class_group=for_class).first()
-        if not target and targets.exists():
-            target = targets.first()
-
-        if target:
-            if target.target_date:
-                t_date = target.target_date
-                slot = target.bell_slot
-                slot_info = f" ({slot.lesson_number}-й ур.)" if slot else ""
-                if t_date == today:
-                    if slot and slot.start_time and slot.end_time and slot.start_time <= current_time <= slot.end_time:
-                        return {
-                            'badge_text': f"⚡ Зараз на уроці{slot_info}",
-                            'badge_class': 'badge-relevance-now',
-                            'is_now': True,
-                            'is_today': True,
-                            'target_info': f"Сьогодні{slot_info}"
-                        }
+            c_id = getattr(for_class, 'id', for_class)
+            tgt = next((t for t in targets_info if t['class_id'] == c_id), None)
+            if tgt:
+                slot_info = f" ({tgt['slot_info']})" if tgt.get('slot_info') else ""
+                if tgt['status'] == 'now':
                     return {
-                        'badge_text': f"🟢 Сьогодні на уроці{slot_info}",
+                        'badge_text': f"⚡ Зараз на уроці{slot_info}",
+                        'badge_class': 'badge-relevance-now',
+                        'is_now': True,
+                        'is_today': True,
+                        'target_info': f"Сьогодні{slot_info}"
+                    }
+                elif tgt['status'] == 'today':
+                    time_part = f" о {tgt['time_str']}" if tgt.get('time_str') else ""
+                    return {
+                        'badge_text': f"🟢 Сьогодні на уроці{slot_info}{time_part}",
                         'badge_class': 'badge-relevance-today',
                         'is_now': False,
                         'is_today': True,
                         'target_info': f"Сьогодні{slot_info}"
                     }
-                elif t_date > today:
-                    delta_days = (t_date - today).days
-                    if delta_days == 1:
-                        day_title = "на завтра"
+                elif tgt['status'] == 'upcoming':
+                    day_title = ""
+                    if tgt.get('date'):
+                        delta = (tgt['date'] - today).days
+                        if delta == 1:
+                            day_title = "на завтра"
+                        elif tgt.get('day_name'):
+                            uk_accusative = {'Понеділок': 'понеділок', 'Вівторок': 'вівторок', 'Середа': 'середу', 'Четвер': 'четвер', "П'ятниця": "п'ятницю", 'Субота': 'суботу', 'Неділя': 'неділю'}
+                            day_title = f"на {uk_accusative.get(tgt['day_name'], tgt['day_name'].lower())}"
+                        else:
+                            day_title = f"на {tgt['date_str']}"
+                    elif tgt.get('day_name'):
+                        uk_accusative = {'Понеділок': 'понеділок', 'Вівторок': 'вівторок', 'Середа': 'середу', 'Четвер': 'четвер', "П'ятниця": "п'ятницю", 'Субота': 'суботу', 'Неділя': 'неділю'}
+                        day_title = f"на {uk_accusative.get(tgt['day_name'], tgt['day_name'].lower())}"
                     else:
-                        uk_weekdays = {1: 'Понеділок', 2: 'Вівторок', 3: 'Середу', 4: 'Четвер', 5: "П'ятницю", 6: 'Суботу', 7: 'Неділю'}
-                        day_title = f"на {uk_weekdays.get(t_date.weekday() + 1, '')}"
+                        day_title = "скоро"
                     return {
                         'badge_text': f"📅 {day_title.capitalize()}{slot_info}",
                         'badge_class': 'badge-relevance-upcoming',
                         'is_now': False,
                         'is_today': False,
-                        'target_info': f"{t_date.strftime('%d.%m')}{slot_info}"
+                        'target_info': f"{tgt.get('date_str') or tgt.get('day_name')}{slot_info}"
                     }
-                else:
+                elif tgt['status'] == 'past':
+                    past_date_str = f" {tgt['date_str']}" if tgt.get('date_str') else ""
                     return {
                         'badge_text': "✓ Пройдений урок",
                         'badge_class': 'badge-relevance-past',
                         'is_now': False,
                         'is_today': False,
-                        'target_info': f"Урок відбувся {t_date.strftime('%d.%m')}"
+                        'target_info': f"Урок відбувся{past_date_str}"
                     }
-            elif target.target_day_of_week:
-                t_day = target.target_day_of_week
-                slot = target.bell_slot
-                slot_info = f" ({slot.lesson_number}-й ур.)" if slot else ""
-                if t_day == today_weekday:
-                    if slot and slot.start_time and slot.end_time and slot.start_time <= current_time <= slot.end_time:
-                        return {
-                            'badge_text': f"⚡ Зараз на уроці{slot_info}",
-                            'badge_class': 'badge-relevance-now',
-                            'is_now': True,
-                            'is_today': True,
-                            'target_info': f"Сьогодні{slot_info}"
-                        }
-                    return {
-                        'badge_text': f"🟢 Сьогодні на уроці{slot_info}",
-                        'badge_class': 'badge-relevance-today',
-                        'is_now': False,
-                        'is_today': True,
-                        'target_info': f"Сьогодні{slot_info}"
-                    }
+
+        # Якщо for_class не вказано (загальна стрічка завдань)
+        if targets_info:
+            has_multiple = len(targets_info) > 1
+
+            # 1. Шукаємо клас, у якого урок триває ЗАРАЗ
+            now_tgts = [t for t in targets_info if t['status'] == 'now']
+            if now_tgts:
+                t = now_tgts[0]
+                class_prefix = f": {t['class_name']}" if has_multiple else ""
+                slot_info = f" ({t['slot_info']})" if t.get('slot_info') else ""
+                return {
+                    'badge_text': f"⚡ Зараз на уроці{class_prefix}{slot_info}",
+                    'badge_class': 'badge-relevance-now',
+                    'is_now': True,
+                    'is_today': True,
+                    'target_info': f"{t['class_name']} — Зараз"
+                }
+
+            # 2. Шукаємо клас, у якого урок СЬОГОДНІ
+            today_tgts = [t for t in targets_info if t['status'] == 'today']
+            if today_tgts:
+                t = today_tgts[0]
+                class_prefix = f": {t['class_name']}" if has_multiple else ""
+                slot_info = f" ({t['slot_info']})" if t.get('slot_info') else ""
+                time_part = f" о {t['time_str']}" if t.get('time_str') else ""
+                return {
+                    'badge_text': f"🟢 Сьогодні на уроці{class_prefix}{slot_info}{time_part}",
+                    'badge_class': 'badge-relevance-today',
+                    'is_now': False,
+                    'is_today': True,
+                    'target_info': f"{t['class_name']} — Сьогодні"
+                }
+
+            # 3. Шукаємо найближчий МАЙБУТНІЙ урок
+            upcoming_tgts = [t for t in targets_info if t['status'] == 'upcoming']
+            if upcoming_tgts:
+                upcoming_tgts.sort(key=lambda x: x['date'] or datetime.date.max)
+                t = upcoming_tgts[0]
+                class_prefix = f": {t['class_name']}" if has_multiple else ""
+                slot_info = f" ({t['slot_info']})" if t.get('slot_info') else ""
+                day_title = ""
+                if t.get('date'):
+                    delta = (t['date'] - today).days
+                    if delta == 1:
+                        day_title = "на завтра"
+                    elif t.get('day_name'):
+                        uk_accusative = {'Понеділок': 'понеділок', 'Вівторок': 'вівторок', 'Середа': 'середу', 'Четвер': 'четвер', "П'ятниця": "п'ятницю", 'Субота': 'суботу', 'Неділя': 'неділю'}
+                        day_title = f"на {uk_accusative.get(t['day_name'], t['day_name'].lower())}"
+                    else:
+                        day_title = f"на {t['date_str']}"
+                elif t.get('day_name'):
+                    uk_accusative = {'Понеділок': 'понеділок', 'Вівторок': 'вівторок', 'Середа': 'середу', 'Четвер': 'четвер', "П'ятниця": "п'ятницю", 'Субота': 'суботу', 'Неділя': 'неділю'}
+                    day_title = f"на {uk_accusative.get(t['day_name'], t['day_name'].lower())}"
                 else:
-                    uk_weekdays = {1: 'Понеділок', 2: 'Вівторок', 3: 'Середу', 4: 'Четвер', 5: "П'ятницю", 6: 'Суботу'}
-                    day_name = uk_weekdays.get(t_day, 'розклад')
-                    return {
-                        'badge_text': f"📅 На {day_name}{slot_info}",
-                        'badge_class': 'badge-relevance-upcoming',
-                        'is_now': False,
-                        'is_today': False,
-                        'target_info': f"{day_name}{slot_info}"
-                    }
+                    day_title = "скоро"
+                return {
+                    'badge_text': f"📅 {day_title.capitalize()}{class_prefix}{slot_info}",
+                    'badge_class': 'badge-relevance-upcoming',
+                    'is_now': False,
+                    'is_today': False,
+                    'target_info': f"{t['class_name']} — {t.get('date_str') or t.get('day_name')}"
+                }
 
-        # 2. Якщо явної прив'язки немає, перевіряємо розклад вчителя для цих класів
-        classes_to_check = [for_class] if for_class else list(self.classes.all())
-        if self.teacher and classes_to_check:
-            teacher_lessons = TeacherLessonSchedule.objects.filter(
-                teacher=self.teacher,
-                class_group__in=classes_to_check
-            ).select_related('bell_slot', 'class_group').order_by('day_of_week', 'bell_slot__lesson_number')
+            # 4. Якщо всі уроки вже завершились
+            past_tgts = [t for t in targets_info if t['status'] == 'past']
+            if past_tgts:
+                badge_text = "✓ Всі уроки пройшли" if has_multiple else "✓ Пройдений урок"
+                return {
+                    'badge_text': badge_text,
+                    'badge_class': 'badge-relevance-past',
+                    'is_now': False,
+                    'is_today': False,
+                    'target_info': "Уроки відбулися"
+                }
 
-            if teacher_lessons.exists():
-                today_lesson = teacher_lessons.filter(day_of_week=today_weekday).first()
-                if today_lesson:
-                    slot = today_lesson.bell_slot
-                    slot_info = f" ({slot.lesson_number}-й ур.)" if slot else ""
-                    if slot and slot.start_time and slot.end_time and slot.start_time <= current_time <= slot.end_time:
-                        return {
-                            'badge_text': f"⚡ Зараз на уроці{slot_info}",
-                            'badge_class': 'badge-relevance-now',
-                            'is_now': True,
-                            'is_today': True,
-                            'target_info': f"Сьогодні{slot_info}"
-                        }
-                    if self.days_ago <= 2:
-                        return {
-                            'badge_text': f"🟢 Сьогодні на уроці{slot_info}",
-                            'badge_class': 'badge-relevance-today',
-                            'is_now': False,
-                            'is_today': True,
-                            'target_info': f"Сьогодні{slot_info}"
-                        }
-                future_lessons = teacher_lessons.filter(day_of_week__gt=today_weekday)
-                next_lesson = future_lessons.first() or teacher_lessons.first()
-                if next_lesson and self.days_ago <= 6:
-                    uk_weekdays = {1: 'Понеділок', 2: 'Вівторок', 3: 'Середу', 4: 'Четвер', 5: "П'ятницю", 6: 'Суботу'}
-                    day_name = uk_weekdays.get(next_lesson.day_of_week, '')
-                    slot_info = f" ({next_lesson.bell_slot.lesson_number}-й ур.)" if next_lesson.bell_slot else ""
-                    return {
-                        'badge_text': f"📅 На {day_name}{slot_info}",
-                        'badge_class': 'badge-relevance-upcoming',
-                        'is_now': False,
-                        'is_today': False,
-                        'target_info': f"{day_name}{slot_info}"
-                    }
-
-        # 3. Дефолтний варіант без розкладу
+        # 5. Дефолтний варіант без прив'язки до уроків
         if self.is_published_today:
             return {
                 'badge_text': '🟢 Сьогодні на уроці',
@@ -1373,6 +1666,11 @@ class AssignmentFile(models.Model):
         'Оригінальна назва файлу',
         max_length=500,
         blank=True
+    )
+    is_task_source_for_ai = models.BooleanField(
+        'Файл з умовою для ШІ',
+        default=False,
+        help_text='Позначка для ШІ, що саме у цьому файлі міститься умова/текст завдання'
     )
     uploaded_at = models.DateTimeField('Завантажено', auto_now_add=True)
 
@@ -1818,6 +2116,73 @@ class Submission(models.Model):
         'Остання (актуальна) спроба', default=True, db_index=True
     )
 
+    # ── Колективна (групова) робота учнів ────────────────────────────────────
+    is_group_work = models.BooleanField(
+        'Колективна робота', default=False, db_index=True
+    )
+    group_authors = models.TextField(
+        'Співавтори / учасники групи', blank=True, default=''
+    )
+    primary_submission = models.ForeignKey(
+        'self',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='coauthor_submissions',
+        verbose_name='Основна робота групи'
+    )
+
+    def is_collective_work(self):
+        """Визначає, чи є робота колективною (груповою)."""
+        if self.is_group_work or self.primary_submission_id:
+            return True
+        if self.coauthor_submissions.exists():
+            return True
+        if self.comment_student:
+            from .student_matcher import extract_coauthors_from_comment
+            if extract_coauthors_from_comment(
+                self.comment_student,
+                class_group=self.class_group,
+                exclude_last_name=self.last_name,
+                exclude_first_name=self.first_name
+            ):
+                return True
+        return False
+
+    def get_group_members_display(self):
+        """Повертає список імен усіх авторів колективної роботи без повторень."""
+        if self.group_authors:
+            return [a.strip() for a in self.group_authors.split(',') if a.strip()]
+        if self.primary_submission and self.primary_submission.group_authors:
+            return [a.strip() for a in self.primary_submission.group_authors.split(',') if a.strip()]
+        # Резервний варіант (витяг з коментаря якщо є)
+        from .student_matcher import extract_coauthors_from_comment
+        coauthors = extract_coauthors_from_comment(
+            self.comment_student,
+            class_group=self.class_group,
+            exclude_last_name=self.last_name,
+            exclude_first_name=self.first_name
+        )
+        if coauthors:
+            all_names = [self.get_student_full_name()] + [c['full_name'] for c in coauthors]
+            seen = set()
+            res = []
+            for n in all_names:
+                if n.lower() not in seen:
+                    seen.add(n.lower())
+                    res.append(n)
+            return res
+        return [self.get_student_full_name()]
+
+    def get_all_group_submissions(self):
+        """Повертає список усіх здач цієї групи (основна + співавтори)."""
+        root = self.primary_submission if self.primary_submission else self
+        all_subs = [root]
+        for sub in root.coauthor_submissions.all():
+            if sub.id != root.id and sub not in all_subs:
+                all_subs.append(sub)
+        return all_subs
+
     def is_ai_allowed(self):
         """Чи дозволено використання ШІ у цьому завданні вчителем."""
         return bool(self.assignment and self.assignment.allow_ai_usage)
@@ -1943,15 +2308,21 @@ class Submission(models.Model):
     @property
     def effective_grade_date(self):
         """
-        Повертає дату виставлення оцінки вчителем (якщо роботу оцінено та є graded_at),
-        або дату здачі роботи учнем. Враховує часовий пояс України.
+        Повертає дату уроку/завдання (об'єкт date), до якого відноситься ця робота та оцінка.
+        Визначається цільовою датою уроку для класу учня або датою публікації завдання.
+        Якщо завдання відсутнє або не прив'язане, використовується дата здачі роботи
+        (або дата оцінювання / поточна дата).
         """
         from django.utils import timezone
-        if self.grade and self.graded_at:
-            return timezone.localtime(self.graded_at).date()
+        if self.assignment:
+            assign_date = self.assignment.get_lesson_date(for_class=self.class_group)
+            if assign_date:
+                return assign_date
         if self.submitted_at:
             return timezone.localtime(self.submitted_at).date()
-        return timezone.now().date()
+        if self.graded_at:
+            return timezone.localtime(self.graded_at).date()
+        return timezone.localtime(timezone.now()).date()
 
 
 
@@ -2376,6 +2747,18 @@ DEFAULT_NUS_SYSTEM_PROMPT = """Ти — висококваліфікований
   * КАТЕГОРИЧНО ЗАБОРОНЕНО знижувати бал або писати зауваження про «невиконання решти завдань» — вони вважаються незаданими!
   * Робота вважається виконаною у повному обсязі (100%), якщо якісно виконано саме задане вчителем завдання.
 
+БАГАТОЗАДАЧНІ УМОВИ ТА ПРАВИЛА ВИБОРУ ЗАВДАНЬ («виконати будь-яке завдання», «одне на вибір»):
+- Якщо вчитель дозволив учням обрати будь-яке завдання з файлу умови:
+  1. СПОЧАТКУ перевір, чи вказав учень, яке саме завдання він виконував: у коментарі учня (наприклад: «виконував завдання 2», «робив вправу 3»), у назві файлу або на початку тексту.
+  2. Якщо учень вказав обране завдання: оцінюй саме це конкретне завдання за критеріями без зниження оцінки за вибір.
+  3. Якщо учень НЕ вказав обране завдання:
+     * Автоматично зістав здану роботу із завданнями файлу умови та визнач найбільш імовірне завдання.
+     * ОБОВ'ЯЗКОВО вкажи учневі у "weaknesses", "summary" та "feedback_comment": «Зверніть увагу: ви не вказали, яке саме завдання з умови на вибір ви виконували (визначено як Завдання X). Відсутність зазначення обраного завдання вплинула на оцінку.»
+     * Знизь оцінку на 1-2 бали через порушення вимоги зазначити обране завдання.
+  4. Якщо ШІ взагалі не зрозумів, яке завдання виконано, або робота не відповідає жодному завданню:
+     * Встанови оцінку "Доопрацювати", рівень "Початковий", "unclear_task": true.
+     * У полі "format_warning" ОБОВ'ЯЗКОВО напиши: «Не зрозуміло, яке саме завдання виконане. Вкажіть номер завдання в коментарі або перевірте правильність файлу.»
+
 ТОЧНЕ РОЗУМІННЯ СУТІ ЗАВДАННЯ, ЗМІСТОВА ВІДПОВІДНІСТЬ ТА ПОВНОТА ВИКОНАННЯ:
 1. Аналіз форми та очікуваного результату: уважно з'ясуй, що саме вимагає завдання (наприклад, структурований список дат з подіями, твір/есе, розв'язання задач із формулами, таблиця тощо). Оцінюй роботу за відповідністю саме цій формі та змісту, а не випадковим ключовим словам.
 2. Суворість для оцінок Високого рівня (10-12 балів): 10-12 балів призначаються ВИКЛЮЧНО за повне, змістовне та структуроване виконання. КАТЕГОРИЧНО ЗАБОРОНЕНО ставити 10-12 балів за фрагментарну відповідь чи поодинокі фрази (наприклад, якщо вимагався список дат, а учень здав одне речення з датою чи картинку з парою слів — така робота є фрагментарною і оцінюється не вище Середнього рівня, тобто 4-6 балів).
@@ -2383,23 +2766,19 @@ DEFAULT_NUS_SYSTEM_PROMPT = """Ти — висококваліфікований
 4. Обов'язковий узагальнений зворотний зв'язок при оцінці менше 10 балів: якщо оцінка менше 10 балів (або "Доопрацювати"), окрім "strengths", ТИ ЗОБОВ'ЯЗАНИЙ у полях "weaknesses" та "feedback_comment" чітко й тактовно описати в загальному ("але в загальному"), що саме виконано не так і чого не вистачає для досягнення вищого балу (порівняти вимогу завдання з фактично зданим результатом).
 
 ТЕХНІЧНІ ВИМОГИ ТА ПРАВИЛА ДЛЯ ПОЛЯ "format_warning":
-- Поле "format_warning" призначене ВИКЛЮЧНО ДЛЯ ТЕХНІЧНИХ ДЕФЕКТІВ РОЗШИРЕННЯ ЧИ ТИПУ ФАЙЛУ (а НЕ для змісту роботи чи зображених об'єктів!):
-  1. Якщо завдання з програмування (наприклад, Python, JS, C++ тощо), код повинен бути збережений у файлі з належним розширенням (наприклад, .py для Python, .html для веб, .cpp для C++).
-  2. Якщо файл здано БЕЗ РОЗШИРЕННЯ (навіть якщо всередині правильний код чи текст), або здано у технічно невідповідному типі файлу (наприклад, текстовий файл .txt замість .py коду чи замість .xlsx таблиці, або фото замість файлу коду):
-     * Обов'язково зафіксуй технічне зауваження у полі "format_warning" (наприклад: "Файл здано без розширення (має бути .py для коду Python)").
-     * Обов'язково додай це технічне зауваження до списку "weaknesses" та у "feedback_comment".
-     * ЗНИЗЬ рекомендовану оцінку на 1-2 бали за порушення технічних вимог до формату здачі.
-  3. СУВОРЕ ПРАВИЛО: Якщо файл має належний технічний формат (наприклад, валідне зображення .jpg/.png, документ .docx/.pdf тощо), але ЗМІСТ роботи не відповідає завданню (наприклад, на фото людина замість кота, есе не на ту тему, помилковий малюнок чи розв'язок):
-     * Поле "format_warning" ОБОВ'ЯЗКОВО МАЄ БУТИ null (або порожнім)!
-     * Усі зауваження щодо невідповідності змісту завдання фіксуй ВИКЛЮЧНО у "weaknesses" та "feedback_comment", а також знижуй оцінку або став рекомендований статус "Доопрацювати".
+- Поле "format_warning" призначене для:
+  1. Технічних дефектів розширення чи типу файлу (наприклад, файл без розширення, .txt замість .py або .xlsx, фото замість файлу програми).
+  2. Випадків, коли НЕ ЗРОЗУМІЛО, яке саме завдання виконане: «Не зрозуміло, яке саме завдання виконане. Вкажіть номер завдання в коментарі або перевірте правильність файлу.»
+- Якщо файл має належний технічний формат, завдання зрозуміле, але у змісті є помилки чи невідповідність темі: поле "format_warning" має бути null (а зауваження йдуть у "weaknesses" та "feedback_comment").
 
 ОСОБЛИВИЙ СТАТУС "Доопрацювати":
-Якщо робота не відповідає темі завдання (наприклад, завантажено стороннє фото чи чужий документ), здано порожній файл, або допущено критичні помилки, які вимагають переробки учнем, вкажи рекомендовану оцінку "Доопрацювати".
+Якщо робота не відповідає темі завдання (наприклад, завантажено стороннє фото чи чужий документ), здано порожній файл, не вдалося визначити виконане завдання, або допущено критичні помилки, які вимагають переробки учнем, вкажи рекомендовану оцінку "Доопрацювати".
 
 ФОРМАТ ВІДПОВІДІ (ТІЛЬКИ ВАЛІДНИЙ JSON БЕЗ ЗАЙВОГО ТЕКСТУ):
 {
   "suggested_grade": "10",
   "level": "Високий (10-12)",
+  "unclear_task": false,
   "format_warning": null,
   "summary": "Короткий загальний висновок щодо якості виконання.",
   "strengths": ["Пункт 1: що зроблено відмінно", "Пункт 2: сильна сторона"],

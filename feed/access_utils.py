@@ -76,12 +76,40 @@ def _parse_csv_line(line: str, delimiter: str = ';') -> List[str]:
         return [c.strip('"').strip() for c in line.split(delimiter)]
 
 
-def _get_tables_mdbtools(file_path: str) -> Tuple[List[str], Optional[str]]:
-    stdout, err = _run_mdb_command(['mdb-tables', '-1', file_path])
+def _get_entries_mdbtools(file_path: str, entry_type: str = 'table') -> Tuple[List[str], Optional[str]]:
+    """Повертає список об'єктів вказаного типу (table, query, form, report, relationship)."""
+    stdout, err = _run_mdb_command(['mdb-tables', '-1', '-t', entry_type, file_path])
     if err:
         return [], err
-    tables = [t.strip() for t in stdout.splitlines() if t.strip()]
-    return tables, None
+    entries = [t.strip() for t in stdout.splitlines() if t.strip()]
+    return entries, None
+
+
+def _get_tables_mdbtools(file_path: str) -> Tuple[List[str], Optional[str]]:
+    return _get_entries_mdbtools(file_path, 'table')
+
+
+def _get_database_version_mdbtools(file_path: str) -> str:
+    """Визначає точну версію формату Access через mdb-ver."""
+    stdout, _ = _run_mdb_command(['mdb-ver', file_path])
+    ver = stdout.strip()
+    if not ver:
+        return ""
+    ver_map = {
+        'JET3': 'Access 97 (Jet 3.0)',
+        'JET4': 'Access 2000-2003 (Jet 4.0)',
+        'ACE12': 'Access 2007 (ACE 12.0)',
+        'ACE14': 'Access 2010 (ACE 14.0)',
+        'ACE15': 'Access 2013 (ACE 15.0)',
+        'ACE16': 'Access 2016-365 (ACE 16.0)',
+    }
+    return ver_map.get(ver, f"Access ({ver})")
+
+
+def _get_query_sql_mdbtools(file_path: str, query_name: str) -> str:
+    """Витягує SQL-текст запиту через mdb-queries."""
+    stdout, _ = _run_mdb_command(['mdb-queries', file_path, query_name])
+    return stdout.strip()
 
 
 def _export_table_mdbtools(file_path: str, table: str, max_rows: int = 200) -> Tuple[List[List[str]], List[str], Optional[str]]:
@@ -101,20 +129,39 @@ def _export_table_mdbtools(file_path: str, table: str, max_rows: int = 200) -> T
 
 
 def parse_access_with_mdbtools(file_path: str, max_rows_per_table: int = 200) -> Tuple[dict, Optional[str]]:
-    tables, err = _get_tables_mdbtools(file_path)
-    if err:
+    tables, err = _get_entries_mdbtools(file_path, 'table')
+    queries, _ = _get_entries_mdbtools(file_path, 'query')
+    forms, _ = _get_entries_mdbtools(file_path, 'form')
+    reports, _ = _get_entries_mdbtools(file_path, 'report')
+    relationships, _ = _get_entries_mdbtools(file_path, 'relationship')
+
+    db_version = _get_database_version_mdbtools(file_path)
+
+    if err and not tables and not queries and not forms and not reports:
         return {}, err
-    if not tables:
-        return {'tables': [], 'schema': ''}, None
 
     result = {
+        'version': db_version,
         'tables': [],
+        'queries': [],
+        'forms': forms or [],
+        'reports': reports or [],
+        'relationships': relationships or [],
         'file_size_kb': os.path.getsize(file_path) / 1024,
     }
+
+    # Видобуваємо SQL запитів
+    for q_name in (queries or [])[:20]:
+        q_sql = _get_query_sql_mdbtools(file_path, q_name)
+        result['queries'].append({
+            'name': q_name,
+            'sql': q_sql
+        })
+
     schema_out, _ = _run_mdb_command(['mdb-schema', file_path])
     result['schema'] = schema_out[:8000] if schema_out else ''
 
-    for table_name in tables[:30]:
+    for table_name in (tables or [])[:30]:
         rows, headers, exp_err = _export_table_mdbtools(file_path, table_name, max_rows_per_table)
         result['tables'].append({
             'name': table_name,
@@ -381,24 +428,54 @@ def extract_access_text_for_ai(file_path: str, max_rows_per_table: int = 50) -> 
         if err:
             parts.append(f"⚠️ Помилка читання: {err}")
         else:
+            ver_info = db_data.get('version')
+            if ver_info:
+                parts.append(f"Формат / Версія: {ver_info}")
+
             tables = db_data.get('tables', [])
-            parts.append(f"\n📊 Кількість таблиць: {len(tables)}")
+            queries = db_data.get('queries', [])
+            forms = db_data.get('forms', [])
+            reports = db_data.get('reports', [])
+
+            parts.append(f"\n📊 Зведення об'єктів бази даних:")
+            parts.append(f"  • Таблиць (Tables): {len(tables)}")
+            parts.append(f"  • Запитів (Queries): {len(queries)}")
+            parts.append(f"  • Екранних форм (Forms): {len(forms)}")
+            parts.append(f"  • Звітів (Reports): {len(reports)}")
 
             schema = db_data.get('schema', '')
             if schema:
-                parts.append(f"\n📐 Схема бази даних:\n```sql\n{schema[:3000]}\n```")
+                parts.append(f"\n📐 Схема бази даних (DDL):\n```sql\n{schema[:3000]}\n```")
 
-            for table in tables[:15]:
-                parts.append(f"\n─────────────────────────────────")
-                parts.append(f"📋 Таблиця: «{table['name']}» ({table['row_count']} записів)")
-                headers = table.get('headers', [])
-                rows = table.get('rows', [])
-                if headers:
-                    parts.append(f"Колонки: {' | '.join(headers)}")
-                for i, row in enumerate(rows[:max_rows_per_table], 1):
-                    parts.append(f"  {i}. {' | '.join(str(c) for c in row)}")
-                if not headers and not rows:
-                    parts.append(f"  (Помилка: {table.get('error', 'невідома')})" if table.get('error') else "  (порожня)")
+            if tables:
+                parts.append("\n📋 ТАБЛИЦІ БАЗИ ДАНИХ ТА ЇХ ВМІСТ:")
+                for table in tables[:15]:
+                    parts.append(f"\n─────────────────────────────────")
+                    parts.append(f"Таблиця: «{table['name']}» ({table['row_count']} записів)")
+                    headers = table.get('headers', [])
+                    rows = table.get('rows', [])
+                    if headers:
+                        parts.append(f"Колонки: {' | '.join(headers)}")
+                    for i, row in enumerate(rows[:max_rows_per_table], 1):
+                        parts.append(f"  {i}. {' | '.join(str(c) for c in row)}")
+                    if not headers and not rows:
+                        parts.append(f"  (Помилка: {table.get('error', 'невідома')})" if table.get('error') else "  (порожня)")
+
+            if queries:
+                parts.append("\n🔍 ЗАПИТИ (SQL QUERIES):")
+                for q in queries[:15]:
+                    parts.append(f"\n─────────────────────────────────")
+                    parts.append(f"Запит: «{q['name']}»")
+                    if q.get('sql'):
+                        parts.append(f"SQL код:\n```sql\n{q['sql']}\n```")
+                    else:
+                        parts.append("  (SQL код недоступний або запит без тексту)")
+
+            if forms:
+                parts.append(f"\n📑 Екранні форми: {', '.join(forms)}")
+
+            if reports:
+                parts.append(f"\n📄 Звіти: {', '.join(reports)}")
     else:
         db_data, err = parse_access_fallback(file_path)
         if err:

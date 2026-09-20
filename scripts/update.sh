@@ -75,6 +75,17 @@ echo "🔨 [3/5] Перезбирання образу застосунку та
 docker compose build app
 docker compose up -d
 
+# Очікуємо поки контейнер app буде у стані running (до 30 сек)
+echo "⏳ Очікування запуску контейнера app..."
+for i in {1..30}; do
+    APP_STATE=$(docker compose ps --status running --services 2>/dev/null || true)
+    if echo "$APP_STATE" | grep -q "app"; then
+        echo "   -> Контейнер app запущений."
+        break
+    fi
+    sleep 1
+done
+
 # 4. Очікування готовності PostgreSQL
 echo ""
 echo "⏳ [4/5] Очікування готовності бази даних PostgreSQL..."
@@ -96,8 +107,8 @@ echo "✅ PostgreSQL готовий до виконання міграцій."
 # 5. Застосування міграцій та збір статики
 echo ""
 echo "🚀 [5/5] Застосування міграцій БД та збір статики..."
-docker compose exec -T app python manage.py migrate --noinput
-docker compose exec -T app python manage.py collectstatic --noinput
+docker compose exec -T app python manage.py migrate --noinput 2>&1
+docker compose exec -T app python manage.py collectstatic --noinput --clear 2>&1 || docker compose exec -T app python manage.py collectstatic --noinput 2>&1
 
 # 6. Фінальна перевірка працездатності (Health Check)
 echo ""

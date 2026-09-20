@@ -145,13 +145,47 @@
                         <div class="card-body">
                             <div class="card-meta">
                                 <div class="card-meta-tags">
-                                    <!-- Класи (виразно та чітко) -->
-                                    {% for class in assignment.classes.all %}
-                                    <span class="class-prominent-badge">
-                                        <span class="class-icon">🏫</span>
-                                        <span class="class-text">{{ class.name }}</span>
-                                    </span>
-                                    {% endfor %}
+                                    <!-- Класи та розклад уроків з актуальністю -->
+                                    {% with targets=assignment.get_all_targets_info %}
+                                    {% if targets %}
+                                        {% for tgt in targets %}
+                                        <span class="class-prominent-badge {{ tgt.badge_class }}" title="{{ tgt.summary }}">
+                                            {% if tgt.status == 'now' %}
+                                            <span class="live-dot-pulse"></span>
+                                            <span class="class-text">{{ tgt.class_name }}</span>
+                                            <span class="class-time-hint">⚡ Зараз{% if tgt.slot_info %} ({{ tgt.slot_info }}){% endif %}</span>
+                                            {% elif tgt.status == 'today' %}
+                                            <span class="class-dot-today"></span>
+                                            <span class="class-text">{{ tgt.class_name }}</span>
+                                            <span class="class-time-hint">Сьогодні{% if tgt.slot_info %} ({{ tgt.slot_info }}){% endif %}{% if tgt.time_str %} {{ tgt.time_str }}{% endif %}</span>
+                                            {% elif tgt.status == 'upcoming' %}
+                                            <span class="class-icon">📅</span>
+                                            <span class="class-text">{{ tgt.class_name }}</span>
+                                            <span class="class-time-hint">{% if tgt.day_name %}{{ tgt.day_name|slice:":2" }}{% elif tgt.date_str %}{{ tgt.date_str }}{% endif %}{% if tgt.slot_info %} ({{ tgt.slot_info }}){% endif %}</span>
+                                            {% elif tgt.status == 'past' %}
+                                            <span class="class-icon">✓</span>
+                                            <span class="class-text">{{ tgt.class_name }}</span>
+                                            <span class="class-time-hint">{% if tgt.slot_info %}{{ tgt.slot_info }} • {% endif %}пройдено</span>
+                                            {% else %}
+                                            <span class="class-icon">🏫</span>
+                                            <span class="class-text">{{ tgt.class_name }}</span>
+                                            {% endif %}
+                                        </span>
+                                        {% endfor %}
+                                    {% else %}
+                                        {% for class in assignment.classes.all %}
+                                        <span class="class-prominent-badge">
+                                            <span class="class-icon">🏫</span>
+                                            <span class="class-text">{{ class.name }}</span>
+                                        </span>
+                                        {% empty %}
+                                        <span class="class-prominent-badge">
+                                            <span class="class-icon">🏫</span>
+                                            <span class="class-text">Всі класи</span>
+                                        </span>
+                                        {% endfor %}
+                                    {% endif %}
+                                    {% endwith %}
 
                                     <!-- Предмет (показується тільки якщо в системі більше ніж 1 предмет) -->
                                     {% if has_multiple_subjects and assignment.subject %}
@@ -177,7 +211,7 @@
                             <h2 class="card-title">{{ assignment.title }}</h2>
 
                             {% if assignment.description %}
-                            <p class="card-description">{{ assignment.description|truncatechars:160 }}</p>
+                            <div class="card-description">{{ assignment.get_card_description|safe }}</div>
                             {% endif %}
                         </div>
 

@@ -2,7 +2,7 @@
 {% load static %}
 
 {% block title %}{{ assignment.title }} | Шкільні Завдання{% endblock %}
-{% block meta_description %}{{ assignment.description|truncatechars:150|default:assignment.title }}{% endblock %}
+{% block meta_description %}{{ assignment.description|striptags|truncatechars:150|default:assignment.title }}{% endblock %}
 
 {% block extra_head %}
 <!-- Prism.js для підсвічування синтаксису коду -->
@@ -49,14 +49,43 @@
                             Для класу:
                         </div>
                         <div style="display:flex;gap:4px;flex-wrap:wrap;">
-                            {% for class in assignment.classes.all %}
-                            <span class="class-prominent-badge" style="font-size:12px;">
-                                <span class="class-icon">🏫</span>
-                                <span class="class-text">{{ class.name }}</span>
-                            </span>
-                            {% empty %}
-                            <span style="color:var(--color-text-muted);">Всі класи</span>
-                            {% endfor %}
+                            {% with targets=assignment.get_all_targets_info %}
+                            {% if targets %}
+                                {% for tgt in targets %}
+                                <span class="class-prominent-badge {{ tgt.badge_class }}" style="font-size:12px;" title="{{ tgt.summary }}">
+                                    {% if tgt.status == 'now' %}
+                                    <span class="live-dot-pulse"></span>
+                                    <span class="class-text">{{ tgt.class_name }}</span>
+                                    <span class="class-time-hint">⚡ Зараз{% if tgt.slot_info %} ({{ tgt.slot_info }}){% endif %}</span>
+                                    {% elif tgt.status == 'today' %}
+                                    <span class="class-dot-today"></span>
+                                    <span class="class-text">{{ tgt.class_name }}</span>
+                                    <span class="class-time-hint">Сьогодні{% if tgt.slot_info %} ({{ tgt.slot_info }}){% endif %}</span>
+                                    {% elif tgt.status == 'upcoming' %}
+                                    <span class="class-icon">📅</span>
+                                    <span class="class-text">{{ tgt.class_name }}</span>
+                                    <span class="class-time-hint">{% if tgt.day_name %}{{ tgt.day_name|slice:":2" }}{% elif tgt.date_str %}{{ tgt.date_str }}{% endif %}{% if tgt.slot_info %} ({{ tgt.slot_info }}){% endif %}</span>
+                                    {% elif tgt.status == 'past' %}
+                                    <span class="class-icon">✓</span>
+                                    <span class="class-text">{{ tgt.class_name }}</span>
+                                    <span class="class-time-hint">{% if tgt.slot_info %}{{ tgt.slot_info }} • {% endif %}пройдено</span>
+                                    {% else %}
+                                    <span class="class-icon">🏫</span>
+                                    <span class="class-text">{{ tgt.class_name }}</span>
+                                    {% endif %}
+                                </span>
+                                {% endfor %}
+                            {% else %}
+                                {% for class in assignment.classes.all %}
+                                <span class="class-prominent-badge" style="font-size:12px;">
+                                    <span class="class-icon">🏫</span>
+                                    <span class="class-text">{{ class.name }}</span>
+                                </span>
+                                {% empty %}
+                                <span style="color:var(--color-text-muted);">Всі класи</span>
+                                {% endfor %}
+                            {% endif %}
+                            {% endwith %}
                         </div>
                     </div>
 
@@ -265,12 +294,41 @@
                             </span>
                             {% endif %}
 
-                            {% for class in assignment.classes.all %}
-                            <span class="class-prominent-badge" style="font-size:12px;">
-                                <span class="class-icon">🏫</span>
-                                <span class="class-text">{{ class.name }}</span>
-                            </span>
-                            {% endfor %}
+                            {% with targets=assignment.get_all_targets_info %}
+                            {% if targets %}
+                                {% for tgt in targets %}
+                                <span class="class-prominent-badge {{ tgt.badge_class }}" style="font-size:12px;" title="{{ tgt.summary }}">
+                                    {% if tgt.status == 'now' %}
+                                    <span class="live-dot-pulse"></span>
+                                    <span class="class-text">{{ tgt.class_name }}</span>
+                                    <span class="class-time-hint">⚡ Зараз{% if tgt.slot_info %} ({{ tgt.slot_info }}){% endif %}</span>
+                                    {% elif tgt.status == 'today' %}
+                                    <span class="class-dot-today"></span>
+                                    <span class="class-text">{{ tgt.class_name }}</span>
+                                    <span class="class-time-hint">Сьогодні{% if tgt.slot_info %} ({{ tgt.slot_info }}){% endif %}</span>
+                                    {% elif tgt.status == 'upcoming' %}
+                                    <span class="class-icon">📅</span>
+                                    <span class="class-text">{{ tgt.class_name }}</span>
+                                    <span class="class-time-hint">{% if tgt.day_name %}{{ tgt.day_name|slice:":2" }}{% elif tgt.date_str %}{{ tgt.date_str }}{% endif %}{% if tgt.slot_info %} ({{ tgt.slot_info }}){% endif %}</span>
+                                    {% elif tgt.status == 'past' %}
+                                    <span class="class-icon">✓</span>
+                                    <span class="class-text">{{ tgt.class_name }}</span>
+                                    <span class="class-time-hint">{% if tgt.slot_info %}{{ tgt.slot_info }} • {% endif %}пройдено</span>
+                                    {% else %}
+                                    <span class="class-icon">🏫</span>
+                                    <span class="class-text">{{ tgt.class_name }}</span>
+                                    {% endif %}
+                                </span>
+                                {% endfor %}
+                            {% else %}
+                                {% for class in assignment.classes.all %}
+                                <span class="class-prominent-badge" style="font-size:12px;">
+                                    <span class="class-icon">🏫</span>
+                                    <span class="class-text">{{ class.name }}</span>
+                                </span>
+                                {% endfor %}
+                            {% endif %}
+                            {% endwith %}
 
                             {% if assignment.is_individual %}
                             <span class="individual-tag">👤 {{ assignment.student_display }}</span>
@@ -294,14 +352,66 @@
                         {{ assignment.title }}
                     </h1>
 
-                    <!-- Опис завдання -->
+                    <!-- Верхня плашка для учня зі швидкою дією -->
+                    {% if not is_teacher %}
+                    <div class="assignment-student-top-banner">
+                        <div>
+                            <div class="top-banner-title">
+                                <span>🎯</span>
+                                <span>Завдання до уроку</span>
+                            </div>
+                            <div class="top-banner-subtitle">
+                                {% if assignment.due_date %}
+                                ⏰ Термін здачі: <strong>до {{ assignment.due_date|date:"d.m.Y" }}</strong>
+                                {% else %}
+                                📖 Ознайомтеся з вказівками вчителя нижче
+                                {% endif %}
+                            </div>
+                        </div>
+                        <a href="{% url 'submit_assignment' assignment.pk %}" class="btn btn-primary btn-sm" style="font-weight:800;padding:8px 18px;box-shadow:0 3px 12px rgba(99,102,241,0.3);text-decoration:none;display:inline-flex;align-items:center;gap:6px;">
+                            <span>📤</span>
+                            <span>Здати роботу зараз</span>
+                        </a>
+                    </div>
+                    {% endif %}
+
+                    <!-- Опис завдання (Інструкція до виконання) -->
                     {% if assignment.description %}
-                    <div class="assignment-description-card">
+                    <div class="assignment-description-card" id="assignment-instructions-card">
                         <div class="assignment-description-header">
-                            <span class="desc-icon">📝</span>
-                            <span class="assignment-description-title">Завдання до виконання:</span>
+                            <div class="assignment-description-title-group">
+                                <span class="desc-icon">📝</span>
+                                <span class="assignment-description-title">Що потрібно зробити (Інструкція):</span>
+                                <span class="assignment-desc-badge">Вказівки вчителя</span>
+                            </div>
+                            <div class="assignment-desc-actions">
+                                <button type="button" class="btn-copy-desc" onclick="copyAssignmentDescription(this)" title="Скопіювати текст завдання">
+                                    <span class="copy-icon">📋</span>
+                                    <span class="copy-label">Скопіювати</span>
+                                </button>
+                            </div>
                         </div>
                         <div class="assignment-full-description rich-text-content" id="assignment-desc-content">{{ assignment.get_formatted_description|safe }}</div>
+                    </div>
+                    {% else %}
+                    <div class="assignment-description-card is-empty-notice" id="assignment-instructions-card">
+                        <div class="assignment-description-header">
+                            <div class="assignment-description-title-group">
+                                <span class="desc-icon">📋</span>
+                                <span class="assignment-description-title">Вказівки до виконання:</span>
+                            </div>
+                        </div>
+                        <div class="assignment-full-description" style="color:var(--color-text-secondary);font-size:15px;line-height:1.6;">
+                            {% if assignment.files.all or assignment.link_url %}
+                            <p style="margin:0;">
+                                💡 <strong>Окремого текстового опису не додано.</strong> Будь ласка, ознайомтеся з <strong>навчальними матеріалами та файлами</strong>, прикріпленими нижче, для виконання роботи.
+                            </p>
+                            {% else %}
+                            <p style="margin:0;">
+                                ℹ️ Текстовий опис завдання відсутній. Уточніть вимоги до роботи безпосередньо у вчителя.
+                            </p>
+                            {% endif %}
+                        </div>
                     </div>
                     {% endif %}
 
@@ -1100,25 +1210,27 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
-function copyAssignmentDescription() {
+function copyAssignmentDescription(btn) {
     var descEl = document.getElementById('assignment-desc-content');
     if (!descEl) return;
     var text = descEl.innerText || descEl.textContent || '';
     if (!text.trim()) return;
 
-    var btn = document.getElementById('copy-desc-btn');
-    var textEl = document.getElementById('copy-desc-text');
-    var iconEl = document.getElementById('copy-desc-icon');
+    var btnEl = btn || document.getElementById('copy-desc-btn') || document.querySelector('.btn-copy-desc');
+    var textEl = btnEl ? (btnEl.querySelector('.copy-label') || document.getElementById('copy-desc-text')) : null;
+    var iconEl = btnEl ? (btnEl.querySelector('.copy-icon') || document.getElementById('copy-desc-icon')) : null;
 
     function showCopiedFeedback() {
-        if (textEl && iconEl && btn) {
+        if (textEl && iconEl && btnEl) {
+            var origText = textEl.textContent;
+            var origIcon = iconEl.textContent;
             textEl.textContent = 'Скопійовано!';
             iconEl.textContent = '✅';
-            btn.classList.add('copied');
+            btnEl.classList.add('copied');
             setTimeout(function() {
-                textEl.textContent = 'Копіювати';
-                iconEl.textContent = '📋';
-                btn.classList.remove('copied');
+                textEl.textContent = origText;
+                iconEl.textContent = origIcon;
+                btnEl.classList.remove('copied');
             }, 2000);
         }
     }

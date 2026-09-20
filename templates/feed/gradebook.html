@@ -264,20 +264,20 @@
                                                     {% if it.grade == 'Доопрацювати' or it.grade == 'доопрацювання' or it.grade == 'д' or it.grade == 'Д' %}
                                                     <a href="{% url 'view_file' it.submission_id %}"
                                                        class="journal-grade-badge rework"
-                                                       title="🔄 Доопрацювати (роботу повернуто на виправлення) — {{ it.assignment_title }}">
+                                                       title="🔄 Доопрацювати (роботу повернуто на виправлення) — {{ it.assignment_title }} (Дата завдання: {{ it.effective_date|date:'d.m.Y' }}){% if it.graded_at %} — Оцінено: {{ it.graded_at|date:'d.m.Y H:i' }}{% endif %}">
                                                         Д
                                                     </a>
                                                     {% elif it.has_grade %}
                                                     <a href="{% url 'view_file' it.submission_id %}"
                                                        class="journal-grade-badge {% if it.grade == '10' or it.grade == '11' or it.grade == '12' %}high{% endif %}"
                                                        {% if it.has_gr %}style="position:relative;"{% endif %}
-                                                       title="{{ it.assignment_title }} ({{ it.submitted_at|date:'d.m.Y H:i' }}){% if it.has_gr %} — Оцінка за ГР: {{ it.grade }} ({% for gr in it.gr_results %}{{ gr.code }}: {{ gr.grade }} б.{% if not forloop.last %}, {% endif %}{% endfor %}){% endif %} — Натисніть для перегляду">
+                                                       title="{{ it.assignment_title }} | Дата завдання: {{ it.effective_date|date:'d.m.Y' }} | Здано: {{ it.submitted_at|date:'d.m.Y H:i' }}{% if it.graded_at %} | Оцінено: {{ it.graded_at|date:'d.m.Y H:i' }}{% endif %}{% if it.has_gr %} — Оцінка за ГР: {{ it.grade }} ({% for gr in it.gr_results %}{{ gr.code }}: {{ gr.grade }} б.{% if not forloop.last %}, {% endif %}{% endfor %}){% endif %} — Натисніть для перегляду">
                                                         {{ it.grade }}{% if it.has_gr %}<span style="font-size:7px;position:absolute;top:-3px;right:-3px;">📊</span>{% endif %}
                                                     </a>
                                                     {% else %}
                                                     <a href="{% url 'view_file' it.submission_id %}"
                                                        class="journal-grade-badge pending"
-                                                       title="⏳ Очікує оцінки — {{ it.assignment_title }}">
+                                                       title="⏳ Очікує оцінки — {{ it.assignment_title }} | Дата завдання: {{ it.effective_date|date:'d.m.Y' }} | Здано: {{ it.submitted_at|date:'d.m.Y H:i' }}">
                                                         ⏳
                                                     </a>
                                                     {% endif %}

@@ -63,16 +63,16 @@
   --sidebar-width: 240px;
 
   /* Блок опису завдання вчителя (Світла тема) */
-  --desc-card-bg: linear-gradient(180deg, #f8faff 0%, #f1f5fd 100%);
+  --desc-card-bg: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
   --desc-card-border: #cbd5e1;
-  --desc-card-accent: #6366f1;
-  --desc-header-bg: linear-gradient(135deg, rgba(99, 102, 241, 0.12) 0%, rgba(139, 92, 246, 0.06) 100%);
-  --desc-header-border: rgba(99, 102, 241, 0.20);
-  --desc-header-text: #3730a3;
-  --desc-header-badge-bg: rgba(99, 102, 241, 0.14);
+  --desc-card-accent: #4f46e5;
+  --desc-header-bg: linear-gradient(135deg, rgba(99, 102, 241, 0.14) 0%, rgba(139, 92, 246, 0.08) 100%);
+  --desc-header-border: rgba(99, 102, 241, 0.25);
+  --desc-header-text: #312e81;
+  --desc-header-badge-bg: rgba(99, 102, 241, 0.16);
   --desc-header-badge-text: #312e81;
   --desc-body-text: #0f172a;
-  --desc-shadow: 0 4px 18px rgba(99, 102, 241, 0.08), 0 1px 3px rgba(15, 23, 42, 0.05);
+  --desc-shadow: 0 4px 20px rgba(99, 102, 241, 0.1), 0 1px 4px rgba(15, 23, 42, 0.06);
 }
 
 /* ─── CSS Змінні — Темна тема ──────────────────────────────────────────────── */
@@ -112,16 +112,16 @@
   --navbar-border: rgba(45, 55, 72, 0.8);
 
   /* Блок опису завдання вчителя (Темна тема) */
-  --desc-card-bg: linear-gradient(180deg, #131926 0%, #0f1420 100%);
-  --desc-card-border: rgba(129, 140, 248, 0.35);
+  --desc-card-bg: linear-gradient(180deg, #161e2e 0%, #111827 100%);
+  --desc-card-border: rgba(129, 140, 248, 0.4);
   --desc-card-accent: #818cf8;
-  --desc-header-bg: linear-gradient(135deg, rgba(129, 140, 248, 0.22) 0%, rgba(168, 85, 247, 0.12) 100%);
-  --desc-header-border: rgba(129, 140, 248, 0.28);
-  --desc-header-text: #c7d2fe;
-  --desc-header-badge-bg: rgba(129, 140, 248, 0.24);
-  --desc-header-badge-text: #e0e7ff;
+  --desc-header-bg: linear-gradient(135deg, rgba(129, 140, 248, 0.25) 0%, rgba(168, 85, 247, 0.15) 100%);
+  --desc-header-border: rgba(129, 140, 248, 0.32);
+  --desc-header-text: #e0e7ff;
+  --desc-header-badge-bg: rgba(129, 140, 248, 0.28);
+  --desc-header-badge-text: #ffffff;
   --desc-body-text: #f8fafc;
-  --desc-shadow: 0 6px 24px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(129, 140, 248, 0.18);
+  --desc-shadow: 0 6px 24px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(129, 140, 248, 0.25);
 }
 
 /* ─── Ресет та базові стилі ─────────────────────────────────────────────────── */
@@ -790,7 +790,7 @@ pre, code {
   color: var(--color-primary-text);
 }
 
-/* ─── Виразні бейджі класів ─── */
+/* ─── Виразні бейджі класів з актуальністю до уроків ─── */
 .class-prominent-badge {
   display: inline-flex;
   align-items: center;
@@ -804,6 +804,91 @@ pre, code {
   border: 1.5px solid rgba(99, 102, 241, 0.35);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
   letter-spacing: 0.02em;
+  transition: all 0.25s ease;
+}
+
+/* Актуальний клас: урок триває ЗАРАЗ — світиться яскравим зеленим і пульсує */
+.class-prominent-badge.class-status-now {
+  background: rgba(16, 185, 129, 0.18);
+  color: #065f46;
+  border: 1.5px solid #10b981;
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.4), inset 0 0 4px rgba(16, 185, 129, 0.15);
+  animation: pulse-badge-green 2.2s infinite ease-in-out;
+}
+
+/* Урок СЬОГОДНІ — насичений зелений бейдж */
+.class-prominent-badge.class-status-today {
+  background: rgba(16, 185, 129, 0.12);
+  color: #047857;
+  border: 1.5px solid rgba(16, 185, 129, 0.45);
+}
+
+/* Майбутній урок — синій/індиго */
+.class-prominent-badge.class-status-upcoming {
+  background: rgba(59, 130, 246, 0.10);
+  color: #1d4ed8;
+  border: 1.5px solid rgba(59, 130, 246, 0.35);
+}
+
+/* Пройдений урок — сірий згаслий */
+.class-prominent-badge.class-status-past {
+  background: var(--color-bg-secondary);
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border);
+  opacity: 0.82;
+}
+
+/* Темна тема для бейджів класів */
+[data-theme="dark"] .class-prominent-badge.class-status-now {
+  background: rgba(16, 185, 129, 0.28);
+  color: #6ee7b7;
+  border-color: #34d399;
+  box-shadow: 0 0 14px rgba(52, 211, 153, 0.5);
+}
+
+[data-theme="dark"] .class-prominent-badge.class-status-today {
+  background: rgba(16, 185, 129, 0.18);
+  color: #a7f3d0;
+  border-color: rgba(52, 211, 153, 0.45);
+}
+
+[data-theme="dark"] .class-prominent-badge.class-status-upcoming {
+  background: rgba(59, 130, 246, 0.18);
+  color: #93c5fd;
+  border-color: rgba(96, 165, 250, 0.4);
+}
+
+[data-theme="dark"] .class-prominent-badge.class-status-past {
+  background: rgba(255, 255, 255, 0.05);
+  color: #9ca3af;
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.class-time-hint {
+  font-size: 11.5px;
+  font-weight: 600;
+  opacity: 0.92;
+  margin-left: 2px;
+}
+
+.class-dot-today {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #10b981;
+  display: inline-block;
+}
+
+@keyframes pulse-badge-green {
+  0% {
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.6);
+  }
+  70% {
+    box-shadow: 0 0 0 7px rgba(16, 185, 129, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+  }
 }
 
 .class-tag {
@@ -1018,11 +1103,55 @@ pre, code {
 }
 
 .live-dot-pulse {
-  width: 7px;
-  height: 7px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background: #10b981;
   display: inline-block;
+  vertical-align: middle;
+  box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+  animation: pulse-dot 1.8s infinite ease-in-out;
+}
+
+@keyframes pulse-dot {
+  0% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+  }
+  70% {
+    transform: scale(1);
+    box-shadow: 0 0 0 6px rgba(16, 185, 129, 0);
+  }
+  100% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+  }
+}
+
+/* Темна тема для бейджів актуальності */
+[data-theme="dark"] .publish-date-badge.badge-relevance-now {
+  background: rgba(16, 185, 129, 0.25);
+  color: #6ee7b7;
+  border-color: #34d399;
+  box-shadow: 0 0 12px rgba(52, 211, 153, 0.35);
+}
+
+[data-theme="dark"] .publish-date-badge.badge-relevance-today {
+  background: rgba(16, 185, 129, 0.18);
+  color: #a7f3d0;
+  border-color: rgba(52, 211, 153, 0.4);
+}
+
+[data-theme="dark"] .publish-date-badge.badge-relevance-upcoming {
+  background: rgba(59, 130, 246, 0.18);
+  color: #93c5fd;
+  border-color: rgba(96, 165, 250, 0.4);
+}
+
+[data-theme="dark"] .publish-date-badge.badge-relevance-past {
+  background: rgba(255, 255, 255, 0.05);
+  color: #9ca3af;
+  border-color: rgba(255, 255, 255, 0.12);
 }
 
 .card-title {
@@ -1050,6 +1179,20 @@ pre, code {
   margin-top: 5px;
   margin-bottom: 4px;
   box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+}
+
+.card-description b,
+.card-description strong {
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.card-description code {
+  font-family: var(--font-mono, monospace);
+  font-size: 11.5px;
+  background: rgba(99, 102, 241, 0.1);
+  padding: 1px 4px;
+  border-radius: 3px;
 }
 
 .card-footer {
@@ -2818,7 +2961,7 @@ body {
   margin-bottom: 26px;
   background: var(--desc-card-bg);
   border: 1.5px solid var(--desc-card-border);
-  border-left: 5px solid var(--desc-card-accent);
+  border-left: 6px solid var(--desc-card-accent);
   border-radius: var(--radius-lg);
   overflow: hidden;
   box-shadow: var(--desc-shadow);
@@ -2827,10 +2970,10 @@ body {
 }
 
 .assignment-description-card:hover {
-  box-shadow: 0 6px 24px rgba(99, 102, 241, 0.12), 0 2px 6px rgba(15, 23, 42, 0.08);
+  box-shadow: 0 8px 28px rgba(99, 102, 241, 0.16), 0 2px 8px rgba(15, 23, 42, 0.08);
 }
 [data-theme="dark"] .assignment-description-card:hover {
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(129, 140, 248, 0.28);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(129, 140, 248, 0.35);
 }
 
 .assignment-description-header {
@@ -2839,42 +2982,241 @@ body {
   border-bottom: 1px solid var(--desc-header-border);
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.assignment-description-title-group {
+  display: flex;
+  align-items: center;
   gap: 10px;
+  flex-wrap: wrap;
 }
 
 .assignment-description-title {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 13px;
+  font-size: 13.5px;
   font-weight: 800;
   text-transform: uppercase;
   color: var(--desc-header-text);
-  letter-spacing: 0.05em;
+  letter-spacing: 0.04em;
 }
 
 .assignment-description-title .desc-icon {
-  font-size: 17px;
+  font-size: 19px;
   line-height: 1;
 }
 
+.assignment-desc-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 750;
+  background: var(--desc-header-badge-bg);
+  color: var(--desc-header-badge-text);
+  border: 1px solid var(--desc-header-border);
+  letter-spacing: 0.02em;
+}
+
+.assignment-desc-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-copy-desc {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  font-size: 11.5px;
+  font-weight: 700;
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.btn-copy-desc:hover {
+  background: var(--color-bg-secondary);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+.btn-copy-desc.copied {
+  background: rgba(16, 185, 129, 0.15);
+  border-color: #10b981;
+  color: #059669;
+}
+
+/* Основне тіло опису завдання */
 .assignment-full-description {
-  font-size: 16px;
-  line-height: 1.8;
+  font-size: 15.5px;
+  line-height: 1.7;
   color: var(--desc-body-text);
-  font-weight: 550;
-  white-space: pre-wrap;
+  font-weight: 500;
+  white-space: normal;
   word-break: break-word;
-  padding: 22px 26px;
+  padding: 20px 24px;
   font-family: inherit;
   letter-spacing: -0.01em;
 }
 
 .assignment-full-description p {
-  margin-bottom: 0.75em;
+  margin: 0 0 0.85em;
 }
 .assignment-full-description p:last-child {
   margin-bottom: 0;
+}
+
+/* Заголовки всередині опису */
+.assignment-full-description h1,
+.assignment-full-description h2,
+.assignment-full-description h3,
+.assignment-full-description h4,
+.assignment-full-description h5,
+.assignment-full-description h6 {
+  color: var(--color-text-primary);
+  font-weight: 800;
+  margin-top: 1.25em;
+  margin-bottom: 0.5em;
+  line-height: 1.35;
+}
+.assignment-full-description h1:first-child,
+.assignment-full-description h2:first-child,
+.assignment-full-description h3:first-child,
+.assignment-full-description h4:first-child {
+  margin-top: 0;
+}
+.assignment-full-description h2,
+.assignment-full-description h3 {
+  font-size: 1.16rem;
+  border-bottom: 1.5px solid var(--desc-header-border);
+  padding-bottom: 5px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.assignment-full-description h4 {
+  font-size: 1.05rem;
+  color: var(--color-primary);
+}
+
+/* Списки всередині опису */
+.assignment-full-description ul,
+.assignment-full-description ol {
+  margin: 0.6em 0 1em 1.25em;
+  padding-left: 0.5em;
+}
+.assignment-full-description li {
+  margin-bottom: 0.45em;
+  line-height: 1.6;
+  color: var(--desc-body-text);
+}
+.assignment-full-description li:last-child {
+  margin-bottom: 0;
+}
+.assignment-full-description li::marker {
+  color: var(--desc-card-accent);
+  font-weight: 800;
+}
+
+/* Виділення важливого тексту */
+.assignment-full-description strong,
+.assignment-full-description b {
+  font-weight: 750;
+  color: var(--color-text-primary);
+}
+
+.assignment-full-description u {
+  text-decoration-color: var(--desc-card-accent);
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1.5px;
+}
+
+/* Код всередині опису */
+.assignment-full-description code {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.9em;
+  background: rgba(99, 102, 241, 0.12);
+  color: #3730a3;
+  padding: 2px 7px;
+  border-radius: 5px;
+  border: 1px solid rgba(99, 102, 241, 0.22);
+  font-weight: 600;
+}
+[data-theme="dark"] .assignment-full-description code {
+  background: rgba(129, 140, 248, 0.2);
+  color: #c7d2fe;
+  border-color: rgba(129, 140, 248, 0.35);
+}
+
+.assignment-full-description pre {
+  margin: 0.8em 0;
+  padding: 12px 16px;
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow-x: auto;
+}
+
+.assignment-full-description blockquote {
+  margin: 1em 0;
+  padding: 10px 16px;
+  background: rgba(99, 102, 241, 0.06);
+  border-left: 4px solid var(--desc-card-accent);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  font-style: italic;
+  color: var(--color-text-secondary);
+}
+
+/* Порожній опис (підказка) */
+.assignment-description-card.is-empty-notice {
+  border-left-color: #0ea5e9;
+  background: rgba(14, 165, 233, 0.04);
+}
+.assignment-description-card.is-empty-notice .assignment-description-header {
+  background: rgba(14, 165, 233, 0.1);
+  border-bottom-color: rgba(14, 165, 233, 0.2);
+}
+.assignment-description-card.is-empty-notice .assignment-description-title {
+  color: #0369a1;
+}
+[data-theme="dark"] .assignment-description-card.is-empty-notice .assignment-description-title {
+  color: #7dd3fc;
+}
+
+/* Панель швидких дій учня вгорі завдання */
+.assignment-student-top-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 18px;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.08) 0%, rgba(139, 92, 246, 0.12) 100%);
+  border: 1.5px solid rgba(99, 102, 241, 0.25);
+  border-radius: var(--radius-lg);
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
+.assignment-student-top-banner .top-banner-title {
+  font-size: 14px;
+  font-weight: 750;
+  color: var(--color-text-primary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.assignment-student-top-banner .top-banner-subtitle {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  margin-top: 2px;
 }
 
 /* Компактний варіант для модалок або бічних панелей */
@@ -2890,6 +3232,65 @@ body {
   line-height: 1.6;
   padding: 12px 14px;
 }
+
+/* ─── Панель ергономічного читання умови завдання (на сторінці здачі) ── */
+.assignment-reading-pane {
+  white-space: normal !important;
+  word-break: break-word;
+}
+.assignment-reading-pane p {
+  margin: 0 0 0.7em;
+}
+.assignment-reading-pane p:last-child {
+  margin-bottom: 0;
+}
+.assignment-reading-pane ul,
+.assignment-reading-pane ol {
+  margin: 0.5em 0 0.75em 1.2em;
+  padding-left: 0.4em;
+}
+.assignment-reading-pane li {
+  margin-bottom: 0.35em;
+  line-height: 1.55;
+  color: var(--desc-body-text);
+}
+.assignment-reading-pane li:last-child {
+  margin-bottom: 0;
+}
+.assignment-reading-pane li::marker {
+  color: var(--desc-card-accent);
+  font-weight: 800;
+}
+.assignment-reading-pane h1,
+.assignment-reading-pane h2,
+.assignment-reading-pane h3,
+.assignment-reading-pane h4 {
+  font-size: 1.05rem;
+  font-weight: 800;
+  margin: 0.8em 0 0.35em;
+  color: var(--color-text-primary);
+}
+.assignment-reading-pane h1:first-child,
+.assignment-reading-pane h2:first-child,
+.assignment-reading-pane h3:first-child,
+.assignment-reading-pane h4:first-child {
+  margin-top: 0;
+}
+.assignment-reading-pane code {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.9em;
+  background: rgba(99, 102, 241, 0.12);
+  color: var(--color-primary);
+  padding: 1px 5px;
+  border-radius: 4px;
+  border: 1px solid rgba(99, 102, 241, 0.2);
+}
+.assignment-reading-pane strong,
+.assignment-reading-pane b {
+  font-weight: 750;
+  color: var(--color-text-primary);
+}
+
 
 /* ─── Єдиний блок посилань на одному рівні ─────────────────────────────────── */
 .assignment-links-card {
