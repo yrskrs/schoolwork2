@@ -264,8 +264,8 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
         resp = self.client.get(reverse('student_submissions_portal'))
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, 'Софія')
-        self.assertContains(resp, 'Оцінено')
-        self.assertContains(resp, '12')
+        self.assertContains(resp, 'Оцінено')          # статус є
+        self.assertNotContains(resp, '✅ Оцінено: 12')  # оцінка прихована
         self.assertContains(resp, 'Відмінно виконане практичне завдання!')
 
 
