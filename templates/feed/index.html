@@ -253,7 +253,11 @@
                                 </span>
                                 {% endif %}
 
-                                {% if assignment.due_date %}
+                                {% if assignment.no_submission_required %}
+                                <span class="badge" style="background:rgba(99,102,241,0.08);color:var(--color-primary);border:1px solid rgba(99,102,241,0.2);font-size:11.5px;padding:2px 7px;border-radius:4px;font-weight:600;" title="Завдання для опрацювання (без здачі робіт)">
+                                    📖 Без здачі
+                                </span>
+                                {% elif assignment.due_date %}
                                 <span class="due-badge">
                                     ⏰ до {{ assignment.due_date|date:"d.m" }}
                                 </span>
@@ -268,25 +272,37 @@
                                     📖 Переглянути
                                 </a>
                                 {% if not user.is_authenticated or not user.teacher_profile %}
-                                <a href="{% url 'submit_assignment' assignment.id %}"
-                                   class="btn btn-submit-work btn-sm"
-                                   onclick="event.stopPropagation();"
-                                   title="Здати виконану роботу">
-                                    📤 Здати роботу
-                                </a>
-                                {% endif %}
-                                {% if user.is_authenticated and user.teacher_profile %}
-                                <a href="{% url 'assignment_submissions' assignment.id %}"
-                                   class="btn btn-submissions btn-sm"
-                                   onclick="event.stopPropagation();"
-                                   title="Переглянути здачі учнів">
-                                    📥 Здачі
-                                    {% if assignment.submissions_count %}
-                                    <span class="submissions-count-badge {% if assignment.ungraded_count %}badge-ungraded{% endif %}">
-                                        {{ assignment.submissions_count }}{% if assignment.ungraded_count %} ({{ assignment.ungraded_count }}!){% endif %}
+                                    {% if not assignment.no_submission_required %}
+                                    <a href="{% url 'submit_assignment' assignment.id %}"
+                                       class="btn btn-submit-work btn-sm"
+                                       onclick="event.stopPropagation();"
+                                       title="Здати виконану роботу">
+                                        📤 Здати роботу
+                                    </a>
+                                    {% else %}
+                                    <span class="badge" style="background:var(--color-bg-secondary);border:1px solid var(--color-border);color:var(--color-primary);font-size:12px;font-weight:700;padding:5px 10px;border-radius:var(--radius-sm);" title="Це завдання не вимагає здачі робіт">
+                                        📖 Без здачі
                                     </span>
                                     {% endif %}
-                                </a>
+                                {% endif %}
+                                {% if user.is_authenticated and user.teacher_profile %}
+                                    {% if not assignment.no_submission_required %}
+                                    <a href="{% url 'assignment_submissions' assignment.id %}"
+                                       class="btn btn-submissions btn-sm"
+                                       onclick="event.stopPropagation();"
+                                       title="Переглянути здачі учнів">
+                                        📥 Здачі
+                                        {% if assignment.submissions_count %}
+                                        <span class="submissions-count-badge {% if assignment.ungraded_count %}badge-ungraded{% endif %}">
+                                            {{ assignment.submissions_count }}{% if assignment.ungraded_count %} ({{ assignment.ungraded_count }}!){% endif %}
+                                        </span>
+                                        {% endif %}
+                                    </a>
+                                    {% else %}
+                                    <span class="badge" style="background:var(--color-bg-secondary);border:1px solid var(--color-border);color:var(--color-text-muted);font-size:12px;font-weight:600;padding:5px 10px;border-radius:var(--radius-sm);" title="Завдання для опрацювання (без здачі робіт)">
+                                        📖 Без здачі
+                                    </span>
+                                    {% endif %}
                                 {% endif %}
                             </div>
                         </div>

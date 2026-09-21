@@ -353,7 +353,9 @@ class AssignmentForm(forms.ModelForm):
             'classes', 'is_individual', 'student_name',
             'link_url', 'link_label', 'youtube_url',
             'due_date', 'scheduled_at',
+            'no_submission_required',
             'allow_student_ai_check', 'allow_ai_usage',
+            'custom_criteria',
         ]
         labels = {
             'subject': 'Предмет',
@@ -365,8 +367,10 @@ class AssignmentForm(forms.ModelForm):
             'link_url': 'Посилання (URL)',
             'link_label': 'Текст посилання',
             'youtube_url': 'Посилання на YouTube',
+            'no_submission_required': 'Не вимагає здачі робіт (усне / для опрацювання)',
             'allow_student_ai_check': 'Дозволити учням 1 самоперевірку через ШІ',
             'allow_ai_usage': 'Дозволити учням використання ШІ при виконанні завдання',
+            'custom_criteria': 'Індивідуальні критерії оцінювання для цього завдання',
         }
         widgets = {
             'subject': forms.Select(attrs={'class': 'form-select'}),
@@ -400,8 +404,14 @@ class AssignmentForm(forms.ModelForm):
                 'class': 'form-input',
                 'placeholder': 'https://www.youtube.com/watch?v=... або https://youtu.be/...',
             }),
+            'no_submission_required': forms.CheckboxInput(attrs={'class': 'form-checkbox'}),
             'allow_student_ai_check': forms.CheckboxInput(attrs={'class': 'form-checkbox'}),
             'allow_ai_usage': forms.CheckboxInput(attrs={'class': 'form-checkbox'}),
+            'custom_criteria': forms.Textarea(attrs={
+                'class': 'form-textarea',
+                'rows': 4,
+                'placeholder': 'Вкажіть специфічні критерії, розбаловку або правила перевірки для цього завдання (будуть показані учням та враховані ШІ)...',
+            }),
         }
 
     def __init__(self, teacher=None, *args, **kwargs):

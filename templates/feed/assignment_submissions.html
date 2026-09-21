@@ -39,12 +39,21 @@
 
                 <!-- Кнопки дій -->
                 <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                    <a href="{% url 'assignment_detail' assignment.pk %}" class="btn btn-secondary btn-sm" target="_blank" rel="noopener noreferrer" title="Відкрити завдання так, як його бачить учень у новій вкладці">
+                        👁️ Як бачить учень ↗
+                    </a>
+                    {% if not assignment.no_submission_required %}
                     <a href="{% url 'download_assignment_submissions_zip' assignment.pk %}{% if selected_class_id %}?class_group={{ selected_class_id }}{% endif %}" class="btn btn-success btn-sm" style="font-weight:700;">
                         📥 Завантажити ZIP
                     </a>
                     <a href="{% url 'submit_assignment' assignment.pk %}" class="btn btn-secondary btn-sm" target="_blank" title="Відкрити форму для учнів">
                         🔗 Лінк для учнів ↗
                     </a>
+                    {% else %}
+                    <span class="badge" style="background:var(--color-bg-secondary);border:1px solid var(--color-border);color:var(--color-primary);font-size:12px;font-weight:700;padding:6px 12px;border-radius:var(--radius-sm);">
+                        📖 Без здачі робіт
+                    </span>
+                    {% endif %}
                     <a href="{% url 'assignment_edit' assignment.pk %}" class="btn btn-secondary btn-sm">
                         ✏️ Редагувати
                     </a>
@@ -385,12 +394,26 @@
                 {% empty %}
                 <div class="sidebar-card" style="padding:40px;text-align:center;">
                     <div class="empty-state">
-                        <div class="empty-icon" style="font-size:48px;margin-bottom:12px;">📭</div>
-                        <h3 style="font-size:1.2rem;font-weight:800;margin:0 0 6px;">Здач ще немає</h3>
-                        <p style="color:var(--color-text-muted);font-size:14px;margin:0 0 16px;">Учні ще не здали роботу по цьому завданню.</p>
+                        <div class="empty-icon" style="font-size:48px;margin-bottom:12px;">{% if assignment.no_submission_required %}📖{% else %}📭{% endif %}</div>
+                        <h3 style="font-size:1.2rem;font-weight:800;margin:0 0 6px;">
+                            {% if assignment.no_submission_required %}
+                            Це завдання не вимагає здачі робіт
+                            {% else %}
+                            Здач ще немає
+                            {% endif %}
+                        </h3>
+                        <p style="color:var(--color-text-muted);font-size:14px;margin:0 0 16px;">
+                            {% if assignment.no_submission_required %}
+                            Вчитель встановив режим усного або самостійного опрацювання — учні не надсилають матеріали на сайт.
+                            {% else %}
+                            Учні ще не здали роботу по цьому завданню.
+                            {% endif %}
+                        </p>
+                        {% if not assignment.no_submission_required %}
                         <a href="{% url 'submit_assignment' assignment.pk %}" class="btn btn-secondary btn-sm" target="_blank">
                             🔗 Посилання для учнів
                         </a>
+                        {% endif %}
                     </div>
                 </div>
                 {% endfor %}

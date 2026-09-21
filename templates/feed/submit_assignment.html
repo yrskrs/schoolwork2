@@ -120,11 +120,18 @@
                         📤 Надіслати виконане завдання
                     </h2>
                 </div>
-                <button type="button" id="toggle-condition-btn" onclick="toggleTaskCondition()" class="btn btn-secondary btn-sm"
-                        style="font-size:11.5px;font-weight:700;padding:4px 10px;display:inline-flex;align-items:center;gap:5px;flex-shrink:0;">
-                    <span id="toggle-condition-icon">📖</span>
-                    <span id="toggle-condition-text">Умова завдання</span>
-                </button>
+                <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                    <button type="button" onclick="openCriteriaModal()" class="btn btn-secondary btn-sm"
+                            style="font-size:11.5px;font-weight:700;padding:4px 10px;display:inline-flex;align-items:center;gap:5px;flex-shrink:0;" title="Переглянути критерії оцінювання цього завдання">
+                        <span>📋</span>
+                        <span>Критерії оцінювання</span>
+                    </button>
+                    <button type="button" id="toggle-condition-btn" onclick="toggleTaskCondition()" class="btn btn-secondary btn-sm"
+                            style="font-size:11.5px;font-weight:700;padding:4px 10px;display:inline-flex;align-items:center;gap:5px;flex-shrink:0;">
+                        <span id="toggle-condition-icon">📖</span>
+                        <span id="toggle-condition-text">Умова завдання</span>
+                    </button>
+                </div>
             </div>
 
             <!-- Компактна плашка завдання (відображається, коли повна умова схована) -->
@@ -971,4 +978,5 @@ document.addEventListener('DOMContentLoaded', function() {
     toggleTaskCondition(false);
 });
 </script>
+{% include 'feed/components/criteria_modal.html' %}
 {% endblock %}

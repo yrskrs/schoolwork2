@@ -47,6 +47,10 @@ def extract_text_from_document(file_path_or_file_obj, original_filename=None):
             return _extract_from_docx(file_bytes)
         elif ext == '.pdf':
             return _extract_from_pdf(file_bytes)
+        elif ext in ['.pptx', '.pptm']:
+            return _extract_from_pptx(file_bytes)
+        elif ext == '.ppt':
+            return _extract_from_ppt(file_bytes)
         elif ext in ['.xlsx', '.xls']:
             return _extract_from_excel(file_bytes)
         elif ext in ['.odt', '.ods', '.odp']:
@@ -74,9 +78,15 @@ def extract_text_from_document(file_path_or_file_obj, original_filename=None):
                     if os.path.exists(tmp_acc_path):
                         os.remove(tmp_acc_path)
         else:
-            # Спробуємо як docx, потім як excel, потім як plain text
+            # Спробуємо як docx, pptx, excel, потім як plain text
             try:
                 text, ok, _ = _extract_from_docx(file_bytes)
+                if ok and text.strip():
+                    return text, True, None
+            except Exception:
+                pass
+            try:
+                text, ok, _ = _extract_from_pptx(file_bytes)
                 if ok and text.strip():
                     return text, True, None
             except Exception:
@@ -292,4 +302,134 @@ def _extract_from_doc_fallback(file_bytes):
     except Exception:
         pass
     return "", False, "Формат старого Word .doc не підтримується повністю. Рекомендуємо зберегти файл у сучасному форматі .docx або .txt."
+
+
+def _extract_from_pptx(file_bytes, max_slides=60):
+    """
+    Вилучення структурованого тексту зі слайдів презентації PowerPoint (.pptx).
+    Враховує заголовки слайдів, текстові блоки, списки, таблиці та нотатки доповідача.
+    """
+    try:
+        from pptx import Presentation
+        prs = Presentation(io.BytesIO(file_bytes))
+        slides_text = []
+        total_slides = len(prs.slides)
+
+        for idx, slide in enumerate(prs.slides, 1):
+            if idx > max_slides:
+                slides_text.append(f"... [ще слайди обрізано, всього {total_slides}]")
+                break
+
+            title_text = ""
+            try:
+                if slide.shapes.title and slide.shapes.title.text.strip():
+                    title_text = slide.shapes.title.text.strip().replace('\n', ' ')
+            except Exception:
+                pass
+
+            slide_header = f"📽️ Слайд {idx}/{total_slides}"
+            if title_text:
+                slide_header += f": «{title_text}»"
+            else:
+                slide_header += ":"
+
+            slide_lines = [slide_header]
+
+            def _process_shape(shape):
+                lines = []
+                if hasattr(shape, "shapes"):
+                    for sub_sh in shape.shapes:
+                        lines.extend(_process_shape(sub_sh))
+                    return lines
+                if hasattr(shape, "has_table") and shape.has_table:
+                    lines.append("[Таблиця на слайді:]")
+                    for row in shape.table.rows:
+                        row_cells = [c.text.strip().replace('\n', ' ') for c in row.cells]
+                        if any(row_cells):
+                            lines.append(" | ".join(row_cells))
+                    return lines
+                if hasattr(shape, "has_text_frame") and shape.has_text_frame:
+                    for p in shape.text_frame.paragraphs:
+                        pt = p.text.strip()
+                        if pt:
+                            level = getattr(p, 'level', 0) or 0
+                            indent = "  " * level
+                            bullet = "• " if level > 0 else ""
+                            lines.append(f"{indent}{bullet}{pt}")
+                elif hasattr(shape, "text") and shape.text and shape.text.strip():
+                    lines.append(shape.text.strip())
+                return lines
+
+            for shape in slide.shapes:
+                try:
+                    if slide.shapes.title and shape == slide.shapes.title:
+                        continue
+                except Exception:
+                    pass
+                slide_lines.extend(_process_shape(shape))
+
+            # Нотатки до слайду (якщо є)
+            try:
+                if slide.has_notes_slide and slide.notes_slide.notes_text_frame:
+                    notes_txt = slide.notes_slide.notes_text_frame.text.strip()
+                    if notes_txt:
+                        slide_lines.append(f"[Нотатки до слайду {idx}]: {notes_txt}")
+            except Exception:
+                pass
+
+            if len(slide_lines) > 1:
+                slides_text.append("\n".join(slide_lines))
+            elif title_text:
+                slides_text.append(slide_header)
+
+        full_text = "\n\n".join(slides_text).strip()
+        if full_text:
+            return full_text, True, None
+    except Exception:
+        pass
+
+    # Fallback на zipfile та XML розбір слайдів
+    try:
+        import zipfile
+        import xml.etree.ElementTree as ET
+        with zipfile.ZipFile(io.BytesIO(file_bytes), 'r') as zf:
+            slide_files = [f for f in zf.namelist() if re.match(r'^ppt/slides/slide\d+\.xml$', f)]
+            if slide_files:
+                slide_files.sort(key=lambda x: int(re.search(r'\d+', x).group()))
+                slides_text = []
+                for idx, s_path in enumerate(slide_files, 1):
+                    xml_data = zf.read(s_path)
+                    tree = ET.fromstring(xml_data)
+                    texts = [n.text.strip() for n in tree.iter() if n.tag.endswith('}t') and n.text and n.text.strip()]
+                    if texts:
+                        slides_text.append(f"📽️ Слайд {idx}:\n" + "\n".join(texts))
+                if slides_text:
+                    return "\n\n".join(slides_text), True, None
+    except Exception:
+        pass
+
+    return "", False, "Не вдалося витягти текст із презентації .pptx."
+
+
+def _extract_from_ppt(file_bytes, max_chars=15000):
+    """Вилучення тексту зі старого бінарного формату PowerPoint .ppt."""
+    try:
+        text_chunks = []
+        ascii_matches = re.findall(b'[\x20-\x7e\t\n\r\xc0-\xff]{6,}', file_bytes)
+        for m in ascii_matches:
+            for enc in ['utf-8', 'cp1251', 'latin-1']:
+                try:
+                    s = m.decode(enc).strip()
+                    if s and len(s) > 5 and any(c.isalnum() for c in s):
+                        if s not in text_chunks:
+                            text_chunks.append(s)
+                        break
+                except Exception:
+                    pass
+        if text_chunks:
+            return "Текст презентації (видобуто з .ppt):\n" + "\n".join(text_chunks)[:max_chars], True, None
+    except Exception:
+        pass
+    return "", False, "Формат .ppt не містить розпізнаного тексту."
+
 

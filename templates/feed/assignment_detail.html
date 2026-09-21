@@ -23,18 +23,46 @@
             <div class="sidebar-card" style="padding:16px;background:var(--color-bg-secondary);border:1px solid var(--color-border);border-left:4px solid #f59e0b;">
                 <div class="page-hero-kicker" style="margin-bottom:6px;color:#d97706;">Режим вчителя</div>
                 <h3 style="font-size:1.02rem;font-weight:750;margin:0 0 10px;color:var(--color-text-primary);">Керування завданням</h3>
-                <a href="{% url 'assignment_edit' assignment.pk %}" class="btn btn-warning btn-block" style="padding:10px 14px;font-weight:750;display:flex;align-items:center;justify-content:center;gap:6px;text-decoration:none;box-shadow:0 2px 8px rgba(245,158,11,0.25);">
-                    <span>✏️</span>
-                    <span>Відредагувати завдання</span>
-                </a>
+                <div style="display:flex;flex-direction:column;gap:8px;">
+                    <a href="{% url 'assignment_edit' assignment.pk %}" class="btn btn-warning btn-block" style="padding:10px 14px;font-weight:750;display:flex;align-items:center;justify-content:center;gap:6px;text-decoration:none;box-shadow:0 2px 8px rgba(245,158,11,0.25);">
+                        <span>✏️</span>
+                        <span>Відредагувати завдання</span>
+                    </a>
+                    <button type="button" class="btn btn-secondary btn-block" style="padding:10px 14px;font-weight:750;display:flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;" onclick="openDuplicateModal({{ assignment.pk }}, '{{ assignment.title|escapejs }}', [{% for c in assignment.classes.all %}{{ c.id }}{% if not forloop.last %},{% endif %}{% endfor %}], '{{ assignment.subject.name|default:""|escapejs }}')">
+                        <span>📋</span>
+                        <span>Копіювати завдання</span>
+                    </button>
+                    <button type="button" class="btn btn-secondary btn-block" style="padding:9px 12px;font-weight:750;display:flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;" onclick="openCriteriaModal()" title="Переглянути критерії оцінювання як це бачить учень">
+                        <span>🔍</span>
+                        <span>Критерії оцінювання</span>
+                    </button>
+                </div>
             </div>
             {% elif not is_teacher %}
             <div class="sidebar-card" style="padding:16px;">
+                {% if assignment.no_submission_required %}
+                <div class="page-hero-kicker" style="margin-bottom:6px;color:var(--color-primary);">📖 Для опрацювання</div>
+                <h3 style="font-size:1.05rem;font-weight:750;margin:0 0 8px;">Без здачі робіт</h3>
+                <p style="font-size:12.5px;color:var(--color-text-muted);line-height:1.45;margin:0 0 12px;">
+                    Це завдання призначене для усного або самостійного опрацювання. Відправляти файли чи відповіді на сервер не потрібно.
+                </p>
+                <button type="button" class="btn btn-secondary btn-block" onclick="openCriteriaModal()" style="padding:9px 12px;font-weight:750;display:flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;" title="Ознайомитися з критеріями оцінювання цього завдання">
+                    <span>📋</span>
+                    <span>Критерії оцінювання</span>
+                </button>
+                {% else %}
                 <div class="page-hero-kicker" style="margin-bottom:6px;">Для учнів</div>
                 <h3 style="font-size:1.05rem;font-weight:750;margin:0 0 10px;">Виконали завдання?</h3>
-                <a href="{% url 'submit_assignment' assignment.pk %}" class="btn btn-primary btn-block" style="padding:11px;">
-                    Здати роботу
-                </a>
+                <div style="display:flex;flex-direction:column;gap:8px;">
+                    <a href="{% url 'submit_assignment' assignment.pk %}" class="btn btn-primary btn-block" style="padding:11px;">
+                        Здати роботу
+                    </a>
+                    <button type="button" class="btn btn-secondary btn-block" onclick="openCriteriaModal()" style="padding:9px 12px;font-weight:750;display:flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;" title="Ознайомитися з критеріями оцінювання цього завдання">
+                        <span>📋</span>
+                        <span>Критерії оцінювання</span>
+                    </button>
+                </div>
+                {% endif %}
             </div>
             {% endif %}
 
@@ -195,11 +223,15 @@
 
                     {% if is_teacher %}
                     <!-- Статистика для вчителя -->
-                    <div style="border-top:1px solid var(--color-border);padding-top:10px;display:flex;justify-content:space-between;color:var(--color-text-muted);font-size:12px;">
+                    <div style="border-top:1px solid var(--color-border);padding-top:10px;display:flex;justify-content:space-between;align-items:center;color:var(--color-text-muted);font-size:12px;">
                         <span>👁️ {{ assignment.views_count }} переглядів</span>
+                        {% if assignment.no_submission_required %}
+                        <span style="color:var(--color-primary);font-weight:700;">📖 Без здачі</span>
+                        {% else %}
                         <a href="{% url 'assignment_submissions' assignment.pk %}" style="color:var(--color-primary);font-weight:700;text-decoration:none;">
                             📥 Здано: {{ submissions_count }}
                         </a>
+                        {% endif %}
                     </div>
                     {% endif %}
 
@@ -232,6 +264,12 @@
                         </a>
                     </li>
                     <li>
+                        <a href="javascript:void(0)" onclick="openDuplicateModal({{ assignment.pk }}, '{{ assignment.title|escapejs }}', [{% for c in assignment.classes.all %}{{ c.id }}{% if not forloop.last %},{% endif %}{% endfor %}], '{{ assignment.subject.name|default:""|escapejs }}')">
+                            <span>📋</span>
+                            <span>Копіювати завдання</span>
+                        </a>
+                    </li>
+                    <li>
                         <a href="javascript:void(0)" onclick="openRescheduleModalDirect({{ assignment.pk }}, '{{ assignment.title|escapejs }}', '{% if assignment.classes.first %}{{ assignment.classes.first.id }}{% endif %}')">
                             <span>🔄</span>
                             <span>Перенести цей урок / дату</span>
@@ -243,12 +281,14 @@
                             <span>Експортувати на флешку (ZIP)</span>
                         </a>
                     </li>
+                    {% if not assignment.no_submission_required %}
                     <li>
                         <a href="{% url 'assignment_submissions' assignment.pk %}">
                             <span>📊</span>
                             <span>Перевірити здані роботи ({{ submissions_count }})</span>
                         </a>
                     </li>
+                    {% endif %}
                     {% endif %}
                 </ul>
             </div>
@@ -336,11 +376,15 @@
                         </div>
 
                         {% if can_edit %}
-                        <div class="teacher-quick-edit-wrap">
+                        <div class="teacher-quick-edit-wrap" style="display:inline-flex;gap:8px;align-items:center;flex-wrap:wrap;">
                             <a href="{% url 'assignment_edit' assignment.pk %}" class="btn btn-warning btn-sm" id="btn-quick-edit-top" style="display:inline-flex;align-items:center;gap:6px;font-weight:750;font-size:13px;padding:7px 14px;border-radius:var(--radius-sm);box-shadow:0 2px 8px rgba(245,158,11,0.25);text-decoration:none;">
                                 <span>✏️</span>
                                 <span>Відредагувати завдання</span>
                             </a>
+                            <button type="button" class="btn btn-secondary btn-sm" id="btn-quick-duplicate-top" style="display:inline-flex;align-items:center;gap:6px;font-weight:750;font-size:13px;padding:7px 14px;border-radius:var(--radius-sm);cursor:pointer;" onclick="openDuplicateModal({{ assignment.pk }}, '{{ assignment.title|escapejs }}', [{% for c in assignment.classes.all %}{{ c.id }}{% if not forloop.last %},{% endif %}{% endfor %}], '{{ assignment.subject.name|default:""|escapejs }}')">
+                                <span>📋</span>
+                                <span>Копіювати завдання</span>
+                            </button>
                         </div>
                         {% endif %}
                     </div>
@@ -357,21 +401,40 @@
                     <div class="assignment-student-top-banner">
                         <div>
                             <div class="top-banner-title">
+                                {% if assignment.no_submission_required %}
+                                <span>📖</span>
+                                <span>Завдання для опрацювання</span>
+                                {% else %}
                                 <span>🎯</span>
                                 <span>Завдання до уроку</span>
+                                {% endif %}
                             </div>
                             <div class="top-banner-subtitle">
-                                {% if assignment.due_date %}
+                                {% if assignment.no_submission_required %}
+                                ℹ️ Це завдання не вимагає здачі робіт на сайті (усне або для самостійного опрацювання)
+                                {% elif assignment.due_date %}
                                 ⏰ Термін здачі: <strong>до {{ assignment.due_date|date:"d.m.Y" }}</strong>
                                 {% else %}
                                 📖 Ознайомтеся з вказівками вчителя нижче
                                 {% endif %}
                             </div>
                         </div>
-                        <a href="{% url 'submit_assignment' assignment.pk %}" class="btn btn-primary btn-sm" style="font-weight:800;padding:8px 18px;box-shadow:0 3px 12px rgba(99,102,241,0.3);text-decoration:none;display:inline-flex;align-items:center;gap:6px;">
-                            <span>📤</span>
-                            <span>Здати роботу зараз</span>
-                        </a>
+                        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                            <button type="button" onclick="openCriteriaModal()" class="btn btn-secondary btn-sm" style="font-weight:750;padding:8px 14px;display:inline-flex;align-items:center;gap:6px;cursor:pointer;" title="Ознайомитися з критеріями оцінювання цього завдання">
+                                <span>📋</span>
+                                <span>Критерії оцінювання</span>
+                            </button>
+                            {% if not assignment.no_submission_required %}
+                            <a href="{% url 'submit_assignment' assignment.pk %}" class="btn btn-primary btn-sm" style="font-weight:800;padding:8px 18px;box-shadow:0 3px 12px rgba(99,102,241,0.3);text-decoration:none;display:inline-flex;align-items:center;gap:6px;">
+                                <span>📤</span>
+                                <span>Здати роботу зараз</span>
+                            </a>
+                            {% else %}
+                            <span class="badge" style="background:var(--color-bg-secondary);border:1px solid var(--color-border);color:var(--color-primary);font-weight:700;padding:6px 12px;font-size:12px;border-radius:var(--radius-sm);">
+                                📖 Без здачі
+                            </span>
+                            {% endif %}
+                        </div>
                     </div>
                     {% endif %}
 
@@ -384,7 +447,11 @@
                                 <span class="assignment-description-title">Що потрібно зробити (Інструкція):</span>
                                 <span class="assignment-desc-badge">Вказівки вчителя</span>
                             </div>
-                            <div class="assignment-desc-actions">
+                            <div class="assignment-desc-actions" style="display:flex;align-items:center;gap:6px;">
+                                <button type="button" class="btn btn-secondary btn-sm" onclick="openCriteriaModal()" style="display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:700;padding:4px 10px;border-radius:var(--radius-sm);cursor:pointer;" title="Переглянути критерії оцінювання">
+                                    <span>📋</span>
+                                    <span>Критерії оцінювання</span>
+                                </button>
                                 <button type="button" class="btn-copy-desc" onclick="copyAssignmentDescription(this)" title="Скопіювати текст завдання">
                                     <span class="copy-icon">📋</span>
                                     <span class="copy-label">Скопіювати</span>
@@ -399,6 +466,12 @@
                             <div class="assignment-description-title-group">
                                 <span class="desc-icon">📋</span>
                                 <span class="assignment-description-title">Вказівки до виконання:</span>
+                            </div>
+                            <div class="assignment-desc-actions">
+                                <button type="button" class="btn btn-secondary btn-sm" onclick="openCriteriaModal()" style="display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:700;padding:4px 10px;border-radius:var(--radius-sm);cursor:pointer;" title="Переглянути критерії оцінювання">
+                                    <span>📋</span>
+                                    <span>Критерії оцінювання</span>
+                                </button>
                             </div>
                         </div>
                         <div class="assignment-full-description" style="color:var(--color-text-secondary);font-size:15px;line-height:1.6;">
@@ -800,6 +873,7 @@
                     {% endif %}
 
                     <!-- Нижній блок здачі роботи -->
+                    {% if not assignment.no_submission_required %}
                     <div style="padding:20px;background:linear-gradient(135deg,rgba(99,102,241,0.06),rgba(139,92,246,0.12));border:1px solid rgba(99,102,241,0.25);border-radius:var(--radius-lg);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px;">
                         <div>
                             <h4 style="font-size:1.1rem;font-weight:800;margin:0 0 4px;color:var(--color-text-primary);">
@@ -814,6 +888,23 @@
                             📤 Здати роботу зараз ➔
                         </a>
                     </div>
+                    {% else %}
+                    <div style="padding:20px;background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:var(--radius-lg);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px;">
+                        <div>
+                            <h4 style="font-size:1.05rem;font-weight:800;margin:0 0 4px;color:var(--color-text-primary);display:flex;align-items:center;gap:6px;">
+                                <span>📖</span>
+                                <span>Завдання для усного або самостійного опрацювання</span>
+                            </h4>
+                            <p style="font-size:13px;color:var(--color-text-muted);margin:0;">
+                                Здача робіт на сайті не передбачена. Опрацюйте надані матеріали відповідно до інструкцій учителя.
+                            </p>
+                        </div>
+                        <button type="button" onclick="openCriteriaModal()" class="btn btn-secondary" style="font-weight:750;display:inline-flex;align-items:center;gap:6px;">
+                            <span>📋</span>
+                            <span>Критерії оцінювання</span>
+                        </button>
+                    </div>
+                    {% endif %}
 
                 </div>
 
@@ -1263,7 +1354,9 @@ function copyAssignmentDescription(btn) {
 
 {% if is_teacher %}
 {% include 'feed/components/reschedule_modal.html' %}
+{% include 'feed/components/duplicate_modal.html' %}
 {% endif %}
+{% include 'feed/components/criteria_modal.html' %}
 
 {% endblock %}
 

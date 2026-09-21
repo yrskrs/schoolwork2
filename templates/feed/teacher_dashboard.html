@@ -92,6 +92,86 @@
                 </a>
             </div>
 
+            <!-- ══ Меню фільтрації завдань ════════════════════════════════════════ -->
+            <div class="card" style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:14px 18px;margin-bottom:18px;box-shadow:0 2px 10px rgba(0,0,0,0.03);">
+                <form id="dashboard-filter-form" method="GET" action="{% url 'teacher_dashboard' %}" onsubmit="return handleFilterSubmit(event)" style="margin:0;display:flex;flex-direction:column;gap:10px;">
+                    <input type="hidden" name="tab" id="filter-tab-input" value="{{ tab|default:'published' }}">
+                    
+                    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+                        <div style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:750;color:var(--color-text-primary);">
+                            <span>🔍</span>
+                            <span>Фільтрація завдань</span>
+                            {% if has_active_filter %}
+                            <span class="badge" style="background:rgba(99,102,241,0.12);color:var(--color-primary);font-size:10.5px;font-weight:750;padding:2px 7px;">Фільтр активний</span>
+                            {% endif %}
+                        </div>
+
+                        <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--color-text-muted);">
+                            <span id="dashboard-results-count">Знайдено: <strong style="color:var(--color-text-primary)">{{ page_obj.paginator.count }}</strong></span>
+                            {% if has_active_filter %}
+                            <button type="button" class="btn btn-secondary btn-sm" onclick="resetDashboardFilters()" style="font-size:11.5px;padding:3px 8px;color:#ef4444;border-color:rgba(239,68,68,0.25);" title="Скинути всі встановлені фільтри">
+                                ✕ Скинути фільтри
+                            </button>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                        <!-- 1. Клас -->
+                        <div style="display:flex;align-items:center;gap:4px;">
+                            <label for="filter-class" style="font-size:12px;font-weight:700;color:var(--color-text-secondary);white-space:nowrap;margin:0;">🏫 Клас:</label>
+                            <select name="class" id="filter-class" class="form-input" style="font-size:12px;padding:5px 8px;min-width:115px;" onchange="applyDashboardFilters()">
+                                <option value="all">Всі класи</option>
+                                {% for c in all_classes %}
+                                <option value="{{ c.id }}" {% if selected_class_id == c.id|stringformat:'s' %}selected{% endif %}>{{ c.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <!-- 2. Предмет / Тематика -->
+                        <div style="display:flex;align-items:center;gap:4px;">
+                            <label for="filter-subject" style="font-size:12px;font-weight:700;color:var(--color-text-secondary);white-space:nowrap;margin:0;">📚 Предмет:</label>
+                            <select name="subject" id="filter-subject" class="form-input" style="font-size:12px;padding:5px 8px;min-width:140px;" onchange="applyDashboardFilters()">
+                                <option value="all">Всі предмети</option>
+                                {% for s in all_subjects %}
+                                <option value="{{ s.id }}" {% if selected_subject_id == s.id|stringformat:'s' %}selected{% endif %}>{{ s.icon }} {{ s.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <!-- 3. Дата (пресет + вибір конкретної дати) -->
+                        <div style="display:flex;align-items:center;gap:4px;">
+                            <label for="filter-date-preset" style="font-size:12px;font-weight:700;color:var(--color-text-secondary);white-space:nowrap;margin:0;">📅 Дата:</label>
+                            <select name="date_preset" id="filter-date-preset" class="form-input" style="font-size:12px;padding:5px 8px;min-width:125px;" onchange="onDatePresetChange()">
+                                <option value="" {% if not selected_date_preset and not selected_date %}selected{% endif %}>Всі дати</option>
+                                <option value="today" {% if selected_date_preset == 'today' %}selected{% endif %}>🟢 Сьогодні</option>
+                                <option value="week" {% if selected_date_preset == 'week' %}selected{% endif %}>🗓️ Цього тижня</option>
+                                <option value="month" {% if selected_date_preset == 'month' %}selected{% endif %}>📆 Цього місяця</option>
+                                <option value="custom" {% if selected_date or selected_date_preset == 'custom' %}selected{% endif %}>🎯 Вказати дату...</option>
+                            </select>
+                            <input type="date" name="date" id="filter-date-input" class="form-input" value="{{ selected_date }}"
+                                   style="font-size:12px;padding:4px 8px;width:130px;{% if not selected_date and selected_date_preset != 'custom' %}display:none;{% endif %}"
+                                   title="Конкретна дата уроку чи завдання" onchange="applyDashboardFilters()">
+                        </div>
+
+                        <!-- 4. Пошук за темою або назвою -->
+                        <div style="display:flex;align-items:center;position:relative;flex:1;min-width:180px;">
+                            <input type="text" name="q" id="filter-q" class="form-input" placeholder="Тема, заголовок, опис..." value="{{ search_query }}"
+                                   style="width:100%;font-size:12px;padding:5px 26px 5px 8px;"
+                                   onkeydown="if(event.key==='Enter'){event.preventDefault();applyDashboardFilters();}">
+                            {% if search_query %}
+                            <button type="button" onclick="clearSearchQuery()" style="position:absolute;right:6px;background:none;border:none;cursor:pointer;color:var(--color-text-muted);font-size:13px;padding:0;line-height:1;" title="Очистити запит">✕</button>
+                            {% endif %}
+                        </div>
+
+                        <!-- Кнопка пошуку -->
+                        <button type="button" class="btn btn-primary btn-sm" onclick="applyDashboardFilters()" style="padding:5px 12px;font-size:12px;font-weight:750;">
+                            Знайти
+                        </button>
+                    </div>
+                </form>
+            </div>
+
             <!-- ══ Зона списку завдань (динамічна) ═══════════════════════════════ -->
             <div id="dashboard-list-zone">
                 {% include 'feed/teacher_dashboard_fragment.html' %}
@@ -112,14 +192,96 @@
 
 {% block extra_scripts %}
 <script>
-/* ─── Плавне анімаційне перемикання вкладок у панелі вчителя ──────────────── */
+/* ─── Плавне анімаційне перемикання вкладок та фільтрів у панелі вчителя ───── */
 var _currentDashboardTab = '{{ tab|default:"published" }}';
 var _dashboardTabAbort   = null;
+
+function getFilterQueryParams() {
+    var form = document.getElementById('dashboard-filter-form');
+    if (!form) return '';
+    var fd = new FormData(form);
+    var p = new URLSearchParams();
+    for (var pair of fd.entries()) {
+        var key = pair[0];
+        var val = String(pair[1]).trim();
+        if (key === 'tab') continue;
+        if (key === 'date_preset' && val === 'custom') continue;
+        if (val && val !== 'all') {
+            p.set(key, val);
+        }
+    }
+    return p.toString();
+}
+
+function onDatePresetChange() {
+    var presetSel = document.getElementById('filter-date-preset');
+    var dateInput = document.getElementById('filter-date-input');
+    if (!presetSel || !dateInput) return;
+
+    if (presetSel.value === 'custom') {
+        dateInput.style.display = 'inline-block';
+        dateInput.focus();
+    } else {
+        dateInput.style.display = 'none';
+        dateInput.value = '';
+        applyDashboardFilters();
+    }
+}
+
+function clearSearchQuery() {
+    var qInput = document.getElementById('filter-q');
+    if (qInput) {
+        qInput.value = '';
+        applyDashboardFilters();
+    }
+}
+
+function handleFilterSubmit(e) {
+    if (e) e.preventDefault();
+    applyDashboardFilters();
+    return false;
+}
+
+function applyDashboardFilters() {
+    var filterQuery = getFilterQueryParams();
+    var tab = _currentDashboardTab || 'published';
+    var fullQuery = 'tab=' + tab + (filterQuery ? '&' + filterQuery : '');
+    loadDashboardContent(fullQuery, true, false);
+    return false;
+}
+
+function resetDashboardFilters() {
+    var form = document.getElementById('dashboard-filter-form');
+    if (form) {
+        var clSel = document.getElementById('filter-class');
+        if (clSel) clSel.value = 'all';
+        var subSel = document.getElementById('filter-subject');
+        if (subSel) subSel.value = 'all';
+        var dpSel = document.getElementById('filter-date-preset');
+        if (dpSel) dpSel.value = '';
+        var dInp = document.getElementById('filter-date-input');
+        if (dInp) { dInp.value = ''; dInp.style.display = 'none'; }
+        var qInp = document.getElementById('filter-q');
+        if (qInp) qInp.value = '';
+    }
+    var tab = _currentDashboardTab || 'published';
+    loadDashboardContent('tab=' + tab, true, false);
+    return false;
+}
 
 function switchDashboardTab(tabName, btnEl) {
     if (!tabName) return false;
     
-    var pureTab = tabName.split('&')[0];
+    var tabParts = tabName.split('&');
+    var pureTab = tabParts[0];
+    var pageParam = '';
+    for (var i = 1; i < tabParts.length; i++) {
+        if (tabParts[i].startsWith('page=')) {
+            pageParam = tabParts[i];
+            break;
+        }
+    }
+
     document.querySelectorAll('#dashboard-tabs .tab-btn').forEach(function(b) {
         if (b.getAttribute('data-tab') === pureTab) {
             b.classList.add('active');
@@ -131,15 +293,24 @@ function switchDashboardTab(tabName, btnEl) {
     });
 
     _currentDashboardTab = pureTab;
+    var tabInp = document.getElementById('filter-tab-input');
+    if (tabInp) tabInp.value = pureTab;
 
-    var newUrl = window.location.pathname + '?tab=' + tabName;
-    try { window.history.pushState({ tab: tabName }, '', newUrl); } catch(e){}
+    var filterQuery = getFilterQueryParams();
+    var fullQuery = 'tab=' + pureTab;
+    if (pageParam) fullQuery += '&' + pageParam;
+    if (filterQuery) fullQuery += '&' + filterQuery;
 
+    loadDashboardContent(fullQuery, true, !!pageParam);
+    return false;
+}
+
+function loadDashboardContent(queryString, pushState, scrollUp) {
     var zone = document.getElementById('dashboard-list-zone');
-    if (!zone) return false;
+    if (!zone) return;
 
     if (window.startProgressBar) window.startProgressBar();
-    zone.style.opacity    = '0.88';
+    zone.style.opacity    = '0.75';
     zone.style.transition = 'opacity 0.12s ease';
 
     if (_dashboardTabAbort) {
@@ -147,7 +318,14 @@ function switchDashboardTab(tabName, btnEl) {
     }
     _dashboardTabAbort = new AbortController();
 
-    fetch('/teacher/?tab=' + tabName + '&fragment=1', {
+    var fetchUrl = '/teacher/?' + queryString + '&fragment=1';
+    var fullBrowserUrl = window.location.pathname + '?' + queryString;
+
+    if (pushState) {
+        try { window.history.pushState({ tabQuery: queryString }, '', fullBrowserUrl); } catch(e){}
+    }
+
+    fetch(fetchUrl, {
         headers: { 'X-Requested-With': 'XMLHttpRequest' },
         signal: _dashboardTabAbort.signal
     })
@@ -156,7 +334,7 @@ function switchDashboardTab(tabName, btnEl) {
         zone.innerHTML = html;
         zone.style.opacity = '1';
         if (window.finishProgressBar) window.finishProgressBar();
-        if (tabName.indexOf('page=') !== -1) {
+        if (scrollUp) {
             zone.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
     })
@@ -166,8 +344,6 @@ function switchDashboardTab(tabName, btnEl) {
             zone.style.opacity = '1';
         }
     });
-
-    return false;
 }
 
 window.addEventListener('popstate', function(e) {

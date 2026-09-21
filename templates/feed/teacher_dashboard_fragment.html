@@ -84,8 +84,10 @@
                 <span class="attachment-count">📎 {{ assignment.files.count }}</span>
                 {% endif %}
 
-                <!-- Дедлайн -->
-                {% if assignment.due_date %}
+                <!-- Дедлайн або без здачі -->
+                {% if assignment.no_submission_required %}
+                <span class="badge" style="background:rgba(99,102,241,0.08);color:var(--color-primary);border:1px solid rgba(99,102,241,0.2);font-size:11.5px;padding:2px 7px;border-radius:4px;font-weight:600;" title="Завдання для опрацювання (без здачі робіт)">📖 Без здачі</span>
+                {% elif assignment.due_date %}
                 <span>📆 до {{ assignment.due_date|date:"d.m.Y" }}</span>
                 {% endif %}
 
@@ -106,7 +108,7 @@
         <div class="dashboard-card-actions" style="display:flex;flex-direction:column;align-items:flex-end;gap:8px;flex-shrink:0;margin-left:auto;">
 
             <!-- Верхній ряд кнопок: Перегляд як учень + Здачі учнів (завжди закріплено справа) -->
-            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end;">
+            <div style="display:flex;align-items:center;gap:8px;">
                 <!-- Кнопка «Як бачить учень» -->
                 <a href="{% url 'assignment_detail' assignment.pk %}"
                    class="btn btn-secondary btn-sm"
@@ -117,15 +119,21 @@
 
                 <!-- Здачі учнів (лічильник) - завжди фіксовано справа -->
                 {% if assignment.status == 'published' %}
-                <a href="{% url 'assignment_submissions' assignment.pk %}"
-                   class="btn-submissions btn-sm"
-                   style="font-size:12px;padding:4px 11px;display:inline-flex;align-items:center;gap:4px;"
-                   title="Переглянути здачі учнів по цьому завданню">
-                    📥 Здачі: <strong>{{ assignment.submissions_count|default:"0" }}</strong>
-                    {% if assignment.ungraded_count %}
-                    <span class="submissions-count-badge badge-ungraded" style="margin-left:2px;">{{ assignment.ungraded_count }} нові</span>
+                    {% if assignment.no_submission_required %}
+                    <span class="badge" style="font-size:12px;padding:5px 10px;display:inline-flex;align-items:center;gap:4px;background:var(--color-bg-secondary);border:1px solid var(--color-border);color:var(--color-primary);border-radius:var(--radius-sm);font-weight:700;" title="Завдання для опрацювання (без здачі робіт)">
+                        📖 Без здачі
+                    </span>
+                    {% else %}
+                    <a href="{% url 'assignment_submissions' assignment.pk %}"
+                       class="btn-submissions btn-sm"
+                       style="font-size:12px;padding:4px 11px;display:inline-flex;align-items:center;gap:4px;"
+                       title="Переглянути здачі учнів по цьому завданню">
+                        📥 Здачі: <strong>{{ assignment.submissions_count|default:"0" }}</strong>
+                        {% if assignment.ungraded_count %}
+                        <span class="submissions-count-badge badge-ungraded" style="margin-left:2px;">{{ assignment.ungraded_count }} нові</span>
+                        {% endif %}
+                    </a>
                     {% endif %}
-                </a>
                 {% endif %}
             </div>
 
@@ -212,17 +220,21 @@
     <div class="sidebar-card">
         <div class="empty-state">
             <div class="empty-icon">
-                {% if tab == 'draft' %}📝{% elif tab == 'scheduled' %}⏰{% elif tab == 'archived' %}📦{% else %}📭{% endif %}
+                {% if has_active_filter %}🔍{% elif tab == 'draft' %}📝{% elif tab == 'scheduled' %}⏰{% elif tab == 'archived' %}📦{% else %}📭{% endif %}
             </div>
             <h3>
-                {% if tab == 'draft' %}Немає чернеток
+                {% if has_active_filter %}
+                За обраними фільтрами завдань не знайдено
+                {% elif tab == 'draft' %}Немає чернеток
                 {% elif tab == 'scheduled' %}Немає запланованих
                 {% elif tab == 'archived' %}Архів порожній
                 {% else %}Немає опублікованих завдань
                 {% endif %}
             </h3>
             <p>
-                {% if tab == 'published' %}
+                {% if has_active_filter %}
+                Спробуйте змінити критерії пошуку, обрати інший клас чи дату, або скинути фільтри.
+                {% elif tab == 'published' %}
                 Створіть перше завдання та опублікуйте його для учнів.
                 {% elif tab == 'draft' %}
                 Збережіть завдання як чернетку, щоб допрацювати пізніше.
@@ -232,7 +244,11 @@
                 Список порожній.
                 {% endif %}
             </p>
+            {% if has_active_filter %}
+            <button type="button" class="btn btn-secondary" onclick="resetDashboardFilters()">✕ Скинути всі фільтри</button>
+            {% else %}
             <a href="{% url 'assignment_create' %}" class="btn btn-primary">＋ Нове завдання</a>
+            {% endif %}
         </div>
     </div>
     {% endfor %}
@@ -241,7 +257,7 @@
     {% if page_obj.has_other_pages %}
     <div style="display:flex;justify-content:center;gap:6px;flex-wrap:wrap;margin-top:20px;padding-top:10px;">
         {% if page_obj.has_previous %}
-        <a href="?tab={{ tab }}&page={{ page_obj.previous_page_number }}"
+        <a href="?tab={{ tab }}{% if filter_querystring %}&{{ filter_querystring }}{% endif %}&page={{ page_obj.previous_page_number }}"
            class="btn btn-secondary btn-sm"
            onclick="return switchDashboardTab('{{ tab }}&page={{ page_obj.previous_page_number }}', null)">
             « Попередня
@@ -251,7 +267,7 @@
         {% if page_obj.number == i %}
         <span class="btn btn-primary btn-sm">{{ i }}</span>
         {% elif i > page_obj.number|add:"-3" and i < page_obj.number|add:"3" %}
-        <a href="?tab={{ tab }}&page={{ i }}"
+        <a href="?tab={{ tab }}{% if filter_querystring %}&{{ filter_querystring }}{% endif %}&page={{ i }}"
            class="btn btn-secondary btn-sm"
            onclick="return switchDashboardTab('{{ tab }}&page={{ i }}', null)">
             {{ i }}
@@ -259,7 +275,7 @@
         {% endif %}
         {% endfor %}
         {% if page_obj.has_next %}
-        <a href="?tab={{ tab }}&page={{ page_obj.next_page_number }}"
+        <a href="?tab={{ tab }}{% if filter_querystring %}&{{ filter_querystring }}{% endif %}&page={{ page_obj.next_page_number }}"
            class="btn btn-secondary btn-sm"
            onclick="return switchDashboardTab('{{ tab }}&page={{ page_obj.next_page_number }}', null)">
             Наступна »

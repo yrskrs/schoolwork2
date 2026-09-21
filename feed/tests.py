@@ -1669,6 +1669,99 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
         # На другій сторінці мають бути решта (6 завдань, разом із початковим)
         self.assertEqual(len(resp_page2.context['assignments']), 6)
 
+    def test_teacher_dashboard_filter_menu(self):
+        """Тест меню фільтрації вчителя: по класах, темах/предметах, датах та пошуковому запиту."""
+        self.client.login(username='teacher1', password='password123')
+
+        subject2 = Subject.objects.create(name='Фізика', icon='⚛️', color='#3b82f6')
+        class2 = ClassGroup.objects.create(name='10-Б', grade=10, letter='Б')
+
+        # Створюємо тестові завдання
+        a_math = Assignment.objects.create(
+            teacher=self.teacher,
+            subject=self.subject,
+            title="Тема з геометрії: трикутники",
+            description="Ознайомитися з ознаками рівності трикутників",
+            status=Assignment.STATUS_PUBLISHED
+        )
+        a_math.classes.add(self.class_group)
+
+        a_physics = Assignment.objects.create(
+            teacher=self.teacher,
+            subject=subject2,
+            title="Тема з фізики: закони Ньютона",
+            description="Вивчити формули другого закону",
+            status=Assignment.STATUS_PUBLISHED
+        )
+        a_physics.classes.add(class2)
+
+        # 1. Перевірка наявності форми меню фільтрації на панелі вчителя
+        resp = self.client.get(reverse('teacher_dashboard'))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, 'Фільтрація завдань')
+        self.assertContains(resp, 'filter-class')
+        self.assertContains(resp, 'filter-subject')
+        self.assertContains(resp, 'filter-date-preset')
+        self.assertContains(resp, 'filter-q')
+
+        # 2. Фільтрація за класом
+        resp_class = self.client.get(reverse('teacher_dashboard') + f'?class={class2.id}')
+        self.assertEqual(resp_class.status_code, 200)
+        self.assertContains(resp_class, 'закони Ньютона')
+        self.assertNotContains(resp_class, 'трикутники')
+
+        # 3. Фільтрація за предметом
+        resp_subject = self.client.get(reverse('teacher_dashboard') + f'?subject={subject2.id}')
+        self.assertEqual(resp_subject.status_code, 200)
+        self.assertContains(resp_subject, 'закони Ньютона')
+        self.assertNotContains(resp_subject, 'трикутники')
+
+        # 4. Фільтрація за текстовим запитом / темою
+        resp_query = self.client.get(reverse('teacher_dashboard') + '?q=трикутники')
+        self.assertEqual(resp_query.status_code, 200)
+        self.assertContains(resp_query, 'трикутники')
+        self.assertNotContains(resp_query, 'закони Ньютона')
+
+    def test_assignment_detail_duplicate_button(self):
+        """Тест наявності кнопки копіювання поруч із відредагувати завдання у перегляді як учень."""
+        # Для вчителя
+        self.client.login(username='teacher1', password='password123')
+        resp = self.client.get(reverse('assignment_detail', kwargs={'pk': self.assignment.pk}))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, 'Відредагувати завдання')
+        self.assertContains(resp, 'Копіювати завдання')
+        self.assertContains(resp, 'openDuplicateModal')
+        self.assertContains(resp, 'duplicate-modal')
+
+        # Для неавторизованого / учня — кнопок редагування та копіювання бути не повинно
+        self.client.logout()
+        resp_student = self.client.get(reverse('assignment_detail', kwargs={'pk': self.assignment.pk}))
+        self.assertEqual(resp_student.status_code, 200)
+        self.assertNotContains(resp_student, 'Відредагувати завдання')
+        self.assertNotContains(resp_student, 'Копіювати завдання')
+        self.assertNotContains(resp_student, 'openDuplicateModal')
+
+    def test_file_viewer_open_assignment_in_new_window(self):
+        """Тест кнопки/посилання відкриття завдання у новому вікні при перевірці та оцінюванні."""
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        file = SimpleUploadedFile("test.py", b"print('Hello')", content_type="text/x-python")
+        sub = Submission.objects.create(
+            assignment=self.assignment,
+            first_name='Олександр',
+            last_name='Шевченко',
+            class_group=self.class_group,
+            teacher=self.teacher,
+            file=file,
+        )
+        self.client.login(username='teacher1', password='password123')
+        resp = self.client.get(reverse('view_file', kwargs={'submission_id': sub.id}))
+        self.assertEqual(resp.status_code, 200)
+        # Перевіряємо наявність кнопки перегляду завдання у новому вікні
+        self.assertContains(resp, 'Відкрити завдання як учень ↗')
+        self.assertContains(resp, 'Як бачить учень ↗')
+        self.assertContains(resp, reverse('assignment_detail', args=[self.assignment.pk]))
+        self.assertContains(resp, 'target="_blank"')
+
     def test_individual_assignment_autofill_and_description_label(self):
         """Тест автозаповнення ПІБ та класу для індивідуального завдання, а також заголовка опису."""
         # 1. Створюємо індивідуальне завдання для учениці
@@ -3249,7 +3342,729 @@ class AssignmentFileAIAndCoauthorTests(TestCase):
         resp_frag = self.client.get(f'/feed/fragment/?date={found_day}')
         self.assertEqual(resp_frag.status_code, 200)
         self.assertContains(resp_frag, 'Завдання розкладу середи')
-        self.assertNotContains(resp_frag, 'Завдань не знайдено на вибрану дату')
+
+class AICreativityAndCriteriaTests(TestCase):
+    """
+    Тести для:
+    1. Налаштування креативності ШІ (temperature): збереження з крапкою і комою, clamping, temperature_dot.
+    2. Індивідуальних критеріїв оцінювання завдання (custom_criteria) у моделі, формі, дублюванні.
+    3. Розширеного промту детекції ШІ (зображення, хуманізатори/обхідники, політика дозволеності).
+    4. Модального вікна перегляду критеріїв оцінювання для учнів на assignment_detail та submit_assignment.
+    """
+
+    def setUp(self):
+        from feed.models import AISettings, Subject, Assignment, ClassGroup, Teacher, Student
+        self.user = User.objects.create_user(username='teacher_criteria_test', password='password123', is_staff=True, is_superuser=True)
+        self.teacher = Teacher.objects.create(user=self.user, full_name='Олена Петрівна')
+        self.class_group = ClassGroup.objects.create(grade=10, letter='Б', name='10-Б')
+        self.teacher.classes.add(self.class_group)
+        self.subject = Subject.objects.create(name='Історія України')
+        self.teacher.subjects.add(self.subject)
+        self.student = Student.objects.create(last_name='Шевченко', first_name='Тарас', class_group=self.class_group)
+
+        self.ai_settings = AISettings.get_solo()
+        self.ai_settings.api_key = 'fake-api-key-test'
+        self.ai_settings.temperature = 0.2
+        self.ai_settings.save()
+
+    def test_temperature_dot_property_and_saving(self):
+        """Перевірка властивості temperature_dot та збереження з комою чи крапкою."""
+        from feed.models import AISettings
+        settings = AISettings.get_solo()
+        settings.temperature = 0.35
+        self.assertEqual(settings.temperature_dot, '0.35')
+
+        settings.temperature = 0.0
+        self.assertEqual(settings.temperature_dot, '0.0')
+
+        self.client.login(username='teacher_criteria_test', password='password123')
+
+        # Збереження з крапкою
+        resp1 = self.client.post(reverse('ai_settings'), {
+            'action': 'save_ai_config',
+            'api_key': 'test-key',
+            'model_name': 'gemini-2.5-flash',
+            'temperature': '0.65',
+            'ai_detector_tolerance_percent': '30',
+        })
+        self.assertEqual(resp1.status_code, 302)
+        settings.refresh_from_db()
+        self.assertAlmostEqual(settings.temperature, 0.65, places=2)
+        self.assertEqual(settings.temperature_dot, '0.65')
+
+        # Збереження з комою (типово для локалізації uk_UA)
+        resp2 = self.client.post(reverse('ai_settings'), {
+            'action': 'save_ai_config',
+            'api_key': 'test-key',
+            'model_name': 'gemini-2.5-flash',
+            'temperature': '0,85',
+            'ai_detector_tolerance_percent': '25',
+        })
+        self.assertEqual(resp2.status_code, 302)
+        settings.refresh_from_db()
+        self.assertAlmostEqual(settings.temperature, 0.85, places=2)
+        self.assertEqual(settings.temperature_dot, '0.85')
+
+        # Clamping
+        resp3 = self.client.post(reverse('ai_settings'), {
+            'action': 'save_ai_config',
+            'api_key': 'test-key',
+            'temperature': '1.7',
+        })
+        settings.refresh_from_db()
+        self.assertEqual(settings.temperature, 1.0)
+
+    def test_custom_criteria_form_and_duplicate(self):
+        """Перевірка збереження індивідуальних критеріїв завдання та їх копіювання при дублюванні."""
+        from feed.models import Assignment
+        self.client.login(username='teacher_criteria_test', password='password123')
+
+        custom_text = "1. Хронологічна послідовність (до 5 б.)\n2. Причинно-наслідкові зв'язки (до 4 б.)\n3. Висновки (до 3 б.)"
+        resp = self.client.post(reverse('assignment_create'), {
+            'subject': self.subject.id,
+            'title': 'Українська революція 1917-1921',
+            'description': 'Опишіть головні етапи та події.',
+            'classes': [self.class_group.id],
+            'publish_choice': 'now',
+            'custom_criteria': custom_text,
+            'allow_ai_usage': '1',
+        })
+        self.assertEqual(resp.status_code, 302)
+
+        asg = Assignment.objects.filter(title='Українська революція 1917-1921').first()
+        self.assertIsNotNone(asg)
+        self.assertEqual(asg.custom_criteria, custom_text)
+        self.assertTrue(asg.allow_ai_usage)
+
+        # Перевірка дублювання завдання
+        dup_resp = self.client.post(reverse('assignment_duplicate', args=[asg.pk]), {
+            'duplicate_title': 'Копія: Українська революція',
+            'duplicate_classes[]': [self.class_group.id],
+            'publish_option': 'now',
+        })
+        self.assertEqual(dup_resp.status_code, 302)
+
+        dup_asg = Assignment.objects.filter(title='Копія: Українська революція').first()
+        self.assertIsNotNone(dup_asg)
+        self.assertEqual(dup_asg.custom_criteria, custom_text)
+        self.assertTrue(dup_asg.allow_ai_usage)
+
+    def test_ai_detector_prompt_instructions(self):
+        """Перевірка формування промту: критерії, зображення, хуманізатори та політика ШІ."""
+        from feed.models import Assignment, Submission
+        from feed.gemini_service import evaluate_submission_with_gemini
+        from unittest.mock import patch
+        import json
+
+        custom_text = "Індивідуальна розбаловка: аргументація - 6 б, джерела - 6 б."
+        asg = Assignment.objects.create(
+            teacher=self.teacher,
+            subject=self.subject,
+            title='Тестове завдання на критерії',
+            description='Умова тестового завдання',
+            custom_criteria=custom_text,
+            allow_ai_usage=False,
+            status=Assignment.STATUS_PUBLISHED,
+        )
+        asg.classes.add(self.class_group)
+
+        sub = Submission.objects.create(
+            assignment=asg,
+            student=self.student,
+            class_group=self.class_group,
+            comment_student='Ось мій текст розв’язку.',
+        )
+
+        captured_payloads = []
+        def fake_http_post(endpoint, payload, timeout=35):
+            captured_payloads.append(payload)
+            fake_data = {
+                "candidates": [{
+                    "content": {
+                        "parts": [{
+                            "text": json.dumps({
+                                "suggested_grade": 9,
+                                "level": "Достатній",
+                                "summary": "Робота опрацьована",
+                                "strengths": ["Гарна відповідь"],
+                                "weaknesses": [],
+                                "feedback_comment": "Добре виконано",
+                                "ai_generated_percent": 10,
+                                "ai_generated_detected": False,
+                                "ai_generated_confidence": "none",
+                                "ai_generated_details": None,
+                                "gr_results": []
+                            })
+                        }]
+                    }
+                }]
+            }
+            return 200, fake_data, json.dumps(fake_data)
+
+        with patch('feed.gemini_service._http_post_json', side_effect=fake_http_post):
+            evaluate_submission_with_gemini(sub)
+
+        self.assertTrue(len(captured_payloads) > 0)
+        req_body = str(captured_payloads[0])
+
+        # Перевірка наявності індивідуальних критеріїв
+        self.assertIn("ІНДИВІДУАЛЬНІ КРИТЕРІЇ ОЦІНЮВАННЯ ВЧИТЕЛЯ", req_body)
+        self.assertIn(custom_text, req_body)
+
+        # Перевірка наявності інструкцій щодо зображень
+        self.assertIn("АНАЛІЗ ПРИКРІПЛЕНИХ ЗОБРАЖЕНЬ ТА ГРАФІКИ", req_body)
+        self.assertIn("Midjourney", req_body)
+
+        # Перевірка інструкцій щодо сервісів обходу (humanizers)
+        self.assertIn("Anti-AI Bypass", req_body)
+        self.assertIn("QuillBot", req_body)
+        self.assertIn("Undetectable AI", req_body)
+
+        # Перевірка суворої політики заборони ШІ
+        self.assertIn("СУВОРО ЗАБОРОНЕНО використання ШІ", req_body)
+
+        # Перевірка інструкцій щодо сервісів обходу (humanizers)
+        self.assertIn("Anti-AI Bypass", req_body)
+        self.assertIn("QuillBot", req_body)
+        self.assertIn("Undetectable AI", req_body)
+
+        # Перевірка суворої політики заборони ШІ
+        self.assertIn("СУВОРО ЗАБОРОНЕНО використання ШІ", req_body)
+
+    def test_criteria_modal_rendered_in_views(self):
+        """Перевірка рендерингу кнопки та модального вікна критеріїв на сторінках завдання."""
+        from feed.models import Assignment
+        asg = Assignment.objects.create(
+            teacher=self.teacher,
+            subject=self.subject,
+            title='Завдання з критеріями для перегляду',
+            description='Вказівки вчителя до завдання',
+            custom_criteria='1. Теза (4 б.)\n2. Аргументи (4 б.)\n3. Висновок (4 б.)',
+            allow_ai_usage=True,
+            status=Assignment.STATUS_PUBLISHED,
+        )
+        asg.classes.add(self.class_group)
+
+        # 1. Сторінка assignment_detail
+        resp = self.client.get(reverse('assignment_detail', args=[asg.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, 'openCriteriaModal()')
+        self.assertContains(resp, 'Критерії оцінювання')
+        self.assertContains(resp, 'id="criteria-modal"')
+        self.assertContains(resp, '1. Теза (4 б.)')
+        self.assertContains(resp, 'ШІ Дозволено')
+
+        # 2. Сторінка submit_assignment
+        resp_sub = self.client.get(reverse('submit_assignment', args=[asg.pk]))
+        self.assertEqual(resp_sub.status_code, 200)
+        self.assertContains(resp_sub, 'openCriteriaModal()')
+        self.assertContains(resp_sub, 'id="criteria-modal"')
+
+
+class TeacherMaterialsAITaskRecognitionTests(TestCase):
+    """
+    Тести перевірки розпізнавання завдань у презентаціях (.pptx, .ppt, .odp),
+    PDF-файлах та зображеннях, доданих вчителем, для запобігання помилковому
+    відправленню робіт учнів на доопрацювання (unclear_task).
+    """
+    def setUp(self):
+        self.teacher_user = User.objects.create_user(username='teach_mat_user_rec', password='password123')
+        self.teacher = Teacher.objects.create(
+            user=self.teacher_user,
+            full_name='Олена Петренко'
+        )
+        self.subject, _ = Subject.objects.get_or_create(name='Інформатика', defaults={'icon': '💻', 'color': '#3b82f6'})
+        self.class_group, _ = ClassGroup.objects.get_or_create(name='9-Б')
+
+        ai_settings = AISettings.get_solo()
+        ai_settings.api_key = 'test-key-teacher-mat'
+        ai_settings.is_enabled = True
+        ai_settings.save()
+
+    def test_pptx_extraction_in_document_parsers(self):
+        """Перевіряємо, що extract_text_from_document витягує текст і структуру з .pptx."""
+        import io
+        import pptx
+        from feed.document_parsers import extract_text_from_document
+        from feed.duplicate_detector import get_normalized_file_content
+
+        prs = pptx.Presentation()
+        s1 = prs.slides.add_slide(prs.slide_layouts[0])
+        s1.shapes.title.text = 'Урок 10. Алгоритми'
+        s1.placeholders[1].text = 'Теорія алгоритмів та їх види'
+
+        s2 = prs.slides.add_slide(prs.slide_layouts[1])
+        s2.shapes.title.text = 'Домашнє завдання'
+        s2.placeholders[1].text = '1. Дати означення алгоритму.\n2. Навести приклад лінійного алгоритму.'
+
+        stream = io.BytesIO()
+        prs.save(stream)
+        stream.seek(0)
+
+        text, ok, err = extract_text_from_document(stream, 'presentation.pptx')
+        self.assertTrue(ok)
+        self.assertIn('Слайд 1/2', text)
+        self.assertIn('Урок 10. Алгоритми', text)
+        self.assertIn('Слайд 2/2', text)
+        self.assertIn('Домашнє завдання', text)
+        self.assertIn('Дати означення алгоритму', text)
+
+    @patch('feed.gemini_service._http_post_json')
+    def test_ai_recognizes_task_in_teacher_presentation(self, mock_http_post):
+        """
+        Перевіряємо, що коли вчитель прикріплює презентацію і дає короткий опис ('Опрацювати презентацію'),
+        ШІ отримує структуру слайдів, чіткі інструкції знайти завдання на слайдах,
+        а також PDF прев'ю в inline_media, і НЕ вважає завдання незрозумілим.
+        """
+        import io
+        import pptx
+        from django.conf import settings as django_settings
+        from feed.gemini_service import evaluate_submission_with_gemini
+
+        prs = pptx.Presentation()
+        s1 = prs.slides.add_slide(prs.slide_layouts[0])
+        s1.shapes.title.text = 'Презентація до теми Екологія'
+        s2 = prs.slides.add_slide(prs.slide_layouts[1])
+        s2.shapes.title.text = 'Практичне завдання'
+        s2.placeholders[1].text = 'Скласти список трьох факторів забруднення.'
+
+        asg = Assignment.objects.create(
+            teacher=self.teacher,
+            subject=self.subject,
+            title='Екологічні проблеми сьогодення',
+            description='Опрацювати матеріали презентації.',
+            status=Assignment.STATUS_PUBLISHED
+        )
+        asg.classes.add(self.class_group)
+
+        # Зберігаємо pptx як файл завдання вчителя
+        pptx_io = io.BytesIO()
+        prs.save(pptx_io)
+        pptx_file = SimpleUploadedFile('ecology_lesson.pptx', pptx_io.getvalue(), content_type='application/vnd.openxmlformats-officedocument.presentationml.presentation')
+        af = AssignmentFile.objects.create(
+            assignment=asg,
+            file=pptx_file,
+            original_name='ecology_lesson.pptx',
+            is_task_source_for_ai=False  # вчитель НЕ ставив радіокнопку
+        )
+
+        # Створюємо фейковий файл прев'ю PDF, наче його згенерував сайт
+        previews_dir = os.path.join(django_settings.MEDIA_ROOT, 'previews')
+        os.makedirs(previews_dir, exist_ok=True)
+        fake_pdf_path = os.path.join(previews_dir, f"{af.id}.pdf")
+        with open(fake_pdf_path, 'wb') as f_pdf:
+            f_pdf.write(b"%PDF-1.4 fake presentation preview")
+
+        try:
+            # Учень здав відповідь на завдання зі слайду 2
+            sub = Submission.objects.create(
+                assignment=asg,
+                first_name='Олександр',
+                last_name='Іваненко',
+                class_group=self.class_group,
+                comment_student="Виконав практичне завдання з презентації: 1. Викиди заводів 2. Автотранспорт 3. Побутове сміття."
+            )
+
+            mock_res = {
+                "candidates": [
+                    {
+                        "content": {
+                            "parts": [
+                                {
+                                    "text": json.dumps({
+                                        "suggested_grade": "11",
+                                        "level": "Високий (10-12)",
+                                        "unclear_task": False,
+                                        "format_warning": None,
+                                        "summary": "Завдання з презентації виконано повно і змістовно.",
+                                        "strengths": ["Вказано всі три фактори"],
+                                        "weaknesses": [],
+                                        "feedback_comment": "Чудово засвоєно матеріал зі слайдів презентації."
+                                    })
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+            mock_http_post.return_value = (200, mock_res, json.dumps(mock_res))
+
+            eval_res = evaluate_submission_with_gemini(sub)
+            self.assertEqual(eval_res['status'], 'success')
+            self.assertEqual(eval_res['suggested_grade'], '11')
+            self.assertFalse(eval_res['unclear_task'])
+
+            # Перевіряємо payload запиту до Gemini
+            call_args = mock_http_post.call_args[0]
+            payload = call_args[1]
+            user_text = payload['contents'][0]['parts'][0]['text']
+
+            # Перевіряємо, що слайди з презентації передані в промт
+            self.assertIn('ecology_lesson.pptx', user_text)
+            self.assertIn('Практичне завдання', user_text)
+            self.assertIn('Скласти список трьох факторів забруднення', user_text)
+
+            # Перевіряємо вказівки для ШІ шукати завдання на слайдах
+            self.assertIn('ПОШУК ЗАВДАННЯ В ЦИХ МАТЕРІАЛАХ', user_text)
+            self.assertIn('ФІНАЛЬНІ/ОСТАННІ СЛАЙДИ', user_text)
+            self.assertIn('ЗАБОРОНА ПОМИЛКОВОГО «ДОПРАЦЮВАННЯ»', user_text)
+
+            # Перевіряємо, що згенероване PDF прев'ю презентації передано до inlineData (Vision)
+            inline_parts = [p['inlineData'] for p in payload['contents'][0]['parts'] if 'inlineData' in p]
+            self.assertTrue(any(ip.get('mimeType') == 'application/pdf' for ip in inline_parts))
+
+        finally:
+            if os.path.exists(fake_pdf_path):
+                os.remove(fake_pdf_path)
+
+    @patch('feed.gemini_service._http_post_json')
+    def test_ai_evaluation_teacher_pdf_and_image_inline_media(self, mock_http_post):
+        """
+        Перевіряємо, що прямий PDF та зображення вчителя (навіть без is_task_source_for_ai)
+        завжди потрапляють до inline_media для Gemini Vision.
+        """
+        from feed.gemini_service import evaluate_submission_with_gemini
+
+        asg = Assignment.objects.create(
+            teacher=self.teacher,
+            subject=self.subject,
+            title='Завдання з малюнком та PDF',
+            description='Виконати завдання з прикріплених матеріалів.',
+            status=Assignment.STATUS_PUBLISHED
+        )
+        asg.classes.add(self.class_group)
+
+        # Додаємо PDF файл вчителя
+        pdf_file = SimpleUploadedFile('task_sheet.pdf', b'%PDF-1.4 test task sheet', content_type='application/pdf')
+        AssignmentFile.objects.create(
+            assignment=asg,
+            file=pdf_file,
+            original_name='task_sheet.pdf',
+            is_task_source_for_ai=False
+        )
+
+        # Додаємо зображення вчителя (наприклад фото завдання)
+        img_bytes = b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15c4\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82'
+        img_file = SimpleUploadedFile('task_photo.png', img_bytes, content_type='image/png')
+        AssignmentFile.objects.create(
+            assignment=asg,
+            file=img_file,
+            original_name='task_photo.png',
+            is_task_source_for_ai=False
+        )
+
+        sub = Submission.objects.create(
+            assignment=asg,
+            first_name='Анна',
+            last_name='Коваль',
+            class_group=self.class_group,
+            comment_student="Розв'язала завдання з фото."
+        )
+
+        mock_res = {
+            "candidates": [
+                {
+                    "content": {
+                        "parts": [
+                            {
+                                "text": json.dumps({
+                                    "suggested_grade": "10",
+                                    "level": "Високий (10-12)",
+                                    "unclear_task": False,
+                                    "format_warning": None,
+                                    "summary": "Завдання успішно виконано.",
+                                    "strengths": ["Правильний розв'язок"],
+                                    "weaknesses": [],
+                                    "feedback_comment": "Все вірно."
+                                })
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+        mock_http_post.return_value = (200, mock_res, json.dumps(mock_res))
+
+        eval_res = evaluate_submission_with_gemini(sub)
+        self.assertEqual(eval_res['status'], 'success')
+
+        call_args = mock_http_post.call_args[0]
+        payload = call_args[1]
+        inline_parts = [p['inlineData'] for p in payload['contents'][0]['parts'] if 'inlineData' in p]
+        mime_types = [ip.get('mimeType') for ip in inline_parts]
+
+        self.assertIn('application/pdf', mime_types)
+        self.assertIn('image/png', mime_types)
+
+
+class AICriteriaGeneratorTests(TestCase):
+    """
+    Тести для ШІ-помічника формування критеріїв оцінювання за 12-бальною шкалою
+    на основі опису вчителя звичайною мовою.
+    """
+    def setUp(self):
+        self.client = Client()
+        self.teacher_user = User.objects.create_user(
+            username='crit_teacher',
+            password='password123',
+            is_staff=True,
+            is_superuser=True
+        )
+        self.teacher = Teacher.objects.create(
+            user=self.teacher_user,
+            full_name='Іван Мельник'
+        )
+        self.subject, _ = Subject.objects.get_or_create(name='Фізика', defaults={'icon': '⚡', 'color': '#ef4444'})
+        self.class_group, _ = ClassGroup.objects.get_or_create(name='8-А')
+
+        ai_settings = AISettings.get_solo()
+        ai_settings.api_key = 'test-key-criteria-gen'
+        ai_settings.is_enabled = True
+        ai_settings.save()
+
+    @patch('feed.gemini_service._http_post_json')
+    def test_generate_criteria_service_success(self, mock_http_post):
+        """Перевіряємо генерацію критеріїв через generate_criteria_with_gemini."""
+        from feed.gemini_service import generate_criteria_with_gemini
+
+        mock_reply = {
+            "candidates": [
+                {
+                    "content": {
+                        "parts": [
+                            {
+                                "text": (
+                                    "Критерії оцінювання (12 балів):\n"
+                                    "• 10-12 балів (Високий рівень): Розв'язано всі 3 задачі, записано 'Дано', використано правильні формули, дано змістовне пояснення.\n"
+                                    "• 7-9 балів (Достатній рівень): Розв'язано 2-3 задачі з незначними арифметичними похибками.\n"
+                                    "• 4-6 балів (Середній рівень): Частковий розв'язок однієї-двох задач, є формули.\n"
+                                    "• 1-3 бали (Початковий рівень): Тільки спроба запису умови без розв'язку."
+                                )
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+        mock_http_post.return_value = (200, mock_reply, json.dumps(mock_reply))
+
+        res = generate_criteria_with_gemini(
+            teacher_notes="Хочу повний розв'язок 3 задач з формулами. За саму відповідь без формул - не вище 7 балів.",
+            assignment_title="Закони Ньютона",
+            assignment_description="Розв'язати задачі 1, 2, 3 на сторінці 45.",
+            subject_name="Фізика",
+            class_group_name="8-А"
+        )
+
+        self.assertEqual(res['status'], 'success')
+        self.assertIn('10-12 балів', res['criteria'])
+        self.assertIn('Високий рівень', res['criteria'])
+
+        # Перевіряємо сформований промпт
+        call_args = mock_http_post.call_args[0]
+        payload = call_args[1]
+        sent_prompt = payload['contents'][0]['parts'][0]['text']
+        self.assertIn("Закони Ньютона", sent_prompt)
+        self.assertIn("Фізика", sent_prompt)
+        self.assertIn("Хочу повний розв'язок 3 задач", sent_prompt)
+        self.assertIn("12-БАЛЬНОЮ ШКАЛОЮ", sent_prompt)
+
+    def test_generate_criteria_service_when_disabled(self):
+        """Перевіряємо коректну помилку, коли модуль ШІ вимкнено."""
+        from feed.gemini_service import generate_criteria_with_gemini
+        ai_settings = AISettings.get_solo()
+        ai_settings.is_enabled = False
+        ai_settings.save()
+
+        res = generate_criteria_with_gemini(teacher_notes="Вимоги до есе")
+        self.assertEqual(res['status'], 'error')
+        self.assertIn('вимкнено', res['message'])
+
+    @patch('feed.gemini_service._http_post_json')
+    def test_teacher_generate_assignment_criteria_view_ajax(self, mock_http_post):
+        """Перевіряємо AJAX-ендпоінт виклику генерації критеріїв вчителем."""
+        mock_reply = {
+            "candidates": [
+                {
+                    "content": {
+                        "parts": [
+                            {"text": "1. Точність розрахунків — до 6 балів.\n2. Графік — до 4 балів.\n3. Висновок — до 2 балів."}
+                        ]
+                    }
+                }
+            ]
+        }
+        mock_http_post.return_value = (200, mock_reply, json.dumps(mock_reply))
+
+        self.client.force_login(self.teacher_user)
+        url = reverse('teacher_generate_assignment_criteria')
+
+        resp = self.client.post(
+            url,
+            data=json.dumps({
+                'teacher_notes': 'Потрібні розрахунки і графік',
+                'assignment_title': 'Лабораторна робота №2',
+                'assignment_description': 'Побудувати графік залежності швидкості від часу',
+                'subject_name': 'Фізика'
+            }),
+            content_type='application/json',
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data['status'], 'success')
+        self.assertIn('Точність розрахунків', data['criteria'])
+
+    def test_teacher_generate_assignment_criteria_view_unauthorized(self):
+        """Перевіряємо захист від неавторизованого доступу."""
+        anon_client = Client()
+        url = reverse('teacher_generate_assignment_criteria')
+        resp = anon_client.post(url, data={'teacher_notes': 'тест'})
+        self.assertEqual(resp.status_code, 302)  # Редирект на логін
+
+
+class AssignmentNoSubmissionRequiredTests(TestCase):
+    """
+    Тести для режиму завдань без обов'язкової здачі робіт (no_submission_required):
+    - Створення та редагування завдання з прапорцем
+    - Приховування кнопок здачі на сторінці завдання та у стрічці
+    - Захист в'юхи submit_assignment (перенаправлення з повідомленням)
+    - Збереження прапорця при дублюванні завдання
+    """
+    def setUp(self):
+        self.client = Client()
+        self.teacher_user = User.objects.create_user(
+            username='oral_teacher',
+            password='password123',
+            is_staff=True,
+            is_superuser=True
+        )
+        self.teacher = Teacher.objects.create(
+            user=self.teacher_user,
+            full_name='Оксана Петрівна'
+        )
+        self.subject, _ = Subject.objects.get_or_create(name='Історія України', defaults={'icon': '📜', 'color': '#3b82f6'})
+        self.class_group, _ = ClassGroup.objects.get_or_create(name='9-Б')
+
+    def test_assignment_model_default_value(self):
+        """За замовчуванням no_submission_required дорівнює False."""
+        assignment = Assignment.objects.create(
+            teacher=self.teacher,
+            subject=self.subject,
+            title='Письмова робота',
+            description='Написати есе',
+            status=Assignment.STATUS_PUBLISHED
+        )
+        self.assertFalse(assignment.no_submission_required)
+
+    def test_assignment_create_with_no_submission_required(self):
+        """Створення завдання з прапорцем 'Не вимагає здачі робіт'."""
+        self.client.force_login(self.teacher_user)
+        url = reverse('assignment_create')
+        data = {
+            'subject': self.subject.pk,
+            'title': 'Читати параграф 15 (усно)',
+            'description': 'Прочитати параграф 15, переглянути презентацію, підготуватися до усного опитування.',
+            'classes': [self.class_group.pk],
+            'no_submission_required': '1',
+            'publish_choice': 'now',
+        }
+        resp = self.client.post(url, data=data, follow=True)
+        self.assertEqual(resp.status_code, 200)
+
+        created = Assignment.objects.filter(title='Читати параграф 15 (усно)').first()
+        self.assertIsNotNone(created)
+        self.assertTrue(created.no_submission_required)
+
+    def test_assignment_detail_view_hides_submit_button_when_no_submission_required(self):
+        """На сторінці завдання для учня відсутні кнопки здачі та відображається плашка 'Без здачі'."""
+        assignment = Assignment.objects.create(
+            teacher=self.teacher,
+            subject=self.subject,
+            title='Усне опрацювання теми',
+            description='Опрацювати матеріал без надсилання файлів.',
+            no_submission_required=True,
+            status=Assignment.STATUS_PUBLISHED
+        )
+        assignment.classes.add(self.class_group)
+
+        # Перегляд анонімним користувачем (учень)
+        url = reverse('assignment_detail', args=[assignment.pk])
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 200)
+
+        content = resp.content.decode('utf-8')
+        # Кнопка 'Здати роботу зараз' / 'Здати роботу' не повинна бути доступна учню
+        self.assertNotIn('Здати роботу зараз', content)
+        self.assertNotIn('Готові здати виконане завдання?', content)
+        # Має бути інформаційний бейдж / пояснення
+        self.assertIn('Без здачі', content)
+        self.assertIn('не вимагає здачі робіт', content)
+
+    def test_assignment_detail_view_shows_submit_button_when_standard(self):
+        """Для звичайного завдання кнопка здачі показується."""
+        assignment = Assignment.objects.create(
+            teacher=self.teacher,
+            subject=self.subject,
+            title='Звичайне домашнє завдання',
+            description='Розв язати вправи в зошиті.',
+            no_submission_required=False,
+            status=Assignment.STATUS_PUBLISHED
+        )
+        assignment.classes.add(self.class_group)
+
+        url = reverse('assignment_detail', args=[assignment.pk])
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 200)
+
+        content = resp.content.decode('utf-8')
+        self.assertIn('Здати роботу', content)
+
+    def test_submit_assignment_redirects_when_no_submission_required(self):
+        """Спроба відкрити форму здачі для завдання без здачі перенаправляє на сторінку завдання."""
+        assignment = Assignment.objects.create(
+            teacher=self.teacher,
+            subject=self.subject,
+            title='Тільки для читання',
+            description='Прочитати текст.',
+            no_submission_required=True,
+            status=Assignment.STATUS_PUBLISHED
+        )
+
+        url = reverse('submit_assignment', args=[assignment.pk])
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 302)
+        self.assertIn(reverse('assignment_detail', args=[assignment.pk]), resp.url)
+
+    def test_duplicate_preserves_no_submission_required(self):
+        """При дублюванні завдання прапорець no_submission_required зберігається."""
+        self.client.force_login(self.teacher_user)
+        original = Assignment.objects.create(
+            teacher=self.teacher,
+            subject=self.subject,
+            title='Оригінал без здачі',
+            description='Усний матеріал',
+            no_submission_required=True,
+            status=Assignment.STATUS_PUBLISHED
+        )
+        original.classes.add(self.class_group)
+
+        url = reverse('assignment_duplicate', args=[original.pk])
+        resp = self.client.post(url, data={
+            'duplicate_title': 'Копія без здачі',
+            'duplicate_classes': [self.class_group.pk],
+            'publish_now': '1'
+        })
+        self.assertIn(resp.status_code, [200, 302])
+
+        dup = Assignment.objects.filter(title='Копія без здачі').first()
+        self.assertIsNotNone(dup)
+        self.assertTrue(dup.no_submission_required)
+
+
+
+
 
 
 

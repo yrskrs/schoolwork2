@@ -748,10 +748,10 @@
                             <span style="color:var(--color-text-primary);font-weight:600;">{{ submission.submitted_at|date:"d.m.Y H:i" }}</span>
                         </div>
                         {% if submission.assignment %}
-                        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:6px;">
-                            <span style="color:var(--color-text-muted);white-space:nowrap;">📋 Завдання:</span>
-                            <a href="{% url 'assignment_detail' submission.assignment.id %}" style="font-weight:700;color:var(--color-text-primary);text-decoration:none;text-align:right;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ submission.assignment.title }}">
-                                {{ submission.assignment.title }}
+                        <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
+                            <span style="color:var(--color-text-muted);white-space:nowrap;flex-shrink:0;">📋 Завдання:</span>
+                            <a href="{% url 'assignment_detail' submission.assignment.id %}" target="_blank" rel="noopener noreferrer" style="font-weight:700;color:var(--color-text-primary);text-decoration:none;text-align:right;max-width:165px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;" title="Відкрити завдання у новому вікні так, як його бачить учень: {{ submission.assignment.title }}">
+                                {{ submission.assignment.title }} ↗
                             </a>
                         </div>
                         {% endif %}
@@ -901,22 +901,32 @@
                     </div>
                     {% endif %}
 
-                    <!-- Кнопка розгортання умови завдання -->
+                    <!-- Кнопка розгортання умови завдання та відкриття у новому вікні -->
                     {% if submission.assignment %}
-                    <div style="border-top:1px dashed var(--color-border);padding-top:6px;">
-                        <button type="button" id="toggle-assignment-btn" onclick="toggleAssignmentCondition()" class="btn btn-secondary btn-sm" style="width:100%;font-size:11.5px;padding:4px 8px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:6px;">
-                            <span id="toggle-assignment-chevron" style="font-size:9px;">▼</span>
-                            <span id="toggle-assignment-text">Переглянути умову завдання</span>
-                        </button>
+                    <div style="border-top:1px dashed var(--color-border);padding-top:8px;">
+                        <div style="display:flex;flex-direction:column;gap:6px;">
+                            <button type="button" id="toggle-assignment-btn" onclick="toggleAssignmentCondition()" class="btn btn-secondary btn-sm" style="width:100%;font-size:11.5px;padding:6px 10px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:6px;" title="Показати/приховати умову завдання тут у вікні перевірки">
+                                <span id="toggle-assignment-chevron" style="font-size:9px;">▼</span>
+                                <span id="toggle-assignment-text">Переглянути умову завдання</span>
+                            </button>
+                            <a href="{% url 'assignment_detail' submission.assignment.id %}" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm" style="width:100%;font-size:11.5px;padding:6px 10px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:5px;text-decoration:none;" title="Відкрити завдання так, як його бачить учень у новому вікні">
+                                <span>👁️</span> <span>Відкрити завдання як учень ↗</span>
+                            </a>
+                        </div>
                         
                         <!-- Розгортаємий блок умови завдання -->
                         <div id="assignment-condition-panel" class="assignment-description-card is-compact" style="display:none;margin-top:8px;">
-                            <div class="assignment-description-header">
+                            <div class="assignment-description-header" style="display:flex;align-items:center;justify-content:space-between;gap:6px;flex-wrap:wrap;">
                                 <div class="assignment-description-title" style="font-size:11.5px;">
                                     <span class="desc-icon">📝</span>
                                     <span>{{ submission.assignment.title }}</span>
                                 </div>
-                                <span class="assignment-desc-badge" style="font-size:10px;">Умова вчителя</span>
+                                <div style="display:flex;align-items:center;gap:6px;">
+                                    <span class="assignment-desc-badge" style="font-size:10px;">Умова вчителя</span>
+                                    <a href="{% url 'assignment_detail' submission.assignment.id %}" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm" style="font-size:10.5px;padding:2px 7px;font-weight:750;text-decoration:none;display:inline-flex;align-items:center;gap:3px;" title="Відкрити завдання так, як його бачить учень у новому вікні">
+                                        <span>👁️ Як бачить учень ↗</span>
+                                    </a>
+                                </div>
                             </div>
                             {% if submission.assignment.description %}
                             <div class="assignment-full-description" style="font-size:13px;line-height:1.6;padding:12px 14px;">{{ submission.assignment.get_formatted_description|safe }}</div>

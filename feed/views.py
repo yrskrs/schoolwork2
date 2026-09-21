@@ -1051,6 +1051,15 @@ def teacher_dashboard(request):
     status_filter = status_map.get(tab, Assignment.STATUS_PUBLISHED)
 
     from django.db.models import Count, Q as DbQ, Min
+    from datetime import datetime, timedelta
+
+    # ── Параметри фільтрації (класи, предмети, дати, пошуковий запит) ─────────
+    class_id = request.GET.get('class') or request.GET.get('class_id') or ''
+    subject_id = request.GET.get('subject') or request.GET.get('subject_id') or ''
+    q = request.GET.get('q', '').strip()
+    date_preset = request.GET.get('date_preset', '').strip()
+    single_date = request.GET.get('date', '').strip()
+
     base_qs = Assignment.objects.filter(
         teacher=teacher,
         status=status_filter
@@ -1063,9 +1072,84 @@ def teacher_dashboard(request):
         )
     )
 
+    # 1. Фільтр за класом
+    if class_id and class_id != 'all':
+        try:
+            base_qs = base_qs.filter(classes__id=int(class_id))
+        except (ValueError, TypeError):
+            class_id = ''
+
+    # 2. Фільтр за предметом / темою
+    if subject_id and subject_id != 'all':
+        try:
+            base_qs = base_qs.filter(subject_id=int(subject_id))
+        except (ValueError, TypeError):
+            subject_id = ''
+
+    # 3. Текстовий пошук за назвою або описом теми
+    if q:
+        base_qs = base_qs.filter(DbQ(title__icontains=q) | DbQ(description__icontains=q))
+
+    # 4. Фільтр за датою (день уроку, дата створення або дедлайн)
+    today = timezone.localtime(timezone.now()).date()
+    if date_preset == 'today':
+        base_qs = base_qs.filter(
+            DbQ(schedule_targets__target_date=today) |
+            DbQ(created_at__date=today) |
+            DbQ(due_date=today)
+        )
+    elif date_preset == 'week':
+        start_of_week = today - timedelta(days=today.weekday())
+        end_of_week = start_of_week + timedelta(days=6)
+        base_qs = base_qs.filter(
+            DbQ(schedule_targets__target_date__range=[start_of_week, end_of_week]) |
+            DbQ(created_at__date__range=[start_of_week, end_of_week]) |
+            DbQ(due_date__range=[start_of_week, end_of_week])
+        )
+    elif date_preset == 'month':
+        base_qs = base_qs.filter(
+            DbQ(schedule_targets__target_date__year=today.year, schedule_targets__target_date__month=today.month) |
+            DbQ(created_at__year=today.year, created_at__month=today.month) |
+            DbQ(due_date__year=today.year, due_date__month=today.month)
+        )
+    elif single_date:
+        try:
+            dt_val = datetime.strptime(single_date, '%Y-%m-%d').date()
+            base_qs = base_qs.filter(
+                DbQ(schedule_targets__target_date=dt_val) |
+                DbQ(created_at__date=dt_val) |
+                DbQ(due_date=dt_val)
+            )
+        except (ValueError, TypeError):
+            single_date = ''
+
+    base_qs = base_qs.distinct()
+
+    # Складання querystring для пагінації та вкладок
+    filter_params = []
+    if class_id and class_id != 'all':
+        filter_params.append(f'class={class_id}')
+    if subject_id and subject_id != 'all':
+        filter_params.append(f'subject={subject_id}')
+    if q:
+        from urllib.parse import quote
+        filter_params.append(f'q={quote(q)}')
+    if date_preset and date_preset != 'all':
+        filter_params.append(f'date_preset={date_preset}')
+    if single_date:
+        filter_params.append(f'date={single_date}')
+    filter_querystring = '&'.join(filter_params)
+
+    has_active_filter = bool(
+        (class_id and class_id != 'all') or
+        (subject_id and subject_id != 'all') or
+        q or
+        (date_preset and date_preset != 'all') or
+        single_date
+    )
+
     # Для вкладки published — сортуємо за актуальністю (target_date >= сьогодні — першими)
     if status_filter == Assignment.STATUS_PUBLISHED:
-        today = timezone.localtime(timezone.now()).date()
         base_qs = base_qs.annotate(earliest_target=Min('schedule_targets__target_date'))
         upcoming = base_qs.filter(earliest_target__gte=today).order_by('earliest_target')
         rest = base_qs.filter(DbQ(earliest_target__lt=today) | DbQ(earliest_target__isnull=True)).order_by('-created_at')
@@ -1100,6 +1184,14 @@ def teacher_dashboard(request):
         'counts': counts,
         'total_ungraded': total_ungraded,
         'all_classes': ClassGroup.objects.all().order_by('grade', 'letter', 'name'),
+        'all_subjects': Subject.objects.all().order_by('name'),
+        'selected_class_id': str(class_id) if class_id and class_id != 'all' else '',
+        'selected_subject_id': str(subject_id) if subject_id and subject_id != 'all' else '',
+        'search_query': q,
+        'selected_date': single_date,
+        'selected_date_preset': date_preset,
+        'has_active_filter': has_active_filter,
+        'filter_querystring': filter_querystring,
     }
 
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.GET.get('fragment') == '1':
@@ -1627,6 +1719,8 @@ def assignment_duplicate(request, pk):
         default_ai_grs=original.default_ai_grs,
         allow_student_ai_check=original.allow_student_ai_check,
         allow_ai_usage=original.allow_ai_usage,
+        custom_criteria=original.custom_criteria,
+        no_submission_required=original.no_submission_required,
     )
     duplicate.classes.set(target_classes)
 
@@ -2455,6 +2549,10 @@ def submit_assignment(request, pk):
         pk=pk,
         status=Assignment.STATUS_PUBLISHED
     )
+
+    if assignment.no_submission_required:
+        messages.info(request, "Це завдання не вимагає здачі робіт на сайті (призначене для усного або самостійного опрацювання).")
+        return redirect('assignment_detail', pk=assignment.pk)
 
     initial_data = {}
     if assignment.is_individual and assignment.student_name:
@@ -5727,7 +5825,11 @@ def teacher_settings_view(request):
             api_key = request.POST.get('api_key', '').strip()
             model_name = request.POST.get('model_name', '').strip()
             system_prompt = request.POST.get('system_prompt', DEFAULT_NUS_SYSTEM_PROMPT).strip()
-            temperature_val = float(request.POST.get('temperature', 0.2))
+            raw_temp = request.POST.get('temperature', '0.2')
+            try:
+                temperature_val = max(0.0, min(1.0, float(str(raw_temp).replace(',', '.').strip())))
+            except (ValueError, TypeError):
+                temperature_val = 0.2
             is_enabled = bool(request.POST.get('is_enabled'))
             tolerance_val = request.POST.get('ai_detector_tolerance_percent')
 
@@ -6116,6 +6218,60 @@ def ai_check_single_submission(request, submission_id):
         messages.warning(request, f"ШІ не зміг перевірити роботу: {result.get('error')}")
 
     return redirect('view_file', submission_id=submission.id)
+
+
+@teacher_required
+@require_POST
+def teacher_generate_assignment_criteria(request):
+    """
+    AJAX endpoint: генерація структурованих індивідуальних критеріїв оцінювання
+    за 12-бальною шкалою НУШ за допомогою Google Gemini на основі опису вчителя звичайною мовою.
+    """
+    from .gemini_service import generate_criteria_with_gemini
+
+    if request.content_type == 'application/json':
+        try:
+            body = json.loads(request.body)
+        except Exception:
+            body = {}
+        teacher_notes = body.get('teacher_notes', '').strip()
+        assignment_title = body.get('assignment_title', '').strip()
+        assignment_description = body.get('assignment_description', '').strip()
+        subject_name = body.get('subject_name', '').strip()
+        class_group_name = body.get('class_group_name', '').strip()
+    else:
+        teacher_notes = request.POST.get('teacher_notes', '').strip()
+        assignment_title = request.POST.get('assignment_title', '').strip()
+        assignment_description = request.POST.get('assignment_description', '').strip()
+        subject_name = request.POST.get('subject_name', '').strip()
+        class_group_name = request.POST.get('class_group_name', '').strip()
+
+    if not teacher_notes and not assignment_description and not assignment_title:
+        return JsonResponse({
+            'status': 'error',
+            'message': 'Будь ласка, опишіть своїми словами вимоги до завдання або заповніть тему чи опис.'
+        }, status=400)
+
+    res = generate_criteria_with_gemini(
+        teacher_notes=teacher_notes,
+        assignment_title=assignment_title,
+        assignment_description=assignment_description,
+        subject_name=subject_name,
+        class_group_name=class_group_name
+    )
+
+    if res.get('status') == 'success':
+        return JsonResponse({
+            'status': 'success',
+            'criteria': res.get('criteria', ''),
+            'model_used': res.get('model_used', '')
+        })
+    else:
+        return JsonResponse({
+            'status': 'error',
+            'message': res.get('message', 'Не вдалося згенерувати критерії.')
+        }, status=400)
+
 
 
 @teacher_required
@@ -6886,6 +7042,8 @@ def export_assignment_zip(request, pk):
             'due_date': assignment.due_date.strftime('%Y-%m-%d') if assignment.due_date else None,
             'allow_student_ai_check': assignment.allow_student_ai_check,
             'allow_ai_usage': assignment.allow_ai_usage,
+            'custom_criteria': assignment.custom_criteria,
+            'no_submission_required': assignment.no_submission_required,
             'additional_links': [{'url': l.url, 'label': l.label} for l in assignment.additional_links.all()],
             'youtube_links': [{'url': y.url, 'title': y.title} for y in assignment.youtube_links.all()],
             'schedule_targets': st_list,
@@ -6988,6 +7146,8 @@ def export_assignments_day_zip(request):
                 'due_date': assignment.due_date.strftime('%Y-%m-%d') if assignment.due_date else None,
                 'allow_student_ai_check': assignment.allow_student_ai_check,
                 'allow_ai_usage': assignment.allow_ai_usage,
+                'custom_criteria': assignment.custom_criteria,
+                'no_submission_required': assignment.no_submission_required,
                 'additional_links': [{'url': l.url, 'label': l.label} for l in assignment.additional_links.all()],
                 'youtube_links': [{'url': y.url, 'title': y.title} for y in assignment.youtube_links.all()],
                 'schedule_targets': st_list,
@@ -7082,6 +7242,8 @@ def import_assignments_zip(request):
                         published_at=timezone.now(),
                         allow_student_ai_check=bool(a_data.get('allow_student_ai_check', False)),
                         allow_ai_usage=bool(a_data.get('allow_ai_usage', False)),
+                        custom_criteria=a_data.get('custom_criteria', ''),
+                        no_submission_required=bool(a_data.get('no_submission_required', False)),
                     )
 
                     # 4. Прив'язка класів

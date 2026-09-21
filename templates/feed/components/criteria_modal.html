@@ -1,0 +1,207 @@
+<!-- ── Модальне вікно перегляду критеріїв оцінювання для учнів та вчителів ── -->
+<div id="criteria-modal" style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(15,23,42,0.7);z-index:99999;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(5px);box-sizing:border-box;">
+    <div class="custom-modal-content" style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);width:100%;max-width:680px;max-height:92vh;display:flex;flex-direction:column;box-shadow:0 25px 50px -12px rgba(0,0,0,0.35);animation:criteriaModalIn 0.22s cubic-bezier(0.16,1,0.3,1);overflow:hidden;">
+        
+        <!-- Заголовок модального вікна -->
+        <div style="padding:16px 20px;background:var(--color-bg-secondary);border-bottom:1px solid var(--color-border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+            <div style="display:flex;align-items:center;gap:10px;">
+                <span style="font-size:22px;line-height:1;">📋</span>
+                <div>
+                    <h3 style="font-size:1.08rem;font-weight:800;margin:0;color:var(--color-text-primary);line-height:1.25;">
+                        Критерії оцінювання завдання
+                    </h3>
+                    <div style="font-size:12px;color:var(--color-text-muted);margin-top:2px;max-width:500px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                        {{ assignment.title }}
+                    </div>
+                </div>
+            </div>
+            <button type="button" onclick="closeCriteriaModal()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--color-text-muted);line-height:1;padding:4px 8px;border-radius:6px;transition:all 0.15s;" title="Закрити (Esc)">✕</button>
+        </div>
+
+        <!-- Тіло модального вікна зі скролом -->
+        <div style="padding:20px;overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:18px;">
+
+            <!-- 1. ІНДИВІДУАЛЬНІ КРИТЕРІЇ ВЧИТЕЛЯ (якщо задані) -->
+            {% if assignment.custom_criteria %}
+            <div style="background:linear-gradient(135deg, rgba(99,102,241,0.06), rgba(168,85,247,0.06));border:1.5px solid rgba(99,102,241,0.35);border-radius:var(--radius-md);padding:16px 18px;position:relative;">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+                    <span style="font-size:18px;">🎯</span>
+                    <span style="font-weight:800;font-size:14px;color:var(--color-primary);text-transform:uppercase;letter-spacing:0.04em;">
+                        Власні критерії вчителя для цього завдання
+                    </span>
+                    <span class="badge" style="background:#6366f1;color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;">
+                        Індивідуальні вимоги
+                    </span>
+                </div>
+                <div style="font-size:14px;line-height:1.65;color:var(--color-text-primary);white-space:pre-line;background:var(--color-surface);padding:12px 14px;border-radius:var(--radius-sm);border:1px solid var(--color-border);">
+                    {{ assignment.custom_criteria }}
+                </div>
+                <div style="font-size:11.5px;color:var(--color-text-muted);margin-top:8px;display:flex;align-items:center;gap:5px;">
+                    <span>💡</span>
+                    <span>Ці критерії визначені безпосередньо вчителем і мають найвищий пріоритет при оцінюванні.</span>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- 2. СИСТЕМА ТА ШКАЛА ОЦІНЮВАННЯ -->
+            <div style="background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:16px 18px;">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+                    <div style="display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;color:var(--color-text-primary);">
+                        <span style="font-size:16px;">📊</span>
+                        <span>Шкала та критерії оцінювання</span>
+                    </div>
+                    {% if assignment.default_ai_preset %}
+                    <span class="badge" style="background:rgba(99,102,241,0.12);color:var(--color-primary);border:1px solid rgba(99,102,241,0.25);font-size:11.5px;font-weight:700;padding:3px 8px;border-radius:6px;">
+                        Шаблон: {{ assignment.default_ai_preset.name }}
+                    </span>
+                    {% endif %}
+                </div>
+
+                <!-- 4 Рівні навчальних досягнень -->
+                <div style="display:flex;flex-direction:column;gap:8px;">
+                    
+                    <!-- Високий рівень -->
+                    <div style="display:flex;gap:12px;align-items:flex-start;padding:10px 12px;background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.25);border-radius:var(--radius-sm);">
+                        <div style="flex-shrink:0;text-align:center;min-width:64px;">
+                            <div style="font-weight:800;font-size:14px;color:#059669;">10–12</div>
+                            <div style="font-size:10.5px;color:#047857;font-weight:700;">Високий</div>
+                        </div>
+                        <div style="font-size:12.5px;line-height:1.45;color:var(--color-text-primary);">
+                            <strong>Повне, вичерпне та самостійне виконання.</strong> Завдання розв'язано правильно, робота структурована, продемонстровано глибоке розуміння матеріалу та аргументованість висновків.
+                        </div>
+                    </div>
+
+                    <!-- Достатній рівень -->
+                    <div style="display:flex;gap:12px;align-items:flex-start;padding:10px 12px;background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.25);border-radius:var(--radius-sm);">
+                        <div style="flex-shrink:0;text-align:center;min-width:64px;">
+                            <div style="font-weight:800;font-size:14px;color:#2563eb;">7–9</div>
+                            <div style="font-size:10.5px;color:#1d4ed8;font-weight:700;">Достатній</div>
+                        </div>
+                        <div style="font-size:12.5px;line-height:1.45;color:var(--color-text-primary);">
+                            <strong>Завдання виконано в основному правильно.</strong> Учень володіє матеріалом, але присутні незначні неточності, пропуски другорядних деталей або незначні зауваження до оформлення.
+                        </div>
+                    </div>
+
+                    <!-- Середній рівень -->
+                    <div style="display:flex;gap:12px;align-items:flex-start;padding:10px 12px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);border-radius:var(--radius-sm);">
+                        <div style="flex-shrink:0;text-align:center;min-width:64px;">
+                            <div style="font-weight:800;font-size:14px;color:#d97706;">4–6</div>
+                            <div style="font-size:10.5px;color:#b45309;font-weight:700;">Середній</div>
+                        </div>
+                        <div style="font-size:12.5px;line-height:1.45;color:var(--color-text-primary);">
+                            <strong>Фрагментарне або поверхневе виконання.</strong> Відповідає вимогам лише частково, наявні суттєві помилки у розв'язку або виконано лише малу частину потрібного обсягу.
+                        </div>
+                    </div>
+
+                    <!-- Початковий рівень / Доопрацювати -->
+                    <div style="display:flex;gap:12px;align-items:flex-start;padding:10px 12px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);border-radius:var(--radius-sm);">
+                        <div style="flex-shrink:0;text-align:center;min-width:64px;">
+                            <div style="font-weight:800;font-size:13px;color:#dc2626;">1–3 / ↩</div>
+                            <div style="font-size:10px;color:#b91c1c;font-weight:700;">Початковий</div>
+                        </div>
+                        <div style="font-size:12.5px;line-height:1.45;color:var(--color-text-primary);">
+                            <strong>Завдання не виконано або виконано неправильно.</strong> Зміст не відповідає темі, виявлено списування/плагіат або заборонене використання ШІ. Робота повертається на доопрацювання.
+                        </div>
+                    </div>
+
+                </div>
+
+                {% if assignment.default_ai_grs %}
+                <!-- Активні групи результатів (ГР) -->
+                <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--color-border);">
+                    <div style="font-size:11.5px;font-weight:700;color:var(--color-text-muted);text-transform:uppercase;margin-bottom:6px;">
+                        Активні групи результатів (ГР):
+                    </div>
+                    <div style="display:flex;flex-wrap:wrap;gap:6px;">
+                        {% for gr in assignment.get_default_gr_list %}
+                        <span class="badge" style="background:var(--color-surface);color:var(--color-text-primary);border:1px solid var(--color-border);font-size:11.5px;padding:3px 8px;font-weight:600;">
+                            🎯 {{ gr }}
+                        </span>
+                        {% empty %}
+                        <span style="font-size:12px;color:var(--color-text-muted);">Всі групи результатів шаблону</span>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- 3. ПОЛІТИКА ЩОДО ШТУЧНОГО ІНТЕЛЕКТУ ТА АКАДЕМІЧНА ДОБРОЧЕСНІСТЬ -->
+            <div style="border-radius:var(--radius-md);padding:14px 16px;border:1.5px solid {% if assignment.allow_ai_usage %}rgba(16,185,129,0.35);background:rgba(16,185,129,0.06);{% else %}rgba(245,158,11,0.35);background:rgba(245,158,11,0.06);{% endif %}">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                    <span style="font-size:18px;">{% if assignment.allow_ai_usage %}💡{% else %}🛡️{% endif %}</span>
+                    <strong style="font-size:13.5px;color:var(--color-text-primary);">
+                        Політика використання штучного інтелекту (ШІ):
+                    </strong>
+                    {% if assignment.allow_ai_usage %}
+                    <span class="badge" style="background:#10b981;color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;">
+                        ШІ Дозволено
+                    </span>
+                    {% else %}
+                    <span class="badge" style="background:#f59e0b;color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;">
+                        Самостійна робота (ШІ заборонено)
+                    </span>
+                    {% endif %}
+                </div>
+
+                <div style="font-size:13px;line-height:1.55;color:var(--color-text-primary);">
+                    {% if assignment.allow_ai_usage %}
+                    Вчитель дозволив користуватися інструментами ШІ для допомоги у підготовці цього завдання. При оцінюванні перевіряється ваше розуміння матеріалу, якість доопрацювання та аргументованість власних висновків.
+                    {% else %}
+                    Для цього завдання вимагається <strong>виключно самостійне виконання</strong> учнем. Система автоматично аналізує всі здані матеріали (текст, код, прикріплені зображення, схеми та спроби перефразування через сервіси обходу/«хуманізатори»). Роботи зі згенерованим ШІ вмістом повертаються на доопрацювання або отримують знижений бал за порушення академічної доброчесності.
+                    {% endif %}
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Нижня плашка із кнопкою закриття -->
+        <div style="padding:12px 20px;background:var(--color-bg-secondary);border-top:1px solid var(--color-border);display:flex;justify-content:flex-end;gap:10px;flex-shrink:0;">
+            <button type="button" onclick="closeCriteriaModal()" class="btn btn-primary" style="font-weight:750;padding:8px 20px;border-radius:var(--radius-sm);">
+                Зрозуміло
+            </button>
+        </div>
+
+    </div>
+</div>
+
+<style>
+@keyframes criteriaModalIn {
+    from { opacity: 0; transform: scale(0.96) translateY(8px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
+}
+</style>
+
+<script>
+function openCriteriaModal() {
+    var modal = document.getElementById('criteria-modal');
+    if (modal) {
+        modal.style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+    }
+}
+
+function closeCriteriaModal() {
+    var modal = document.getElementById('criteria-modal');
+    if (modal) {
+        modal.style.display = 'none';
+        document.body.style.overflow = '';
+    }
+}
+
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        closeCriteriaModal();
+    }
+});
+
+document.addEventListener('DOMContentLoaded', function() {
+    var modal = document.getElementById('criteria-modal');
+    if (modal) {
+        modal.addEventListener('click', function(e) {
+            if (e.target === modal) {
+                closeCriteriaModal();
+            }
+        });
+    }
+});
+</script>
