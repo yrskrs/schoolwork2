@@ -206,10 +206,12 @@
                                 {% endif %}
                             </div>
                             <div class="submission-meta" style="font-size:12px;color:var(--color-text-muted);display:flex;gap:10px;margin-top:2px;">
-                                <span>🏫 {{ submission.class_group.name }}</span>
+                                🏫 {{ submission.class_group.name }}
                                 <span>📅 {{ submission.submitted_at|date:"d.m.Y H:i" }}</span>
                                 {% if submission.is_graded %}
                                 <span style="color:var(--color-success);font-weight:700;">✓ Оцінено</span>
+                                {% elif not submission.is_latest_attempt %}
+                                <span style="color:var(--color-text-muted);font-weight:700;">📦 Замінено новою версією</span>
                                 {% else %}
                                 <span style="color:var(--color-warning);font-weight:700;">⏳ Очікує оцінки</span>
                                 {% endif %}
@@ -301,6 +303,8 @@
                                         {% endif %}
                                         {% if prev.grade %}
                                         <span style="margin-left:8px;font-size:11.5px;color:#059669;">✅ Оцінка: <strong>{{ prev.grade }}</strong></span>
+                                        {% else %}
+                                        <span style="margin-left:8px;font-size:11.5px;color:var(--color-text-muted);">📦 Замінено новою спробою</span>
                                         {% endif %}
                                     </div>
                                     <a href="{% url 'view_file' prev.id %}{% if filter_querystring %}?{{ filter_querystring }}{% endif %}" class="btn btn-secondary btn-sm" style="font-size:11px;padding:2px 8px;" title="Переглянути матеріали спроби #{{ prev.resubmission_attempt }}">
@@ -318,10 +322,14 @@
                             {% for comment in submission.comments.all %}
                             <div class="submission-comment-item" style="background:rgba(99,102,241,0.06);border-left:3px solid var(--color-primary);padding:8px 12px;border-radius:0 var(--radius-sm) var(--radius-sm) 0;margin-bottom:6px;font-size:12px;">
                                 <div style="display:flex;justify-content:space-between;align-items:center;">
-                                    <strong style="color:var(--color-primary);">{{ comment.author.get_full_name|default:comment.author.username }}</strong>
-                                    <span style="color:var(--color-text-muted);font-size:11px;">{{ comment.created_at|date:"d.m.Y H:i" }}</span>
+                                    <div style="font-weight:700;color:var(--color-text-primary);">
+                                        👨‍🏫 {{ comment.author.get_full_name|default:comment.author.username }}
+                                    </div>
+                                    <div style="font-size:11px;color:var(--color-text-muted);">
+                                        {{ comment.created_at|date:"d.m.Y H:i" }}
+                                    </div>
                                 </div>
-                                <div style="margin-top:3px;color:var(--color-text-primary);">{{ comment.text }}</div>
+                                <div style="color:var(--color-text-secondary);margin-top:4px;white-space:pre-wrap;">{{ comment.text }}</div>
                             </div>
                             {% endfor %}
                         </div>
@@ -349,6 +357,15 @@
                     <!-- Права частина: оцінка -->
                     <div class="submission-grade-section" style="min-width:180px;border-left:1px solid var(--color-border);padding-left:16px;">
                         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px;">
+                            {% if not submission.is_latest_attempt and not submission.grade %}
+                            <div style="background:var(--color-bg-secondary);border:1px dashed var(--color-border);padding:8px 10px;border-radius:var(--radius-sm);font-size:11.5px;text-align:center;width:100%;">
+                                📦 <strong>Замінено новою спробою</strong>
+                                <div style="font-size:10px;color:var(--color-text-muted);margin-top:2px;">Оцінювання не потрібне</div>
+                            </div>
+                            <a href="{% url 'view_file' submission.id %}{% if filter_querystring %}?{{ filter_querystring }}{% endif %}" class="btn btn-secondary btn-sm" style="width:100%;text-align:center;font-weight:600;margin-top:4px;">
+                                👁️ Переглянути спробу
+                            </a>
+                            {% else %}
                             <div style="display:flex;align-items:center;gap:8px;">
                                 <span style="font-size:12px;color:var(--color-text-muted);font-weight:600;">Оцінка:</span>
                                 {% if submission.grade == 'Доопрацювати' %}
@@ -387,6 +404,7 @@
                             <a href="{% url 'view_file' submission.id %}{% if filter_querystring %}?{{ filter_querystring }}{% endif %}" class="btn btn-success btn-sm" style="width:100%;text-align:center;font-weight:700;margin-top:4px;">
                                 👁️ Перевірити роботу
                             </a>
+                            {% endif %}
                         </div>
                     </div>
 

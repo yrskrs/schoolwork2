@@ -1,6 +1,7 @@
 """
 Глобальні контекстні процесори для шаблонів SchoolNet.
 """
+from django.db.models import Q
 from .models import Submission, School, BellSchedule, AssignmentRescheduleLog, Teacher, ClassGroup
 from .changelog import SITE_VERSION, SITE_VERSION_SHORT, CHANGELOG_DATA
 
@@ -47,14 +48,13 @@ def teacher_stats_context(request):
 
             if teacher:
                 if is_super_mode:
-                    count = Submission.objects.filter(grade__isnull=True).count() + Submission.objects.filter(grade='').count()
+                    count = Submission.objects.filter(is_latest_attempt=True).filter(Q(grade__isnull=True) | Q(grade='')).count()
                 else:
                     count = Submission.objects.filter(
                         assignment__teacher=teacher,
-                        grade__isnull=True
-                    ).count() + Submission.objects.filter(
-                        assignment__teacher=teacher,
-                        grade=''
+                        is_latest_attempt=True
+                    ).filter(
+                        Q(grade__isnull=True) | Q(grade='')
                     ).count()
                 context['pending_submissions_count'] = count
 

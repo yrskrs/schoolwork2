@@ -264,8 +264,8 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
         resp = self.client.get(reverse('student_submissions_portal'))
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, 'Софія')
-        self.assertContains(resp, 'Оцінено вчителем')
-        self.assertNotContains(resp, 'grade-badge')
+        self.assertContains(resp, 'Оцінено')
+        self.assertContains(resp, '12')
         self.assertContains(resp, 'Відмінно виконане практичне завдання!')
 
 
@@ -2184,6 +2184,94 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
         self.assertEqual(len(success_resp.context['page_obj']), 1)
         self.assertContains(success_resp, 'Спроба #2')
 
+    def test_resubmission_gradebook_and_pending_counters(self):
+        """
+        Перевірка, що при повторній здачі (перездачі) роботи:
+        1. Перша неперевірена спроба не висить в журналі оцінок як ⏳.
+        2. Перша спроба не завищує лічильники неперевірених робіт вчителя (pending_reviews_count, pending_submissions_count).
+        3. У кабінеті учня (student_submissions_portal) спроби групуються: виводиться остання активна спроба з історією попередніх спроб.
+        """
+        from .student_matcher import cluster_submissions_by_student
+        from .context_processors import teacher_stats_context
+
+        # 1. Створюємо першу спробу учня без оцінки
+        sub1 = Submission.objects.create(
+            assignment=self.assignment,
+            first_name='Андрій',
+            last_name='Мельник',
+            class_group=self.class_group,
+            teacher=self.teacher,
+            file=SimpleUploadedFile("melnyk_v1.txt", b"Initial attempt"),
+            resubmission_attempt=1,
+            is_latest_attempt=True,
+            submitted_at=timezone.now()
+        )
+
+        # Лічильник вчителя повинен бути 1
+        self.assertEqual(self.teacher.pending_reviews_count, 1)
+
+        # 2. Учень надсилає другу спробу (перездача)
+        f2 = SimpleUploadedFile("melnyk_v2.txt", b"Second improved attempt")
+        post_data = {
+            'full_name': 'Мельник Андрій',
+            'class_group': self.class_group.id,
+            'files': [f2],
+            'comment_student': 'Виправив зауваження!',
+        }
+        resp = self.client.post(reverse('submit_assignment', args=[self.assignment.id]), post_data, follow=True)
+        self.assertEqual(resp.status_code, 200)
+
+        sub1.refresh_from_db()
+        sub2 = Submission.objects.filter(last_name='Мельник', first_name='Андрій', assignment=self.assignment).order_by('-submitted_at').first()
+
+        # sub1 замінена, sub2 актуальна
+        self.assertFalse(sub1.is_latest_attempt)
+        self.assertTrue(sub2.is_latest_attempt)
+        self.assertTrue(sub1.is_superseded)
+        self.assertFalse(sub2.is_superseded)
+        self.assertFalse(sub1.awaits_grading)
+        self.assertTrue(sub2.awaits_grading)
+
+        # 3. Перевірка лічильників неперевірених робіт вчителя
+        # Має бути рівно 1 неперевірена робота (нова спроба), а не 2!
+        self.assertEqual(self.teacher.pending_reviews_count, 1)
+
+        # Перевірка контекстного процесора
+        class DummyRequest:
+            def __init__(self, user):
+                self.user = user
+                self.session = {}
+        ctx = teacher_stats_context(DummyRequest(self.user))
+        self.assertEqual(ctx['pending_submissions_count'], 1)
+
+        # 4. Перевірка журналу оцінок (кластеризація):
+        # Перша неперевірена спроба НЕ повинна додавати ⏳ до клітинки журналу
+        submissions_qs = Submission.objects.filter(class_group=self.class_group, assignment=self.assignment)
+        clusters = cluster_submissions_by_student(submissions_qs)
+        melnyk_cluster = next((c for c in clusters if c['last_name'] == 'Мельник'), None)
+        self.assertIsNotNone(melnyk_cluster)
+
+        # sub1 не повинна бути в grades_by_date, оскільки вона замінена і не має оцінки
+        sub_ids_in_grades = [g['submission_id'] for sublist in melnyk_cluster['grades_by_date'].values() for g in sublist]
+        self.assertNotIn(sub1.id, sub_ids_in_grades)
+        self.assertIn(sub2.id, sub_ids_in_grades)
+
+        # 5. Перевірка сторінки кабінету учня (student_submissions_portal):
+        portal_resp = self.client.get(reverse('student_submissions_portal'), {
+            'q': 'Мельник Андрій',
+            'class': self.class_group.id
+        })
+        self.assertEqual(portal_resp.status_code, 200)
+        # Учень бачить лише 1 головну картку завдання (sub2)
+        subs_in_portal = list(portal_resp.context['page_obj'])
+        self.assertEqual(len(subs_in_portal), 1)
+        self.assertEqual(subs_in_portal[0].id, sub2.id)
+        # Картка показує спробу #2 та історію попередніх спроб
+        self.assertContains(portal_resp, 'Спроба #2')
+        self.assertContains(portal_resp, 'Попередні версії цієї роботи')
+        self.assertContains(portal_resp, 'Спроба #1')
+        self.assertContains(portal_resp, 'Замінено новою спробою')
+
     def test_ai_detection_and_allow_ai_usage(self):
         """Тест створення завдання з дозволом на ШІ та виявлення ознак використання ШІ в роботі учня."""
         self.client.login(username='teacher1', password='password123')
@@ -2814,7 +2902,7 @@ class FirstRunSetupTests(TestCase):
         self.assertEqual(resp_student.status_code, 200)
         # Наявність кнопки оновлень та версії
         self.assertContains(resp_student, 'id="site-changelog-btn"')
-        self.assertContains(resp_student, 'v2.5')
+        self.assertContains(resp_student, 'changelog-version-tag')
         self.assertContains(resp_student, 'id="changelog-modal"')
         # Учень бачить учнівські оновлення
         self.assertContains(resp_student, 'Виконання завдань на вибір та захист від зниження балу')

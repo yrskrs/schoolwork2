@@ -11,6 +11,7 @@ import urllib.request
 from typing import Optional, Tuple
 from urllib.parse import urlparse, parse_qs
 from django.utils.encoding import iri_to_uri
+from django.db.models import Q
 
 _URL_TITLE_CACHE = {}
 
@@ -1247,7 +1248,6 @@ def get_teacher_upcoming_notifications(teacher, now_dt=None):
         # Якщо урок розпочнеться в найближчі 45 хвилин АБО триває прямо зараз
         is_upcoming_or_now = (s_min - 45 <= now_min < e_min)
         if is_upcoming_or_now:
-            from django.db.models import Q
             # Шукаємо, чи є опубліковане завдання для цього уроку:
             # 1) Явна цільова дата уроку на сьогодні
             # 2) Цільовий день тижня та дзвінковий слот відповідають цьому уроку
@@ -1279,13 +1279,12 @@ def get_teacher_upcoming_notifications(teacher, now_dt=None):
                     'time_str': slot.start_time.strftime('%H:%M'),
                 })
 
-    # 2. Неперевірені здані роботи
+    # 2. Неперевірені здані роботи (лише актуальні спроби)
     ungraded_count = Submission.objects.filter(
         assignment__teacher=teacher,
-        grade__isnull=True
-    ).count() + Submission.objects.filter(
-        assignment__teacher=teacher,
-        grade=''
+        is_latest_attempt=True,
+    ).filter(
+        Q(grade__isnull=True) | Q(grade='')
     ).count()
 
     if ungraded_count > 0:

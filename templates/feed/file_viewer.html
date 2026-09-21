@@ -822,10 +822,11 @@
                     </div>
 
                     <!-- Попередження, якщо вчитель відкрив застарілу версію роботи, а учень здав новішу -->
-                    {% if not submission.is_latest_attempt and submission.subsequent_submissions.all %}
+                    {% if not submission.is_latest_attempt %}
                     <div style="background:#fffbeb;border:1.5px solid #fde68a;border-radius:var(--radius-sm);padding:8px 10px;font-size:11.5px;color:#92400e;">
                         <strong style="display:block;margin-bottom:2px;color:#b45309;">⚠️ Це попередня версія роботи (Спроба #{{ submission.resubmission_attempt }})!</strong>
-                        <div>Учень здав оновлену роботу (роботу над помилками).</div>
+                        <div>Учень здав оновлену роботу (роботу над помилками). Цю спробу оцінювати не потрібно.</div>
+                        {% if submission.subsequent_submissions.all %}
                         {% for subseq in submission.subsequent_submissions.all %}
                         <div style="margin-top:4px;">
                             <a href="{% url 'view_file' subseq.id %}{% if nav_query_string %}?{{ nav_query_string }}{% endif %}" class="btn btn-sm btn-primary" style="font-size:11px;font-weight:700;padding:3px 8px;display:inline-flex;align-items:center;gap:4px;text-decoration:none;">
@@ -833,6 +834,7 @@
                             </a>
                         </div>
                         {% endfor %}
+                        {% endif %}
                     </div>
                     {% endif %}
 

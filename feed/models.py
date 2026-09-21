@@ -328,11 +328,12 @@ class Teacher(models.Model):
 
     @property
     def pending_reviews_count(self):
-        """Кількість неперевірених/неоцінених робіт учнів по завданнях цього вчителя."""
+        """Кількість неперевірених/неоцінених робіт учнів по завданнях цього вчителя (тільки актуальні спроби)."""
         from django.db.models import Q
         from .models import Submission
         return Submission.objects.filter(
-            assignment__teacher=self
+            assignment__teacher=self,
+            is_latest_attempt=True
         ).filter(
             Q(grade__isnull=True) | Q(grade='')
         ).count()
@@ -2211,6 +2212,18 @@ class Submission(models.Model):
         """Чи дозволено використання ШІ у цьому завданні вчителем."""
         return bool(self.assignment and self.assignment.allow_ai_usage)
 
+    @property
+    def is_superseded(self):
+        """Чи є ця робота застарілою попередньою спробою, заміненою новішою версією."""
+        return not self.is_latest_attempt
+
+    @property
+    def awaits_grading(self):
+        """Чи очікує ця робота перевірки та оцінки вчителем (застарілі спроби НЕ очікують оцінки)."""
+        if not self.is_latest_attempt:
+            return False
+        return not bool(self.grade)
+
     def get_all_attempts(self):
         """Повертає список усіх спроб здачі цієї роботи цим учнем (від першої до останньої)."""
         if not self.assignment:
@@ -2221,7 +2234,7 @@ class Submission(models.Model):
             q &= (Q(student_id=self.student_id) | (Q(last_name__iexact=self.last_name) & Q(first_name__iexact=self.first_name)))
         else:
             q &= Q(last_name__iexact=self.last_name) & Q(first_name__iexact=self.first_name)
-        return list(Submission.objects.filter(q).order_by('submitted_at'))
+        return list(Submission.objects.filter(q).prefetch_related('files', 'comments', 'comments__author').order_by('submitted_at'))
 
     def has_resubmissions(self):
         """Чи є у цієї роботи інші спроби здачі (раніше чи пізніше)."""
@@ -2230,9 +2243,9 @@ class Submission(models.Model):
         return len(self.get_all_attempts()) > 1
 
     def get_previous_attempts(self):
-        """Повертає попередні спроби здачі до цієї."""
+        """Повертає попередні спроби здачі до цієї (від старіших до новіших)."""
         all_att = self.get_all_attempts()
-        return [s for s in all_att if s.submitted_at < self.submitted_at]
+        return [s for s in all_att if s.id != self.id and s.submitted_at <= self.submitted_at]
 
     def has_used_student_ai_check_for_assignment(self):
         """Перевіряє, чи учень вже використовував самоперевірку ШІ для цього завдання в будь-якій зі своїх спроб."""

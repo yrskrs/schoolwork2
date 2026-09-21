@@ -667,9 +667,14 @@ def student_submissions_portal(request):
     selected_class_id = request.GET.get('class')
     search_query = request.GET.get('search', '').strip()
 
+    show_all = request.GET.get('all_attempts') == '1'
+
     submissions_qs = Submission.objects.all().select_related(
-        'assignment', 'class_group', 'teacher', 'assignment__subject'
-    ).prefetch_related('comments', 'comments__author').order_by('-submitted_at')
+        'assignment', 'class_group', 'teacher', 'assignment__subject', 'previous_submission'
+    ).prefetch_related('comments', 'comments__author', 'files').order_by('-submitted_at')
+
+    if not show_all:
+        submissions_qs = submissions_qs.filter(is_latest_attempt=True)
 
     if selected_class_id:
         try:
@@ -1064,10 +1069,10 @@ def teacher_dashboard(request):
         teacher=teacher,
         status=status_filter
     ).prefetch_related('classes', 'files').select_related('subject').annotate(
-        submissions_count=Count('submissions', distinct=True),
+        submissions_count=Count('submissions', filter=DbQ(submissions__is_latest_attempt=True), distinct=True),
         ungraded_count=Count(
             'submissions',
-            filter=DbQ(submissions__grade__isnull=True) | DbQ(submissions__grade=''),
+            filter=(DbQ(submissions__grade__isnull=True) | DbQ(submissions__grade='')) & DbQ(submissions__is_latest_attempt=True),
             distinct=True
         )
     )
@@ -1173,7 +1178,8 @@ def teacher_dashboard(request):
 
     # Загальна кількість неоцінених здач для значку
     total_ungraded = Submission.objects.filter(
-        assignment__teacher=teacher
+        assignment__teacher=teacher,
+        is_latest_attempt=True
     ).filter(Q(grade__isnull=True) | Q(grade='')).count()
 
     context = {
@@ -1232,10 +1238,11 @@ def teacher_live_status(request):
     }
 
     if request.user.is_superuser or request.session.get('superadmin_mode'):
-        pending_count = Submission.objects.filter(Q(grade__isnull=True) | Q(grade='')).count()
+        pending_count = Submission.objects.filter(is_latest_attempt=True).filter(Q(grade__isnull=True) | Q(grade='')).count()
     else:
         pending_count = Submission.objects.filter(
-            assignment__teacher=teacher
+            assignment__teacher=teacher,
+            is_latest_attempt=True
         ).filter(
             Q(grade__isnull=True) | Q(grade='')
         ).count()
@@ -3009,7 +3016,7 @@ def view_file(request, submission_id):
 
     if grade_filter == 'ungraded':
         # Включаємо поточну роботу, щоб виставлення оцінки не викидало вчителя з черги під час перегляду
-        nav_qs = nav_qs.filter(Q(grade__isnull=True) | Q(grade='') | Q(id=submission.id))
+        nav_qs = nav_qs.filter((Q(is_latest_attempt=True) & (Q(grade__isnull=True) | Q(grade=''))) | Q(id=submission.id))
         filter_desc_parts.append("Без оцінки")
     elif grade_filter == 'graded':
         nav_qs = nav_qs.filter((~Q(grade__isnull=True) & ~Q(grade='')) | Q(id=submission.id))
@@ -3535,7 +3542,7 @@ def assignment_submissions(request, pk):
     # Фільтр по оцінці
     grade_filter = request.GET.get('grade_filter', 'all')
     if grade_filter == 'ungraded':
-        submissions_qs = submissions_qs.filter(Q(grade__isnull=True) | Q(grade=''))
+        submissions_qs = submissions_qs.filter(is_latest_attempt=True).filter(Q(grade__isnull=True) | Q(grade=''))
     elif grade_filter == 'graded':
         submissions_qs = submissions_qs.exclude(grade__isnull=True).exclude(grade='')
 
@@ -3677,7 +3684,7 @@ def all_submissions_dashboard(request):
             pass
 
     if grade_filter == 'ungraded':
-        submissions_qs = submissions_qs.filter(Q(grade__isnull=True) | Q(grade=''))
+        submissions_qs = submissions_qs.filter(is_latest_attempt=True).filter(Q(grade__isnull=True) | Q(grade=''))
     elif grade_filter == 'graded':
         submissions_qs = submissions_qs.exclude(grade__isnull=True).exclude(grade='')
 
@@ -3941,10 +3948,11 @@ def grade_submission(request, sub_id):
 
     # Оновлюємо актуальний лічильник робіт без оцінки для інтерфейсу вчителя
     if request.user.is_superuser or request.session.get('superadmin_mode'):
-        remaining_pending = Submission.objects.filter(Q(grade__isnull=True) | Q(grade='')).count()
+        remaining_pending = Submission.objects.filter(is_latest_attempt=True).filter(Q(grade__isnull=True) | Q(grade='')).count()
     elif teacher:
         remaining_pending = Submission.objects.filter(
-            assignment__teacher=teacher
+            assignment__teacher=teacher,
+            is_latest_attempt=True
         ).filter(
             Q(grade__isnull=True) | Q(grade='')
         ).count()
@@ -4045,10 +4053,11 @@ def mass_grade_submissions(request):
 
     # Перераховуємо актуальний лічильник робіт без оцінки
     if request.user.is_superuser or request.session.get('superadmin_mode'):
-        remaining_pending = Submission.objects.filter(Q(grade__isnull=True) | Q(grade='')).count()
+        remaining_pending = Submission.objects.filter(is_latest_attempt=True).filter(Q(grade__isnull=True) | Q(grade='')).count()
     elif teacher:
         remaining_pending = Submission.objects.filter(
-            assignment__teacher=teacher
+            assignment__teacher=teacher,
+            is_latest_attempt=True
         ).filter(
             Q(grade__isnull=True) | Q(grade='')
         ).count()
@@ -4819,7 +4828,7 @@ def gradebook(request):
         elif g_filt == 'rework':
             return val in ['доопрацювати', 'на доопрацювання', 'д']
         elif g_filt == 'ungraded':
-            return not item.get('has_grade') or val == ''
+            return (not item.get('has_grade') or val == '') and item.get('is_latest_attempt', True)
         return True
 
     has_active_filter = bool(parsed_single_date or parsed_date_from or parsed_date_to or (grade_filter and grade_filter != 'all') or date_preset)
@@ -6339,7 +6348,7 @@ def ai_batch_check_view(request):
 
     # Підрахунок доступних робіт
     total_submissions = Submission.objects.count()
-    ungraded_submissions = Submission.objects.filter(Q(grade__isnull=True) | Q(grade='')).count()
+    ungraded_submissions = Submission.objects.filter(is_latest_attempt=True).filter(Q(grade__isnull=True) | Q(grade='')).count()
     ai_evaluated_submissions = Submission.objects.filter(ai_status='success').count()
 
     context = {
@@ -6373,7 +6382,7 @@ def api_ai_get_batch_queue(request):
     if assignment_id:
         qs = qs.filter(assignment_id=assignment_id)
     if only_ungraded:
-        qs = qs.filter(Q(grade__isnull=True) | Q(grade=''))
+        qs = qs.filter(is_latest_attempt=True).filter(Q(grade__isnull=True) | Q(grade=''))
     if only_unreviewed_ai:
         qs = qs.exclude(ai_status='success')
 

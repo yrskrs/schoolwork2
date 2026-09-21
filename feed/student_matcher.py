@@ -11,6 +11,7 @@
 import re
 import difflib
 from typing import Tuple, List, Dict, Optional, Set, Any
+from django.utils import timezone
 
 # Словник еквівалентності українських імен (повні, скорочені, пестливі форми)
 UKRAINIAN_NAME_VARIANTS: Dict[str, Set[str]] = {
@@ -257,6 +258,8 @@ def cluster_submissions_by_student(submissions_list) -> List[Dict]:
     """
     Групує список здач робіт за інтелектуальним профілем учня.
     Об'єднує здачі з різним порядком слів, скороченими іменами та одруками в єдиний запис учня.
+    Забезпечує правильну обробку повторних спроб (перездач):
+    застарілі спроби без оцінки НЕ висять як неперевірені (⏳) у журналі.
     """
     clusters: List[Dict] = []
 
@@ -288,30 +291,65 @@ def cluster_submissions_by_student(submissions_list) -> List[Dict]:
         matched_cluster['submissions'].append(sub)
         matched_cluster['all_submissions_count'] += 1
 
-        date_key = sub.effective_grade_date
-        if date_key not in matched_cluster['grades_by_date']:
-            matched_cluster['grades_by_date'][date_key] = []
+    # Формуємо grades_by_date та numeric_grades для кожного учня з урахуванням перездач
+    for cl in clusters:
+        # Групуємо роботи учня за завданнями
+        subs_by_assignment = {}
+        for sub in cl['submissions']:
+            asgn_key = sub.assignment_id if sub.assignment_id else f"none_{sub.id}"
+            if asgn_key not in subs_by_assignment:
+                subs_by_assignment[asgn_key] = []
+            subs_by_assignment[asgn_key].append(sub)
 
-        gr_results = sub.get_ai_gr_results_list()
-        gr_avg = sub.get_ai_gr_average()
-        item = {
-            'submission_id': sub.id,
-            'grade': sub.grade or '',
-            'has_grade': bool(sub.grade),
-            'assignment_title': sub.assignment.title if sub.assignment else 'Завдання',
-            'submitted_at': sub.submitted_at,
-            'graded_at': sub.graded_at,
-            'effective_date': date_key,
-            'has_file': bool(sub.file),
-            'has_link': bool(sub.link),
-            'gr_results': gr_results,
-            'gr_avg': gr_avg,
-            'has_gr': bool(gr_results),
-        }
-        matched_cluster['grades_by_date'][date_key].append(item)
+        for asgn_key, asgn_subs in subs_by_assignment.items():
+            # Визначаємо останню (найновішу) спробу
+            latest_sub = None
+            for s in asgn_subs:
+                if getattr(s, 'is_latest_attempt', False):
+                    latest_sub = s
+                    break
+            if not latest_sub:
+                latest_sub = max(asgn_subs, key=lambda s: s.submitted_at if s.submitted_at else timezone.now())
 
-        if sub.grade and sub.grade.isdigit():
-            matched_cluster['numeric_grades'].append(int(sub.grade))
+            for s in asgn_subs:
+                is_latest = (s.id == latest_sub.id)
+                has_grade = bool(s.grade)
+
+                # Головне правило: якщо спроба застаріла і НЕ має оцінки —
+                # вона була замінена учнем новою спробою і НЕ повинна висіти в журналі як неперевірена (⏳)
+                if not is_latest and not has_grade:
+                    continue
+
+                date_key = s.effective_grade_date
+                if date_key not in cl['grades_by_date']:
+                    cl['grades_by_date'][date_key] = []
+
+                gr_results = s.get_ai_gr_results_list()
+                gr_avg = s.get_ai_gr_average()
+                item = {
+                    'submission_id': s.id,
+                    'grade': s.grade or '',
+                    'has_grade': has_grade,
+                    'is_latest_attempt': is_latest,
+                    'is_superseded': not is_latest,
+                    'resubmission_attempt': getattr(s, 'resubmission_attempt', 1),
+                    'assignment_title': s.assignment.title if s.assignment else 'Завдання',
+                    'submitted_at': s.submitted_at,
+                    'graded_at': s.graded_at,
+                    'effective_date': date_key,
+                    'has_file': bool(s.file),
+                    'has_link': bool(s.link),
+                    'gr_results': gr_results,
+                    'gr_avg': gr_avg,
+                    'has_gr': bool(gr_results),
+                }
+                cl['grades_by_date'][date_key].append(item)
+
+                # Враховуємо оцінку в середній бал (якщо це актуальна спроба або єдина з оцінкою)
+                if s.grade and s.grade.isdigit():
+                    latest_has_numeric = bool(latest_sub.grade and latest_sub.grade.isdigit())
+                    if is_latest or not latest_has_numeric:
+                        cl['numeric_grades'].append(int(s.grade))
 
     # Сортуємо учнів за алфавітом прізвища
     clusters.sort(key=lambda c: (c['last_name'].lower(), c['first_name'].lower()))
