@@ -370,34 +370,6 @@ pre, code {
   box-sizing: border-box;
 }
 
-@media (max-width: 880px) {
-  .feed-layout {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .sidebar {
-    display: none;
-    position: fixed;
-    top: 56px;
-    left: 0;
-    z-index: 90;
-    width: min(300px, 88vw);
-    max-height: calc(100vh - 56px);
-    padding: 12px;
-    background: var(--color-bg);
-    box-shadow: var(--shadow-lg);
-    overflow-y: auto;
-  }
-  .sidebar.mobile-open { display: block; }
-  body.sidebar-open::before {
-    content: '';
-    position: fixed;
-    inset: 56px 0 0 0;
-    background: rgba(15, 23, 42, 0.28);
-    z-index: 80;
-  }
-}
-
-
 /* ─── Сайдбар ────────────────────────────────────────────────────────────────── */
 .sidebar {
   position: sticky;
@@ -409,6 +381,35 @@ pre, code {
   overscroll-behavior: contain;
   scrollbar-width: thin;
   scrollbar-color: var(--color-border) transparent;
+}
+
+@media (max-width: 880px) {
+  .feed-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .sidebar {
+    display: none;
+    position: fixed !important;
+    top: 56px !important;
+    left: 0 !important;
+    z-index: 90 !important;
+    width: min(300px, 88vw) !important;
+    max-height: calc(100vh - 56px) !important;
+    padding: 12px;
+    background: var(--color-bg);
+    box-shadow: var(--shadow-lg);
+    overflow-y: auto;
+  }
+  .sidebar.mobile-open {
+    display: block !important;
+  }
+  body.sidebar-open::before {
+    content: '';
+    position: fixed;
+    inset: 56px 0 0 0;
+    background: rgba(15, 23, 42, 0.28);
+    z-index: 80;
+  }
 }
 
 .sidebar::-webkit-scrollbar {
@@ -3176,6 +3177,49 @@ body {
   color: var(--color-text-secondary);
 }
 
+/* ── Гарантія читабельності тексту опису завдання та візуального редактора в темній темі ── */
+[data-theme="dark"] #rich-editor,
+[data-theme="dark"] #rich-editor *:not(mark):not(code):not(pre):not(a):not(.badge):not(.tag),
+[data-theme="dark"] .assignment-full-description,
+[data-theme="dark"] .assignment-full-description *:not(mark):not(code):not(pre):not(a):not(.badge):not(.tag),
+[data-theme="dark"] .rich-text-content,
+[data-theme="dark"] .rich-text-content *:not(mark):not(code):not(pre):not(a):not(.badge):not(.tag) {
+  color: var(--color-text-primary) !important;
+}
+
+[data-theme="dark"] #rich-editor span,
+[data-theme="dark"] #rich-editor p,
+[data-theme="dark"] #rich-editor div,
+[data-theme="dark"] .assignment-full-description span,
+[data-theme="dark"] .assignment-full-description p,
+[data-theme="dark"] .assignment-full-description div,
+[data-theme="dark"] .rich-text-content span,
+[data-theme="dark"] .rich-text-content p,
+[data-theme="dark"] .rich-text-content div {
+  background-color: transparent !important;
+}
+
+[data-theme="dark"] #rich-editor {
+  background: var(--color-surface);
+  caret-color: var(--color-primary);
+  border-color: var(--color-border);
+}
+
+[data-theme="dark"] #rich-editor:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+}
+
+[data-theme="dark"] .editor-btn {
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  border-color: var(--color-border);
+}
+
+[data-theme="dark"] .editor-btn:hover {
+  background: var(--color-bg-secondary);
+}
+
 /* Порожній опис (підказка) */
 .assignment-description-card.is-empty-notice {
   border-left-color: #0ea5e9;
@@ -4365,7 +4409,14 @@ body {
   100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
 }
 
+@keyframes liveBarShimmer {
+  0% { filter: brightness(0.96); }
+  50% { filter: brightness(1.24); }
+  100% { filter: brightness(0.96); }
+}
+
 #mobile-menu-btn { display: none; }
+#mobile-menu-btn.sidebar-not-found { display: none !important; }
 
 @media (max-width: 1180px) {
   .navbar-search { flex: 0 1 180px; }
@@ -4378,8 +4429,11 @@ body {
   .user-menu-name { display: none; }
 }
 
+@media (max-width: 880px) {
+  #mobile-menu-btn { display: flex; }
+}
+
 @media (max-width: 768px) {
-  #mobile-menu-btn { display: flex !important; }
   .navbar-search { display: none; }
   .nav-btn-text { display: none; }
   .user-menu-name { display: none; }

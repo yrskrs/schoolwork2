@@ -174,24 +174,72 @@
             }
 
             // ── 3. Інформер поточного уроку (live-lesson-widget) ───────────────
-            var liveWidget = document.getElementById('live-lesson-widget');
-            if (liveWidget && data.live_status && data.live_status.has_schedule) {
-                var timeInfoEl = document.getElementById('live-lesson-time-info');
-                if (timeInfoEl && data.live_status.time_info) {
-                    timeInfoEl.textContent = data.live_status.time_info;
-                }
-                var badgeEl = liveWidget.querySelector('.badge');
-                if (badgeEl && data.live_status.badge_text) {
-                    badgeEl.textContent = data.live_status.badge_text;
-                }
-                var titleEl = liveWidget.querySelector('h3');
-                if (titleEl && data.live_status.title) {
-                    titleEl.textContent = data.live_status.title;
-                }
-                var progressFill = document.getElementById('live-lesson-progress-fill');
-                if (progressFill && data.live_status.progress_percent !== undefined) {
-                    progressFill.style.width = data.live_status.progress_percent + '%';
-                    progressFill.style.background = (data.live_status.status_type === 'in_break') ? 'linear-gradient(90deg, #f59e0b, #d97706)' : 'linear-gradient(90deg, #10b981, #059669)';
+            var liveWidgets = document.querySelectorAll('.live-lesson-widget');
+            if (liveWidgets.length > 0 && data.live_status && data.live_status.has_schedule) {
+                var ls = data.live_status;
+                liveWidgets.forEach(function(liveWidget) {
+                    var timeInfoEl = liveWidget.querySelector('#live-lesson-time-info') || liveWidget.querySelector('.live-lesson-time-info');
+                    if (timeInfoEl && ls.time_info) {
+                        timeInfoEl.textContent = ls.time_info;
+                    }
+                    var badgeEl = liveWidget.querySelector('.badge');
+                    if (badgeEl && ls.badge_text) {
+                        badgeEl.textContent = ls.badge_text;
+                        if (ls.status_type === 'in_lesson') {
+                            badgeEl.style.background = 'rgba(16, 185, 129, 0.15)';
+                            badgeEl.style.color = '#059669';
+                            badgeEl.style.border = '1px solid rgba(16, 185, 129, 0.3)';
+                        } else if (ls.status_type === 'in_break') {
+                            badgeEl.style.background = 'rgba(245, 158, 11, 0.15)';
+                            badgeEl.style.color = '#d97706';
+                            badgeEl.style.border = '1px solid rgba(245, 158, 11, 0.3)';
+                        }
+                    }
+                    var titleEl = liveWidget.querySelector('h3');
+                    if (titleEl && ls.title) {
+                        titleEl.textContent = ls.title;
+                    }
+                    var card = liveWidget.querySelector('.live-lesson-card');
+                    if (card) {
+                        card.className = 'live-lesson-card status-' + ls.status_type;
+                        var stripe = card.children[0];
+                        if (stripe) {
+                            stripe.style.background = (ls.status_type === 'in_lesson') ? '#10b981' :
+                                                      (ls.status_type === 'in_break') ? '#f59e0b' :
+                                                      (ls.status_type === 'before_school') ? '#3b82f6' : 'var(--color-primary)';
+                        }
+                    }
+                    var iconBubble = liveWidget.querySelector('.status-icon-bubble');
+                    if (iconBubble) {
+                        if (ls.status_type === 'in_lesson') {
+                            iconBubble.textContent = '🔔';
+                            iconBubble.style.background = 'rgba(16, 185, 129, 0.15)';
+                            iconBubble.style.color = '#059669';
+                        } else if (ls.status_type === 'in_break') {
+                            iconBubble.textContent = '☕';
+                            iconBubble.style.background = 'rgba(245, 158, 11, 0.15)';
+                            iconBubble.style.color = '#d97706';
+                        } else if (ls.status_type === 'before_school') {
+                            iconBubble.textContent = '🌅';
+                            iconBubble.style.background = 'rgba(59, 130, 246, 0.15)';
+                            iconBubble.style.color = '#2563eb';
+                        } else {
+                            iconBubble.textContent = '📅';
+                        }
+                    }
+                    var progressFill = liveWidget.querySelector('#live-lesson-progress-fill') || liveWidget.querySelector('.live-lesson-progress-fill');
+                    if (progressFill && ls.progress_percent !== undefined) {
+                        progressFill.style.width = ls.progress_percent + '%';
+                        progressFill.style.background = (ls.status_type === 'in_break') ? 'linear-gradient(90deg, #f59e0b, #fbbf24, #d97706)' : 'linear-gradient(90deg, #10b981, #34d399, #059669)';
+                    }
+                });
+            }
+
+            // ── 3.1. Синхронізація модалки розкладу на сьогодні, якщо вона відкрита ──
+            if (typeof window.refreshTodayScheduleModal === 'function') {
+                var todayModal = document.getElementById('today-schedule-modal');
+                if (todayModal && todayModal.style.display !== 'none') {
+                    window.refreshTodayScheduleModal();
                 }
             }
 

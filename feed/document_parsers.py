@@ -24,11 +24,14 @@ def extract_text_from_document(file_path_or_file_obj, original_filename=None):
     ext = os.path.splitext(filename)[1].lower() if filename else ""
 
     # 1. Читання байтів або використання шляху
-    if isinstance(file_path_or_file_obj, str):
-        if not os.path.exists(file_path_or_file_obj):
-            return "", False, f"Файл не знайдено на диску: {file_path_or_file_obj}"
-        with open(file_path_or_file_obj, 'rb') as f:
+    if isinstance(file_path_or_file_obj, (str, os.PathLike)):
+        str_path = str(file_path_or_file_obj)
+        if not os.path.exists(str_path):
+            return "", False, f"Файл не знайдено на диску: {str_path}"
+        with open(str_path, 'rb') as f:
             file_bytes = f.read()
+    elif isinstance(file_path_or_file_obj, (bytes, bytearray)):
+        file_bytes = bytes(file_path_or_file_obj)
     elif hasattr(file_path_or_file_obj, 'read'):
         if hasattr(file_path_or_file_obj, 'seek'):
             file_path_or_file_obj.seek(0)
@@ -225,6 +228,51 @@ def _extract_from_excel(file_bytes):
                 sheet_summaries.append("\n".join(sheet_lines))
 
         wb.close()
+        full_text = "\n\n".join(sheet_summaries).strip()
+        if full_text:
+            return full_text, True, None
+    except Exception:
+        pass
+
+    # 2. Якщо це бінарний формат .xls (Excel 97-2003) — читаємо через xlrd
+    try:
+        import xlrd
+        wb = xlrd.open_workbook(file_contents=file_bytes)
+        sheet_summaries = []
+
+        for sheetname in wb.sheet_names()[:5]:
+            sheet = wb.sheet_by_name(sheetname)
+            sheet_lines = [f"[АРКУШ: {sheetname}]"]
+            max_r = min(sheet.nrows, 100)
+            max_c = min(sheet.ncols, 25)
+
+            for r_idx in range(max_r):
+                row_vals = []
+                for c_idx in range(max_c):
+                    cell = sheet.cell(r_idx, c_idx)
+                    if cell.ctype == xlrd.XL_CELL_DATE:
+                        try:
+                            dt = xlrd.xldate_as_datetime(cell.value, wb.datemode)
+                            val = dt.strftime('%d.%m.%Y')
+                        except Exception:
+                            val = str(cell.value)
+                    elif cell.ctype == xlrd.XL_CELL_NUMBER:
+                        val = str(int(cell.value)) if cell.value.is_integer() else str(cell.value)
+                    elif cell.ctype in (xlrd.XL_CELL_EMPTY, xlrd.XL_CELL_BLANK):
+                        val = ""
+                    else:
+                        val = str(cell.value).strip() if cell.value is not None else ""
+                    row_vals.append(val)
+
+                if any(row_vals):
+                    sheet_lines.append(" | ".join(row_vals))
+
+            if sheet.nrows > 100:
+                sheet_lines.append("... [ще рядки обрізано]")
+
+            if len(sheet_lines) > 1:
+                sheet_summaries.append("\n".join(sheet_lines))
+
         full_text = "\n\n".join(sheet_summaries).strip()
         if full_text:
             return full_text, True, None

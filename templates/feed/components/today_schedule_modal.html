@@ -1,6 +1,6 @@
-<!-- ── Модальне вікно «Розклад на сьогодні» з компактним дизайном та візуальним прогрес-баром ── -->
-<div id="today-schedule-modal" style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(15,23,42,0.65);z-index:99999;align-items:center;justify-content:center;padding:12px;backdrop-filter:blur(4px);">
-    <div class="custom-modal-content" style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);width:100%;max-width:480px;box-shadow:0 16px 36px rgba(0,0,0,0.22);overflow:hidden;animation:rescheduleModalIn 0.2s ease-out;max-height:82vh;display:flex;flex-direction:column;">
+<!-- ── Модальне вікно «Розклад на сьогодні» з живим статус-баром та анімацією в реальному часі ── -->
+<div id="today-schedule-modal" style="display:none;position:fixed;inset:0;width:100%;height:100%;background:rgba(15,23,42,0.65);z-index:99999;align-items:center;justify-content:center;padding:12px;backdrop-filter:blur(4px);box-sizing:border-box;">
+    <div class="custom-modal-content" style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);width:100%;max-width:500px;box-shadow:0 16px 36px rgba(0,0,0,0.22);overflow:hidden;animation:rescheduleModalIn 0.2s ease-out;max-height:86vh;display:flex;flex-direction:column;">
         
         <!-- Заголовок (компактний) -->
         <div style="padding:10px 16px;background:var(--color-bg-secondary);border-bottom:1px solid var(--color-border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
@@ -14,6 +14,36 @@
                 </div>
             </div>
             <button type="button" onclick="closeTodayScheduleModal()" style="background:none;border:none;font-size:18px;cursor:pointer;color:var(--color-text-muted);line-height:1;padding:4px;" aria-label="Закрити">✕</button>
+        </div>
+
+        <!-- 🌟 ЖИВИЙ СТАТУС-БАР ПОТОЧНОГО УРОКУ / ПЕРЕРВИ З АНІМАЦІЄЮ В РЕАЛЬНОМУ ЧАСІ 🌟 -->
+        <div id="modal-live-status-container" style="display:none;padding:10px 14px;background:var(--color-surface);border-bottom:1px solid var(--color-border);flex-shrink:0;">
+            <div id="modal-live-status-card" style="border-radius:var(--radius-md);padding:10px 12px;border:1px solid var(--color-border);position:relative;overflow:hidden;background:var(--color-bg-secondary);">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+                    <div style="display:flex;align-items:center;gap:8px;">
+                        <span id="modal-live-badge" class="badge" style="font-size:10.5px;font-weight:800;padding:2px 8px;border-radius:12px;">
+                            —
+                        </span>
+                        <strong id="modal-live-title" style="font-size:13px;color:var(--color-text-primary);">
+                            —
+                        </strong>
+                    </div>
+                    <div style="font-size:12px;font-weight:700;display:flex;align-items:center;gap:4px;" id="modal-live-timer-text">
+                        <span>⏱️</span>
+                        <span id="modal-live-time-val">—</span>
+                    </div>
+                </div>
+
+                <!-- Анімований статус-бар прогресу -->
+                <div style="margin-top:7px;height:6px;width:100%;background:rgba(0,0,0,0.08);border-radius:3px;overflow:hidden;position:relative;">
+                    <div id="modal-live-progress-fill" style="height:100%;width:0%;border-radius:3px;transition:width 0.4s ease;animation:liveBarShimmer 2.5s ease-in-out infinite;"></div>
+                </div>
+
+                <div style="display:flex;justify-content:space-between;align-items:center;font-size:10px;color:var(--color-text-muted);margin-top:3px;">
+                    <span id="modal-live-elapsed-info">Минуло: 0 хв</span>
+                    <span id="modal-live-pct-info">0%</span>
+                </div>
+            </div>
         </div>
 
         <!-- Контент списку уроків (компактний) -->
@@ -45,145 +75,376 @@
     </div>
 </div>
 
+<style>
+@keyframes liveBarShimmer {
+    0% { filter: brightness(0.96); }
+    50% { filter: brightness(1.24); }
+    100% { filter: brightness(0.96); }
+}
+@keyframes liveDotGlow {
+    0% { transform: scale(0.92); opacity: 0.8; }
+    50% { transform: scale(1.15); opacity: 1; }
+    100% { transform: scale(0.92); opacity: 0.8; }
+}
+</style>
+
 <script>
-function openTodayScheduleModal() {
-    var modal = document.getElementById('today-schedule-modal');
-    if (!modal) return;
-    modal.style.display = 'flex';
-    loadTodayScheduleData();
-}
+(function() {
+    var todayScheduleLiveTimer = null;
+    var todaySchedulePollTimer = null;
+    var cachedScheduleData = null;
 
-function closeTodayScheduleModal() {
-    var modal = document.getElementById('today-schedule-modal');
-    if (modal) modal.style.display = 'none';
-}
+    window.openTodayScheduleModal = function() {
+        var modal = document.getElementById('today-schedule-modal');
+        if (!modal) return;
+        modal.style.display = 'flex';
+        loadTodayScheduleData(false);
+        startTodayScheduleTimers();
+    };
 
-function loadTodayScheduleData() {
-    var body = document.getElementById('today-schedule-modal-body');
-    var subtitle = document.getElementById('today-schedule-date-subtitle');
-    var conductedEl = document.getElementById('modal-conducted-count');
+    window.closeTodayScheduleModal = function() {
+        var modal = document.getElementById('today-schedule-modal');
+        if (modal) modal.style.display = 'none';
+        stopTodayScheduleTimers();
+    };
 
-    fetch('/api/today-schedule/')
-        .then(function(res) { return res.json(); })
-        .then(function(data) {
-            if (!data.success) {
-                body.innerHTML = '<div style="color:#ef4444;text-align:center;padding:16px;font-size:12.5px;">Не вдалося завантажити розклад.</div>';
-                return;
+    window.refreshTodayScheduleModal = function() {
+        var modal = document.getElementById('today-schedule-modal');
+        if (modal && modal.style.display !== 'none') {
+            loadTodayScheduleData(true);
+        }
+    };
+
+    function startTodayScheduleTimers() {
+        stopTodayScheduleTimers();
+
+        // 1. Плавний локальний тікінг щосекунди (розрахунок точних хвилин і відсотків без очікування перезавантаження)
+        todayScheduleLiveTimer = setInterval(tickModalLiveTime, 2000);
+
+        // 2. Фонова тиха синхронізація з сервером кожні 15 секунд
+        todaySchedulePollTimer = setInterval(function() {
+            var modal = document.getElementById('today-schedule-modal');
+            if (modal && modal.style.display !== 'none' && !document.hidden) {
+                loadTodayScheduleData(true);
             }
+        }, 15000);
+    }
 
-            subtitle.textContent = data.weekday_display + ', ' + data.date_display;
+    function stopTodayScheduleTimers() {
+        if (todayScheduleLiveTimer) {
+            clearInterval(todayScheduleLiveTimer);
+            todayScheduleLiveTimer = null;
+        }
+        if (todaySchedulePollTimer) {
+            clearInterval(todaySchedulePollTimer);
+            todaySchedulePollTimer = null;
+        }
+    }
 
-            if (data.conducted_info && conductedEl) {
-                var manualBadge = data.conducted_info.is_manual ? ' (вручну)' : '';
-                conductedEl.textContent = data.conducted_info.count + manualBadge;
-            }
+    function loadTodayScheduleData(isSilent) {
+        var body = document.getElementById('today-schedule-modal-body');
+        var subtitle = document.getElementById('today-schedule-date-subtitle');
+        var conductedEl = document.getElementById('modal-conducted-count');
 
-            var lessons = data.lessons || [];
-            if (lessons.length === 0) {
-                body.innerHTML = '<div style="text-align:center;padding:24px;color:var(--color-text-muted);"><div style="font-size:26px;margin-bottom:4px;">🔔</div><div style="font-size:12.5px;">Розклад дзвінків ще не створено у системі.</div></div>';
-                return;
-            }
+        if (!isSilent && body && (!cachedScheduleData || !cachedScheduleData.lessons)) {
+            body.innerHTML = '<div style="text-align:center;padding:24px;color:var(--color-text-muted);"><div style="font-size:24px;margin-bottom:6px;">⏳</div><div style="font-size:12.5px;">Оновлення даних розкладу...</div></div>';
+        }
 
-            var html = '<div style="display:flex;flex-direction:column;gap:4px;">';
-
-            for (var i = 0; i < lessons.length; i++) {
-                var l = lessons[i];
-                var cardBorder = 'var(--color-border)';
-                var cardBg = 'var(--color-surface)';
-                var statusBadge = '';
-
-                if (l.is_current) {
-                    cardBorder = '#10b981';
-                    cardBg = 'rgba(16, 185, 129, 0.07)';
-                    statusBadge = '<span style="background:#10b981;color:#fff;font-size:10px;font-weight:800;padding:2px 7px;border-radius:10px;display:inline-flex;align-items:center;gap:3px;box-shadow:0 1px 4px rgba(16,185,129,0.3);"><span style="width:5px;height:5px;border-radius:50%;background:#fff;animation:livePulse 1s infinite alternate;"></span> ЗАРАЗ (' + l.rem_minutes + ' хв)</span>';
-                } else if (l.is_past) {
-                    cardBg = 'var(--color-bg-secondary)';
-                    statusBadge = '<span style="font-size:10.5px;font-weight:700;color:var(--color-text-muted);">✓ Завершено</span>';
-                } else if (l.is_future) {
-                    statusBadge = '<span style="font-size:10.5px;font-weight:600;color:var(--color-text-muted);">Попереду</span>';
-                }
-
-                html += '<div style="border:1px solid ' + cardBorder + ';background:' + cardBg + ';border-radius:var(--radius-sm);padding:6px 10px;transition:all 0.15s ease;' + (l.is_current ? 'box-shadow:0 0 0 2px rgba(16,185,129,0.22);' : '') + '">';
-                
-                // Основний рядок уроку
-                html += '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">';
-                
-                // Ліва частина: номер уроку, час, клас та предмет
-                html += '<div style="display:flex;align-items:center;gap:8px;min-width:0;">';
-                html += '<div style="width:24px;height:24px;border-radius:6px;background:' + (l.is_current ? '#10b981;color:#fff;' : 'rgba(99,102,241,0.1);color:var(--color-primary);') + 'display:flex;align-items:center;justify-content:center;font-weight:900;font-size:12px;flex-shrink:0;">' + l.lesson_number + '</div>';
-                
-                html += '<div style="min-width:0;">';
-                html += '<div style="font-weight:800;font-size:12.5px;color:var(--color-text-primary);line-height:1.2;">' + l.lesson_number + '-й урок <span style="font-weight:600;font-size:11px;color:var(--color-text-muted);">(' + l.start_time + '–' + l.end_time + ')</span></div>';
-
-                if (l.has_class) {
-                    html += '<div style="display:flex;align-items:center;gap:5px;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">';
-                    html += '<span class="class-tag" style="font-size:10.5px;font-weight:800;padding:1px 5px;">' + l.class_name + '</span>';
-                    if (l.subject_name) {
-                        html += '<span style="font-size:11px;color:' + l.subject_color + ';font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + l.subject_icon + ' ' + l.subject_name + '</span>';
+        fetch('/api/today-schedule/')
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                if (!data.success) {
+                    if (!isSilent && body) {
+                        body.innerHTML = '<div style="color:#ef4444;text-align:center;padding:16px;font-size:12.5px;">Не вдалося завантажити розклад.</div>';
                     }
-                    html += '</div>';
-                } else {
-                    html += '<div style="font-size:11px;color:var(--color-text-muted);">вікно (немає уроку)</div>';
-                }
-                html += '</div>'; // end text
-                html += '</div>'; // end left
-
-                // Права частина: статус
-                html += '<div style="text-align:right;flex-shrink:0;">' + statusBadge + '</div>';
-                html += '</div>'; // end main row
-
-                // ── ВІЗУАЛЬНИЙ ПРОГРЕС-БАР ПОТОЧНОГО УРОКУ ──
-                if (l.is_current) {
-                    var pct = Math.min(100, Math.max(0, l.progress_percent || 0));
-                    html += '<div style="margin-top:5px;padding-top:4px;border-top:1px dashed rgba(16,185,129,0.25);">';
-                    html += '<div style="height:5px;width:100%;background:rgba(16,185,129,0.18);border-radius:3px;overflow:hidden;">';
-                    html += '<div style="height:100%;width:' + pct + '%;background:linear-gradient(90deg,#10b981,#059669);border-radius:3px;transition:width 0.3s ease;"></div>';
-                    html += '</div>';
-                    html += '<div style="display:flex;justify-content:space-between;align-items:center;font-size:10px;color:#059669;font-weight:700;margin-top:2px;">';
-                    html += '<span>⏱️ Минуло: ' + (l.elapsed_minutes || 0) + ' хв</span>';
-                    html += '<span>Залишилось: ' + l.rem_minutes + ' хв (' + pct + '%)</span>';
-                    html += '</div>';
-                    html += '</div>';
+                    return;
                 }
 
-                html += '</div>'; // end lesson card
-
-                // ── ПЕРЕРВА ──
-                if (l.is_break_now) {
-                    var bPct = Math.min(100, Math.max(0, l.break_progress_percent || 0));
-                    html += '<div style="background:rgba(245,158,11,0.1);border:1px dashed #f59e0b;border-radius:var(--radius-sm);padding:5px 9px;margin:2px 0;">';
-                    html += '<div style="display:flex;align-items:center;justify-content:space-between;color:#d97706;font-size:11px;font-weight:700;">';
-                    html += '<span style="display:inline-flex;align-items:center;gap:4px;"><span>☕</span> <span>ЗАРАЗ ПЕРЕРВА (' + l.break_after + ' хв)</span></span>';
-                    html += '<span>до уроку: ' + l.break_rem_minutes + ' хв</span>';
-                    html += '</div>';
-                    
-                    // Візуальний прогрес-бар перерви
-                    html += '<div style="height:4px;width:100%;background:rgba(245,158,11,0.2);border-radius:2px;overflow:hidden;margin-top:3px;">';
-                    html += '<div style="height:100%;width:' + bPct + '%;background:linear-gradient(90deg,#f59e0b,#d97706);border-radius:2px;transition:width 0.3s ease;"></div>';
-                    html += '</div>';
-                    html += '<div style="display:flex;justify-content:space-between;font-size:9.5px;color:#b45309;font-weight:600;margin-top:1px;">';
-                    html += '<span>Минуло: ' + (l.break_elapsed_minutes || 0) + ' з ' + l.break_after + ' хв</span>';
-                    html += '<span>' + bPct + '%</span>';
-                    html += '</div>';
-                    html += '</div>';
-                } else if (l.break_after && l.break_after > 0 && i + 1 < lessons.length) {
-                    html += '<div style="text-align:center;font-size:10px;color:var(--color-text-muted);padding:1px 0;line-height:1.2;">';
-                    html += '☕ Перерва ' + l.break_after + ' хв';
-                    html += '</div>';
+                cachedScheduleData = data;
+                if (subtitle && data.weekday_display) {
+                    subtitle.textContent = data.weekday_display + ', ' + data.date_display;
                 }
+
+                if (data.conducted_info && conductedEl) {
+                    var manualBadge = data.conducted_info.is_manual ? ' (вручну)' : '';
+                    conductedEl.textContent = data.conducted_info.count + manualBadge;
+                }
+
+                renderScheduleContent(data);
+                tickModalLiveTime();
+            })
+            .catch(function(err) {
+                console.error('Error fetching today schedule:', err);
+                if (!isSilent && body) {
+                    body.innerHTML = '<div style="color:#ef4444;text-align:center;padding:16px;font-size:12.5px;">Помилка завантаження даних.</div>';
+                }
+            });
+    }
+
+    function renderScheduleContent(data) {
+        var body = document.getElementById('today-schedule-modal-body');
+        if (!body) return;
+
+        var lessons = data.lessons || [];
+        if (lessons.length === 0) {
+            body.innerHTML = '<div style="text-align:center;padding:24px;color:var(--color-text-muted);"><div style="font-size:26px;margin-bottom:4px;">🔔</div><div style="font-size:12.5px;">Розклад дзвінків ще не створено у системі.</div></div>';
+            updateTopStatusBanner(null, null);
+            return;
+        }
+
+        var currentLesson = null;
+        var currentBreakLesson = null;
+
+        var html = '<div style="display:flex;flex-direction:column;gap:5px;">';
+
+        for (var i = 0; i < lessons.length; i++) {
+            var l = lessons[i];
+            var cardBorder = 'var(--color-border)';
+            var cardBg = 'var(--color-surface)';
+            var statusBadge = '';
+
+            if (l.is_current) {
+                currentLesson = l;
+                cardBorder = '#10b981';
+                cardBg = 'rgba(16, 185, 129, 0.08)';
+                statusBadge = '<span style="background:#10b981;color:#fff;font-size:10px;font-weight:800;padding:2px 7px;border-radius:10px;display:inline-flex;align-items:center;gap:3px;box-shadow:0 1px 4px rgba(16,185,129,0.3);"><span style="width:5px;height:5px;border-radius:50%;background:#fff;animation:liveDotGlow 1.2s infinite alternate;"></span> ЗАРАЗ (<span id="modal-card-rem-' + l.slot_id + '">' + l.rem_minutes + '</span> хв)</span>';
+            } else if (l.is_past) {
+                cardBg = 'var(--color-bg-secondary)';
+                statusBadge = '<span style="font-size:10.5px;font-weight:700;color:var(--color-text-muted);">✓ Завершено</span>';
+            } else if (l.is_future) {
+                statusBadge = '<span style="font-size:10.5px;font-weight:600;color:var(--color-text-muted);">Попереду</span>';
             }
 
-            html += '</div>';
-            body.innerHTML = html;
-        })
-        .catch(function(err) {
-            console.error('Error fetching today schedule:', err);
-            body.innerHTML = '<div style="color:#ef4444;text-align:center;padding:16px;font-size:12.5px;">Помилка завантаження даних.</div>';
-        });
-}
+            html += '<div id="modal-lesson-card-' + l.slot_id + '" style="border:1px solid ' + cardBorder + ';background:' + cardBg + ';border-radius:var(--radius-sm);padding:7px 10px;transition:all 0.2s ease;' + (l.is_current ? 'box-shadow:0 0 0 2px rgba(16,185,129,0.22);' : '') + '">';
+            
+            // Основний рядок уроку
+            html += '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">';
+            
+            // Ліва частина: номер уроку, час, клас та предмет
+            html += '<div style="display:flex;align-items:center;gap:8px;min-width:0;">';
+            html += '<div style="width:24px;height:24px;border-radius:6px;background:' + (l.is_current ? '#10b981;color:#fff;' : 'rgba(99,102,241,0.1);color:var(--color-primary);') + 'display:flex;align-items:center;justify-content:center;font-weight:900;font-size:12px;flex-shrink:0;">' + l.lesson_number + '</div>';
+            
+            html += '<div style="min-width:0;">';
+            html += '<div style="font-weight:800;font-size:12.5px;color:var(--color-text-primary);line-height:1.2;">' + l.lesson_number + '-й урок <span style="font-weight:600;font-size:11px;color:var(--color-text-muted);">(' + l.start_time + '–' + l.end_time + ')</span></div>';
 
-document.addEventListener('click', function(e) {
-    var modal = document.getElementById('today-schedule-modal');
-    if (modal && e.target === modal) closeTodayScheduleModal();
-});
+            if (l.has_class) {
+                html += '<div style="display:flex;align-items:center;gap:5px;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">';
+                html += '<span class="class-tag" style="font-size:10.5px;font-weight:800;padding:1px 5px;">' + l.class_name + '</span>';
+                if (l.subject_name) {
+                    html += '<span style="font-size:11px;color:' + (l.subject_color || 'var(--color-primary)') + ';font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + (l.subject_icon || '📚') + ' ' + l.subject_name + '</span>';
+                }
+                html += '</div>';
+            } else {
+                html += '<div style="font-size:11px;color:var(--color-text-muted);">вікно (немає уроку)</div>';
+            }
+            html += '</div>'; // end text
+            html += '</div>'; // end left
+
+            // Права частина: статус
+            html += '<div style="text-align:right;flex-shrink:0;">' + statusBadge + '</div>';
+            html += '</div>'; // end main row
+
+            // ── ВІЗУАЛЬНИЙ ПРОГРЕС-БАР ПОТОЧНОГО УРОКУ ──
+            if (l.is_current) {
+                var pct = Math.min(100, Math.max(0, l.progress_percent || 0));
+                html += '<div style="margin-top:6px;padding-top:4px;border-top:1px dashed rgba(16,185,129,0.25);">';
+                html += '<div style="height:5px;width:100%;background:rgba(16,185,129,0.18);border-radius:3px;overflow:hidden;">';
+                html += '<div id="modal-card-fill-' + l.slot_id + '" style="height:100%;width:' + pct + '%;background:linear-gradient(90deg,#10b981,#059669);border-radius:3px;transition:width 0.4s ease;"></div>';
+                html += '</div>';
+                html += '<div style="display:flex;justify-content:space-between;align-items:center;font-size:10px;color:#059669;font-weight:700;margin-top:3px;">';
+                html += '<span id="modal-card-elapsed-' + l.slot_id + '">⏱️ Минуло: ' + (l.elapsed_minutes || 0) + ' хв</span>';
+                html += '<span id="modal-card-rem-text-' + l.slot_id + '">Залишилось: ' + l.rem_minutes + ' хв (' + pct + '%)</span>';
+                html += '</div>';
+                html += '</div>';
+            }
+
+            html += '</div>'; // end lesson card
+
+            // ── ПЕРЕРВА ──
+            if (l.is_break_now) {
+                currentBreakLesson = l;
+                var bPct = Math.min(100, Math.max(0, l.break_progress_percent || 0));
+                html += '<div style="background:rgba(245,158,11,0.12);border:1px dashed #f59e0b;border-radius:var(--radius-sm);padding:6px 10px;margin:2px 0;">';
+                html += '<div style="display:flex;align-items:center;justify-content:space-between;color:#d97706;font-size:11px;font-weight:700;">';
+                html += '<span style="display:inline-flex;align-items:center;gap:4px;"><span>☕</span> <span>ЗАРАЗ ПЕРЕРВА (' + l.break_after + ' хв)</span></span>';
+                html += '<span id="modal-break-rem-text">до уроку: ' + l.break_rem_minutes + ' хв</span>';
+                html += '</div>';
+                
+                // Візуальний прогрес-бар перерви
+                html += '<div style="height:5px;width:100%;background:rgba(245,158,11,0.22);border-radius:3px;overflow:hidden;margin-top:4px;">';
+                html += '<div id="modal-break-fill" style="height:100%;width:' + bPct + '%;background:linear-gradient(90deg,#f59e0b,#d97706);border-radius:3px;transition:width 0.4s ease;"></div>';
+                html += '</div>';
+                html += '<div style="display:flex;justify-content:space-between;font-size:9.5px;color:#b45309;font-weight:600;margin-top:2px;">';
+                html += '<span id="modal-break-elapsed-text">Минуло: ' + (l.break_elapsed_minutes || 0) + ' з ' + l.break_after + ' хв</span>';
+                html += '<span id="modal-break-pct-text">' + bPct + '%</span>';
+                html += '</div>';
+                html += '</div>';
+            } else if (l.break_after && l.break_after > 0 && i + 1 < lessons.length) {
+                html += '<div style="text-align:center;font-size:10px;color:var(--color-text-muted);padding:1px 0;line-height:1.2;">';
+                html += '☕ Перерва ' + l.break_after + ' хв';
+                html += '</div>';
+            }
+        }
+
+        html += '</div>';
+        body.innerHTML = html;
+
+        updateTopStatusBanner(currentLesson, currentBreakLesson);
+    }
+
+    function updateTopStatusBanner(lesson, breakLesson) {
+        var container = document.getElementById('modal-live-status-container');
+        var card = document.getElementById('modal-live-status-card');
+        var badge = document.getElementById('modal-live-badge');
+        var title = document.getElementById('modal-live-title');
+        var timeVal = document.getElementById('modal-live-time-val');
+        var fill = document.getElementById('modal-live-progress-fill');
+        var elapsedInfo = document.getElementById('modal-live-elapsed-info');
+        var pctInfo = document.getElementById('modal-live-pct-info');
+
+        if (!container || !card) return;
+
+        if (lesson && lesson.is_current) {
+            container.style.display = 'block';
+            card.style.background = 'rgba(16, 185, 129, 0.08)';
+            card.style.borderColor = 'rgba(16, 185, 129, 0.35)';
+
+            badge.style.background = 'rgba(16, 185, 129, 0.2)';
+            badge.style.color = '#059669';
+            badge.style.border = '1px solid rgba(16, 185, 129, 0.4)';
+            badge.textContent = '🟢 ' + lesson.lesson_number + '-й урок';
+
+            var subj = lesson.subject_name ? ' (' + lesson.subject_name + ')' : '';
+            title.textContent = (lesson.class_name ? lesson.class_name + subj : lesson.lesson_number + '-й урок');
+
+            var pct = Math.min(100, Math.max(0, lesson.progress_percent || 0));
+            fill.style.width = pct + '%';
+            fill.style.background = 'linear-gradient(90deg, #10b981, #34d399, #059669)';
+
+            timeVal.innerHTML = 'Залишилось: <span style="color:#059669;">' + lesson.rem_minutes + ' хв</span> (до ' + lesson.end_time + ')';
+            elapsedInfo.textContent = 'Минуло: ' + (lesson.elapsed_minutes || 0) + ' з ' + (lesson.duration_minutes || 45) + ' хв';
+            pctInfo.textContent = pct + '%';
+        } else if (breakLesson && breakLesson.is_break_now) {
+            container.style.display = 'block';
+            card.style.background = 'rgba(245, 158, 11, 0.1)';
+            card.style.borderColor = 'rgba(245, 158, 11, 0.35)';
+
+            badge.style.background = 'rgba(245, 158, 11, 0.2)';
+            badge.style.color = '#d97706';
+            badge.style.border = '1px solid rgba(245, 158, 11, 0.4)';
+            badge.textContent = '☕ Перерва';
+
+            title.textContent = 'Перерва між уроками (' + breakLesson.break_after + ' хв)';
+
+            var bPct = Math.min(100, Math.max(0, breakLesson.break_progress_percent || 0));
+            fill.style.width = bPct + '%';
+            fill.style.background = 'linear-gradient(90deg, #f59e0b, #fbbf24, #d97706)';
+
+            timeVal.innerHTML = 'До дзвінка: <span style="color:#d97706;">' + breakLesson.break_rem_minutes + ' хв</span>';
+            elapsedInfo.textContent = 'Минуло: ' + (breakLesson.break_elapsed_minutes || 0) + ' з ' + breakLesson.break_after + ' хв';
+            pctInfo.textContent = bPct + '%';
+        } else {
+            container.style.display = 'none';
+        }
+    }
+
+    function tickModalLiveTime() {
+        if (!cachedScheduleData || !cachedScheduleData.lessons) return;
+        var lessons = cachedScheduleData.lessons;
+
+        var now = new Date();
+        var nowMin = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
+
+        var currentLesson = null;
+        var currentBreak = null;
+        var needsServerResync = false;
+
+        for (var i = 0; i < lessons.length; i++) {
+            var l = lessons[i];
+            if (!l.start_time || !l.end_time) continue;
+            var sParts = l.start_time.split(':').map(Number);
+            var eParts = l.end_time.split(':').map(Number);
+            var sMin = sParts[0] * 60 + sParts[1];
+            var eMin = eParts[0] * 60 + eParts[1];
+
+            // Перевіряємо чи урок триває прямо зараз
+            if (nowMin >= sMin && nowMin < eMin) {
+                currentLesson = l;
+                var dur = Math.max(1, eMin - sMin);
+                var elapsed = Math.max(0, Math.min(dur, Math.floor(nowMin - sMin)));
+                var rem = Math.max(0, Math.ceil(eMin - nowMin));
+                var pct = Math.min(100, Math.max(0, Math.round(((nowMin - sMin) / dur) * 100)));
+
+                l.is_current = true;
+                l.rem_minutes = rem;
+                l.elapsed_minutes = elapsed;
+                l.progress_percent = pct;
+
+                // Оновлюємо елементи в середині картки списку
+                var cardFill = document.getElementById('modal-card-fill-' + l.slot_id);
+                if (cardFill) cardFill.style.width = pct + '%';
+                var cardRem = document.getElementById('modal-card-rem-' + l.slot_id);
+                if (cardRem) cardRem.textContent = rem;
+                var cardElapsed = document.getElementById('modal-card-elapsed-' + l.slot_id);
+                if (cardElapsed) cardElapsed.textContent = '⏱️ Минуло: ' + elapsed + ' хв';
+                var cardRemText = document.getElementById('modal-card-rem-text-' + l.slot_id);
+                if (cardRemText) cardRemText.textContent = 'Залишилось: ' + rem + ' хв (' + pct + '%)';
+            } else if (l.is_current && nowMin >= eMin) {
+                // Урок щойно завершився — потрібна синхронізація
+                needsServerResync = true;
+            }
+
+            // Перевіряємо перерву після уроку
+            if (l.break_after && i + 1 < lessons.length) {
+                var nextL = lessons[i + 1];
+                var nextSParts = nextL.start_time.split(':').map(Number);
+                var nextSMin = nextSParts[0] * 60 + nextSParts[1];
+
+                if (nowMin >= eMin && nowMin < nextSMin) {
+                    currentBreak = l;
+                    var bDur = Math.max(1, nextSMin - eMin);
+                    var bElapsed = Math.max(0, Math.min(bDur, Math.floor(nowMin - eMin)));
+                    var bRem = Math.max(0, Math.ceil(nextSMin - nowMin));
+                    var bPct = Math.min(100, Math.max(0, Math.round(((nowMin - eMin) / bDur) * 100)));
+
+                    l.is_break_now = true;
+                    l.break_rem_minutes = bRem;
+                    l.break_elapsed_minutes = bElapsed;
+                    l.break_progress_percent = bPct;
+
+                    var bFill = document.getElementById('modal-break-fill');
+                    if (bFill) bFill.style.width = bPct + '%';
+                    var bRemText = document.getElementById('modal-break-rem-text');
+                    if (bRemText) bRemText.textContent = 'до уроку: ' + bRem + ' хв';
+                    var bElapsedText = document.getElementById('modal-break-elapsed-text');
+                    if (bElapsedText) bElapsedText.textContent = 'Минуло: ' + bElapsed + ' з ' + l.break_after + ' хв';
+                    var bPctText = document.getElementById('modal-break-pct-text');
+                    if (bPctText) bPctText.textContent = bPct + '%';
+                } else if (l.is_break_now && nowMin >= nextSMin) {
+                    needsServerResync = true;
+                }
+            }
+        }
+
+        updateTopStatusBanner(currentLesson, currentBreak);
+
+        if (needsServerResync) {
+            loadTodayScheduleData(true);
+        }
+    }
+
+    // Закриття модалки кліком на бекдроп
+    document.addEventListener('click', function(e) {
+        var modal = document.getElementById('today-schedule-modal');
+        if (modal && e.target === modal) window.closeTodayScheduleModal();
+    });
+
+    // Закриття клавішею Escape
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            var modal = document.getElementById('today-schedule-modal');
+            if (modal && modal.style.display !== 'none') window.closeTodayScheduleModal();
+        }
+    });
+})();
 </script>

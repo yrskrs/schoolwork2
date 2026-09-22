@@ -460,7 +460,7 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
         # Перевірка сторінки налаштувань ШІ
         resp = self.client.get(reverse('ai_settings'))
         self.assertEqual(resp.status_code, 200)
-        self.assertContains(resp, 'Налаштування модуля Google Gemini AI')
+        self.assertContains(resp, 'Налаштування модуля')
 
         # Збереження налаштувань
         post_resp = self.client.post(reverse('ai_settings'), {
@@ -1028,7 +1028,7 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
         settings.save()
 
         # Мокаємо запити: якщо url містить gemini-fail-model -> повертаємо 429, якщо gemini-fallback-success -> 200 OK
-        def side_effect(url, payload_dict, timeout=30):
+        def side_effect(url, payload_dict, headers=None, timeout=30):
             if 'gemini-fail-model' in url:
                 err_body = {'error': {'message': 'Resource has been exhausted (rate limit)', 'code': 429}}
                 return (429, err_body, json.dumps(err_body))
@@ -1434,7 +1434,7 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
         )
 
         captured_payloads = []
-        def side_effect(url, payload, timeout=35):
+        def side_effect(url, payload, headers=None, timeout=35):
             captured_payloads.append(payload)
             return (200, {
                 "candidates": [{
@@ -1476,7 +1476,7 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
         self.assertIn("в загальному", res['feedback_comment'])
 
         # Тест постінспекції: якщо ШІ повернув оцінку 5 з порожнім weaknesses, постобробка гарантує зауваження
-        def side_effect_empty_weaknesses(url, payload, timeout=35):
+        def side_effect_empty_weaknesses(url, payload, *args, **kwargs):
             return (200, {
                 "candidates": [{
                     "content": {
@@ -1945,6 +1945,13 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
         resp_del = self.client.post(reverse('teacher_student_delete', kwargs={'student_id': st.id}))
         self.assertEqual(resp_del.status_code, 302)
         self.assertFalse(Student.objects.filter(id=st.id).exists())
+
+    def test_teacher_schedule_tab_includes_live_lesson_widget(self):
+        """Тест: на вкладці розкладу вчителя відображається живий статус-бар поточного уроку/розкладу."""
+        self.client.login(username='teacher1', password='password123')
+        resp = self.client.get(reverse('teacher_students') + '?tab=schedule')
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, 'live-lesson-widget')
 
     def test_student_portal_search_isolation_for_same_last_names(self):
         """
@@ -3104,8 +3111,8 @@ class AssignmentFileAIAndCoauthorTests(TestCase):
 
         dummy_file = SimpleUploadedFile("project.py", b"print('Hello from team')", content_type="text/plain")
 
-        # Учень здає роботу і в коментарі вказує співавтора
-        resp_sub = self.client.post(reverse('submit_assignment', args=[asg.pk]), {
+        # Учень здає роботу і вказує співавтора в коментарі
+        resp_sub = self.client.post(reverse('submit_assignment', args=[asg.id]), {
             'full_name': 'Коваленко Данило',
             'class_group': self.class_group.id,
             'comment_student': 'Виконували практичну разом з Мельник Софія, все протестували.',
@@ -3539,10 +3546,16 @@ class AICreativityAndCriteriaTests(TestCase):
 
     def test_ai_detector_prompt_instructions(self):
         """Перевірка формування промту: критерії, зображення, хуманізатори та політика ШІ."""
-        from feed.models import Assignment, Submission
+        from feed.models import Assignment, Submission, AISettings
         from feed.gemini_service import evaluate_submission_with_gemini
         from unittest.mock import patch
         import json
+
+        # Переконуємось, що ШІ увімкнено та ключ встановлено
+        ai_set = AISettings.get_solo()
+        ai_set.api_key = 'fake-key-for-detector-test'
+        ai_set.is_enabled = True
+        ai_set.save()
 
         custom_text = "Індивідуальна розбаловка: аргументація - 6 б, джерела - 6 б."
         asg = Assignment.objects.create(
@@ -3564,7 +3577,7 @@ class AICreativityAndCriteriaTests(TestCase):
         )
 
         captured_payloads = []
-        def fake_http_post(endpoint, payload, timeout=35):
+        def fake_http_post(endpoint, payload, *args, **kwargs):
             captured_payloads.append(payload)
             fake_data = {
                 "candidates": [{
@@ -4151,21 +4164,655 @@ class AssignmentNoSubmissionRequiredTests(TestCase):
         self.assertTrue(dup.no_submission_required)
 
 
+class SanitizeHtmlAndAssignmentFormattingTests(TestCase):
+    """Тести для перевірки збереження багаторядкового тексту, форматування та очищення темних інлайн-стилів."""
+
+    def test_sanitize_html_preserves_first_line_with_br(self):
+        """Перевірка, що перший рядок тексту не зникає при використанні <br>."""
+        from feed.utils import sanitize_html
+        raw = "Перша стрічка завдання<br>Друга стрічка завдання"
+        cleaned = sanitize_html(raw)
+        self.assertIn("Перша стрічка завдання", cleaned)
+        self.assertIn("Друга стрічка завдання", cleaned)
+
+    def test_sanitize_html_preserves_leading_text_before_bold(self):
+        """Перевірка, що весь текст до жирного шрифту не зникає."""
+        from feed.utils import sanitize_html
+        raw = "Зробити вправи 1-5 <b>Обов'язково</b> здати до п'ятниці"
+        cleaned = sanitize_html(raw)
+        self.assertIn("Зробити вправи 1-5", cleaned)
+        self.assertIn("<b>Обов'язково</b>", cleaned)
+        self.assertIn("здати до п'ятниці", cleaned)
+
+    def test_sanitize_html_cleans_dark_inline_colors(self):
+        """Перевірка, що інлайн-кольори, які зливаються в темній темі, очищаються."""
+        from feed.utils import sanitize_html
+        raw = '<span style="color: rgb(0, 0, 0); background-color: #ffffff; font-weight: bold;">Текст завдання</span>'
+        cleaned = sanitize_html(raw)
+        self.assertNotIn("rgb(0, 0, 0)", cleaned)
+        self.assertNotIn("#ffffff", cleaned)
+        self.assertIn("Текст завдання", cleaned)
+        self.assertIn("font-weight: bold", cleaned)
+
+    def test_assignment_get_formatted_description_preserves_lines(self):
+        """Перевірка, що get_formatted_description зберігає всі рядки опису завдання."""
+        assignment = Assignment(
+            title="Тестове завдання",
+            description="Рядок номер один<br>Рядок номер два <strong>важливо</strong>"
+        )
+        formatted = assignment.get_formatted_description()
+        self.assertIn("Рядок номер один", formatted)
+        self.assertIn("Рядок номер два", formatted)
+        self.assertIn("<strong>важливо</strong>", formatted)
 
 
+class ExcelChartExtractionTests(TestCase):
+    """
+    Тести для розпізнавання, видобування метаданих та візуального рендерингу
+    вбудованих діаграм/графіків у таблицях Excel (.xlsx, .xls, .ods) для ШІ Gemini.
+    """
+
+    def setUp(self):
+        import tempfile
+        self.temp_dir = tempfile.TemporaryDirectory()
+
+    def tearDown(self):
+        self.temp_dir.cleanup()
+
+    def test_parse_excel_charts_bar_chart(self):
+        """Перевіряємо видобування стовпчастої діаграми з книги Excel."""
+        import openpyxl
+        from openpyxl.chart import BarChart, Reference
+        from feed.gemini_service import parse_excel_charts
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Продажі"
+        ws.append(["Місяць", "Кількість"])
+        ws.append(["Січень", 10])
+        ws.append(["Лютий", 25])
+        ws.append(["Березень", 30])
+
+        chart = BarChart()
+        chart.type = "col"
+        chart.title = "Продажі за квартал"
+        chart.y_axis.title = "Штуки"
+        chart.x_axis.title = "Місяці"
+
+        data = Reference(ws, min_col=2, min_row=1, max_row=4)
+        cats = Reference(ws, min_col=1, min_row=2, max_row=4)
+        chart.add_data(data, titles_from_data=True)
+        chart.set_categories(cats)
+        ws.add_chart(chart, "E2")
+
+        file_path = os.path.join(self.temp_dir.name, "test_bar.xlsx")
+        wb.save(file_path)
+
+        charts = parse_excel_charts(file_path)
+        self.assertEqual(len(charts), 1)
+        c = charts[0]
+        self.assertIn("стовпчаста", c['type'].lower())
+        self.assertEqual(c['title'], "Продажі за квартал")
+        self.assertEqual(c['sheet_name'], "Продажі")
+        self.assertEqual(c['anchor'], "E2")
+        self.assertIn("Місяці", c['axis_titles'])
+        self.assertIn("Штуки", c['axis_titles'])
+        self.assertTrue(len(c['series']) > 0)
+        self.assertTrue(c['has_legend'])
+
+    def test_parse_excel_charts_pie_chart(self):
+        """Перевіряємо видобування кругової секторної діаграми."""
+        import openpyxl
+        from openpyxl.chart import PieChart, Reference
+        from feed.gemini_service import parse_excel_charts
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Бюджет"
+        ws.append(["Категорія", "Сума"])
+        ws.append(["Оренда", 5000])
+        ws.append(["Продукти", 3000])
+        ws.append(["Транспорт", 1200])
+
+        chart = PieChart()
+        chart.title = "Структура витрат"
+        data = Reference(ws, min_col=2, min_row=1, max_row=4)
+        labels = Reference(ws, min_col=1, min_row=2, max_row=4)
+        chart.add_data(data, titles_from_data=True)
+        chart.set_categories(labels)
+        ws.add_chart(chart, "D2")
+
+        file_path = os.path.join(self.temp_dir.name, "test_pie.xlsx")
+        wb.save(file_path)
+
+        charts = parse_excel_charts(file_path)
+        self.assertEqual(len(charts), 1)
+        c = charts[0]
+        self.assertIn("кругова", c['type'].lower())
+        self.assertEqual(c['title'], "Структура витрат")
+        self.assertEqual(c['sheet_name'], "Бюджет")
+        self.assertEqual(c['anchor'], "D2")
+
+    def test_extract_text_from_excel_includes_charts_summary(self):
+        """Перевіряємо, що extract_text_from_excel включає структурований блок опису діаграм."""
+        import openpyxl
+        from openpyxl.chart import BarChart, Reference
+        from feed.gemini_service import extract_text_from_excel
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Дані"
+        ws.append(["Рік", "Прибуток"])
+        ws.append(["2023", 100])
+        ws.append(["2024", 200])
+
+        chart = BarChart()
+        chart.title = "Динаміка прибутку"
+        data = Reference(ws, min_col=2, min_row=1, max_row=3)
+        chart.add_data(data, titles_from_data=True)
+        ws.add_chart(chart, "C1")
+
+        file_path = os.path.join(self.temp_dir.name, "test_summary.xlsx")
+        wb.save(file_path)
+
+        text = extract_text_from_excel(file_path)
+        self.assertIn("ВИЯВЛЕНІ ВБУДОВАНІ ДІАГРАМИ ТА ГРАФІКИ У ФАЙЛІ EXCEL", text)
+        self.assertIn("Динаміка прибутку", text)
+        self.assertIn("Дані", text)
+
+    def test_extract_images_from_xlsx_visual_rendering(self):
+        """Перевіряємо візуальний рендеринг сторінок таблиці з графіками у зображення PNG для ШІ."""
+        import openpyxl
+        import shutil
+        from openpyxl.chart import BarChart, Reference
+        from feed.gemini_service import extract_images_from_xlsx
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Графік"
+        ws.append(["X", "Y"])
+        ws.append([1, 10])
+        ws.append([2, 20])
+
+        chart = BarChart()
+        chart.title = "Тестовий графік"
+        data = Reference(ws, min_col=2, min_row=1, max_row=3)
+        chart.add_data(data, titles_from_data=True)
+        ws.add_chart(chart, "C1")
+
+        file_path = os.path.join(self.temp_dir.name, "test_render.xlsx")
+        wb.save(file_path)
+
+        images = extract_images_from_xlsx(file_path)
+        if shutil.which('libreoffice') and shutil.which('pdftoppm'):
+            self.assertTrue(len(images) > 0)
+            self.assertEqual(images[0]['mime_type'], 'image/png')
+            self.assertTrue(images[0]['size_kb'] > 0)
+            self.assertTrue(len(images[0]['data']) > 0)
 
 
+class AssignmentFilesPreviewOptimizationTests(TestCase):
+    """
+    Тести для перевірки миттєвого завантаження деталей завдання з файлами
+    (без блокування запиту учня на важких конвертаціях) та фонового розігріву прев'ю.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='teacher_prev', password='password123', is_staff=True, is_superuser=True)
+        self.teacher = Teacher.objects.create(user=self.user, full_name='Іванов Іван')
+        self.class_group = ClassGroup.objects.create(grade=10, letter='Б', name='10-Б')
+        self.teacher.classes.add(self.class_group)
+        self.subject = Subject.objects.create(name='Фізика', icon='⚛️', color='#3b82f6')
+        self.teacher.subjects.add(self.subject)
+
+        self.assignment = Assignment.objects.create(
+            teacher=self.teacher,
+            subject=self.subject,
+            title='Урок 1: Закони Ньютона',
+            description='Ознайомтеся з прикріпленою презентацією.',
+            status=Assignment.STATUS_PUBLISHED,
+            published_at=timezone.now()
+        )
+        self.assignment.classes.add(self.class_group)
+
+        self.test_file = SimpleUploadedFile(
+            "physics_lesson.pptx",
+            b"PK\x03\x04fake_presentation_content",
+            content_type="application/vnd.openxmlformats-officedocument.presentationml.presentation"
+        )
+        self.assignment_file = AssignmentFile.objects.create(
+            assignment=self.assignment,
+            file=self.test_file,
+            original_name="physics_lesson.pptx"
+        )
+        self._cleanup_previews()
+        self.client = Client()
+
+    def tearDown(self):
+        self._cleanup_previews()
+
+    def _cleanup_previews(self):
+        from django.conf import settings
+        import shutil
+        if hasattr(self, 'assignment_file') and self.assignment_file and self.assignment_file.id:
+            cdir = os.path.join(settings.MEDIA_ROOT, 'previews', str(self.assignment_file.id))
+            if os.path.exists(cdir):
+                shutil.rmtree(cdir, ignore_errors=True)
+            cpdf = os.path.join(settings.MEDIA_ROOT, 'previews', f"{self.assignment_file.id}.pdf")
+            if os.path.exists(cpdf):
+                try:
+                    os.remove(cpdf)
+                except Exception:
+                    pass
+
+    def test_assignment_detail_non_blocking_instant_load(self):
+        """Сторінка деталей завдання відкривається миттєво (200 OK) і не зависає на першому відкритті."""
+        response = self.client.get(reverse('assignment_detail', args=[self.assignment.id]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'physics_lesson.pptx')
+        self.assertContains(response, 'Урок 1: Закони Ньютона')
+        # Коли слайди ще не згенеровані, показується елемент фонового завантаження та перемикач
+        self.assertContains(response, 'Підготовка інтерактивного перегляду слайдів')
+
+    def test_get_presentation_slides_non_blocking_flag(self):
+        """get_presentation_slides з wait_if_missing=False повертає пусті списки миттєво без блокування."""
+        from feed.views import get_presentation_slides
+        slide_urls, pdf_url = get_presentation_slides(self.assignment_file.id, self.assignment_file.file.path, wait_if_missing=False)
+        self.assertEqual(slide_urls, [])
+        self.assertIsNone(pdf_url)
+
+    def test_get_pdf_preview_url_non_blocking_flag(self):
+        """get_pdf_preview_url з wait_if_missing=False повертає None миттєво без блокування."""
+        from feed.views import get_pdf_preview_url
+        pdf_url = get_pdf_preview_url(self.assignment_file, wait_if_missing=False)
+        self.assertIsNone(pdf_url)
+
+    def test_copy_preview_cache_instant_duplication(self):
+        """При дублюванні завдання вже згенеровані файли прев'ю копіюються миттєво без повторної конвертації."""
+        from django.conf import settings
+        from feed.views import _copy_preview_cache
+
+        previews_root = os.path.join(settings.MEDIA_ROOT, 'previews')
+        os.makedirs(previews_root, exist_ok=True)
+
+        old_file_id = 99991
+        new_file_id = 99992
+
+        # Створюємо фіктивний кеш для old_file_id
+        old_pdf = os.path.join(previews_root, f"{old_file_id}.pdf")
+        with open(old_pdf, 'w') as f:
+            f.write("%PDF-1.4 test")
+
+        old_dir = os.path.join(previews_root, str(old_file_id))
+        os.makedirs(old_dir, exist_ok=True)
+        with open(os.path.join(old_dir, 'presentation.pdf'), 'w') as f:
+            f.write("%PDF-1.4 pres")
+        with open(os.path.join(old_dir, 'slide-1.jpg'), 'w') as f:
+            f.write("fake_jpg")
+
+        try:
+            _copy_preview_cache(old_file_id, new_file_id)
+
+            new_pdf = os.path.join(previews_root, f"{new_file_id}.pdf")
+            self.assertTrue(os.path.exists(new_pdf))
+
+            new_dir = os.path.join(previews_root, str(new_file_id))
+            self.assertTrue(os.path.exists(new_dir))
+            self.assertTrue(os.path.exists(os.path.join(new_dir, 'presentation.pdf')))
+            self.assertTrue(os.path.exists(os.path.join(new_dir, 'slide-1.jpg')))
+        finally:
+            # Очищуємо тимчасові тестові файли
+            import shutil
+            for fid in [old_file_id, new_file_id]:
+                p = os.path.join(previews_root, f"{fid}.pdf")
+                if os.path.exists(p):
+                    os.remove(p)
+                d = os.path.join(previews_root, str(fid))
+                if os.path.exists(d):
+                    shutil.rmtree(d, ignore_errors=True)
+
+    def test_prewarm_assignment_files_preview_queues_safely(self):
+        """Функція prewarm_assignment_files_preview безпечно чергує обробку файлів завдання."""
+        from feed.views import prewarm_assignment_files_preview
+        # Не викидає жодних винятків і запускає фоновий потік
+        prewarm_assignment_files_preview(self.assignment)
 
 
+class ExcelLegacyXlsSupportTests(TestCase):
+    """
+    Тести для підтримки застарілого бінарного формату Excel 97-2003 (.xls):
+    - Конвертація в HTML через xlrd без помилки openpyxl
+    - Вилучення тексту для ШІ Gemini
+    - Парсер документів для критеріїв МОН
+    - Інлайн-перегляд у представленні завдання
+    """
+
+    def setUp(self):
+        import tempfile
+        import subprocess
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.csv_path = os.path.join(self.temp_dir.name, "test_table.csv")
+        with open(self.csv_path, "w", encoding="utf-8") as f:
+            f.write("Учень,Бал,Рівень\nІваненко,11,Високий\nПетренко,8,Достатній\n")
+
+        self.xls_path = os.path.join(self.temp_dir.name, "test_table.xls")
+        # Конвертуємо CSV в справжній бінарний .xls через LibreOffice
+        res = subprocess.run(
+            ['libreoffice', '--headless', '--convert-to', 'xls', self.csv_path, '--outdir', self.temp_dir.name],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
+        if res.returncode != 0 or not os.path.exists(self.xls_path):
+            # Якщо LibreOffice зберіг з іншим іменем або помилка:
+            gen_files = glob.glob(os.path.join(self.temp_dir.name, "*.xls"))
+            if gen_files:
+                self.xls_path = gen_files[0]
+
+        self.user = User.objects.create_user(username='teacher_xls', password='password123', is_staff=True, is_superuser=True)
+        self.teacher = Teacher.objects.create(user=self.user, full_name='Вчитель Інформатики')
+        self.class_group = ClassGroup.objects.create(grade=9, letter='А', name='9-А')
+        self.teacher.classes.add(self.class_group)
+        self.subject = Subject.objects.create(name='Інформатика', icon='💻', color='#10b981')
+        self.teacher.subjects.add(self.subject)
+
+    def tearDown(self):
+        self.temp_dir.cleanup()
+
+    def test_convert_xlsx_to_html_with_xls_file(self):
+        """Перевіряємо, що convert_xlsx_to_html успішно парсить .xls без openpyxl помилки."""
+        from feed.utils import convert_xlsx_to_html
+        if not os.path.exists(self.xls_path):
+            self.skipTest("LibreOffice did not generate .xls file")
+
+        html_content, error_msg = convert_xlsx_to_html(self.xls_path)
+        self.assertIsNone(error_msg)
+        self.assertTrue(len(html_content) > 0)
+        self.assertIn("excel-table", html_content)
+        self.assertIn("Іваненко", html_content)
+        self.assertIn("Петренко", html_content)
+        # Перевірка що немає повідомлення про несумісність openpyxl
+        self.assertNotIn("openpyxl does not support", html_content)
+
+    def test_extract_text_from_excel_xls(self):
+        """Перевіряємо вилучення тексту для ШІ Gemini зі старого .xls файлу."""
+        from feed.gemini_service import extract_text_from_excel
+        if not os.path.exists(self.xls_path):
+            self.skipTest("LibreOffice did not generate .xls file")
+
+        text = extract_text_from_excel(self.xls_path)
+        self.assertIn("Іваненко", text)
+        self.assertIn("Петренко", text)
+        self.assertNotIn("Помилка читання Excel таблиці", text)
+
+    def test_document_parser_extract_from_excel_xls(self):
+        """Перевіряємо вилучення тексту парсером критеріїв МОН з бінарного .xls."""
+        from feed.document_parsers import _extract_from_excel
+        if not os.path.exists(self.xls_path):
+            self.skipTest("LibreOffice did not generate .xls file")
+
+        with open(self.xls_path, "rb") as f:
+            file_bytes = f.read()
+
+        parsed_text, ok, err = _extract_from_excel(file_bytes)
+        self.assertTrue(ok)
+        self.assertIsNone(err)
+        self.assertIn("Іваненко", parsed_text)
+        self.assertIn("Петренко", parsed_text)
+
+    def test_assignment_detail_view_renders_xls_attachment(self):
+        """Перевіряємо, що сторінка завдання з прикріпленим .xls відкривається вчителю без попередження про помилку."""
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from feed.models import Assignment, AssignmentFile
+
+        if not os.path.exists(self.xls_path):
+            self.skipTest("LibreOffice did not generate .xls file")
+
+        assignment = Assignment.objects.create(
+            title="Таблиці Excel 97-2003",
+            description="Практична робота з електронними таблицями",
+            teacher=self.teacher,
+            subject=self.subject,
+            status=Assignment.STATUS_PUBLISHED,
+            published_at=timezone.now()
+        )
+        assignment.classes.add(self.class_group)
+
+        with open(self.xls_path, "rb") as f:
+            xls_data = f.read()
+
+        af = AssignmentFile.objects.create(
+            assignment=assignment,
+            file=SimpleUploadedFile("tablytsya.xls", xls_data, content_type="application/vnd.ms-excel")
+        )
+
+        self.client.force_login(self.user)
+        response = self.client.get(reverse('assignment_detail', args=[assignment.id]))
+        self.assertEqual(response.status_code, 200)
+
+        # Переконуємося, що в контексті є прев'ю без помилки
+        files = response.context['files_with_preview']
+        self.assertEqual(len(files), 1)
+        f_info = files[0]
+        self.assertIsNone(f_info['error_preview'])
+        self.assertIsNotNone(f_info['html_preview'])
+        self.assertIn("excel-table", f_info['html_preview'])
+        self.assertIn("Іваненко", f_info['html_preview'])
 
 
+class MultiProviderAndFailoverAITests(TestCase):
+    """Тести для підтримки багатьох провайдерів ШІ, резервного API та автоматичного failover."""
 
+    def setUp(self):
+        self.user = User.objects.create_user(username='teacher_ai_test', password='password123', is_staff=True, is_superuser=True)
+        self.teacher = Teacher.objects.create(user=self.user, full_name='Оцінювач Тестовий')
+        self.class_group = ClassGroup.objects.create(grade=10, letter='Б', name='10-Б')
+        self.teacher.classes.add(self.class_group)
+        self.subject = Subject.objects.create(name='Фізика', icon='⚛️', color='#10b981')
+        self.teacher.subjects.add(self.subject)
 
+        self.assignment = Assignment.objects.create(
+            teacher=self.teacher,
+            subject=self.subject,
+            title='Закони Ньютона',
+            description='Поясніть перший закон Ньютона та наведіть приклади.',
+            status=Assignment.STATUS_PUBLISHED,
+            published_at=timezone.now()
+        )
+        self.assignment.classes.add(self.class_group)
 
+        self.submission = Submission.objects.create(
+            assignment=self.assignment,
+            first_name='Микола',
+            last_name='Петренко',
+            class_group=self.class_group,
+            teacher=self.teacher,
+            comment_student='Перший закон Ньютона — закон інерції. Приклади: рух автомобіля з вимкненим двигуном.'
+        )
 
+        self.client = Client()
+        self.client.force_login(self.user)
 
+    def test_ai_settings_config_helpers(self):
+        """Перевірка методів get_active_config, get_backup_config та has_backup_configured."""
+        settings = AISettings.get_solo()
+        settings.ai_provider = 'openai'
+        settings.api_key = 'sk-main-key'
+        settings.model_name = 'gpt-4o'
+        settings.custom_api_url = ''
 
+        settings.backup_ai_provider = 'deepseek'
+        settings.backup_api_key = 'sk-backup-key'
+        settings.backup_model_name = 'deepseek-chat'
+        settings.backup_custom_api_url = ''
 
+        settings.active_api_type = 'primary'
+        settings.auto_failover_enabled = True
+        settings.save()
 
+        self.assertTrue(settings.has_backup_configured())
 
+        # Перевірка для active_api_type == 'primary'
+        prov, key, model, url, is_b = settings.get_active_config()
+        self.assertEqual(prov, 'openai')
+        self.assertEqual(key, 'sk-main-key')
+        self.assertEqual(model, 'gpt-4o')
+        self.assertFalse(is_b)
+
+        b_prov, b_key, b_model, b_url = settings.get_backup_config()
+        self.assertEqual(b_prov, 'deepseek')
+        self.assertEqual(b_key, 'sk-backup-key')
+        self.assertEqual(b_model, 'deepseek-chat')
+
+        # Перемикаємо на 'backup'
+        settings.active_api_type = 'backup'
+        settings.save()
+
+        prov, key, model, url, is_b = settings.get_active_config()
+        self.assertEqual(prov, 'deepseek')
+        self.assertEqual(key, 'sk-backup-key')
+        self.assertTrue(is_b)
+
+        b_prov, b_key, b_model, b_url = settings.get_backup_config()
+        self.assertEqual(b_prov, 'openai')
+        self.assertEqual(b_key, 'sk-main-key')
+
+    def test_save_ai_config_multi_provider_view(self):
+        """Збереження налаштувань основного та резервного API через форму POST."""
+        post_data = {
+            'action': 'save_ai_config',
+            'is_enabled': '1',
+            'ai_provider': 'deepseek',
+            'api_key': 'sk-deepseek-main',
+            'model_name': 'deepseek-chat',
+            'custom_api_url': '',
+            'backup_ai_provider': 'groq',
+            'backup_api_key': 'gsk-groq-backup',
+            'backup_model_name': 'llama-3.3-70b-versatile',
+            'backup_custom_api_url': '',
+            'active_api_type': 'primary',
+            'auto_failover_enabled': '1',
+            'temperature': '0.3',
+            'ai_detector_tolerance_percent': '20',
+            'system_prompt': DEFAULT_NUS_SYSTEM_PROMPT
+        }
+
+        response = self.client.post(reverse('teacher_settings'), post_data)
+        self.assertEqual(response.status_code, 302)
+
+        settings = AISettings.get_solo()
+        self.assertTrue(settings.is_enabled)
+        self.assertEqual(settings.ai_provider, 'deepseek')
+        self.assertEqual(settings.api_key, 'sk-deepseek-main')
+        self.assertEqual(settings.backup_ai_provider, 'groq')
+        self.assertEqual(settings.backup_api_key, 'gsk-groq-backup')
+        self.assertEqual(settings.backup_model_name, 'llama-3.3-70b-versatile')
+        self.assertTrue(settings.auto_failover_enabled)
+        self.assertEqual(settings.active_api_type, 'primary')
+
+    def test_switch_active_api_action(self):
+        """Ручне перемикання активного API між основним та резервним."""
+        settings = AISettings.get_solo()
+        settings.active_api_type = 'primary'
+        settings.save()
+
+        # Виклик дії перемикання
+        response = self.client.post(reverse('teacher_settings'), {'action': 'switch_active_api'})
+        self.assertEqual(response.status_code, 302)
+
+        settings.refresh_from_db()
+        self.assertEqual(settings.active_api_type, 'backup')
+
+        # Повторне перемикання назад
+        response = self.client.post(reverse('teacher_settings'), {'action': 'switch_active_api'})
+        self.assertEqual(response.status_code, 302)
+
+        settings.refresh_from_db()
+        self.assertEqual(settings.active_api_type, 'primary')
+
+    @patch('feed.gemini_service._http_post_json')
+    def test_test_ai_connection_gemini_and_openai(self, mock_http):
+        """Тестування перевірки з'єднання для Gemini та OpenAI-сумісних провайдерів."""
+        from .gemini_service import test_ai_connection
+
+        # 1. Gemini успіх
+        mock_http.return_value = (200, {
+            'candidates': [{'content': {'parts': [{'text': 'ПРИВІТ СВІТ'}]}}]
+        }, 'OK')
+
+        ok, msg, model, prov = test_ai_connection(provider='gemini', api_key='AIzaTest', model_name='gemini-2.5-flash')
+        self.assertTrue(ok)
+        self.assertEqual(prov, 'gemini')
+        # gemini-2.5-flash is redirected to gemini-3.8-flash by clean_model_name
+        self.assertEqual(model, 'gemini-3.8-flash')
+
+        # 2. OpenAI успіх
+        mock_http.return_value = (200, {
+            'choices': [{'message': {'content': 'HELLO OPENAI'}}]
+        }, 'OK')
+
+        ok, msg, model, prov = test_ai_connection(provider='openai', api_key='sk-test', model_name='gpt-4o-mini')
+        self.assertTrue(ok)
+        self.assertEqual(prov, 'openai')
+        self.assertEqual(model, 'gpt-4o-mini')
+
+        # 3. Перевірка AJAX ендпоінту api_test_gemini_connection
+        resp = self.client.post(reverse('api_test_gemini_connection'), {
+            'provider': 'openai',
+            'api_key': 'sk-test',
+            'model_name': 'gpt-4o-mini'
+        })
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertTrue(data['success'])
+        self.assertEqual(data['provider'], 'openai')
+
+    @patch('feed.gemini_service.call_ai_api')
+    def test_evaluate_submission_failover_on_429(self, mock_call):
+        """Якщо основний API повертає 429, система автоматично перемикається на резервний API."""
+        settings = AISettings.get_solo()
+        settings.is_enabled = True
+        settings.ai_provider = 'gemini'
+        settings.api_key = 'AIzaPrimary'
+        settings.model_name = 'gemini-2.5-flash'
+        settings.saved_models_list = json.dumps([{"name": "gemini-2.5-flash", "priority": 1, "enabled": True}])
+        settings.backup_ai_provider = 'deepseek'
+        settings.backup_api_key = 'sk-backup-deepseek'
+        settings.backup_model_name = 'deepseek-chat'
+        settings.active_api_type = 'primary'
+        settings.auto_failover_enabled = True
+        settings.save()
+
+        # Перший виклик (gemini): 429 Rate Limit
+        # Другий виклик (failover to deepseek): 200 OK з валідним JSON
+        valid_json = json.dumps({
+            "suggested_grade": "10",
+            "level": "Високий",
+            "summary": "Відмінне пояснення першого закону Ньютона.",
+            "strengths": ["Чітке визначення", "Вдалі приклади"],
+            "weaknesses": [],
+            "feedback_comment": "Чудова робота!"
+        })
+
+        # Спроба 1 (Gemini): 429
+        # Спроба 1 повтор (Gemini): 429
+        # Спроба 2 (Failover to DeepSeek): 200 OK з валідним JSON
+        mock_call.side_effect = [
+            (429, None, "Rate limit exceeded", {}),  # Gemini attempt 0
+            (429, None, "Rate limit exceeded", {}),  # Gemini retry attempt 1
+            (200, valid_json, None, {})             # DeepSeek (Failover)
+        ]
+
+        result = evaluate_submission_with_gemini(self.submission, ai_settings=settings)
+
+        self.assertEqual(result['status'], 'success')
+        self.assertEqual(result['suggested_grade'], '10')
+
+        self.submission.refresh_from_db()
+        self.assertEqual(self.submission.ai_status, 'success')
+        self.assertEqual(self.submission.ai_suggested_grade, '10')
+        self.assertIn('Deepseek', self.submission.ai_model_used)
+
+        # Перевіряємо запис дати та причини failover
+        settings.refresh_from_db()
+        self.assertIsNotNone(settings.last_failover_at)
+        self.assertIn('Deepseek', settings.last_failover_reason)
 

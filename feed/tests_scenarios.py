@@ -11,6 +11,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.core.files.uploadedfile import SimpleUploadedFile
 import docx
+from unittest.mock import patch
 
 from feed.models import (
     Teacher, ClassGroup, Subject, Assignment, AssignmentFile,
@@ -524,7 +525,8 @@ class ComprehensiveScenariosTest(TestCase):
         resp_cal_new = self.client.get(reverse('index'), {'date': new_lesson_date.strftime('%Y-%m-%d')})
         self.assertContains(resp_cal_new, 'Оригінальне завдання')
 
-    def test_multi_class_schedule_status_and_card_aging(self):
+    @patch('django.utils.timezone.now', return_value=timezone.make_aware(datetime.datetime(2026, 9, 22, 10, 0, 0)))
+    def test_multi_class_schedule_status_and_card_aging(self, mock_now):
         """
         Тестування вимоги:
         1. Одне завдання для кількох класів з різними уроками.

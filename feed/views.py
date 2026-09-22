@@ -38,7 +38,20 @@ import json
 import zipfile
 import io
 import mimetypes
+import threading
+import tempfile
+import glob
+import shutil
+import subprocess
 from datetime import datetime, timedelta
+
+# Concurrency control for background preview generation (LibreOffice & pdftoppm)
+_PREVIEW_LOCK = threading.Lock()
+_ACTIVE_PREVIEWS = set()
+_ACTIVE_PREVIEWS_LOCK = threading.Lock()
+_PREVIEW_EVENTS = {}  # file_id -> threading.Event
+_PREVIEW_EVENTS_LOCK = threading.Lock()
+_PREVIEW_SEMAPHORE = threading.Semaphore(2)  # Limit concurrent LibreOffice conversions to protect server CPU
 
 
 from django.shortcuts import render, redirect, get_object_or_404
@@ -60,7 +73,7 @@ from .models import (
     Assignment, AssignmentFile, AssignmentLink, AssignmentYouTubeLink,
     Teacher, ClassGroup, Student, Subject,
     Submission, SubmissionComment, SubmissionActivityLog, School, log_submission_activity,
-    AISettings, DEFAULT_NUS_SYSTEM_PROMPT, DEFAULT_NUS_GR_SYSTEM_PROMPT, AICriteriaPreset, DEFAULT_TRADITIONAL_SYSTEM_PROMPT,
+    AISettings, AI_PROVIDER_CHOICES, DEFAULT_NUS_SYSTEM_PROMPT, DEFAULT_NUS_GR_SYSTEM_PROMPT, AICriteriaPreset, DEFAULT_TRADITIONAL_SYSTEM_PROMPT,
     BellSchedule, TeacherLessonSchedule, AssignmentScheduleTarget, SystemNotification,
     AssignmentRescheduleLog
 )
@@ -565,14 +578,14 @@ def assignment_detail(request, pk):
             if ext in ['.docx', '.doc']:
                 preview_type = 'office'
                 html_preview, error_preview = convert_docx_to_html(file_path)
-                pdf_preview_url = get_pdf_preview_url(af)
+                pdf_preview_url = get_pdf_preview_url(af, wait_if_missing=False)
             elif ext in ['.xlsx', '.xls']:
                 preview_type = 'office'
                 html_preview, error_preview = convert_xlsx_to_html(file_path)
             elif ext in ['.pptx', '.ppt', '.odp']:
                 preview_type = 'office'
                 html_preview, error_preview = convert_pptx_to_html(file_path)
-                slide_urls, pdf_preview_url = get_presentation_slides(af.id, file_path)
+                slide_urls, pdf_preview_url = get_presentation_slides(af.id, file_path, wait_if_missing=False)
             elif ext == '.odt':
                 preview_type = 'office'
                 html_preview, error_preview = convert_odt_to_html(file_path)
@@ -1334,6 +1347,9 @@ def assignment_create(request):
                     is_task_source_for_ai=is_task,
                 )
 
+            # Фоновий розігрів попереднього перегляду для прикріплених файлів
+            prewarm_assignment_files_preview(assignment)
+
             # Зберігаємо додаткові посилання
             for url, label in zip(request.POST.getlist('extra_link_url'), request.POST.getlist('extra_link_label')):
                 if url.strip():
@@ -1522,6 +1538,9 @@ def assignment_edit(request, pk):
                     original_name=f.name,
                     is_task_source_for_ai=is_task,
                 )
+
+            # Фоновий розігрів попереднього перегляду для нових файлів
+            prewarm_assignment_files_preview(assignment)
 
             # Оновлюємо додаткові посилання (перезаписуємо)
             assignment.additional_links.all().delete()
@@ -1733,12 +1752,16 @@ def assignment_duplicate(request, pk):
 
     # Копіюємо файли (посилання на ті самі файли, без фізичного копіювання)
     for f in original.files.all():
-        AssignmentFile.objects.create(
+        new_f = AssignmentFile.objects.create(
             assignment=duplicate,
             file=f.file,
             original_name=f.original_name,
             is_task_source_for_ai=f.is_task_source_for_ai,
         )
+        _copy_preview_cache(f.id, new_f.id)
+
+    # Розігріваємо будь-які відсутні прев'ю у фоновому режимі
+    prewarm_assignment_files_preview(duplicate)
 
     # Копіюємо додаткові посилання
     for lnk in original.additional_links.all():
@@ -2089,106 +2112,287 @@ def teacher_profile(request):
 from django.views.decorators.clickjacking import xframe_options_exempt
 
 
-def get_presentation_slides(file_id, file_path):
+def _run_libreoffice_convert(input_path, out_dir, convert_to='pdf', timeout=40):
+    """
+    Safely runs headless LibreOffice conversion with an isolated user profile
+    to prevent profile locks, collisions, and exit code 81.
+    """
+    lo_bin = shutil.which('libreoffice') or shutil.which('soffice')
+    if not lo_bin:
+        return False
+        
+    temp_profile_dir = tempfile.mkdtemp(prefix='lo_profile_')
+    try:
+        cmd = [
+            lo_bin,
+            '--headless',
+            f'-env:UserInstallation=file://{temp_profile_dir}',
+            '--convert-to', convert_to,
+            '--outdir', out_dir,
+            input_path
+        ]
+        res = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=timeout)
+        return res.returncode == 0
+    except Exception as e:
+        print(f"LibreOffice conversion error for {input_path}: {e}")
+        return False
+    finally:
+        shutil.rmtree(temp_profile_dir, ignore_errors=True)
+
+
+def _copy_preview_cache(old_file_id, new_file_id):
+    """
+    Copies or hardlinks already rendered preview files (PDF and slides) from old_file_id to new_file_id.
+    Makes assignment duplication instantaneous with 0 conversion overhead.
+    """
+    try:
+        from django.conf import settings
+        previews_root = os.path.join(settings.MEDIA_ROOT, 'previews')
+        
+        # 1. Direct PDF
+        old_pdf = os.path.join(previews_root, f"{old_file_id}.pdf")
+        new_pdf = os.path.join(previews_root, f"{new_file_id}.pdf")
+        if os.path.exists(old_pdf) and not os.path.exists(new_pdf):
+            try:
+                os.link(old_pdf, new_pdf)
+            except Exception:
+                try:
+                    shutil.copyfile(old_pdf, new_pdf)
+                except Exception:
+                    pass
+
+        # 2. Slide images dir
+        old_dir = os.path.join(previews_root, str(old_file_id))
+        new_dir = os.path.join(previews_root, str(new_file_id))
+        if os.path.isdir(old_dir) and not os.path.exists(new_dir):
+            try:
+                shutil.copytree(old_dir, new_dir)
+            except Exception:
+                pass
+    except Exception as e:
+        print(f"Error copying preview cache from {old_file_id} to {new_file_id}: {e}")
+
+
+def _do_generate_file_preview(file_id, file_path=None):
+    """
+    Performs the heavy conversion of an attached file to PDF and slide JPEGs.
+    Ensures safe, isolated execution and writes results to MEDIA_ROOT/previews/.
+    """
+    from django.conf import settings
+
+    if not file_path:
+        from .models import AssignmentFile
+        af = AssignmentFile.objects.filter(id=file_id).first()
+        if not af or not af.file:
+            return
+        try:
+            file_path = af.file.path
+        except Exception:
+            return
+
+    if not file_path or not os.path.exists(file_path):
+        return
+
+    ext = os.path.splitext(file_path)[1].lower()
+    previews_dir = os.path.join(settings.MEDIA_ROOT, 'previews')
+    os.makedirs(previews_dir, exist_ok=True)
+
+    if ext in ['.pptx', '.ppt', '.odp']:
+        cache_dir = os.path.join(previews_dir, str(file_id))
+        os.makedirs(cache_dir, exist_ok=True)
+        pdf_path = os.path.join(cache_dir, 'presentation.pdf')
+        
+        # 1. Convert to PDF if not present
+        if not os.path.exists(pdf_path):
+            success = _run_libreoffice_convert(file_path, cache_dir, convert_to='pdf', timeout=40)
+            if success:
+                base_name = os.path.splitext(os.path.basename(file_path))[0]
+                gen_pdf = os.path.join(cache_dir, base_name + '.pdf')
+                if os.path.exists(gen_pdf) and gen_pdf != pdf_path:
+                    try:
+                        os.rename(gen_pdf, pdf_path)
+                    except Exception:
+                        pass
+                elif not os.path.exists(pdf_path):
+                    pdfs = [p for p in glob.glob(os.path.join(cache_dir, '*.pdf')) if p != pdf_path]
+                    if pdfs:
+                        try:
+                            os.rename(pdfs[0], pdf_path)
+                        except Exception:
+                            pass
+
+        # Also copy/link presentation.pdf to previews/<file_id>.pdf
+        if os.path.exists(pdf_path):
+            direct_pdf = os.path.join(previews_dir, f"{file_id}.pdf")
+            if not os.path.exists(direct_pdf):
+                try:
+                    os.link(pdf_path, direct_pdf)
+                except Exception:
+                    try:
+                        shutil.copyfile(pdf_path, direct_pdf)
+                    except Exception:
+                        pass
+
+            # 2. Generate slide JPEGs if pdftoppm is available
+            slide_files = sorted(glob.glob(os.path.join(cache_dir, 'slide-*.jpg')))
+            if not slide_files and shutil.which('pdftoppm'):
+                prefix = os.path.join(cache_dir, 'slide')
+                cmd = ['pdftoppm', '-jpeg', '-r', '130', pdf_path, prefix]
+                try:
+                    subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=40)
+                except Exception:
+                    pass
+
+    elif ext in ['.docx', '.doc', '.odt', '.xlsx', '.xls']:
+        pdf_path = os.path.join(previews_dir, f"{file_id}.pdf")
+        if not os.path.exists(pdf_path):
+            try:
+                with tempfile.TemporaryDirectory(dir=previews_dir, prefix=f"conv_{file_id}_") as conv_tmp:
+                    success = _run_libreoffice_convert(file_path, conv_tmp, convert_to='pdf', timeout=35)
+                    if success:
+                        gen_pdfs = glob.glob(os.path.join(conv_tmp, '*.pdf'))
+                        if gen_pdfs:
+                            try:
+                                shutil.move(gen_pdfs[0], pdf_path)
+                            except Exception:
+                                pass
+            except Exception:
+                pass
+
+
+def prewarm_single_file_preview(file_id, file_path=None):
+    """
+    Pre-generates PDF and presentation slide previews in a background daemon thread.
+    Thread-safe, avoids duplicate concurrent work for the same file_id.
+    """
+    if not file_id:
+        return
+
+    with _PREVIEW_EVENTS_LOCK:
+        if file_id in _PREVIEW_EVENTS:
+            return  # Already queued or running
+        evt = threading.Event()
+        _PREVIEW_EVENTS[file_id] = evt
+
+    def _worker():
+        try:
+            with _PREVIEW_SEMAPHORE:
+                _do_generate_file_preview(file_id, file_path)
+        except Exception as e:
+            print(f"Error in preview prewarm for file {file_id}: {e}")
+        finally:
+            evt.set()
+            with _PREVIEW_EVENTS_LOCK:
+                _PREVIEW_EVENTS.pop(file_id, None)
+
+    t = threading.Thread(target=_worker, name=f"prewarm_preview_{file_id}", daemon=True)
+    t.start()
+
+
+def prewarm_assignment_files_preview(assignment):
+    """
+    Pre-warms previews for all eligible attached files in an assignment in background threads.
+    Eligible files: .pptx, .ppt, .odp, .docx, .doc, .odt, .xlsx, .xls
+    """
+    if not assignment:
+        return
+    try:
+        files = list(assignment.files.all())
+    except Exception:
+        files = []
+
+    for af in files:
+        if not af.file:
+            continue
+        ext = af.get_extension()
+        if ext in ['.pptx', '.ppt', '.odp', '.docx', '.doc', '.odt', '.xlsx', '.xls']:
+            try:
+                fpath = af.file.path
+                if os.path.exists(fpath):
+                    prewarm_single_file_preview(af.id, fpath)
+            except Exception:
+                pass
+
+
+def _wait_for_preview(file_id, timeout=30):
+    """If a background prewarm job is currently running for file_id, wait for it."""
+    evt = None
+    with _PREVIEW_EVENTS_LOCK:
+        evt = _PREVIEW_EVENTS.get(file_id)
+    if evt:
+        evt.wait(timeout=timeout)
+
+
+def get_presentation_slides(file_id, file_path, wait_if_missing=True):
     """
     Генерує або дістає з кешу високоякісні зображення слайдів презентації (.pptx, .ppt, .odp)
     та PDF версію через headless LibreOffice + pdftoppm.
     Повертає (slide_urls, pdf_url).
     """
-    import os
-    import glob
-    import shutil
-    import subprocess
     from django.conf import settings
-    
+
     cache_dir = os.path.join(settings.MEDIA_ROOT, 'previews', str(file_id))
-    os.makedirs(cache_dir, exist_ok=True)
     pdf_path = os.path.join(cache_dir, 'presentation.pdf')
-    
-    # 1. Перевіряємо чи є вже PDF
-    if not os.path.exists(pdf_path):
-        try:
-            if shutil.which('libreoffice') or shutil.which('soffice'):
-                cmd = ['libreoffice', '--headless', '--convert-to', 'pdf', '--outdir', cache_dir, file_path]
-                subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=40)
-                base_name = os.path.splitext(os.path.basename(file_path))[0]
-                gen_pdf = os.path.join(cache_dir, base_name + '.pdf')
-                if os.path.exists(gen_pdf) and gen_pdf != pdf_path:
-                    os.rename(gen_pdf, pdf_path)
-        except Exception:
-            pass
-            
+    slide_files = sorted(glob.glob(os.path.join(cache_dir, 'slide-*.jpg')))
+
+    # Якщо слайди вже скомпільовані і є на диску -> миттєво віддаємо
+    if slide_files and os.path.exists(pdf_path):
+        media_url = settings.MEDIA_URL.rstrip('/')
+        slide_urls = [f'{media_url}/previews/{file_id}/{os.path.basename(p)}' for p in slide_files]
+        pdf_url = f'{media_url}/previews/{file_id}/presentation.pdf'
+        return slide_urls, pdf_url
+
+    # Якщо відкладений режим (наприклад під час першого рендеру сторінки завдання учню):
+    if not wait_if_missing:
+        prewarm_single_file_preview(file_id, file_path)
+        return [], None
+
+    # Якщо викликано з очікуванням (AJAX запит за слайдами або тест):
+    _wait_for_preview(file_id, timeout=35)
+
+    slide_files = sorted(glob.glob(os.path.join(cache_dir, 'slide-*.jpg')))
+    if not (slide_files and os.path.exists(pdf_path)):
+        with _PREVIEW_SEMAPHORE:
+            _do_generate_file_preview(file_id, file_path)
+
+    slide_files = sorted(glob.glob(os.path.join(cache_dir, 'slide-*.jpg')))
     if not os.path.exists(pdf_path):
         return [], None
 
-    # Також створюємо прямий PDF для перегляду у previews/<file_id>.pdf
-    direct_pdf = os.path.join(settings.MEDIA_ROOT, 'previews', f"{file_id}.pdf")
-    if not os.path.exists(direct_pdf):
-        try:
-            shutil.copyfile(pdf_path, direct_pdf)
-        except Exception:
-            pass
-        
-    # 2. Перевіряємо чи є вже зображення слайдів
-    slide_files = sorted(glob.glob(os.path.join(cache_dir, 'slide-*.jpg')))
-    if not slide_files:
-        try:
-            if shutil.which('pdftoppm'):
-                prefix = os.path.join(cache_dir, 'slide')
-                cmd = ['pdftoppm', '-jpeg', '-r', '130', pdf_path, prefix]
-                subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=40)
-                slide_files = sorted(glob.glob(os.path.join(cache_dir, 'slide-*.jpg')))
-        except Exception:
-            pass
-            
     media_url = settings.MEDIA_URL.rstrip('/')
     slide_urls = [f'{media_url}/previews/{file_id}/{os.path.basename(p)}' for p in slide_files]
     pdf_url = f'{media_url}/previews/{file_id}/presentation.pdf'
     return slide_urls, pdf_url
 
 
-def get_pdf_preview_url(file_obj):
+def get_pdf_preview_url(file_obj, wait_if_missing=True):
     """
     Конвертує pptx, docx, або xlsx у PDF за допомогою headless LibreOffice, якщо його ще немає в кеші.
-    Повертає URL до PDF файлу або None у разі помилки.
+    Повертає URL до PDF файлу або None у разі помилки чи асинхронного режиму.
     """
-    import os
-    import subprocess
     from django.conf import settings
-    
+    from django.urls import reverse
+
     previews_dir = os.path.join(settings.MEDIA_ROOT, 'previews')
-    os.makedirs(previews_dir, exist_ok=True)
-    
     pdf_filename = f"{file_obj.id}.pdf"
     pdf_path = os.path.join(previews_dir, pdf_filename)
-    
+
     if os.path.exists(pdf_path):
-        from django.urls import reverse
         return reverse('file_view', args=[file_obj.id]) + "?preview_pdf=1"
-        
-    try:
-        # Запускаємо LibreOffice для конвертації
-        cmd = [
-            'libreoffice',
-            '--headless',
-            '--convert-to', 'pdf',
-            '--outdir', previews_dir,
-            file_obj.file.path
-        ]
-        subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True, timeout=20)
-        
-        # Отримуємо назву оригінального файлу та міняємо розширення на .pdf
-        base_name = os.path.basename(file_obj.file.path)
-        raw_pdf_name = os.path.splitext(base_name)[0] + '.pdf'
-        raw_pdf_path = os.path.join(previews_dir, raw_pdf_name)
-        
-        if os.path.exists(raw_pdf_path):
-            os.rename(raw_pdf_path, pdf_path)
-            from django.urls import reverse
-            return reverse('file_view', args=[file_obj.id]) + "?preview_pdf=1"
-    except Exception as e:
-        print(f"Error converting file {file_obj.id} to PDF preview: {str(e)}")
-        
+
+    if not wait_if_missing:
+        prewarm_single_file_preview(file_obj.id, file_obj.file.path if file_obj.file else None)
+        return None
+
+    # Очікуємо фоновий процес або генеруємо
+    _wait_for_preview(file_obj.id, timeout=30)
+    if not os.path.exists(pdf_path):
+        with _PREVIEW_SEMAPHORE:
+            _do_generate_file_preview(file_obj.id, file_obj.file.path if file_obj.file else None)
+
+    if os.path.exists(pdf_path):
+        return reverse('file_view', args=[file_obj.id]) + "?preview_pdf=1"
+
     return None
 
 
@@ -2304,9 +2508,29 @@ def file_preview(request, file_id):
     file_obj = get_object_or_404(AssignmentFile, pk=file_id)
     ext = file_obj.get_extension()
 
-    
-    # Спочатку пробуємо якісну конвертацію у PDF через LibreOffice
-    if ext in {'.pptx', '.ppt', '.docx', '.doc', '.xlsx', '.xls'}:
+    # Для презентацій: спочатку перевіряємо наявність слайдів (JPEG), потім PDF
+    if ext in {'.pptx', '.ppt', '.odp'}:
+        slide_urls, pdf_url = get_presentation_slides(file_obj.id, file_obj.file.path if file_obj.file else None)
+        if slide_urls:
+            return JsonResponse({
+                'type': 'slides',
+                'slides': slide_urls,
+                'count': len(slide_urls),
+                'pdf_url': pdf_url
+            })
+        # Слайди ще не готові — перевіряємо PDF як fallback
+        pdf_url_direct = get_pdf_preview_url(file_obj, wait_if_missing=False)
+        if pdf_url_direct:
+            return JsonResponse({
+                'type': 'url',
+                'url': request.build_absolute_uri(pdf_url_direct),
+                'file_type': 'pdf'
+            })
+        # Нічого не готово ще — повертаємо порожню відповідь щоб polling продовжувався
+        return JsonResponse({'type': 'pending'})
+
+    # Для Word/Excel — спочатку пробуємо PDF через LibreOffice
+    if ext in {'.docx', '.doc', '.xlsx', '.xls'}:
         pdf_url = get_pdf_preview_url(file_obj)
         if pdf_url:
             return JsonResponse({
@@ -2314,7 +2538,8 @@ def file_preview(request, file_id):
                 'url': request.build_absolute_uri(pdf_url),
                 'file_type': 'pdf'
             })
-            
+
+    
     # Резервна обробка (fallback), якщо LibreOffice не зміг згенерувати PDF
     if ext == '.docx':
         try:
@@ -2333,37 +2558,17 @@ def file_preview(request, file_id):
                 'message': f'Помилка конвертації файлу Word: {str(e)}'
             })
 
-    elif ext == '.xlsx':
+    elif ext in ['.xlsx', '.xls']:
         try:
-            import openpyxl
-            wb = openpyxl.load_workbook(file_obj.file.path, read_only=True, data_only=True)
-            html = []
-            for sheet_name in wb.sheetnames[:3]:
-                sheet = wb[sheet_name]
-                html.append(f"<h3 style='margin-top:20px; margin-bottom:10px; color:var(--color-primary); text-align:left;'>📊 Аркуш: {sheet_name}</h3>")
-                html.append("<div style='overflow-x:auto; width:100%; border-radius:8px; border:1px solid var(--color-border); margin-bottom:20px;'><table style='width:100%; border-collapse:collapse; font-size:13px; background:var(--color-surface);'>")
-                
-                for r_idx, row in enumerate(sheet.iter_rows(values_only=True)):
-                    if r_idx > 100:
-                        html.append("<tr><td colspan='100' style='text-align:center; color:var(--color-text-muted); padding:8px;'>... відображено перші 100 рядків ...</td></tr>")
-                        break
-                    if not any(row):
-                        continue
-                        
-                    html.append("<tr style='border-bottom:1px solid var(--color-border);'>")
-                    for cell_value in row:
-                        val = str(cell_value) if cell_value is not None else ""
-                        if r_idx == 0:
-                            html.append(f"<th style='border-right:1px solid var(--color-border); padding:8px; background:var(--color-bg-secondary); font-weight:600; text-align:left;'>{val}</th>")
-                        else:
-                            html.append(f"<td style='border-right:1px solid var(--color-border); padding:8px; text-align:left;'>{val}</td>")
-                    html.append("</tr>")
-                html.append("</table></div>")
-            
-            styled_html = "".join(html)
+            html_content, err_msg = convert_xlsx_to_html(file_obj.file.path, max_rows=100)
+            if html_content:
+                return JsonResponse({
+                    'type': 'html',
+                    'content': html_content
+                })
             return JsonResponse({
-                'type': 'html',
-                'content': styled_html
+                'type': 'error',
+                'message': err_msg or 'Помилка конвертації таблиці Excel'
             })
         except Exception as e:
             return JsonResponse({
@@ -2371,28 +2576,7 @@ def file_preview(request, file_id):
                 'message': f'Помилка конвертації таблиці Excel: {str(e)}'
             })
 
-    elif ext in ['.pptx', '.ppt', '.odp']:
-        try:
-            slide_urls, pdf_url = get_presentation_slides(file_obj.id, file_obj.file.path)
-            if slide_urls:
-                return JsonResponse({
-                    'type': 'slides',
-                    'slides': slide_urls,
-                    'count': len(slide_urls),
-                    'pdf_url': pdf_url
-                })
-            else:
-                from .utils import convert_pptx_to_html
-                h, err = convert_pptx_to_html(file_obj.file.path)
-                return JsonResponse({
-                    'type': 'html',
-                    'content': h or f"Помилка конвертації: {err}"
-                })
-        except Exception as e:
-            return JsonResponse({
-                'type': 'error',
-                'message': f'Помилка обробки презентації: {str(e)}'
-            })
+    # Примітка: .pptx, .ppt, .odp вже оброблені на початку функції (ранній return)
 
     # 4. Обробка Scratch 3 (.sb3) проєктів
     elif ext == '.sb3':
@@ -5830,9 +6014,20 @@ def teacher_settings_view(request):
             return redirect(f"{reverse('teacher_settings')}?tab=environment")
 
         # ── 3. ДІЇ ШТУЧНОГО ІНТЕЛЕКТУ ТА ПРІОРИТЕТІВ МОДЕЛЕЙ ─────────────────
-        elif action == 'save_ai_config' or (not action and ('api_key' in request.POST or 'temperature' in request.POST or 'system_prompt' in request.POST or 'ai_detector_tolerance_percent' in request.POST)):
+        elif action == 'save_ai_config' or (not action and ('api_key' in request.POST or 'temperature' in request.POST or 'system_prompt' in request.POST or 'ai_detector_tolerance_percent' in request.POST or 'backup_api_key' in request.POST)):
+            ai_provider = request.POST.get('ai_provider', 'gemini').strip()
             api_key = request.POST.get('api_key', '').strip()
             model_name = request.POST.get('model_name', '').strip()
+            custom_api_url = request.POST.get('custom_api_url', '').strip()
+
+            backup_ai_provider = request.POST.get('backup_ai_provider', 'gemini').strip()
+            backup_api_key = request.POST.get('backup_api_key', '').strip()
+            backup_model_name = request.POST.get('backup_model_name', '').strip()
+            backup_custom_api_url = request.POST.get('backup_custom_api_url', '').strip()
+
+            active_api_type = request.POST.get('active_api_type', 'primary').strip()
+            auto_failover_enabled = bool(request.POST.get('auto_failover_enabled'))
+
             system_prompt = request.POST.get('system_prompt', DEFAULT_NUS_SYSTEM_PROMPT).strip()
             raw_temp = request.POST.get('temperature', '0.2')
             try:
@@ -5842,10 +6037,22 @@ def teacher_settings_view(request):
             is_enabled = bool(request.POST.get('is_enabled'))
             tolerance_val = request.POST.get('ai_detector_tolerance_percent')
 
+            ai_settings.ai_provider = ai_provider or 'gemini'
             ai_settings.api_key = api_key
             if model_name:
                 ai_settings.model_name = model_name
                 ai_settings.add_saved_model(model_name)
+            ai_settings.custom_api_url = custom_api_url
+
+            ai_settings.backup_ai_provider = backup_ai_provider or 'gemini'
+            ai_settings.backup_api_key = backup_api_key
+            ai_settings.backup_model_name = backup_model_name
+            ai_settings.backup_custom_api_url = backup_custom_api_url
+
+            if active_api_type in ['primary', 'backup']:
+                ai_settings.active_api_type = active_api_type
+            ai_settings.auto_failover_enabled = auto_failover_enabled
+
             ai_settings.system_prompt = system_prompt
             ai_settings.temperature = temperature_val
             ai_settings.is_enabled = is_enabled
@@ -5855,7 +6062,20 @@ def teacher_settings_view(request):
                 except (ValueError, TypeError):
                     pass
             ai_settings.save()
-            messages.success(request, "Параметри Google Gemini AI успішно збережено! 🤖")
+            messages.success(request, "Параметри модуля ШІ (включаючи резервний API та провайдерів) успішно збережено! 🤖")
+            if request.path == reverse('ai_settings'):
+                return redirect('ai_settings')
+            return redirect(f"{reverse('teacher_settings')}?tab=ai")
+
+        elif action == 'switch_active_api':
+            target_api = request.POST.get('target_api', '').strip()
+            if target_api in ['primary', 'backup']:
+                ai_settings.active_api_type = target_api
+            else:
+                ai_settings.active_api_type = 'backup' if ai_settings.active_api_type == 'primary' else 'primary'
+            ai_settings.save(update_fields=['active_api_type', 'updated_at'])
+            target_title = "Основний API" if ai_settings.active_api_type == 'primary' else "Резервний API"
+            messages.success(request, f"Активний API успішно перемкнуто на: {target_title}! 🔄")
             if request.path == reverse('ai_settings'):
                 return redirect('ai_settings')
             return redirect(f"{reverse('teacher_settings')}?tab=ai")
@@ -6126,6 +6346,7 @@ def teacher_settings_view(request):
         'bell_schedules': BellSchedule.objects.all().order_by('lesson_number'),
         'env_stats': env_stats,
         'ai_settings': ai_settings,
+        'ai_providers': AI_PROVIDER_CHOICES,
         'saved_models': saved_models,
         'models_with_priority': models_with_priority,
         'active_fallback_chain': active_fallback_chain,
@@ -6168,17 +6389,25 @@ def ai_settings_view(request):
 @require_POST
 def api_test_gemini_connection(request):
     """
-    AJAX endpoint для перевірки валідності API ключа Google Gemini.
+    AJAX endpoint для перевірки валідності API ключа будь-якого ШІ-провайдера (Gemini, OpenAI, DeepSeek тощо).
     """
-    from .gemini_service import test_gemini_connection
+    from .gemini_service import test_ai_connection
+    provider = request.POST.get('provider', '').strip()
     api_key = request.POST.get('api_key', '').strip()
     model_name = request.POST.get('model_name', '').strip()
+    custom_url = request.POST.get('custom_url', '').strip()
 
-    success, message, model_used = test_gemini_connection(api_key=api_key, model_name=model_name)
+    success, message, model_used, prov_used = test_ai_connection(
+        provider=provider,
+        api_key=api_key,
+        model_name=model_name,
+        custom_url=custom_url
+    )
     return JsonResponse({
         'success': success,
         'message': message,
-        'model': model_used
+        'model': model_used,
+        'provider': prov_used
     })
 
 

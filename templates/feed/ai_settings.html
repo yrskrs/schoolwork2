@@ -144,7 +144,7 @@
                                             </button>
                                         </form>
                                         {% endif %}
-                                        <button type="button" class="btn btn-secondary btn-sm" onclick="testModelDirect('{{ ms.name }}')" style="font-size:11px;padding:2px 6px;" title="Протестувати з'єднання з цією моделлю">
+                                        <button type="button" class="btn btn-secondary btn-sm" onclick="testModelDirect('{{ ms.name }}', this)" style="font-size:11px;padding:2px 6px;" title="Протестувати з'єднання з цією моделлю">
                                             🧪 Тест
                                         </button>
                                         {% if ms.is_saved and not ms.is_active %}
@@ -199,11 +199,36 @@
             <form method="POST" id="ai-settings-form">
                 {% csrf_token %}
 
-                <!-- Блок 1: API Ключ, Активна Модель та Креативність -->
+                <!-- Блок 1: API Ключ, Резервний API, Вибір провайдерів та Failover -->
                 <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:24px;margin-bottom:20px;box-shadow:0 2px 8px rgba(0,0,0,0.02);">
-                    <h2 style="font-size:1.15rem;font-weight:800;margin:0 0 16px;color:var(--color-text-primary);display:flex;align-items:center;gap:8px;">
-                        <span>🔑</span> <span>Параметри підключення Google Gemini API</span>
-                    </h2>
+                    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:16px;">
+                        <h2 style="font-size:1.15rem;font-weight:800;margin:0;color:var(--color-text-primary);display:flex;align-items:center;gap:8px;">
+                            <span>🔑</span> <span>Параметри підключення ШІ (Google Gemini, OpenAI, DeepSeek та інші)</span>
+                        </h2>
+
+                        <!-- Швидкий перемикач активного API -->
+                        <div style="display:flex;align-items:center;gap:10px;background:var(--color-bg-secondary);padding:6px 14px;border-radius:var(--radius-md);border:1px solid var(--color-border);">
+                            <span style="font-size:12px;font-weight:700;color:var(--color-text-secondary);">Активний API:</span>
+                            {% if ai_settings.active_api_type == 'backup' %}
+                                <span class="badge" style="background:#f59e0b;color:#fff;font-weight:800;font-size:12px;padding:3px 9px;">🛡️ Резервний</span>
+                            {% else %}
+                                <span class="badge" style="background:#10b981;color:#fff;font-weight:800;font-size:12px;padding:3px 9px;">⚡ Основний</span>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <!-- Повідомлення про останній failover -->
+                    {% if ai_settings.last_failover_at %}
+                    <div style="background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);border-radius:var(--radius-md);padding:10px 14px;margin-bottom:18px;display:flex;align-items:center;gap:10px;font-size:13px;color:#b45309;">
+                        <span style="font-size:18px;">⚡</span>
+                        <div style="flex:1;">
+                            <strong>Останнє автоматичне перемикання:</strong> {{ ai_settings.last_failover_at|date:"d.m.Y H:i" }}
+                            {% if ai_settings.last_failover_reason %}
+                            <div style="font-size:12px;margin-top:2px;color:var(--color-text-secondary);">{{ ai_settings.last_failover_reason }}</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endif %}
 
                     <div style="display:grid;grid-template-columns:1fr;gap:16px;">
                         
@@ -215,45 +240,160 @@
                             </label>
                         </div>
 
-                        <!-- Поле API ключа -->
-                        <div class="form-group" style="margin:0;">
-                            <label for="api_key" class="form-label" style="font-weight:700;display:flex;justify-content:space-between;align-items:center;">
-                                <span>Google Gemini API Key <span style="color:#ef4444">*</span></span>
-                                <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" style="font-size:12px;color:var(--color-primary);font-weight:600;text-decoration:none;">
-                                    Отримати безкоштовний ключ в Google AI Studio ↗
-                                </a>
-                            </label>
-                            <div style="position:relative;display:flex;gap:8px;">
-                                <input type="password" name="api_key" id="api_key" value="{{ ai_settings.api_key }}"
-                                       placeholder="AIzaSy..." class="form-input" style="flex:1;font-family:monospace;font-size:14px;">
-                                <button type="button" class="btn btn-secondary btn-sm" onclick="toggleKeyVisibility()" style="padding:0 12px;" title="Показати/приховати ключ">
-                                    👁️
-                                </button>
-                                <button type="button" class="btn btn-secondary btn-sm" id="btn-test-conn" onclick="testConnection()" style="font-weight:700;white-space:nowrap;padding:0 16px;">
-                                    🧪 Перевірити з'єднання
-                                </button>
-                            </div>
-                            <div id="conn-test-result" style="display:none;margin-top:8px;padding:8px 12px;border-radius:var(--radius-sm);font-size:13px;"></div>
-                        </div>
+                        <!-- СІТКА КАРТОК: ОСНОВНИЙ API ТА РЕЗЕРВНИЙ API -->
+                        <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(360px, 1fr));gap:20px;">
 
-                        <!-- Вибір моделі та температура -->
-                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
-                            <div class="form-group" style="margin:0;">
-                                <label for="model_name" class="form-label" style="font-weight:700;">
-                                    Активна модель Gemini:
-                                </label>
-                                <div style="display:flex;gap:6px;">
-                                    <select name="model_name" id="model_name" class="form-input" style="font-family:monospace;font-weight:700;font-size:13px;">
-                                        {% for m in saved_models %}
-                                        <option value="{{ m }}" {% if ai_settings.model_name == m %}selected{% endif %}>{{ m }}</option>
-                                        {% endfor %}
+                            <!-- ОСНОВНИЙ API -->
+                            <div style="background:var(--color-background);border:2px solid {% if ai_settings.active_api_type == 'primary' %}var(--color-primary){% else %}var(--color-border){% endif %};border-radius:var(--radius-md);padding:18px;">
+                                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                                    <h3 style="margin:0;font-size:15px;font-weight:800;color:var(--color-text-primary);display:flex;align-items:center;gap:6px;">
+                                        <span>⚡</span> <span>Основний API</span>
+                                    </h3>
+                                    {% if ai_settings.active_api_type == 'primary' %}
+                                    <span class="badge" style="background:#10b981;color:#fff;font-weight:800;font-size:11px;">🟢 Зараз активний</span>
+                                    {% endif %}
+                                </div>
+
+                                <div class="form-group mb-3">
+                                    <label for="ai_provider" class="form-label" style="font-weight:700;font-size:12.5px;">Провайдер ШІ:</label>
+                                    <select name="ai_provider" id="ai_provider" class="form-input" style="font-weight:700;" onchange="updateProviderHints('primary')">
+                                        <option value="gemini" {% if ai_settings.ai_provider == 'gemini' %}selected{% endif %}>Google Gemini AI (Офіційний)</option>
+                                        <option value="openai" {% if ai_settings.ai_provider == 'openai' %}selected{% endif %}>OpenAI (ChatGPT, GPT-4o, GPT-4o-mini)</option>
+                                        <option value="deepseek" {% if ai_settings.ai_provider == 'deepseek' %}selected{% endif %}>DeepSeek AI (DeepSeek-V3 / R1)</option>
+                                        <option value="groq" {% if ai_settings.ai_provider == 'groq' %}selected{% endif %}>Groq Cloud (Llama 3.3, Mixtral)</option>
+                                        <option value="openrouter" {% if ai_settings.ai_provider == 'openrouter' %}selected{% endif %}>OpenRouter (Всі моделі в одному API)</option>
+                                        <option value="custom" {% if ai_settings.ai_provider == 'custom' %}selected{% endif %}>Власний API / Локальна Ollama (OpenAI-сумісний)</option>
                                     </select>
                                 </div>
-                                <div style="font-size:11px;color:var(--color-text-muted);margin-top:4px;">
-                                    Виберіть зі збережених або додайте нову в списку вище.
+
+                                <div class="form-group mb-3">
+                                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+                                        <label for="api_key" class="form-label" style="font-weight:700;font-size:12.5px;margin:0;">Основний API Key:</label>
+                                        <a id="primary-key-link" href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" style="font-size:11.5px;color:var(--color-primary);font-weight:600;text-decoration:none;">Отримати ключ ↗</a>
+                                    </div>
+                                    <div style="position:relative;display:flex;gap:6px;">
+                                        <input type="password" name="api_key" id="api_key" value="{{ ai_settings.api_key }}"
+                                               placeholder="Введіть API ключ..." class="form-input" style="flex:1;font-family:monospace;font-size:13px;">
+                                        <button type="button" class="btn btn-secondary btn-sm" onclick="toggleKeyVisibility('api_key')" style="padding:0 10px;" title="Показати/приховати">👁️</button>
+                                        <button type="button" class="btn btn-secondary btn-sm" id="btn-test-primary" onclick="testConnection('primary')" style="font-weight:700;white-space:nowrap;padding:0 12px;font-size:12px;">🧪 Тест</button>
+                                    </div>
+                                    <div id="primary-test-result" style="display:none;margin-top:6px;padding:6px 10px;border-radius:var(--radius-sm);font-size:12px;"></div>
+                                </div>
+
+                                <div class="form-group mb-3">
+                                    <label for="model_name" class="form-label" style="font-weight:700;font-size:12.5px;">Основна модель:</label>
+                                    <input type="text" name="model_name" id="model_name" value="{{ ai_settings.model_name|default:'gemini-3.6-flash' }}"
+                                           list="primary-models-datalist" class="form-input" style="font-family:monospace;font-weight:700;font-size:13px;">
+                                    <datalist id="primary-models-datalist">
+                                        <option value="gemini-3.6-flash">Google Gemini 3.6 Flash (Рекомендована)</option>
+                                        <option value="gemini-flash-latest">Google Gemini Flash Latest</option>
+                                        <option value="gemini-3-flash-preview">Google Gemini 3 Flash Preview</option>
+                                        <option value="gemini-3.1-flash-lite-preview">Google Gemini 3.1 Flash Lite</option>
+                                        <option value="gemini-3.1-pro-preview">Google Gemini 3.1 Pro Preview</option>
+                                        <option value="gpt-4o-mini">OpenAI GPT-4o-mini</option>
+                                        <option value="gpt-4o">OpenAI GPT-4o</option>
+                                        <option value="deepseek-chat">DeepSeek Chat (V3)</option>
+                                        <option value="llama-3.3-70b-versatile">Groq Llama 3.3 70B</option>
+                                    </datalist>
+                                </div>
+
+                                <div class="form-group mb-0" id="primary-url-group" style="{% if ai_settings.ai_provider != 'custom' %}display:none;{% endif %}">
+                                    <label for="custom_api_url" class="form-label" style="font-weight:700;font-size:12.5px;">Base URL (Custom / Ollama):</label>
+                                    <input type="url" name="custom_api_url" id="custom_api_url" value="{{ ai_settings.custom_api_url }}"
+                                           placeholder="http://localhost:11434/v1" class="form-input" style="font-family:monospace;font-size:12.5px;">
                                 </div>
                             </div>
 
+                            <!-- РЕЗЕРВНИЙ API (FAILOVER) -->
+                            <div style="background:var(--color-background);border:2px solid {% if ai_settings.active_api_type == 'backup' %}#f59e0b{% else %}var(--color-border){% endif %};border-radius:var(--radius-md);padding:18px;">
+                                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                                    <h3 style="margin:0;font-size:15px;font-weight:800;color:var(--color-text-primary);display:flex;align-items:center;gap:6px;">
+                                        <span>🛡️</span> <span>Резервний API (Failover)</span>
+                                    </h3>
+                                    {% if ai_settings.active_api_type == 'backup' %}
+                                    <span class="badge" style="background:#f59e0b;color:#fff;font-weight:800;font-size:11px;">🟢 Зараз активний</span>
+                                    {% elif ai_settings.backup_api_key %}
+                                    <span class="badge" style="background:rgba(16,185,129,0.15);color:#059669;font-weight:800;font-size:11px;">✓ Налаштовано</span>
+                                    {% else %}
+                                    <span class="badge" style="background:var(--color-bg-secondary);color:var(--color-text-muted);font-weight:700;font-size:11px;">Не задано</span>
+                                    {% endif %}
+                                </div>
+
+                                <div class="form-group mb-3">
+                                    <label for="backup_ai_provider" class="form-label" style="font-weight:700;font-size:12.5px;">Резервний провайдер:</label>
+                                    <select name="backup_ai_provider" id="backup_ai_provider" class="form-input" style="font-weight:700;" onchange="updateProviderHints('backup')">
+                                        <option value="gemini" {% if ai_settings.backup_ai_provider == 'gemini' %}selected{% endif %}>Google Gemini AI (Офіційний)</option>
+                                        <option value="openai" {% if ai_settings.backup_ai_provider == 'openai' %}selected{% endif %}>OpenAI (ChatGPT, GPT-4o, GPT-4o-mini)</option>
+                                        <option value="deepseek" {% if ai_settings.backup_ai_provider == 'deepseek' %}selected{% endif %}>DeepSeek AI (DeepSeek-V3 / R1)</option>
+                                        <option value="groq" {% if ai_settings.backup_ai_provider == 'groq' %}selected{% endif %}>Groq Cloud (Llama 3.3, Mixtral)</option>
+                                        <option value="openrouter" {% if ai_settings.backup_ai_provider == 'openrouter' %}selected{% endif %}>OpenRouter (Всі моделі в одному API)</option>
+                                        <option value="custom" {% if ai_settings.backup_ai_provider == 'custom' %}selected{% endif %}>Власний API / Локальна Ollama (OpenAI-сумісний)</option>
+                                    </select>
+                                </div>
+
+                                <div class="form-group mb-3">
+                                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+                                        <label for="backup_api_key" class="form-label" style="font-weight:700;font-size:12.5px;margin:0;">Резервний API Key:</label>
+                                        <a id="backup-key-link" href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" style="font-size:11.5px;color:var(--color-primary);font-weight:600;text-decoration:none;">Отримати ключ ↗</a>
+                                    </div>
+                                    <div style="position:relative;display:flex;gap:6px;">
+                                        <input type="password" name="backup_api_key" id="backup_api_key" value="{{ ai_settings.backup_api_key }}"
+                                               placeholder="Введіть резервний API ключ..." class="form-input" style="flex:1;font-family:monospace;font-size:13px;">
+                                        <button type="button" class="btn btn-secondary btn-sm" onclick="toggleKeyVisibility('backup_api_key')" style="padding:0 10px;" title="Показати/приховати">👁️</button>
+                                        <button type="button" class="btn btn-secondary btn-sm" id="btn-test-backup" onclick="testConnection('backup')" style="font-weight:700;white-space:nowrap;padding:0 12px;font-size:12px;">🧪 Тест</button>
+                                    </div>
+                                    <div id="backup-test-result" style="display:none;margin-top:6px;padding:6px 10px;border-radius:var(--radius-sm);font-size:12px;"></div>
+                                </div>
+
+                                <div class="form-group mb-3">
+                                    <label for="backup_model_name" class="form-label" style="font-weight:700;font-size:12.5px;">Резервна модель:</label>
+                                    <input type="text" name="backup_model_name" id="backup_model_name" value="{{ ai_settings.backup_model_name }}"
+                                           placeholder="Залиште порожнім або вкажіть..." list="backup-models-datalist" class="form-input" style="font-family:monospace;font-weight:700;font-size:13px;">
+                                    <datalist id="backup-models-datalist">
+                                        <option value="gemini-3.6-flash">Google Gemini 3.6 Flash</option>
+                                        <option value="gemini-flash-latest">Google Gemini Flash Latest</option>
+                                        <option value="gemini-3.1-flash-lite-preview">Google Gemini 3.1 Flash Lite</option>
+                                        <option value="gpt-4o-mini">OpenAI GPT-4o-mini</option>
+                                        <option value="deepseek-chat">DeepSeek Chat</option>
+                                        <option value="llama-3.3-70b-versatile">Groq Llama 3.3 70B</option>
+                                    </datalist>
+                                </div>
+
+                                <div class="form-group mb-0" id="backup-url-group" style="{% if ai_settings.backup_ai_provider != 'custom' %}display:none;{% endif %}">
+                                    <label for="backup_custom_api_url" class="form-label" style="font-weight:700;font-size:12.5px;">Резервний Base URL:</label>
+                                    <input type="url" name="backup_custom_api_url" id="backup_custom_api_url" value="{{ ai_settings.backup_custom_api_url }}"
+                                           placeholder="http://localhost:11434/v1" class="form-input" style="font-family:monospace;font-size:12.5px;">
+                                </div>
+                            </div>
+
+                        </div>
+
+                        <!-- ПАНЕЛЬ КЕРУВАННЯ ПЕРЕМИКАННЯМ ТА FAILOVER -->
+                        <div style="background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:14px 18px;margin-top:6px;">
+                            <div style="display:flex;flex-wrap:wrap;gap:20px;align-items:center;margin-bottom:10px;">
+                                <div style="display:flex;align-items:center;gap:16px;">
+                                    <span style="font-weight:700;font-size:13px;color:var(--color-text-secondary);">Активний ключ за замовчуванням:</span>
+                                    <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:700;cursor:pointer;margin:0;">
+                                        <input type="radio" name="active_api_type" value="primary" {% if ai_settings.active_api_type == 'primary' %}checked{% endif %} style="accent-color:var(--color-primary);">
+                                        <span>⚡ Основний</span>
+                                    </label>
+                                    <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:700;cursor:pointer;margin:0;">
+                                        <input type="radio" name="active_api_type" value="backup" {% if ai_settings.active_api_type == 'backup' %}checked{% endif %} style="accent-color:#f59e0b;">
+                                        <span>🛡️ Резервний</span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div style="display:flex;align-items:flex-start;gap:10px;padding-top:10px;border-top:1px dashed var(--color-border);">
+                                <input type="checkbox" name="auto_failover_enabled" id="auto_failover_enabled" value="1" {% if ai_settings.auto_failover_enabled %}checked{% endif %} style="width:18px;height:18px;margin-top:2px;accent-color:#10b981;cursor:pointer;">
+                                <label for="auto_failover_enabled" style="font-size:13px;cursor:pointer;margin:0;line-height:1.4;">
+                                    <strong style="color:var(--color-text-primary);">Автоматично перемикатися на резервний API</strong> у разі вичерпання лімітів (429 Rate Limit), помилок сервера (5xx) чи збоїв мережі.
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Вибір креативності -->
+                        <div style="display:grid;grid-template-columns:1fr;gap:16px;margin-top:8px;">
                             <div class="form-group" style="margin:0;">
                                 <label for="temperature" class="form-label" style="font-weight:700;">
                                     Креативність (Temperature: <span id="temp-val">{{ ai_settings.temperature_dot }}</span>):
@@ -269,7 +409,7 @@
                         </div>
 
                         <!-- Допустимий поріг збігів для ШІ-детектора -->
-                        <div style="background:var(--color-background);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:14px 16px;margin-top:16px;">
+                        <div style="background:var(--color-background);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:14px 16px;margin-top:10px;">
                             <div class="form-group" style="margin:0;">
                                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
                                     <label for="ai_detector_tolerance_percent" class="form-label" style="font-weight:700;margin:0;display:flex;align-items:center;gap:6px;">
@@ -287,9 +427,6 @@
                                     <span>5% (Строга перевірка)</span>
                                     <span style="font-weight:700;color:var(--color-primary);">25% (Рекомендовано: захист від хибних спрацьовувань)</span>
                                     <span>60% (Висока толерантність)</span>
-                                </div>
-                                <div style="font-size:11.5px;color:var(--color-text-muted);margin-top:6px;line-height:1.4;">
-                                    💡 Якщо учень скопіював окремі терміни, формули чи 1-2 стандартні фрази (в межах цього відсотка), робота вважається самостійною і <strong>не</strong> маркується як згенерована ШІ.
                                 </div>
                             </div>
                         </div>
@@ -345,48 +482,126 @@
 
 {% block extra_scripts %}
 <script>
-function toggleKeyVisibility() {
-    var inp = document.getElementById('api_key');
-    if (inp.type === 'password') {
-        inp.type = 'text';
-    } else {
-        inp.type = 'password';
+function toggleKeyVisibility(inputId) {
+    var id = inputId || 'api_key';
+    var inp = document.getElementById(id);
+    if (!inp) return;
+    inp.type = (inp.type === 'password') ? 'text' : 'password';
+}
+
+function updateProviderHints(target) {
+    var isBackup = (target === 'backup');
+    var provSelect = document.getElementById(isBackup ? 'backup_ai_provider' : 'ai_provider');
+    var keyLink = document.getElementById(isBackup ? 'backup-key-link' : 'primary-key-link');
+    var urlGroup = document.getElementById(isBackup ? 'backup-url-group' : 'primary-url-group');
+    if (!provSelect) return;
+
+    var val = provSelect.value;
+    var links = {
+        'gemini': 'https://aistudio.google.com/app/apikey',
+        'openai': 'https://platform.openai.com/api-keys',
+        'deepseek': 'https://platform.deepseek.com/api_keys',
+        'groq': 'https://console.groq.com/keys',
+        'openrouter': 'https://openrouter.ai/keys',
+        'custom': ''
+    };
+
+    if (keyLink) {
+        var href = links[val] || '';
+        if (href) {
+            keyLink.href = href;
+            keyLink.style.display = 'inline';
+        } else {
+            keyLink.style.display = 'none';
+        }
+    }
+
+    if (urlGroup) {
+        urlGroup.style.display = (val === 'custom') ? 'block' : 'none';
+    }
+
+    var providerModels = {
+        'gemini': [
+            { id: 'gemini-3.6-flash', name: 'Google Gemini 3.6 Flash (Рекомендована)' },
+            { id: 'gemini-flash-latest', name: 'Google Gemini Flash Latest' },
+            { id: 'gemini-3-flash-preview', name: 'Google Gemini 3 Flash Preview' },
+            { id: 'gemini-3.1-flash-lite-preview', name: 'Google Gemini 3.1 Flash Lite' },
+            { id: 'gemini-3.1-pro-preview', name: 'Google Gemini 3.1 Pro Preview' }
+        ],
+        'openai': [
+            { id: 'gpt-4o-mini', name: 'OpenAI GPT-4o-mini (Швидка та економна)' },
+            { id: 'gpt-4o', name: 'OpenAI GPT-4o (Флагманська)' },
+            { id: 'o3-mini', name: 'OpenAI o3-mini (Reasoning)' }
+        ],
+        'deepseek': [
+            { id: 'deepseek-chat', name: 'DeepSeek Chat (V3) (Універсальна)' },
+            { id: 'deepseek-reasoner', name: 'DeepSeek Reasoner (R1)' }
+        ],
+        'groq': [
+            { id: 'llama-3.3-70b-versatile', name: 'Groq Llama 3.3 70B (Надвисока швидкість)' },
+            { id: 'llama-3.1-8b-instant', name: 'Groq Llama 3.1 8B Instant' },
+            { id: 'mixtral-8x7b-32768', name: 'Groq Mixtral 8x7B' }
+        ],
+        'openrouter': [
+            { id: 'google/gemini-2.5-flash', name: 'OpenRouter Gemini 2.5 Flash' },
+            { id: 'deepseek/deepseek-chat', name: 'OpenRouter DeepSeek Chat' },
+            { id: 'openai/gpt-4o-mini', name: 'OpenRouter GPT-4o-mini' }
+        ],
+        'custom': [
+            { id: 'llama3.2', name: 'Ollama Llama 3.2' },
+            { id: 'mistral', name: 'Ollama Mistral' },
+            { id: 'qwen2.5', name: 'Ollama Qwen 2.5' }
+        ]
+    };
+
+    var modelDatalist = document.getElementById(isBackup ? 'backup-models-datalist' : 'primary-models-datalist');
+    if (modelDatalist && providerModels[val]) {
+        modelDatalist.innerHTML = '';
+        providerModels[val].forEach(function(m) {
+            var opt = document.createElement('option');
+            opt.value = m.id;
+            opt.textContent = m.name;
+            modelDatalist.appendChild(opt);
+        });
     }
 }
 
-function testModelDirect(modelName) {
-    var apiKey = document.getElementById('api_key').value.trim();
-    if (!apiKey) {
-        alert('Будь ласка, введіть Google Gemini API Key у формі для тестування.');
+function testConnection(target, callerBtn) {
+    var isBackup = (target === 'backup');
+    var provEl = document.getElementById(isBackup ? 'backup_ai_provider' : 'ai_provider');
+    var keyEl = document.getElementById(isBackup ? 'backup_api_key' : 'api_key');
+    var modelEl = document.getElementById(isBackup ? 'backup_model_name' : 'model_name');
+    var urlEl = document.getElementById(isBackup ? 'backup_custom_api_url' : 'custom_api_url');
+    var btn = callerBtn || document.getElementById(isBackup ? 'btn-test-backup' : 'btn-test-primary');
+    var resBox = document.getElementById(isBackup ? 'backup-test-result' : 'primary-test-result');
+
+    var provider = provEl ? provEl.value : 'gemini';
+    var apiKey = keyEl ? keyEl.value.trim() : '';
+    var modelName = modelEl ? modelEl.value.trim() : '';
+    var customUrl = urlEl ? urlEl.value.trim() : '';
+
+    if (provider !== 'custom' && !apiKey) {
+        alert('Будь ласка, введіть API Key для ' + provider.toUpperCase() + ' перед тестуванням.');
         return;
     }
-    runApiTest(apiKey, modelName);
-}
 
-function testConnection() {
-    var apiKey = document.getElementById('api_key').value.trim();
-    var modelName = document.getElementById('model_name').value;
-    if (!apiKey) {
-        alert('Будь ласка, введіть Google Gemini API Key перед тестуванням.');
-        return;
+    if (btn) btn.disabled = true;
+    var origText = btn ? btn.textContent : '';
+    if (btn) btn.textContent = '⏳...';
+
+    if (resBox) {
+        resBox.style.display = 'block';
+        resBox.style.background = 'var(--color-bg-secondary)';
+        resBox.style.color = 'var(--color-text-primary)';
+        resBox.innerHTML = 'Запит до ' + provider.toUpperCase() + ' (' + (modelName || 'активна модель') + ')...';
+        resBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
-    runApiTest(apiKey, modelName);
-}
-
-function runApiTest(apiKey, modelName) {
-    var btn = document.getElementById('btn-test-conn');
-    var resBox = document.getElementById('conn-test-result');
-
-    btn.disabled = true;
-    btn.textContent = '⏳ Перевірка (' + modelName + ')...';
-    resBox.style.display = 'block';
-    resBox.style.background = 'var(--color-bg-secondary)';
-    resBox.style.color = 'var(--color-text-primary)';
-    resBox.innerHTML = 'Запит до Google Gemini API (модель: ' + modelName + ')...';
 
     var formData = new FormData();
+    formData.append('provider', provider);
     formData.append('api_key', apiKey);
     formData.append('model_name', modelName);
+    formData.append('custom_url', customUrl);
     formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
 
     fetch('{% url "api_test_gemini_connection" %}', {
@@ -398,28 +613,50 @@ function runApiTest(apiKey, modelName) {
     })
     .then(function(r) { return r.json(); })
     .then(function(data) {
-        btn.disabled = false;
-        btn.textContent = '🧪 Перевірити з\'єднання';
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = origText;
+        }
 
         if (data.success) {
-            resBox.style.background = 'rgba(16, 185, 129, 0.12)';
-            resBox.style.border = '1px solid rgba(16, 185, 129, 0.3)';
-            resBox.style.color = '#059669';
-            resBox.innerHTML = '<strong>✅ Успішно [' + data.model + ']!</strong> ' + data.message;
+            if (resBox) {
+                resBox.style.background = 'rgba(16, 185, 129, 0.12)';
+                resBox.style.border = '1px solid rgba(16, 185, 129, 0.3)';
+                resBox.style.color = '#059669';
+                resBox.innerHTML = '<strong>✅ Успішно [' + (data.provider || provider).toUpperCase() + ' / ' + data.model + ']!</strong> ' + data.message;
+            }
         } else {
-            resBox.style.background = 'rgba(239, 68, 68, 0.12)';
-            resBox.style.border = '1px solid rgba(239, 68, 68, 0.3)';
-            resBox.style.color = '#ef4444';
-            resBox.innerHTML = '<strong>❌ Помилка підключення [' + (data.model || modelName) + ']:</strong> ' + data.message;
+            if (resBox) {
+                resBox.style.background = 'rgba(239, 68, 68, 0.12)';
+                resBox.style.border = '1px solid rgba(239, 68, 68, 0.3)';
+                resBox.style.color = '#ef4444';
+                resBox.innerHTML = '<strong>❌ Помилка [' + (data.provider || provider).toUpperCase() + ']:</strong> ' + data.message;
+            }
         }
     })
     .catch(function(err) {
-        btn.disabled = false;
-        btn.textContent = '🧪 Перевірити з\'єднання';
-        resBox.style.background = 'rgba(239, 68, 68, 0.12)';
-        resBox.style.color = '#ef4444';
-        resBox.innerHTML = '<strong>❌ Мережева помилка:</strong> ' + err;
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = origText;
+        }
+        if (resBox) {
+            resBox.style.background = 'rgba(239, 68, 68, 0.12)';
+            resBox.style.color = '#ef4444';
+            resBox.innerHTML = '<strong>❌ Мережева помилка:</strong> ' + err;
+        }
     });
+}
+
+function testModelDirect(modelName, callerBtn) {
+    var apiKeyEl = document.getElementById('api_key');
+    var apiKey = apiKeyEl ? apiKeyEl.value.trim() : '';
+    if (!apiKey) {
+        alert('Будь ласка, введіть API Key у формі для тестування.');
+        return;
+    }
+    var modelEl = document.getElementById('model_name');
+    if (modelEl) modelEl.value = modelName;
+    testConnection('primary', callerBtn);
 }
 
 function resetDefaultPrompt() {

@@ -19,11 +19,35 @@ import time
 import zipfile
 import tarfile
 import xml.etree.ElementTree as ET
+import subprocess
+import tempfile
+import glob
+import shutil
 from django.utils import timezone
 from .models import AISettings, Submission, DEFAULT_NUS_SYSTEM_PROMPT, AICriteriaPreset
 from .duplicate_detector import check_submission_duplicates, get_normalized_file_content
 
 GEMINI_API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
+OPENAI_API_BASE_URL = "https://api.openai.com/v1"
+DEEPSEEK_API_BASE_URL = "https://api.deepseek.com"
+GROQ_API_BASE_URL = "https://api.groq.com/openai/v1"
+OPENROUTER_API_BASE_URL = "https://openrouter.ai/api/v1"
+
+DEFAULT_MODELS_BY_PROVIDER = {
+    'gemini': ['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.1-flash-lite', 'gemini-3-flash-preview', 'gemini-3.1-pro-preview'],
+    'openai': ['gpt-4o-mini', 'gpt-4o', 'gpt-4-turbo', 'o3-mini'],
+    'deepseek': ['deepseek-chat', 'deepseek-reasoner'],
+    'groq': ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768'],
+    'openrouter': ['google/gemini-2.5-flash', 'deepseek/deepseek-chat', 'openai/gpt-4o-mini', 'anthropic/claude-3.5-sonnet'],
+    'custom': ['llama3.2', 'mistral', 'qwen2.5'],
+}
+
+
+def get_default_model_for_provider(provider):
+    """Повертає рекомендовану модель за замовчуванням для обраного провайдера."""
+    prov = (provider or 'gemini').lower().strip()
+    models = DEFAULT_MODELS_BY_PROVIDER.get(prov, [])
+    return models[0] if models else 'gemini-3.8-flash'
 
 
 def get_ai_settings():
@@ -31,19 +55,23 @@ def get_ai_settings():
     return AISettings.get_solo()
 
 
-def _http_post_json(url, payload_dict, timeout=30):
+def _http_post_json(url, payload_dict, headers=None, timeout=30):
     """
-    Виконує HTTP POST запит із JSON тілом через вбудований urllib.
+    Виконує HTTP POST запит із JSON тілом через вбудований urllib з підтримкою кастомних заголовків.
     Повертає (status_code: int, response_data: dict | None, response_text: str).
     """
     json_bytes = json.dumps(payload_dict).encode('utf-8')
+    req_headers = {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Accept': 'application/json'
+    }
+    if headers:
+        req_headers.update(headers)
+
     req = urllib.request.Request(
         url,
         data=json_bytes,
-        headers={
-            'Content-Type': 'application/json; charset=utf-8',
-            'Accept': 'application/json'
-        },
+        headers=req_headers,
         method='POST'
     )
     try:
@@ -69,70 +97,262 @@ def _http_post_json(url, payload_dict, timeout=30):
         raise Exception(f"Мережева помилка підключення: {e.reason}")
 
 
-def clean_model_name(name):
-    """Очищує та нормалізує назву моделі Gemini."""
+def clean_model_name(name, provider='gemini'):
+    """Очищує та нормалізує назву моделі."""
     if not name:
-        return 'gemini-3.6-flash'
+        return get_default_model_for_provider(provider)
     name = name.strip()
-    if name.startswith('models/'):
-        name = name[7:]
-    # Автоматичне перенаправлення застарілих / вимкнених Google моделей на актуальні
-    if name in ['gemini-2.0-flash', 'gemini-2.5-flash']:
-        return 'gemini-3.6-flash'
-    if name in ['gemini-2.0-pro', 'gemini-2.5-pro']:
-        return 'gemini-flash-latest'
-    if name in ['gemini-2.0-flash-lite', 'gemini-2.5-flash-lite']:
-        return 'gemini-3.1-flash-lite-preview'
+    if (provider or 'gemini').lower() == 'gemini':
+        if name.startswith('models/'):
+            name = name[7:]
+        # Автоматичне перенаправлення застарілих / вимкнених Google моделей на актуальні
+        legacy_flash = [
+            'gemini-1.5-flash', 'gemini-1.5-flash-latest', 'gemini-1.5-flash-8b',
+            'gemini-1.5-pro', 'gemini-1.5-pro-latest',
+            'gemini-2.0-flash', 'gemini-2.0-flash-exp', 'gemini-2.0-flash-001',
+            'gemini-2.5-flash', 'gemini-2.0-pro', 'gemini-2.0-pro-exp-02-05',
+            # Моделі з проблемами квоти/доступу — перенаправляємо на актуальну
+            'gemini-3.5-flash', 'gemini-3.6-flash', 'gemini-flash-latest',
+        ]
+        if name in legacy_flash:
+            return 'gemini-3.8-flash'
+        if name in ['gemini-2.5-pro', 'gemini-pro-latest']:
+            return 'gemini-3.1-pro-preview'
+        if name in ['gemini-2.0-flash-lite', 'gemini-2.5-flash-lite', 'gemini-3.1-flash-lite-preview']:
+            return 'gemini-3.1-flash-lite'
     return name
+
+
+def get_provider_endpoint(provider, model_name=None, api_key=None, custom_url=None):
+    """
+    Повертає (url: str, headers: dict, actual_model: str) для обраного ШІ-провайдера.
+    """
+    headers = {}
+    provider = (provider or 'gemini').lower().strip()
+    model = clean_model_name(model_name or get_default_model_for_provider(provider), provider=provider)
+
+    if provider == 'gemini':
+        url = f"{GEMINI_API_BASE_URL}/{model}:generateContent?key={api_key}"
+        return url, headers, model
+
+    # OpenAI-сумісні провайдери
+    if api_key:
+        headers['Authorization'] = f"Bearer {api_key.strip()}"
+
+    if provider == 'openai':
+        url = f"{OPENAI_API_BASE_URL}/chat/completions"
+    elif provider == 'deepseek':
+        url = f"{DEEPSEEK_API_BASE_URL}/chat/completions"
+    elif provider == 'groq':
+        url = f"{GROQ_API_BASE_URL}/chat/completions"
+    elif provider == 'openrouter':
+        url = f"{OPENROUTER_API_BASE_URL}/chat/completions"
+        headers['HTTP-Referer'] = 'https://schoolnet.local'
+        headers['X-Title'] = 'SchoolNet Education AI'
+    elif provider == 'custom':
+        base = (custom_url or 'http://localhost:11434/v1').strip().rstrip('/')
+        if not base.endswith('/chat/completions'):
+            url = f"{base}/chat/completions"
+        else:
+            url = base
+    else:
+        url = f"{GEMINI_API_BASE_URL}/{model}:generateContent?key={api_key}"
+
+    return url, headers, model
+
+
+def call_ai_api(prompt_text, system_prompt="", inline_media=None, provider="gemini", api_key="", model_name="", custom_url="", temperature=0.2, max_output_tokens=3500, timeout=35, json_mode=False, thinking_budget=None):
+    """
+    Універсальна функція для звернення до будь-якого ШІ-провайдера
+    (Google Gemini, OpenAI, DeepSeek, Groq, OpenRouter, Custom/Ollama).
+    Повертає (status_code: int, response_text: str | None, error_message: str | None, raw_data: dict | None).
+    """
+    provider = (provider or 'gemini').lower().strip()
+    url, headers, model = get_provider_endpoint(provider, model_name=model_name, api_key=api_key, custom_url=custom_url)
+
+    if provider == 'gemini':
+        parts = []
+        if prompt_text:
+            parts.append({"text": prompt_text})
+        if inline_media:
+            for item in inline_media:
+                parts.append({
+                    "inlineData": {
+                        "mimeType": item["mime_type"],
+                        "data": item["data"]
+                    }
+                })
+
+        generation_config = {
+            "temperature": temperature,
+            "maxOutputTokens": max_output_tokens
+        }
+        if thinking_budget is not None:
+            generation_config["thinkingConfig"] = {"thinkingBudget": thinking_budget}
+        if json_mode:
+            generation_config["responseMimeType"] = "application/json"
+
+        payload = {
+            "contents": [
+                {
+                    "role": "user",
+                    "parts": parts
+                }
+            ],
+            "generationConfig": generation_config
+        }
+        if system_prompt:
+            payload["systemInstruction"] = {
+                "parts": [{"text": system_prompt}]
+            }
+
+        try:
+            status_code, data, text = _http_post_json(url, payload, headers=headers, timeout=timeout)
+
+            # Якщо модель не підтримує thinkingConfig (400), повторюємо без нього
+            if status_code == 400 and thinking_budget is not None and ('thinkingConfig' in text or 'thinking' in text):
+                del payload["generationConfig"]["thinkingConfig"]
+                status_code, data, text = _http_post_json(url, payload, headers=headers, timeout=timeout)
+
+            if status_code == 200 and data:
+                candidates = data.get('candidates', [])
+                if candidates:
+                    cand = candidates[0]
+                    c_parts = cand.get('content', {}).get('parts', [])
+                    if c_parts:
+                        # Фільтруємо частини роздумів ШІ (thinking)
+                        text_parts = [p.get('text', '') for p in c_parts if not p.get('thought')]
+                        if not text_parts:
+                            text_parts = [p.get('text', '') for p in c_parts]
+                        raw_reply = "\n".join([t for t in text_parts if t]).strip()
+                        if raw_reply:
+                            return status_code, raw_reply, None, data
+
+                    finish_reason = cand.get('finishReason', '')
+                    if finish_reason == 'MAX_TOKENS':
+                        return status_code, "", "Модель досягла ліміту токенів (MAX_TOKENS) під час формування відповіді. Збільште ліміт вихідних токенів.", data
+                    elif finish_reason == 'SAFETY':
+                        return status_code, "", "Відповідь заблоковано фільтром безпеки Gemini (SAFETY)", data
+                return status_code, "", "Порожня відповідь від Gemini", data
+            else:
+                err_data = data or {}
+                err_msg = err_data.get('error', {}).get('message', text[:300])
+                return status_code, None, err_msg, data
+        except Exception as e:
+            return 0, None, str(e), None
+
+    else:
+        # OpenAI Chat Completions формат
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+
+        user_content = []
+        if prompt_text:
+            user_content.append({"type": "text", "text": prompt_text})
+
+        if inline_media:
+            for item in inline_media:
+                user_content.append({
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:{item['mime_type']};base64,{item['data']}"
+                    }
+                })
+
+        # Якщо немає зображень, передаємо простий рядок для максимальної сумісності
+        if not inline_media:
+            messages.append({"role": "user", "content": prompt_text})
+        else:
+            messages.append({"role": "user", "content": user_content})
+
+        payload = {
+            "model": model,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_output_tokens,
+        }
+
+        # Спроба з response_format, якщо ввімкнено json_mode
+        if json_mode:
+            payload["response_format"] = {"type": "json_object"}
+
+        try:
+            status_code, data, text = _http_post_json(url, payload, headers=headers, timeout=timeout)
+
+            # Якщо endpoint не підтримує response_format (400), пробуємо повторити без нього
+            if status_code == 400 and json_mode and ('response_format' in text or 'json_object' in text):
+                del payload["response_format"]
+                status_code, data, text = _http_post_json(url, payload, headers=headers, timeout=timeout)
+
+            if status_code == 200 and data:
+                choices = data.get('choices', [])
+                if choices:
+                    msg = choices[0].get('message', {})
+                    raw_reply = msg.get('content', '') or msg.get('reasoning_content', '')
+                    raw_reply = raw_reply.strip()
+                    return status_code, raw_reply, None, data
+                return status_code, "", "Порожня відповідь від моделі", data
+            else:
+                err_data = data or {}
+                err_msg = err_data.get('error', {}).get('message', text[:300])
+                return status_code, None, err_msg, data
+        except Exception as e:
+            return 0, None, str(e), None
+
+
+def test_ai_connection(provider=None, api_key=None, model_name=None, custom_url=None):
+    """
+    Перевіряє коректність API ключа та доступність вибраної моделі для вказаного або активного провайдера.
+    Повертає (success: bool, message: str, model_used: str, provider_used: str).
+    """
+    settings = get_ai_settings()
+    act_provider, act_key, act_model, act_url, _ = settings.get_active_config()
+
+    prov = (provider or act_provider or 'gemini').lower().strip()
+    key = api_key.strip() if api_key is not None else act_key
+    raw_model = (model_name or act_model or get_default_model_for_provider(prov)).strip()
+    model = clean_model_name(raw_model, provider=prov)
+    url = custom_url.strip() if custom_url is not None else act_url
+
+    if prov != 'custom' and not key:
+        return False, f"API Key для {prov.title()} не вказано.", model, prov
+
+    test_prompt = "Тест з'єднання. Напиши коротку відповідь: 'З'єднання зі SchoolNet AI успішне!'"
+    status_code, reply_text, err_msg, _ = call_ai_api(
+        prompt_text=test_prompt,
+        provider=prov,
+        api_key=key,
+        model_name=model,
+        custom_url=url,
+        temperature=0.1,
+        max_output_tokens=1000,
+        timeout=15,
+        thinking_budget=0
+    )
+
+    if status_code == 200 and reply_text:
+        return True, f"Успішно підключено! Відповідь моделі ({model}): {reply_text}", model, prov
+    elif status_code in (401, 403):
+        return False, f"Помилка автентифікації ({status_code}): Недійсний API Key або відсутній доступ до моделі {model}.", model, prov
+    elif status_code == 429:
+        return False, f"Перевищено ліміт запитів (429 Rate Limit) для {model}. Рекомендується використати резервний API.", model, prov
+    elif status_code == 404:
+        return False, f"Модель {model} не знайдена в API ({status_code}): {err_msg}", model, prov
+    elif status_code == 400:
+        return False, f"Помилка запиту API (400): {err_msg}", model, prov
+    else:
+        msg = err_msg or f"HTTP {status_code}"
+        return False, f"Помилка підключення до {prov.title()} ({model}): {msg}", model, prov
 
 
 def test_gemini_connection(api_key=None, model_name=None):
     """
     Перевіряє коректність API ключа та доступність вибраної моделі Google Gemini.
-    Повертає (success: bool, message: str, model_used: str).
+    (Збережено для зворотної сумісності).
     """
-    settings = get_ai_settings()
-    key = api_key.strip() if api_key else (settings.api_key or '').strip()
-    model = clean_model_name(model_name or settings.model_name)
-
-    if not key:
-        return False, "Google Gemini API Key не вказано в налаштуваннях.", model
-
-    endpoint = f"{GEMINI_API_BASE_URL}/{model}:generateContent?key={key}"
-    payload = {
-        "contents": [
-            {
-                "parts": [
-                    {"text": "Тест з'єднання. Напиши коротку відповідь: 'З'єднання зі SchoolNet AI успішне!'"}
-                ]
-            }
-        ],
-        "generationConfig": {
-            "temperature": 0.1,
-            "maxOutputTokens": 60
-        }
-    }
-
-    try:
-        status_code, data, text = _http_post_json(endpoint, payload, timeout=12)
-        if status_code == 200 and data:
-            reply_text = ""
-            try:
-                reply_text = data['candidates'][0]['content']['parts'][0]['text'].strip()
-            except (KeyError, IndexError):
-                reply_text = "З'єднання встановлено."
-            return True, f"Успішно підключено! Відповідь моделі: {reply_text}", model
-        elif status_code == 400:
-            err = (data or {}).get('error', {}).get('message', text)
-            return False, f"Помилка API (400): {err}", model
-        elif status_code == 403:
-            return False, "Помилка автентифікації (403): Недійсний API Key або відсутній доступ до моделі.", model
-        elif status_code == 429:
-            return False, "Перевищено ліміт запитів (429 Rate Limit). Спробуйте через кілька хвилин.", model
-        else:
-            return False, f"Помилка сервера Google ({status_code}): {text[:200]}", model
-    except Exception as e:
-        return False, f"Помилка підключення: {str(e)}", model
+    success, message, model_used, _ = test_ai_connection(provider='gemini', api_key=api_key, model_name=model_name)
+    return success, message, model_used
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -454,41 +674,435 @@ def extract_images_from_pptx(file_path, max_images=6, max_bytes_per_img=8 * 1024
     return extracted
 
 
-def extract_images_from_xlsx(file_path, max_images=4, max_bytes_per_img=8 * 1024 * 1024):
+def col_num_to_letter(col_idx):
+    """Конвертує 0-індексований номер стовпця Excel у літерне позначення (0 -> A, 1 -> B, 26 -> AA тощо)."""
+    letters = ''
+    col_idx += 1
+    while col_idx > 0:
+        col_idx, remainder = divmod(col_idx - 1, 26)
+        letters = chr(65 + remainder) + letters
+    return letters
+
+
+def parse_excel_charts(file_path):
     """
-    Видобуває вбудовані зображення, діаграми та графіки з електронної таблиці Excel (.xlsx),
-    які зберігаються у zip-папці xl/media/.
+    Аналізує структуру OpenXML книги Excel (.xlsx, .xlsm) та витягує повні метадані
+    про всі створені учнем вбудовані діаграми, графіки та візуалізації.
+    Повертає список словників з детальним описом кожної діаграми.
     """
-    extracted = []
+    charts_info = []
+    if not file_path or not os.path.exists(file_path):
+        return charts_info
+
     try:
+        if not zipfile.is_zipfile(file_path):
+            return charts_info
+
         with zipfile.ZipFile(file_path, 'r') as z:
-            media_files = [f for f in z.namelist() if f.startswith('xl/media/')]
-            img_exts = {
-                '.png': 'image/png',
-                '.jpg': 'image/jpeg',
-                '.jpeg': 'image/jpeg',
-                '.webp': 'image/webp',
-                '.bmp': 'image/bmp',
-                '.gif': 'image/gif',
+            names = set(z.namelist())
+
+            # 1. Збираємо мапу аркушів (sheet file -> sheet name)
+            sheet_name_map = {}
+            if 'xl/workbook.xml' in names and 'xl/_rels/workbook.xml.rels' in names:
+                try:
+                    wb_root = ET.fromstring(z.read('xl/workbook.xml'))
+                    rels_root = ET.fromstring(z.read('xl/_rels/workbook.xml.rels'))
+
+                    wb_ns = {
+                        'w': 'http://schemas.openxmlformats.org/spreadsheetml/2006/main',
+                        'r': 'http://schemas.openxmlformats.org/officeDocument/2006/relationships'
+                    }
+                    pkg_ns = {'p': 'http://schemas.openxmlformats.org/package/2006/relationships'}
+
+                    rid_to_target = {}
+                    for rel in rels_root.findall('./p:Relationship', pkg_ns):
+                        rid = rel.get('Id')
+                        target = rel.get('Target', '').lstrip('/')
+                        if not target.startswith('xl/'):
+                            target = 'xl/' + target
+                        rid_to_target[rid] = target
+
+                    for sheet in wb_root.findall('.//w:sheet', wb_ns):
+                        s_name = sheet.get('name')
+                        rid = sheet.get('{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id')
+                        if rid and rid in rid_to_target:
+                            sheet_name_map[rid_to_target[rid]] = s_name
+                except Exception:
+                    pass
+
+            # 2. Мапа зв'язків аркушів з кресленнями (drawing file -> sheet_name)
+            drawing_to_sheet = {}
+            chart_locations = {}
+
+            for name in names:
+                if name.startswith('xl/worksheets/_rels/') and name.endswith('.xml.rels'):
+                    base_xml = name.replace('xl/worksheets/_rels/', 'xl/worksheets/').replace('.rels', '')
+                    sheet_name = sheet_name_map.get(base_xml, 'Аркуш')
+                    try:
+                        rels_root = ET.fromstring(z.read(name))
+                        for rel in rels_root.findall('.//{http://schemas.openxmlformats.org/package/2006/relationships}Relationship'):
+                            target = rel.get('Target', '').lstrip('/')
+                            if 'drawings/' in target:
+                                if not target.startswith('xl/'):
+                                    target = 'xl/' + target.split('xl/')[-1] if 'xl/' in target else 'xl/drawings/' + target.split('/')[-1]
+                                drawing_to_sheet[target] = sheet_name
+                    except Exception:
+                        pass
+
+            # 3. Аналізуємо зв'язки креслень з діаграмами (xl/drawings/_rels/)
+            drawing_rid_to_chart = {}
+            for name in names:
+                if name.startswith('xl/drawings/_rels/') and name.endswith('.xml.rels'):
+                    dr_xml = name.replace('xl/drawings/_rels/', 'xl/drawings/').replace('.rels', '')
+                    sheet_name = drawing_to_sheet.get(dr_xml, 'Таблиця')
+                    try:
+                        rels_root = ET.fromstring(z.read(name))
+                        for rel in rels_root.findall('.//{http://schemas.openxmlformats.org/package/2006/relationships}Relationship'):
+                            target = rel.get('Target', '').lstrip('/')
+                            rid = rel.get('Id')
+                            if 'charts/' in target:
+                                chart_target = 'xl/charts/' + target.split('/')[-1]
+                                drawing_rid_to_chart[(dr_xml, rid)] = (chart_target, sheet_name)
+                    except Exception:
+                        pass
+
+            # 4. Аналізуємо координати комірок (anchor) у файлах креслень
+            for name in names:
+                if name.startswith('xl/drawings/drawing') and name.endswith('.xml'):
+                    sheet_name = drawing_to_sheet.get(name, 'Таблиця')
+                    try:
+                        dr_root = ET.fromstring(z.read(name))
+                        for anchor_elem in dr_root.findall('./*'):
+                            col_elem = anchor_elem.find('.//{http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing}col')
+                            row_elem = anchor_elem.find('.//{http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing}row')
+                            chart_elem = anchor_elem.find('.//{http://schemas.openxmlformats.org/drawingml/2006/chart}chart')
+
+                            anchor_str = ''
+                            if col_elem is not None and row_elem is not None and col_elem.text and row_elem.text:
+                                try:
+                                    c_idx = int(col_elem.text)
+                                    r_idx = int(row_elem.text) + 1
+                                    anchor_str = f'{col_num_to_letter(c_idx)}{r_idx}'
+                                except Exception:
+                                    pass
+
+                            if chart_elem is not None:
+                                rid = chart_elem.get('{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id')
+                                if rid and (name, rid) in drawing_rid_to_chart:
+                                    ch_path, s_name = drawing_rid_to_chart[(name, rid)]
+                                    chart_locations[ch_path] = {'sheet_name': s_name, 'anchor': anchor_str}
+                    except Exception:
+                        pass
+
+            # 5. Парсимо самі файли діаграм xl/charts/chart*.xml
+            chart_files = sorted([f for f in names if f.startswith('xl/charts/chart') and f.endswith('.xml')])
+            if not chart_files:
+                return charts_info
+
+            chart_type_map = {
+                'barChart': 'Стовпчаста / лінійчата діаграма (Bar/Column chart)',
+                'bar3DChart': 'Об\'ємна стовпчаста діаграма (3D Bar/Column chart)',
+                'lineChart': 'Лінійний графік (Line chart)',
+                'line3DChart': 'Об\'ємний графік (3D Line chart)',
+                'pieChart': 'Кругова секторна діаграма (Pie chart)',
+                'pie3DChart': 'Об\'ємна кругова діаграма (3D Pie chart)',
+                'doughnutChart': 'Кільцева діаграма (Doughnut chart)',
+                'areaChart': 'Діаграма з областями (Area chart)',
+                'area3DChart': 'Об\'ємна діаграма з областями (3D Area chart)',
+                'scatterChart': 'Точкова діаграма / графік розсіювання (Scatter plot)',
+                'radarChart': 'Пелюсткова / радіальна діаграма (Radar chart)',
+                'bubbleChart': 'Бульбашкова діаграма (Bubble chart)',
+                'stockChart': 'Біржова діаграма (Stock chart)',
+                'surfaceChart': 'Поверхнева діаграма (Surface chart)',
+                'surface3DChart': 'Об\'ємна поверхнева діаграма (3D Surface chart)'
             }
-            media_files.sort()
-            for mf in media_files:
-                ext = os.path.splitext(mf)[1].lower()
-                if ext in img_exts:
-                    info = z.getinfo(mf)
-                    if 0 < info.file_size <= max_bytes_per_img:
-                        data = z.read(mf)
+
+            ns = {
+                'c': 'http://schemas.openxmlformats.org/drawingml/2006/chart',
+                'a': 'http://schemas.openxmlformats.org/drawingml/2006/main'
+            }
+
+            for idx, cf in enumerate(chart_files, 1):
+                try:
+                    xml_data = z.read(cf)
+                    root = ET.fromstring(xml_data)
+                except Exception:
+                    continue
+
+                # Заголовок діаграми
+                title = ''
+                title_elem = root.find('.//c:chart/c:title', ns)
+                if title_elem is not None:
+                    texts = [t.text for t in title_elem.findall('.//a:t', ns) if t.text]
+                    if texts:
+                        title = ''.join(texts).strip()
+                    else:
+                        v_elem = title_elem.find('.//c:v', ns)
+                        if v_elem is not None and v_elem.text:
+                            title = v_elem.text.strip()
+                        else:
+                            f_elem = title_elem.find('.//c:f', ns)
+                            if f_elem is not None and f_elem.text:
+                                title = f'Посилання: {f_elem.text.strip()}'
+
+                # PlotArea
+                plot_area = root.find('.//c:chart/c:plotArea', ns)
+                found_types = []
+                series_info = []
+                axis_titles = []
+
+                if plot_area is not None:
+                    for child in plot_area:
+                        tag_name = child.tag.split('}')[-1]
+                        if tag_name in chart_type_map:
+                            desc = chart_type_map[tag_name]
+                            if tag_name == 'barChart':
+                                bar_dir = child.find('./c:barDir', ns)
+                                if bar_dir is not None:
+                                    val = bar_dir.get('val')
+                                    if val == 'col':
+                                        desc = 'Вертикальна стовпчаста діаграма / гістограма (Column chart)'
+                                    elif val == 'bar':
+                                        desc = 'Горизонтальна лінійчата діаграма (Bar chart)'
+                            found_types.append(desc)
+
+                            # Серії (ряди даних)
+                            for ser in child.findall('./c:ser', ns):
+                                s_name = ''
+                                tx = ser.find('./c:tx', ns)
+                                if tx is not None:
+                                    s_texts = [t.text for t in tx.findall('.//a:t', ns) if t.text]
+                                    if s_texts:
+                                        s_name = ''.join(s_texts).strip()
+                                    else:
+                                        v = tx.find('.//c:v', ns)
+                                        if v is not None and v.text:
+                                            s_name = v.text.strip()
+                                        else:
+                                            f = tx.find('.//c:f', ns)
+                                            if f is not None and f.text:
+                                                s_name = f.text.strip()
+
+                                cat_ref = ''
+                                cat_f = ser.find('.//c:cat//c:f', ns)
+                                if cat_f is not None and cat_f.text:
+                                    cat_ref = cat_f.text.strip()
+
+                                val_ref = ''
+                                val_f = ser.find('.//c:val//c:f', ns)
+                                if val_f is not None and val_f.text:
+                                    val_ref = val_f.text.strip()
+
+                                s_parts = []
+                                if s_name:
+                                    s_parts.append(f'Серія: \"{s_name}\"')
+                                if cat_ref:
+                                    s_parts.append(f'Категорії (X): {cat_ref}')
+                                if val_ref:
+                                    s_parts.append(f'Значення (Y): {val_ref}')
+                                if s_parts:
+                                    series_info.append(' | '.join(s_parts))
+
+                    # Осі
+                    for ax_tag in ['./c:catAx', './c:valAx', './c:dateAx', './c:serAx']:
+                        for ax in plot_area.findall(ax_tag, ns):
+                            ax_t = ax.find('./c:title', ns)
+                            if ax_t is not None:
+                                ax_texts = [t.text for t in ax_t.findall('.//a:t', ns) if t.text]
+                                if ax_texts:
+                                    ax_str = ''.join(ax_texts).strip()
+                                    if ax_str and ax_str not in axis_titles:
+                                        axis_titles.append(ax_str)
+
+                # Легенда
+                has_legend = root.find('.//c:chart/c:legend', ns) is not None
+                legend_pos_str = ''
+                if has_legend:
+                    leg_elem = root.find('.//c:chart/c:legend/c:legendPos', ns)
+                    leg_val = leg_elem.get('val') if leg_elem is not None else 'r'
+                    pos_dict = {'r': 'праворуч', 'l': 'ліворуч', 't': 'вгорі', 'b': 'знизу', 'tr': 'вгорі праворуч'}
+                    legend_pos_str = pos_dict.get(leg_val, 'налаштована')
+
+                loc = chart_locations.get(cf, {})
+                s_name = loc.get('sheet_name') or 'Таблиця'
+                anchor = loc.get('anchor')
+
+                chart_type_str = ', '.join(dict.fromkeys(found_types)) if found_types else 'Вбудована діаграма'
+
+                charts_info.append({
+                    'index': idx,
+                    'file': cf,
+                    'sheet_name': s_name,
+                    'anchor': anchor,
+                    'type': chart_type_str,
+                    'title': title or '(без назви)',
+                    'axis_titles': axis_titles,
+                    'series': series_info,
+                    'has_legend': has_legend,
+                    'legend_position': legend_pos_str
+                })
+    except Exception:
+        pass
+
+    return charts_info
+
+
+def format_excel_charts_summary(charts_info):
+    """
+    Форматує структурований інформаційний опис виявлених у файлі діаграм для промпту ШІ.
+    """
+    if not charts_info:
+        return ""
+
+    lines = [
+        "════════════════════════════════════════════════════════════════════",
+        f"📊 ВИЯВЛЕНІ ВБУДОВАНІ ДІАГРАМИ ТА ГРАФІКИ У ФАЙЛІ EXCEL ({len(charts_info)} шт.):",
+        "ШІ повинен обов'язково врахувати наявність та параметри цих діаграм при оцінюванні!"
+    ]
+    for c in charts_info:
+        loc_str = f"на аркуші «{c['sheet_name']}»"
+        if c.get('anchor'):
+            loc_str += f" (розташована біля клітинки {c['anchor']})"
+        lines.append(f"• Діаграма #{c['index']} {loc_str}:")
+        lines.append(f"  - Тип діаграми: {c['type']}")
+        lines.append(f"  - Назва (заголовок): {c['title']}")
+        if c.get('axis_titles'):
+            lines.append(f"  - Підписи осей: {', '.join(c['axis_titles'])}")
+        if c.get('has_legend'):
+            leg_info = f"наявна (позиція: {c.get('legend_position', 'налаштована')})"
+            lines.append(f"  - Легенда: {leg_info}")
+        if c.get('series'):
+            lines.append("  - Ряди та діапазони даних:")
+            for s in c['series']:
+                lines.append(f"    * {s}")
+    lines.append("════════════════════════════════════════════════════════════════════")
+    return "\n".join(lines)
+
+
+def render_spreadsheet_to_images(file_path, max_pages=4):
+    """
+    Рендерить аркуші електронної таблиці (.xlsx, .xls, .ods) у візуальні PNG зображення
+    через headless LibreOffice та pdftoppm, щоб передати їх у мультимодальний зір ШІ Gemini.
+    """
+    rendered = []
+    if not file_path or not os.path.exists(file_path):
+        return rendered
+
+    lo_bin = 'libreoffice' if shutil.which('libreoffice') else ('soffice' if shutil.which('soffice') else None)
+    ppm_bin = shutil.which('pdftoppm')
+
+    if not lo_bin or not ppm_bin:
+        return rendered
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        try:
+            pdf_cmd = [
+                lo_bin,
+                '--headless',
+                f'-env:UserInstallation=file://{tmp_dir}/lo_profile',
+                '--convert-to', 'pdf',
+                '--outdir', tmp_dir,
+                file_path
+            ]
+            res = subprocess.run(pdf_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30)
+            if res.returncode != 0:
+                return rendered
+
+            pdf_files = glob.glob(os.path.join(tmp_dir, '*.pdf'))
+            if not pdf_files:
+                return rendered
+            pdf_file = pdf_files[0]
+
+            page_prefix = os.path.join(tmp_dir, 'sheet_page')
+            ppm_cmd = [
+                ppm_bin,
+                '-png',
+                '-r', '150',
+                pdf_file,
+                page_prefix
+            ]
+            subprocess.run(ppm_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=25)
+
+            png_files = sorted(glob.glob(os.path.join(tmp_dir, 'sheet_page-*.png')))
+            for idx, pf in enumerate(png_files[:max_pages]):
+                try:
+                    with open(pf, 'rb') as f:
+                        data = f.read()
+                    if 0 < len(data) <= 8 * 1024 * 1024:
                         b64 = base64.b64encode(data).decode('utf-8')
-                        extracted.append({
-                            'name': os.path.basename(mf),
-                            'mime_type': img_exts[ext],
+                        rendered.append({
+                            'name': f'excel_chart_page_{idx+1}.png',
+                            'mime_type': 'image/png',
                             'data': b64,
                             'size_kb': len(data) / 1024
                         })
-                        if len(extracted) >= max_images:
-                            break
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    return rendered
+
+
+def extract_images_from_xlsx(file_path, max_images=4, max_bytes_per_img=8 * 1024 * 1024):
+    """
+    Видобуває графічні зображення, діаграми та сторінки з таблиці Excel (.xlsx, .xls, .ods):
+    1. Растрові зображення, додані користувачем (зберігаються в xl/media/).
+    2. Візуальний рендеринг сторінок з вбудованими діаграмами та графіками через LibreOffice + pdftoppm,
+       щоб ШІ Gemini міг безпосередньо оцінити вигляд, кольори, підписи та оформлення діаграм.
+    """
+    extracted = []
+    has_charts = False
+
+    # 1. Перевіряємо вбудовані картинки та наявність діаграм у .xlsx
+    try:
+        if zipfile.is_zipfile(file_path):
+            with zipfile.ZipFile(file_path, 'r') as z:
+                all_names = z.namelist()
+                chart_files = [f for f in all_names if f.startswith('xl/charts/chart') and f.endswith('.xml')]
+                if chart_files:
+                    has_charts = True
+
+                media_files = [f for f in all_names if f.startswith('xl/media/')]
+                img_exts = {
+                    '.png': 'image/png',
+                    '.jpg': 'image/jpeg',
+                    '.jpeg': 'image/jpeg',
+                    '.webp': 'image/webp',
+                    '.bmp': 'image/bmp',
+                    '.gif': 'image/gif',
+                }
+                media_files.sort()
+                for mf in media_files:
+                    ext = os.path.splitext(mf)[1].lower()
+                    if ext in img_exts:
+                        info = z.getinfo(mf)
+                        if 0 < info.file_size <= max_bytes_per_img:
+                            data = z.read(mf)
+                            b64 = base64.b64encode(data).decode('utf-8')
+                            extracted.append({
+                                'name': os.path.basename(mf),
+                                'mime_type': img_exts[ext],
+                                'data': b64,
+                                'size_kb': len(data) / 1024
+                            })
+                            if len(extracted) >= max_images:
+                                break
     except Exception:
         pass
+
+    # 2. Якщо є вбудовані діаграми (або це файл .xls/.ods, або в xl/media/ нічого не знайдено),
+    # рендеримо сторінки таблиці у високій якості, щоб ШІ міг побачити діаграми на власні очі!
+    remaining_slots = max_images - len(extracted)
+    if remaining_slots > 0:
+        ext = os.path.splitext(file_path)[1].lower()
+        if has_charts or ext in ['.xls', '.ods'] or not extracted:
+            rendered_pages = render_spreadsheet_to_images(file_path, max_pages=remaining_slots)
+            for r_img in rendered_pages:
+                extracted.append(r_img)
+                if len(extracted) >= max_images:
+                    break
+
     return extracted
 
 
@@ -531,33 +1145,105 @@ def extract_images_from_zip(file_path, max_images=6, max_bytes_per_img=8 * 1024 
 
 def extract_text_from_excel(file_path, max_rows=50, max_cols=20):
     """
-    Видобуває дані та таблиці з файлу Excel (.xlsx).
+    Видобуває дані, таблиці та метадані діаграм із файлу Excel (.xlsx, .xls).
     """
-    try:
-        import openpyxl
-        wb = openpyxl.load_workbook(file_path, data_only=True, read_only=True)
-        sheet_summaries = []
+    sheet_summaries = []
+    charts_summary = ""
 
-        for sheetname in wb.sheetnames[:5]:
-            sheet = wb[sheetname]
-            sheet_lines = [f"📊 Аркуш: {sheetname}"]
-            rows_count = 0
+    ext = os.path.splitext(file_path)[1].lower() if file_path else ""
 
-            for row in sheet.iter_rows(values_only=True):
-                rows_count += 1
-                if rows_count > max_rows:
+    # 1. Витягуємо метадані діаграм для .xlsx
+    if ext == '.xlsx' or zipfile.is_zipfile(file_path):
+        try:
+            charts_info = parse_excel_charts(file_path)
+            if charts_info:
+                charts_summary = format_excel_charts_summary(charts_info)
+        except Exception:
+            pass
+
+    # 2. Витягуємо дані таблиць
+    # 2.1. Якщо це застарілий .xls, спершу читаємо напряму через xlrd
+    if ext == '.xls':
+        try:
+            import xlrd
+            wb = xlrd.open_workbook(file_path)
+            for sheetname in wb.sheet_names()[:5]:
+                sheet = wb.sheet_by_name(sheetname)
+                sheet_lines = [f"📊 Аркуш: {sheetname}"]
+                max_r = min(sheet.nrows, max_rows)
+                max_c = min(sheet.ncols, max_cols)
+                for r_idx in range(max_r):
+                    row_vals = []
+                    for c_idx in range(max_c):
+                        cell = sheet.cell(r_idx, c_idx)
+                        if cell.ctype == xlrd.XL_CELL_DATE:
+                            try:
+                                dt = xlrd.xldate_as_datetime(cell.value, wb.datemode)
+                                val = dt.strftime('%d.%m.%Y')
+                            except Exception:
+                                val = str(cell.value)
+                        elif cell.ctype == xlrd.XL_CELL_NUMBER:
+                            val = str(int(cell.value)) if cell.value.is_integer() else str(cell.value)
+                        elif cell.ctype in (xlrd.XL_CELL_EMPTY, xlrd.XL_CELL_BLANK):
+                            val = ""
+                        else:
+                            val = str(cell.value).strip() if cell.value is not None else ""
+                        row_vals.append(val)
+                    if any(v.strip() for v in row_vals):
+                        sheet_lines.append(" | ".join(row_vals))
+                if sheet.nrows > max_rows:
                     sheet_lines.append(f"[... ще рядки]")
-                    break
-                row_vals = [str(v) if v is not None else "" for v in row[:max_cols]]
-                if any(v.strip() for v in row_vals):
-                    sheet_lines.append(" | ".join(row_vals))
+                if len(sheet_lines) > 1:
+                    sheet_summaries.append("\n".join(sheet_lines))
+        except Exception:
+            pass
 
-            sheet_summaries.append("\n".join(sheet_lines))
+    # 2.2. Якщо це .xlsx (або якщо xlrd не зміг прочитати), читаємо через openpyxl
+    if not sheet_summaries:
+        try:
+            import openpyxl
+            wb = openpyxl.load_workbook(file_path, data_only=True, read_only=True)
 
-        wb.close()
-        return "\n\n".join(sheet_summaries)
-    except Exception as e:
-        return f"[Помилка читання Excel таблиці: {str(e)}]"
+            for sheetname in wb.sheetnames[:5]:
+                sheet = wb[sheetname]
+                sheet_lines = [f"📊 Аркуш: {sheetname}"]
+                rows_count = 0
+
+                for row in sheet.iter_rows(values_only=True):
+                    rows_count += 1
+                    if rows_count > max_rows:
+                        sheet_lines.append(f"[... ще рядки]")
+                        break
+                    row_vals = [str(v) if v is not None else "" for v in row[:max_cols]]
+                    if any(v.strip() for v in row_vals):
+                        sheet_lines.append(" | ".join(row_vals))
+
+                sheet_summaries.append("\n".join(sheet_lines))
+
+            wb.close()
+        except Exception as e:
+            # Резервне читання для застарілих .xls або пошкоджених файлів через LibreOffice
+            lo_bin = 'libreoffice' if shutil.which('libreoffice') else ('soffice' if shutil.which('soffice') else None)
+            if lo_bin and ext in ['.xls', '.xlsx']:
+                with tempfile.TemporaryDirectory() as tmp_dir:
+                    try:
+                        res = subprocess.run([lo_bin, '--headless', f'-env:UserInstallation=file://{tmp_dir}/lo_profile', '--convert-to', 'xlsx', '--outdir', tmp_dir, file_path],
+                                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=25)
+                        if res.returncode == 0:
+                            gen_files = glob.glob(os.path.join(tmp_dir, '*.xlsx'))
+                            if gen_files:
+                                return extract_text_from_excel(gen_files[0], max_rows=max_rows, max_cols=max_cols)
+                    except Exception:
+                        pass
+            sheet_summaries.append(f"[Помилка читання Excel таблиці: {str(e)}]")
+
+    res_parts = []
+    if sheet_summaries:
+        res_parts.append("\n\n".join(sheet_summaries))
+    if charts_summary:
+        res_parts.append(charts_summary)
+
+    return "\n\n".join(res_parts) if res_parts else "[Порожня електронна таблиця]"
 
 
 def extract_text_from_binary_presentation(file_path, max_chars=40000):
@@ -903,6 +1589,59 @@ def fetch_url_content(url, timeout=10, max_chars=20000):
         return None, None, f"Помилка завантаження {url}: {str(e)}"
 
 
+def _optimize_image_for_ai(file_path_or_bytes, max_dim=1600, quality=85):
+    """
+    Оптимізує та масштабує фотозображення перед кодуванням у base64 для передачі до ШІ API.
+    Зменшує 8-15 МБ фотографії з камер телефонів до 150-350 КБ без втрати читабельності рукописного тексту,
+    зберігаючи вихідний MIME-тип (PNG для PNG, JPEG для JPEG).
+    """
+    try:
+        from PIL import Image, ImageOps
+        import io
+        if isinstance(file_path_or_bytes, (bytes, bytearray)):
+            orig_bytes = bytes(file_path_or_bytes)
+            img = Image.open(io.BytesIO(orig_bytes))
+        else:
+            with open(file_path_or_bytes, 'rb') as f:
+                orig_bytes = f.read()
+            img = Image.open(io.BytesIO(orig_bytes))
+
+        orig_fmt = (img.format or 'JPEG').upper()
+        mime_type = 'image/png' if orig_fmt == 'PNG' else 'image/jpeg'
+
+        w, h = img.size
+        # Якщо розмір файлу менше 1.5 МБ і роздільна здатність у нормі — повертаємо як є без перетиснення
+        if len(orig_bytes) <= 1536 * 1024 and w <= max_dim and h <= max_dim:
+            return orig_bytes, mime_type
+
+        try:
+            img = ImageOps.exif_transpose(img)
+        except Exception:
+            pass
+
+        if w > max_dim or h > max_dim:
+            img.thumbnail((max_dim, max_dim), Image.Resampling.LANCZOS)
+
+        out = io.BytesIO()
+        if orig_fmt == 'PNG':
+            img.save(out, format='PNG', optimize=True)
+            return out.getvalue(), 'image/png'
+        else:
+            if img.mode != 'RGB':
+                img = img.convert('RGB')
+            img.save(out, format='JPEG', quality=quality, optimize=True)
+            return out.getvalue(), 'image/jpeg'
+    except Exception:
+        fallback_mime = 'image/png' if (isinstance(file_path_or_bytes, str) and file_path_or_bytes.lower().endswith('.png')) else 'image/jpeg'
+        if isinstance(file_path_or_bytes, (bytes, bytearray)):
+            return bytes(file_path_or_bytes), fallback_mime
+        try:
+            with open(file_path_or_bytes, 'rb') as f:
+                return f.read(), fallback_mime
+        except Exception:
+            return None, fallback_mime
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # ОСНОВНА ФУНКЦІЯ ВИДОБУВАННЯ ВМІСТУ ЗДАЧІ РОБОТИ УЧНЯ
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1099,18 +1838,24 @@ def extract_submission_content(submission):
         elif ext in ['.xlsx', '.xls']:
             excel_text = extract_text_from_excel(file_path)
             text_parts.append(f"Вміст таблиці Excel ({filename}, {file_size_kb:.1f} КБ):\n{excel_text}")
-            if ext == '.xlsx':
-                xlsx_imgs = extract_images_from_xlsx(file_path)
-                for x_img in xlsx_imgs:
-                    inline_media.append({
-                        "mime_type": x_img['mime_type'],
-                        "data": x_img['data']
-                    })
-                    text_parts.append(f"[У таблиці Excel ({filename}) виявлено діаграму/графік: {x_img['name']} ({x_img['size_kb']:.1f} КБ) — передано на візуальний аналіз ШІ]")
+            xlsx_imgs = extract_images_from_xlsx(file_path)
+            for x_img in xlsx_imgs:
+                inline_media.append({
+                    "mime_type": x_img['mime_type'],
+                    "data": x_img['data']
+                })
+                text_parts.append(f"[У таблиці Excel ({filename}) виявлено діаграму/сторінку з графіком: {x_img['name']} ({x_img['size_kb']:.1f} КБ) — передано на візуальний мультимодальний аналіз ШІ]")
 
         elif ext == '.ods':
             ods_text = extract_text_from_opendocument(file_path)
             text_parts.append(f"Вміст таблиці OpenDocument (.ods) ({filename}):\n{ods_text or '[Порожня таблиця]'}")
+            ods_imgs = extract_images_from_xlsx(file_path)
+            for o_img in ods_imgs:
+                inline_media.append({
+                    "mime_type": o_img['mime_type'],
+                    "data": o_img['data']
+                })
+                text_parts.append(f"[У таблиці OpenDocument ({filename}) виявлено сторінку з графіком: {o_img['name']} ({o_img['size_kb']:.1f} КБ) — передано на візуальний мультимодальний аналіз ШІ]")
 
         # ── Е. ПРЕЗЕНТАЦІЇ (.pptx, .ppt, .odp) ─────────────────────────────────
         elif ext in ['.pptx', '.ppt']:
@@ -1139,22 +1884,14 @@ def extract_submission_content(submission):
         # ── Є. ЗОБРАЖЕННЯ (ФОТО ЗОШИТІВ, СКРІНШОТИ, СХЕМИ) ───────────────────
         elif ext in ['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif', '.tiff', '.tif', '.svg', '.heic', '.heif']:
             try:
-                mime_type = mimetypes.guess_type(file_path)[0] or 'image/jpeg'
-                if ext == '.webp':
-                    mime_type = 'image/webp'
-                elif ext == '.png':
-                    mime_type = 'image/png'
-                elif ext in ['.jpg', '.jpeg']:
-                    mime_type = 'image/jpeg'
-
-                with open(file_path, 'rb') as img_f:
-                    img_bytes = img_f.read()
-                    b64_data = base64.b64encode(img_bytes).decode('utf-8')
+                b_data, mime_type = _optimize_image_for_ai(file_path)
+                if b_data:
+                    b64_data = base64.b64encode(b_data).decode('utf-8')
                     inline_media.append({
                         "mime_type": mime_type,
                         "data": b64_data
                     })
-                    text_parts.append(f"[Прикріплено фотозображення зошита/роботи: {filename} ({file_size_kb:.1f} КБ)]")
+                    text_parts.append(f"[Прикріплено фотозображення зошита/роботи: {filename} ({file_size_kb:.1f} КБ, оптимізовано для ШІ)]")
             except Exception as e:
                 text_parts.append(f"[Помилка обробки зображення: {e}]")
 
@@ -1334,14 +2071,21 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
     Результати записуються безпосередньо у submission (ai_suggested_grade, ai_feedback, ai_status тощо).
     """
     settings = ai_settings or get_ai_settings()
-    api_key = (settings.api_key or '').strip()
+    act_provider, act_key, act_model, act_url, is_backup_active = settings.get_active_config()
 
-    if not api_key:
-        error_msg = "Google Gemini API Key не налаштовано в системі. Вкажіть ключ у Налаштуваннях ШІ."
-        submission.ai_status = 'failed'
-        submission.ai_error_reason = error_msg
-        submission.save(update_fields=['ai_status', 'ai_error_reason'])
-        return {'status': 'failed', 'error': error_msg}
+    if not act_key and act_provider != 'custom':
+        # Якщо в активному провайдері немає ключа, але є резервний — використовуємо резервний
+        if settings.has_backup_configured():
+            b_prov, b_key, b_model, b_url = settings.get_backup_config()
+            if b_key or b_prov == 'custom':
+                act_provider, act_key, act_model, act_url = b_prov, b_key, b_model, b_url
+                is_backup_active = not is_backup_active
+        if not act_key and act_provider != 'custom':
+            error_msg = f"API Key для {act_provider.title()} не налаштовано в системі. Вкажіть ключ у Налаштуваннях ШІ."
+            submission.ai_status = 'failed'
+            submission.ai_error_reason = error_msg
+            submission.save(update_fields=['ai_status', 'ai_error_reason'])
+            return {'status': 'failed', 'error': error_msg}
 
     # Визначаємо шаблон критеріїв оцінювання
     selected_preset = criteria_preset
@@ -1480,6 +2224,16 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
         "- У 'strengths' та 'weaknesses' відзначай як відповідність темі, так і якість оформлення презентації."
     )
 
+    # ── ОЦІНЮВАННЯ ЕЛЕКТРОННИХ ТАБЛИЦЬ ТА ДІАГРАМ/ГРАФІКІВ (.xlsx, .xls, .ods) ──
+    prompt_lines.append(
+        "📊 ВКАЗІВКИ ДЛЯ ПЕРЕВІРКИ ЕЛЕКТРОННИХ ТАБЛИЦЬ ТА ДІАГРАМ (Excel / Calc):\n"
+        "- Уважно перевіряй наявність побудованих діаграм, графіків, гістограм та візуалізацій (якщо в завданні вимагалося створити діаграму/графік)!\n"
+        "- Звертай особливу увагу на структурований блок «ВИЯВЛЕНІ ВБУДОВАНІ ДІАГРАМИ ТА ГРАФІКИ» у текстовому описі таблиці, а також на прикріплені візуальні зображення сторінок таблиці з графіками (передані у мультимодальному контексті).\n"
+        "- Якщо учень побудував діаграму: оцінюй правильність вибору типу діаграми (стовпчаста/гістограма, кругова, графік тощо), наявність назви (заголовка), підписів осей, легенди та коректність діапазонів даних (рядів та категорій).\n"
+        "- КАТЕГОРИЧНО ЗАБОРОНЕНО стверджувати, що діаграма відсутня, якщо вона зафіксована у структурі таблиці або на переданих зображеннях сторінок!\n"
+        "- Оцінюй також коректність розрахунків, використання формул (якщо вимагалося) та структуру таблиці."
+    )
+
     # Витягуємо вміст прикріплених вчителем файлів до завдання (щоб ШІ знав повну умову завдання)
     if assignment and assignment.files.exists():
         from django.conf import settings as django_settings
@@ -1491,65 +2245,7 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                 af_ext = af.get_extension()
                 is_ai_task = getattr(af, 'is_task_source_for_ai', False)
 
-                # 1. Додаємо візуальні медіа та PDF вчителя до inline_media для зорового аналізу Gemini Vision
-                has_visual_attached = False
-
-                # Зображення (фото вправ з підручника, зошита, графічні схеми)
-                if af_ext in ['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif']:
-                    try:
-                        mime_t = mimetypes.guess_type(af.file.path)[0] or 'image/jpeg'
-                        with open(af.file.path, 'rb') as f_img:
-                            inline_media.append({
-                                "mime_type": mime_t,
-                                "data": base64.b64encode(f_img.read()).decode('utf-8')
-                            })
-                        has_visual_attached = True
-                    except Exception:
-                        pass
-
-                # Прямий PDF документ
-                elif af_ext == '.pdf':
-                    try:
-                        if os.path.getsize(af.file.path) <= 16 * 1024 * 1024:
-                            with open(af.file.path, 'rb') as f_pdf:
-                                inline_media.append({
-                                    "mime_type": "application/pdf",
-                                    "data": base64.b64encode(f_pdf.read()).decode('utf-8')
-                                })
-                            has_visual_attached = True
-                    except Exception:
-                        pass
-
-                # Презентація (.pptx, .ppt, .odp) або Office документ: підключаємо згенероване PDF прев'ю
-                elif af_ext in ['.pptx', '.ppt', '.odp', '.docx']:
-                    preview_pdf_path = None
-                    cand1 = os.path.join(django_settings.MEDIA_ROOT, 'previews', f"{af.id}.pdf")
-                    cand2 = os.path.join(django_settings.MEDIA_ROOT, 'previews', str(af.id), 'presentation.pdf')
-                    if os.path.exists(cand1):
-                        preview_pdf_path = cand1
-                    elif os.path.exists(cand2):
-                        preview_pdf_path = cand2
-                    else:
-                        try:
-                            from .views import get_pdf_preview_url
-                            get_pdf_preview_url(af)
-                            if os.path.exists(cand1):
-                                preview_pdf_path = cand1
-                        except Exception:
-                            pass
-
-                    if preview_pdf_path and os.path.exists(preview_pdf_path) and os.path.getsize(preview_pdf_path) <= 16 * 1024 * 1024:
-                        try:
-                            with open(preview_pdf_path, 'rb') as f_prev:
-                                inline_media.append({
-                                    "mime_type": "application/pdf",
-                                    "data": base64.b64encode(f_prev.read()).decode('utf-8')
-                                })
-                            has_visual_attached = True
-                        except Exception:
-                            pass
-
-                # 2. Витягуємо детальний текст файлу (слайди, заголовки, таблиці, параграфи)
+                # 1. Спочатку витягуємо детальний структурований текст файлу (слайди, заголовки, таблиці, параграфи)
                 af_text = ""
                 if af_ext in ['.pptx', '.ppt']:
                     try:
@@ -1563,7 +2259,73 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                         pass
 
                 if not af_text:
-                    af_text = get_normalized_file_content(af.file.path, af.file.name)
+                    try:
+                        af_text = get_normalized_file_content(af.file.path, af.file.name)
+                    except Exception:
+                        pass
+
+                # 2. Додаємо візуальні медіа до inline_media для Gemini Vision (тільки коли це дійсно необхідно):
+                has_visual_attached = False
+
+                # Зображення (фото вправ з підручника, зошита, графічні схеми) — оптимізуємо розмір
+                if af_ext in ['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif']:
+                    try:
+                        b_data, mime_t = _optimize_image_for_ai(af.file.path)
+                        if b_data:
+                            inline_media.append({
+                                "mime_type": mime_t,
+                                "data": base64.b64encode(b_data).decode('utf-8')
+                            })
+                            has_visual_attached = True
+                    except Exception:
+                        pass
+
+                # Прямий PDF документ: передаємо у Vision, якщо розмір до 4 МБ або якщо текст не вдалося видобути
+                elif af_ext == '.pdf':
+                    try:
+                        pdf_size = os.path.getsize(af.file.path)
+                        if (not af_text or len(af_text.strip()) < 60 or pdf_size <= 4 * 1024 * 1024) and pdf_size <= 10 * 1024 * 1024:
+                            with open(af.file.path, 'rb') as f_pdf:
+                                inline_media.append({
+                                    "mime_type": "application/pdf",
+                                    "data": base64.b64encode(f_pdf.read()).decode('utf-8')
+                                })
+                            has_visual_attached = True
+                    except Exception:
+                        pass
+
+                # Презентація (.pptx, .ppt, .odp) або Office документ:
+                # ОПТИМІЗАЦІЯ ШВИДКОДІЇ: якщо структурований текст слайдів/документа успішно видобуто,
+                # ШІ миттєво оцінює роботу за текстом без передачі важкого багатомегабайтного PDF прев'ю!
+                # Передаємо згенероване PDF прев'ю ТІЛЬКИ якщо текст відсутній (чисто графічні слайди чи скани).
+                elif af_ext in ['.pptx', '.ppt', '.odp', '.docx', '.xlsx', '.xls', '.ods']:
+                    preview_pdf_path = None
+                    cand1 = os.path.join(django_settings.MEDIA_ROOT, 'previews', f"{af.id}.pdf")
+                    cand2 = os.path.join(django_settings.MEDIA_ROOT, 'previews', str(af.id), 'presentation.pdf')
+                    if os.path.exists(cand1):
+                        preview_pdf_path = cand1
+                    elif os.path.exists(cand2):
+                        preview_pdf_path = cand2
+                    elif not af_text or len(af_text.strip()) < 60:
+                        # Тільки якщо тексту немає, запускаємо важку конвертацію LibreOffice на льоту:
+                        try:
+                            from .views import get_pdf_preview_url
+                            get_pdf_preview_url(af)
+                            if os.path.exists(cand1):
+                                preview_pdf_path = cand1
+                        except Exception:
+                            pass
+
+                    if preview_pdf_path and os.path.exists(preview_pdf_path) and os.path.getsize(preview_pdf_path) <= 6 * 1024 * 1024:
+                        try:
+                            with open(preview_pdf_path, 'rb') as f_prev:
+                                inline_media.append({
+                                    "mime_type": "application/pdf",
+                                    "data": base64.b64encode(f_prev.read()).decode('utf-8')
+                                })
+                            has_visual_attached = True
+                        except Exception:
+                            pass
 
                 visual_status = " [візуальний вміст/PDF передано на безпосередній зоровий аналіз ШІ]" if has_visual_attached else ""
 
@@ -1826,68 +2588,108 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
             "- Якщо оцінка менше 10 балів (або 'Доопрацювати'): обов'язково опиши в 'weaknesses' та 'feedback_comment' в загальному, що саме виконано не так і чого не вистачає для досягнення вищого балу.\n"
         )
 
-    # Формування payload для Gemini API
-    request_parts = [{"text": "\n".join(prompt_lines)}]
+    prompt_content = "\n".join(prompt_lines)
 
-    for media in inline_media:
-        request_parts.append({
-            "inlineData": {
-                "mimeType": media['mime_type'],
-                "data": media['data']
-            }
+    # Формуємо ланцюжок спроб: спочатку активний провайдер, потім резервний (failover)
+    attempts_configs = []
+
+    # 1. Спроби для активної конфігурації
+    if act_provider == 'gemini':
+        models_chain = settings.get_active_fallback_chain() if hasattr(settings, 'get_active_fallback_chain') else [act_model]
+        models_to_try = [clean_model_name(m) for m in models_chain if m]
+        if not models_to_try:
+            models_to_try = [clean_model_name(act_model or 'gemini-2.5-flash')]
+        for m in models_to_try:
+            attempts_configs.append({
+                'provider': act_provider,
+                'api_key': act_key,
+                'model': m,
+                'custom_url': act_url,
+                'is_backup': is_backup_active
+            })
+    else:
+        attempts_configs.append({
+            'provider': act_provider,
+            'api_key': act_key,
+            'model': act_model or get_default_model_for_provider(act_provider),
+            'custom_url': act_url,
+            'is_backup': is_backup_active
         })
 
-    payload = {
-        "contents": [
-            {
-                "role": "user",
-                "parts": request_parts
-            }
-        ],
-        "systemInstruction": {
-            "parts": [{"text": system_instruction}]
-        },
-        "generationConfig": {
-            "temperature": float(settings.temperature or 0.2),
-            "responseMimeType": "application/json",
-            "maxOutputTokens": 4096
-        }
-    }
-
-    # Отримуємо ланцюжок моделей з пріоритетами
-    models_chain = settings.get_active_fallback_chain() if hasattr(settings, 'get_active_fallback_chain') else [settings.model_name]
-    models_to_try = [clean_model_name(m) for m in models_chain if m]
-    if not models_to_try:
-        models_to_try = [clean_model_name(settings.model_name or 'gemini-2.5-flash')]
+    # 2. Резервна конфігурація у разі збою / 429 (failover)
+    if settings.auto_failover_enabled and settings.has_backup_configured():
+        b_prov, b_key, b_model, b_url = settings.get_backup_config()
+        if b_key or b_prov == 'custom':
+            m_target = b_model or get_default_model_for_provider(b_prov)
+            attempts_configs.append({
+                'provider': b_prov,
+                'api_key': b_key,
+                'model': clean_model_name(m_target) if b_prov == 'gemini' else m_target,
+                'custom_url': b_url,
+                'is_backup': not is_backup_active
+            })
 
     attempted_errors = []
 
-    for model_idx, model_name in enumerate(models_to_try):
-        endpoint = f"{GEMINI_API_BASE_URL}/{model_name}:generateContent?key={api_key}"
-        fallback_happened = (model_idx > 0)
-        max_retries = 1 if len(models_to_try) > 1 else 2
+    for cfg_idx, cfg in enumerate(attempts_configs):
+        c_provider = cfg['provider']
+        c_key = cfg['api_key']
+        c_model = cfg['model']
+        c_url = cfg['custom_url']
+        c_is_backup = cfg['is_backup']
+
+        is_failover_call = (c_is_backup != is_backup_active)
+        fallback_happened = is_failover_call or (cfg_idx > 0)
+        max_retries = 1 if len(attempts_configs) > 1 else 2
 
         for attempt in range(max_retries + 1):
             try:
-                status_code, data, text = _http_post_json(endpoint, payload, timeout=35)
+                # Оптимізація швидкодії: для Flash-моделей вимикаємо тривалий ланцюжок роздумів (thinkingBudget=0),
+                # що скорочує час очікування відповіді з 25-40 секунд до 2-4 секунд!
+                thinking_budget_val = 0 if ('flash' in c_model.lower() and c_provider == 'gemini') else None
 
-                if status_code == 429 and attempt < max_retries:
-                    time.sleep(2)
+                status_code, raw_text, err_msg, raw_data = call_ai_api(
+                    prompt_text=prompt_content,
+                    system_prompt=system_instruction,
+                    inline_media=inline_media,
+                    provider=c_provider,
+                    api_key=c_key,
+                    model_name=c_model,
+                    custom_url=c_url,
+                    temperature=float(settings.temperature or 0.2),
+                    max_output_tokens=4096,
+                    timeout=35,
+                    json_mode=True,
+                    thinking_budget=thinking_budget_val
+                )
+
+                if status_code in (429, 500, 502, 503, 504) and attempt < max_retries:
+                    time.sleep(1.5 * (attempt + 1))
                     continue
 
-                if status_code != 200 or not data:
-                    err_data = data or {}
-                    err_msg = err_data.get('error', {}).get('message', f"HTTP {status_code}: {text[:200]}")
+                if status_code != 200 or not raw_text:
                     if status_code == 429:
-                        err_msg = f"Перевищено ліміт запитів для {model_name} (429 Rate Limit)."
-                    elif status_code == 403:
-                        err_msg = f"Недійсний Google Gemini API Key для {model_name} (403)."
+                        fail_reason = f"Перевищено ліміт запитів для {c_model} (429 Rate Limit)."
+                    elif status_code in (401, 403):
+                        fail_reason = f"Недійсний API Key для {c_provider.title()} ({c_model})."
+                    else:
+                        fail_reason = err_msg or f"Помилка HTTP {status_code}"
 
-                    attempted_errors.append(f"[{model_name}]: {err_msg}")
-                    break  # Переходимо до наступної пріоритетної моделі
+                    attempted_errors.append(f"[{c_provider}/{c_model}]: {fail_reason}")
+                    break  # Переходимо до наступної моделі / резервного API
 
-                raw_text = data['candidates'][0]['content']['parts'][0]['text'].strip()
+                raw_text = raw_text.strip()
                 result_json = extract_json_from_text(raw_text)
+
+                model_name = f"{c_model} ({c_provider.title()})" if c_provider != 'gemini' else c_model
+
+                if is_failover_call:
+                    try:
+                        settings.last_failover_at = timezone.now()
+                        settings.last_failover_reason = f"Автоматичне перемикання на резервний {c_provider.title()} ({c_model}). Попередня помилка: {'; '.join(attempted_errors[-2:])}"
+                        settings.save(update_fields=['last_failover_at', 'last_failover_reason'])
+                    except Exception:
+                        pass
 
                 if result_json:
                     suggested_grade = str(result_json.get('suggested_grade', '')).strip()
@@ -2176,11 +2978,11 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                     }
 
             except Exception as e:
-                attempted_errors.append(f"[{model_name} виняток]: {str(e)}")
+                attempted_errors.append(f"[{c_provider}/{c_model} виняток]: {str(e)}")
                 break
 
-    # Якщо всі моделі в черзі зазнали невдачі
-    all_err_msg = " | ".join(attempted_errors) if attempted_errors else "Не вдалося отримати відповідь від жодної з налаштованих моделей ШІ."
+    # Якщо всі спроби (включаючи резервний API) зазнали невдачі
+    all_err_msg = " | ".join(attempted_errors) if attempted_errors else "Не вдалося отримати відповідь від жодної з налаштованих моделей або резервного API ШІ."
     submission.ai_status = 'failed'
     submission.ai_error_reason = all_err_msg
     submission.save(update_fields=['ai_status', 'ai_error_reason'])
@@ -2191,14 +2993,21 @@ def generate_criteria_with_gemini(teacher_notes, assignment_title='', assignment
     """
     Генерує структуровані індивідуальні критерії оцінювання за 12-бальною шкалою НУШ
     на основі побажань вчителя, описаних звичайною мовою, та контексту завдання.
+    Підтримує будь-якого налаштованого ШІ-провайдера та резервний API при збоях.
     """
     settings = get_ai_settings()
     if not settings.is_enabled:
         return {'status': 'error', 'message': 'Модуль ШІ вимкнено в налаштуваннях системи.'}
 
-    api_key = (settings.api_key or '').strip()
-    if not api_key:
-        return {'status': 'error', 'message': 'API-ключ Google Gemini не налаштовано в системі.'}
+    act_provider, act_key, act_model, act_url, is_backup_active = settings.get_active_config()
+    if not act_key and act_provider != 'custom':
+        if settings.has_backup_configured():
+            b_prov, b_key, b_model, b_url = settings.get_backup_config()
+            if b_key or b_prov == 'custom':
+                act_provider, act_key, act_model, act_url = b_prov, b_key, b_model, b_url
+                is_backup_active = not is_backup_active
+        if not act_key and act_provider != 'custom':
+            return {'status': 'error', 'message': f'API-ключ для {act_provider.title()} не налаштовано в системі.'}
 
     teacher_notes = (teacher_notes or '').strip()
     assignment_title = (assignment_title or '').strip()
@@ -2241,101 +3050,127 @@ def generate_criteria_with_gemini(teacher_notes, assignment_title='', assignment
 
     full_prompt = "\n".join(prompt_parts)
 
-    models_to_try = []
-    if custom_model:
-        models_to_try.append(clean_model_name(custom_model))
-    if hasattr(settings, 'get_active_fallback_chain'):
-        for m in settings.get_active_fallback_chain():
-            m_clean = clean_model_name(m)
-            if m_clean not in models_to_try:
-                models_to_try.append(m_clean)
-    if hasattr(settings, 'model_name') and settings.model_name:
-        m_clean = clean_model_name(settings.model_name)
-        if m_clean not in models_to_try:
-            models_to_try.append(m_clean)
-
-    # Додаємо гарантовані актуальні Flash-моделі як резервні
-    for fallback in ['gemini-3.6-flash', 'gemini-flash-latest', 'gemini-3-flash-preview', 'gemini-3.1-flash-lite-preview']:
-        if fallback not in models_to_try:
-            models_to_try.append(fallback)
-
     try:
         temp_val = float(getattr(settings, 'temperature', 0.3) or 0.3)
         temperature = max(0.0, min(1.0, temp_val))
     except (ValueError, TypeError):
         temperature = 0.3
 
+    # Ланцюжок спроб (активний провайдер + резервний)
+    attempts_configs = []
+
+    # 1. Активна конфігурація
+    if act_provider == 'gemini':
+        models_to_try = []
+        if custom_model:
+            models_to_try.append(clean_model_name(custom_model))
+        if hasattr(settings, 'get_active_fallback_chain'):
+            for m in settings.get_active_fallback_chain():
+                m_clean = clean_model_name(m)
+                if m_clean not in models_to_try:
+                    models_to_try.append(m_clean)
+        if hasattr(settings, 'model_name') and settings.model_name:
+            m_clean = clean_model_name(settings.model_name)
+            if m_clean not in models_to_try:
+                models_to_try.append(m_clean)
+        for fallback in ['gemini-2.5-flash', 'gemini-1.5-flash', 'gemini-3.6-flash']:
+            if fallback not in models_to_try:
+                models_to_try.append(fallback)
+        for m in models_to_try:
+            attempts_configs.append({
+                'provider': act_provider,
+                'api_key': act_key,
+                'model': m,
+                'custom_url': act_url,
+                'is_backup': is_backup_active
+            })
+    else:
+        m_chosen = clean_model_name(custom_model) if custom_model else (act_model or get_default_model_for_provider(act_provider))
+        attempts_configs.append({
+            'provider': act_provider,
+            'api_key': act_key,
+            'model': m_chosen,
+            'custom_url': act_url,
+            'is_backup': is_backup_active
+        })
+
+    # 2. Резервна конфігурація (якщо налаштована та дозволено failover)
+    if settings.auto_failover_enabled and settings.has_backup_configured():
+        b_prov, b_key, b_model, b_url = settings.get_backup_config()
+        if b_key or b_prov == 'custom':
+            m_target = b_model or get_default_model_for_provider(b_prov)
+            attempts_configs.append({
+                'provider': b_prov,
+                'api_key': b_key,
+                'model': clean_model_name(m_target) if b_prov == 'gemini' else m_target,
+                'custom_url': b_url,
+                'is_backup': not is_backup_active
+            })
+
     attempted_errors = []
 
-    for model_name in models_to_try:
-        endpoint = f"{GEMINI_API_BASE_URL}/{model_name}:generateContent?key={api_key}"
+    for cfg in attempts_configs:
+        c_provider = cfg['provider']
+        c_key = cfg['api_key']
+        c_model = cfg['model']
+        c_url = cfg['custom_url']
+        c_is_backup = cfg['is_backup']
+        is_failover = (c_is_backup != is_backup_active)
 
-        # Конфігурації генерації: спочатку пробуємо без витрат токенів на роздуми (thinkingBudget: 0),
-        # а якщо конкретна модель не підтримує цей параметр — зі стандартною конфігурацією
-        generation_configs = [
-            {"temperature": temperature, "maxOutputTokens": 3500, "thinkingConfig": {"thinkingBudget": 0}},
-            {"temperature": temperature, "maxOutputTokens": 3500}
-        ]
+        try:
+            thinking_budget_val = 0 if ('flash' in c_model.lower() and c_provider == 'gemini') else None
+            status_code, raw_text, err_msg, raw_data = call_ai_api(
+                prompt_text=full_prompt,
+                system_prompt="",
+                inline_media=None,
+                provider=c_provider,
+                api_key=c_key,
+                model_name=c_model,
+                custom_url=c_url,
+                temperature=temperature,
+                max_output_tokens=3500,
+                timeout=35,
+                json_mode=False,
+                thinking_budget=thinking_budget_val
+            )
 
-        model_succeeded = False
-        for gen_cfg in generation_configs:
-            payload = {
-                "contents": [
-                    {
-                        "parts": [{"text": full_prompt}]
+            if status_code == 200 and raw_text:
+                result_text = raw_text.strip()
+                if result_text.startswith('```'):
+                    lines = result_text.splitlines()
+                    if lines and lines[0].startswith('```'):
+                        lines = lines[1:]
+                    if lines and lines[-1].startswith('```'):
+                        lines = lines[:-1]
+                    result_text = "\n".join(lines).strip()
+
+                if result_text:
+                    if is_failover:
+                        try:
+                            settings.last_failover_at = timezone.now()
+                            settings.last_failover_reason = f"Автоматичне перемикання на резервний {c_provider.title()} ({c_model}) при генерації критеріїв."
+                            settings.save(update_fields=['last_failover_at', 'last_failover_reason'])
+                        except Exception:
+                            pass
+
+                    model_display = f"{c_model} ({c_provider.title()})" if c_provider != 'gemini' else c_model
+                    return {
+                        'status': 'success',
+                        'criteria': result_text,
+                        'model_used': model_display
                     }
-                ],
-                "generationConfig": gen_cfg
-            }
-            try:
-                status_code, data, text = _http_post_json(endpoint, payload, timeout=35)
-                if status_code == 200 and data:
-                    candidates = data.get('candidates', [])
-                    if candidates:
-                        cand = candidates[0]
-                        parts = cand.get('content', {}).get('parts', [])
-                        if parts:
-                            # Фільтруємо частини думок ШІ, залишаючи суто фінальний текст
-                            text_parts = [p.get('text', '') for p in parts if not p.get('thought')]
-                            if not text_parts:
-                                text_parts = [p.get('text', '') for p in parts]
-                            result_text = "\n".join([t for t in text_parts if t]).strip()
-                            if result_text.startswith('```'):
-                                lines = result_text.splitlines()
-                                if lines and lines[0].startswith('```'):
-                                    lines = lines[1:]
-                                if lines and lines[-1].startswith('```'):
-                                    lines = lines[:-1]
-                                result_text = "\n".join(lines).strip()
-                            if result_text:
-                                return {
-                                    'status': 'success',
-                                    'criteria': result_text,
-                                    'model_used': model_name
-                                }
-                elif status_code == 429:
-                    attempted_errors.append(f"{model_name}: вичерпано ліміт запитів (429 Rate Limit)")
-                    break
-                elif status_code == 400:
-                    err_msg = (data or {}).get('error', {}).get('message', text[:150])
-                    if 'thinking' in err_msg.lower():
-                        continue  # Повторюємо без thinkingConfig
-                    attempted_errors.append(f"{model_name}: {err_msg}")
-                    break
-                elif status_code == 404:
-                    attempted_errors.append(f"{model_name}: модель застаріла або недоступна (404)")
-                    break
-                else:
-                    err_msg = (data or {}).get('error', {}).get('message', f"Помилка {status_code}")
-                    attempted_errors.append(f"{model_name}: {err_msg}")
-                    break
-            except Exception as e:
-                attempted_errors.append(f"{model_name}: {str(e)}")
-                break
+
+            if status_code == 429:
+                attempted_errors.append(f"{c_provider}/{c_model}: вичерпано ліміт запитів (429 Rate Limit)")
+            else:
+                attempted_errors.append(f"{c_provider}/{c_model}: {err_msg or f'Помилка {status_code}'}")
+
+        except Exception as e:
+            attempted_errors.append(f"{c_provider}/{c_model}: {str(e)}")
 
     detail = f" ({'; '.join(attempted_errors)})" if attempted_errors else ""
     return {
         'status': 'error',
-        'message': f"Не вдалося згенерувати критерії через тимчасову недоступність моделі ШІ{detail}. Спробуйте ще раз або перевірте налаштування Gemini."
+        'message': f"Не вдалося згенерувати критерії через тимчасову недоступність моделі ШІ{detail}. Спробуйте ще раз або перевірте налаштування ШІ."
     }
 

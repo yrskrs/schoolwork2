@@ -39,4 +39,4 @@ RUN mkdir -p /app/media /app/staticfiles /app/logs
 RUN chmod -R 755 /app/media /app/staticfiles /app/logs
 
 # Команда запуску через gunicorn з автоматичною міграцією БД та збором статики
-CMD ["sh", "-c", "python manage.py migrate && python manage.py collectstatic --noinput && gunicorn --bind 0.0.0.0:8000 --workers 3 schoolnet.wsgi:application"]
+CMD ["sh", "-c", "python manage.py migrate && python manage.py collectstatic --noinput && gunicorn --config /app/gunicorn.conf.py schoolnet.wsgi:application"]

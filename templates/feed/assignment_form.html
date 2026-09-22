@@ -671,6 +671,17 @@ document.addEventListener('DOMContentLoaded', function() {
         return '📄';
     }
 
+    function syncFilesToInput() {
+        if (!fileInput) return;
+        try {
+            if (assignmentFilesStore && assignmentFilesStore.files && assignmentFilesStore.files.length > 0) {
+                fileInput.files = assignmentFilesStore.files;
+            }
+        } catch (e) {
+            console.warn('Cannot assign assignmentFilesStore.files to fileInput.files:', e);
+        }
+    }
+
     function addFilesToStore(fileList) {
         if (!fileList || !fileList.length) return;
         for (var i = 0; i < fileList.length; i++) {
@@ -683,12 +694,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
             if (!duplicate) {
-                assignmentFilesStore.items.add(f);
+                try {
+                    assignmentFilesStore.items.add(f);
+                } catch(e) {
+                    console.warn('DataTransfer.items.add error:', e);
+                }
             }
         }
-        if (fileInput) {
-            fileInput.files = assignmentFilesStore.files;
-        }
+        syncFilesToInput();
         renderNewFilesUI();
     }
 
@@ -697,12 +710,15 @@ document.addEventListener('DOMContentLoaded', function() {
         var removedFile = assignmentFilesStore.files[index];
         for (var i = 0; i < assignmentFilesStore.files.length; i++) {
             if (i !== index) {
-                newStore.items.add(assignmentFilesStore.files[i]);
+                try {
+                    newStore.items.add(assignmentFilesStore.files[i]);
+                } catch(e) {}
             }
         }
         assignmentFilesStore = newStore;
-        if (fileInput) {
-            fileInput.files = assignmentFilesStore.files;
+        syncFilesToInput();
+        if (assignmentFilesStore.files.length === 0 && fileInput) {
+            try { fileInput.value = ''; } catch(e) {}
         }
         if (removedFile && currentAiTaskFile === 'new:' + removedFile.name) {
             currentAiTaskFile = '';
@@ -792,6 +808,10 @@ document.addEventListener('DOMContentLoaded', function() {
     if (uploadArea && fileInput) {
         uploadArea.addEventListener('click', function(e) {
             if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON') return;
+            // Якщо ще не обрано жодного файлу, дозволяємо чистий вибір
+            if (assignmentFilesStore.files.length === 0) {
+                try { fileInput.value = ''; } catch(err) {}
+            }
             fileInput.click();
         });
 
@@ -827,7 +847,6 @@ document.addEventListener('DOMContentLoaded', function() {
             if (this.files && this.files.length) {
                 addFilesToStore(this.files);
             }
-            this.value = '';
         });
     }
 
@@ -835,9 +854,7 @@ document.addEventListener('DOMContentLoaded', function() {
     var formEl = document.getElementById('assignment-form');
     if (formEl && fileInput) {
         formEl.addEventListener('submit', function() {
-            if (assignmentFilesStore.files.length > 0) {
-                fileInput.files = assignmentFilesStore.files;
-            }
+            syncFilesToInput();
         });
     }
 });
@@ -1055,14 +1072,34 @@ document.addEventListener('DOMContentLoaded', function() {
     var descTextarea = document.getElementById('{{ form.description.id_for_label }}') || document.querySelector('textarea[name="description"]');
     var richEditor = document.getElementById('rich-editor');
 
+    function cleanDarkStyles(html) {
+        if (!html) return '';
+        return html
+            .replace(/color\s*:\s*(#000000|#000|black|rgb\s*\(\s*0\s*,\s*0\s*,\s*0\s*\)|#0f172a|#1e293b|#111827|#334155)\s*;?/gi, '')
+            .replace(/background(-color)?\s*:\s*(#ffffff|#fff|white|rgb\s*\(\s*255\s*,\s*255\s*,\s*255\s*\))\s*;?/gi, '');
+    }
+
     if (richEditor && descTextarea) {
-        richEditor.innerHTML = descTextarea.value || '';
+        richEditor.innerHTML = cleanDarkStyles(descTextarea.value || '');
 
         richEditor.addEventListener('input', function() {
             descTextarea.value = richEditor.innerHTML;
         });
         richEditor.addEventListener('blur', function() {
             descTextarea.value = richEditor.innerHTML;
+        });
+
+        // Безпечна вставка (Paste): очищаємо сторонні темні інлайн-кольори та білі фони
+        richEditor.addEventListener('paste', function(e) {
+            var clipboardData = e.clipboardData || window.clipboardData;
+            if (!clipboardData) return;
+            var pastedHtml = clipboardData.getData('text/html');
+            if (pastedHtml) {
+                e.preventDefault();
+                var cleanedHtml = cleanDarkStyles(pastedHtml);
+                document.execCommand('insertHTML', false, cleanedHtml);
+                descTextarea.value = richEditor.innerHTML;
+            }
         });
 
         var parentForm = richEditor.closest('form');

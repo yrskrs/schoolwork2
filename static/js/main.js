@@ -477,7 +477,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Якщо на сторінці немає сайдбару, приховуємо кнопку меню взагалі
     if (!currentSidebar()) {
-        mobileMenuBtn.style.display = 'none';
+        mobileMenuBtn.classList.add('sidebar-not-found');
+        mobileMenuBtn.style.setProperty('display', 'none', 'important');
     }
 
     mobileMenuBtn.addEventListener('click', function () {
@@ -622,8 +623,8 @@ document.addEventListener('submit', function (e) {
     'use strict';
     let progressTimer = null;
     let progressBar = null;
-
     let indicatorTimer = null;
+    let safetyTimer = null;
 
     function getBar() {
         if (!progressBar) {
@@ -646,6 +647,7 @@ document.addEventListener('submit', function (e) {
         const indicator = getIndicator();
         clearTimeout(progressTimer);
         clearTimeout(indicatorTimer);
+        clearTimeout(safetyTimer);
 
         // Миттєвий старт смужки без затримок
         bar.classList.add('active');
@@ -657,11 +659,16 @@ document.addEventListener('submit', function (e) {
             bar.style.width = '68%';
         }, 120);
 
-        // Якщо завантаження триває більше 180мс — м'яко показуємо бейдж
+        // Якщо завантаження триває більше 180мс — показуємо бейдж
         indicatorTimer = setTimeout(function () {
             if (indicator) indicator.classList.add('active');
             bar.style.width = '88%';
         }, 180);
+
+        // Сторожовий таймер (Watchdog): якщо сторінка не вивантажилась через 4.5 с (наприклад, файл скачався чи дія скасувалась) — плавно приховуємо індикатор
+        safetyTimer = setTimeout(function () {
+            window.finishProgressBar();
+        }, 4500);
     };
 
     window.finishProgressBar = function () {
@@ -669,6 +676,7 @@ document.addEventListener('submit', function (e) {
         const indicator = getIndicator();
         clearTimeout(progressTimer);
         clearTimeout(indicatorTimer);
+        clearTimeout(safetyTimer);
 
         if (indicator) indicator.classList.remove('active');
 
@@ -682,31 +690,111 @@ document.addEventListener('submit', function (e) {
         }, 150);
     };
 
+    window.resetProgressBar = function () {
+        const bar = getBar();
+        const indicator = getIndicator();
+        clearTimeout(progressTimer);
+        clearTimeout(indicatorTimer);
+        clearTimeout(safetyTimer);
+
+        if (indicator) indicator.classList.remove('active');
+        bar.classList.remove('active');
+        bar.style.opacity = '0';
+        bar.style.width = '0%';
+    };
+
     // Автоматична візуалізація завантаження при переході за внутрішніми посиланнями
     document.addEventListener('click', function (e) {
+        // 1. Ігноруємо неліві кліки (коліщатко / середня кнопка, права кнопка)
+        if (e.button !== 0) return;
+
+        // 2. Ігноруємо кліки з модифікаторами (Ctrl, Cmd, Shift, Alt відкривають у новій вкладці або вікні)
+        if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+
+        // 3. Ігноруємо якщо дія вже скасована іншим слухачем
+        if (e.defaultPrevented) return;
+
         const link = e.target.closest('a');
         if (!link) return;
+
+        // 4. Ігноруємо посилання, що відкриваються у новій вкладці або фреймі
+        const target = (link.getAttribute('target') || '').toLowerCase().trim();
+        if (target && target !== '_self') return;
+
+        // 5. Ігноруємо посилання для завантаження файлів
+        if (link.hasAttribute('download')) return;
+
+        // 6. Ігноруємо елементи інтерфейсу та модальні вікна
+        if (link.hasAttribute('data-no-progress') ||
+            link.classList.contains('no-progress') ||
+            link.hasAttribute('data-bs-toggle') ||
+            link.hasAttribute('data-toggle') ||
+            link.getAttribute('role') === 'button') {
+            return;
+        }
+
         const href = link.getAttribute('href');
-        if (!href || href.startsWith('#') || href.startsWith('javascript:') ||
-            link.getAttribute('target') === '_blank' || link.hasAttribute('download')) {
+        if (!href) return;
+
+        // 7. Ігноруємо якорі, псевдопротоколи та порожні дії
+        if (href.startsWith('#') ||
+            href.startsWith('javascript:') ||
+            href.startsWith('mailto:') ||
+            href.startsWith('tel:') ||
+            href.startsWith('blob:') ||
+            href.startsWith('data:')) {
             return;
         }
-        if (link.hasAttribute('onclick') && link.getAttribute('onclick').includes('return false')) {
-            return;
-        }
+
+        // 8. Ігноруємо переходи на ту саму сторінку без параметрів
         if (href === window.location.pathname + window.location.search) {
             return;
         }
-        if (href.startsWith('/') || href.startsWith('?') || href.includes(window.location.host)) {
+
+        // 9. Ігноруємо прямі посилання на файли, які браузер скачує (PDF, ZIP, DOCX, SB3 тощо) або URL експорту
+        const cleanPath = href.split('?')[0].split('#')[0];
+        if (/\.(pdf|zip|tar|gz|rar|7z|docx?|xlsx?|pptx?|csv|sb[23]|txt|png|jpe?g|gif|webp)$/i.test(cleanPath) ||
+            /\/download\/|\/export\//i.test(href)) {
+            return;
+        }
+
+        // 10. Перевірка внутрішнього посилання
+        const isInternal = href.startsWith('/') ||
+                           href.startsWith('?') ||
+                           href.includes(window.location.host);
+
+        if (isInternal) {
             window.startProgressBar();
+
+            // Перевіряємо через тик події: якщо наступний обробник (наприклад, modal чи AJAX) викликав preventDefault
+            setTimeout(function () {
+                if (e.defaultPrevented) {
+                    window.finishProgressBar();
+                }
+            }, 0);
         }
     });
 
-    // При відправці звичайних форм також показуємо індикатор
+    // При кліку коліщатком або допоміжними кнопками миші ніколи не залишаємо прогрес-бар
+    document.addEventListener('auxclick', function () {
+        window.finishProgressBar();
+    });
+
+    // При відправці звичайних форм також показуємо індикатор (якщо форма не відкривається в новій вкладці)
     document.addEventListener('submit', function (e) {
-        if (!e.defaultPrevented && e.target && !e.target.hasAttribute('data-no-progress')) {
-            window.startProgressBar();
-        }
+        const form = e.target;
+        if (!form || e.defaultPrevented || form.hasAttribute('data-no-progress')) return;
+        const target = (form.getAttribute('target') || '').toLowerCase().trim();
+        if (target && target !== '_self') return;
+
+        window.startProgressBar();
+
+        // Якщо валідація форми або інший скрипт зупинив сабміт
+        setTimeout(function () {
+            if (e.defaultPrevented) {
+                window.finishProgressBar();
+            }
+        }, 50);
     });
 
     // Завершення індикатора при завантаженні або поверненні з кешу
@@ -715,6 +803,23 @@ document.addEventListener('submit', function (e) {
     });
     window.addEventListener('pageshow', function () {
         window.finishProgressBar();
+    });
+
+    // Якщо користувач повернувся на вкладку з іншої вкладки — гарантуємо скидання застряглого індикатора
+    window.addEventListener('focus', function () {
+        window.finishProgressBar();
+    });
+    document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'visible') {
+            window.finishProgressBar();
+        }
+    });
+
+    // Скасування індикатора клавішею Escape
+    window.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') {
+            window.finishProgressBar();
+        }
     });
 })();
 

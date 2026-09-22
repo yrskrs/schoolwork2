@@ -2834,14 +2834,114 @@ DEFAULT_NUS_SYSTEM_PROMPT = """Ти — висококваліфікований
 }
 """
 
+AI_PROVIDER_CHOICES = [
+    ('gemini', 'Google Gemini (Офіційний API)'),
+    ('openai', 'OpenAI (ChatGPT / GPT-4o)'),
+    ('deepseek', 'DeepSeek (DeepSeek V3 / R1)'),
+    ('groq', 'Groq Cloud (Llama / Mixtral)'),
+    ('openrouter', 'OpenRouter (Універсальний доступ)'),
+    ('custom', 'Власний OpenAI-сумісний (Ollama / Local AI / vLLM)'),
+]
+
+ACTIVE_KEY_CHOICES = [
+    ('primary', 'Основний API'),
+    ('backup', 'Резервний API'),
+]
+
+
 class AISettings(models.Model):
     """
-    Глобальні налаштування модуля Google Gemini AI для школи.
-    Підтримує чергу пріоритетів моделей для автоматичного fallback при вичерпанні лімітів (429 Rate Limit) або помилках.
+    Глобальні налаштування модуля штучного інтелекту (Google Gemini, OpenAI, DeepSeek, Groq тощо) для школи.
+    Підтримує основний та резервний API ключі, автоматичний failover при помилках та чергу пріоритетів моделей.
     """
-    api_key = models.CharField('Google Gemini API Key', max_length=255, blank=True, default='', help_text="Отримайте безкоштовний ключ в Google AI Studio")
-    model_name = models.CharField('Модель Gemini', max_length=100, default='gemini-2.5-flash', help_text="Основна модель (Пріоритет #1)")
-    saved_models_list = models.TextField('Збережені моделі з пріоритетами', blank=True, default='[{"name": "gemini-2.5-flash", "priority": 1, "enabled": true}, {"name": "gemini-1.5-flash", "priority": 2, "enabled": true}, {"name": "gemini-2.5-pro", "priority": 3, "enabled": true}, {"name": "gemini-3.6-flash", "priority": 4, "enabled": true}]')
+    AI_PROVIDER_CHOICES = AI_PROVIDER_CHOICES
+    ACTIVE_KEY_CHOICES = ACTIVE_KEY_CHOICES
+
+    # ── Основний API ──────────────────────────────────────────────────────────
+    ai_provider = models.CharField(
+        'Основний провайдер ШІ',
+        max_length=50,
+        default='gemini',
+        choices=AI_PROVIDER_CHOICES,
+        help_text="Оберіть платформу ШІ для основного оцінювання"
+    )
+    api_key = models.CharField(
+        'Основний API Key',
+        max_length=255,
+        blank=True,
+        default='',
+        help_text="Отримайте ключ в Google AI Studio або кабінеті обраного ШІ"
+    )
+    model_name = models.CharField(
+        'Основна модель',
+        max_length=100,
+        default='gemini-3.8-flash',
+        help_text="Основна модель (Пріоритет #1)"
+    )
+    custom_api_url = models.CharField(
+        'Основний Base URL',
+        max_length=255,
+        blank=True,
+        default='',
+        help_text="Для custom провайдера або локальної Ollama, наприклад: http://localhost:11434/v1"
+    )
+
+    # ── Резервний API (Failover) ──────────────────────────────────────────────
+    backup_ai_provider = models.CharField(
+        'Резервний провайдер ШІ',
+        max_length=50,
+        default='gemini',
+        choices=AI_PROVIDER_CHOICES,
+        help_text="Провайдер резервного API на випадок збоїв чи вичерпання лімітів"
+    )
+    backup_api_key = models.CharField(
+        'Резервний API Key',
+        max_length=255,
+        blank=True,
+        default='',
+        help_text="Резервний ключ для безперебійного оцінювання"
+    )
+    backup_model_name = models.CharField(
+        'Резервна модель',
+        max_length=100,
+        blank=True,
+        default='',
+        help_text="Модель резервного API (якщо порожньо — використовується сумісна за замовчуванням)"
+    )
+    backup_custom_api_url = models.CharField(
+        'Резервний Base URL',
+        max_length=255,
+        blank=True,
+        default='',
+        help_text="Для резервного custom провайдера"
+    )
+
+    # ── Режим активності та автоматичного перемикання ─────────────────────────
+    active_api_type = models.CharField(
+        'Активний API ключ',
+        max_length=20,
+        default='primary',
+        choices=ACTIVE_KEY_CHOICES,
+        help_text="Ручний вибір активного ключа: Основний або Резервний"
+    )
+    auto_failover_enabled = models.BooleanField(
+        'Автоматичне перемикання при збоях',
+        default=True,
+        help_text="Автоматично використовувати резервний API у разі вичерпання лімітів (429 Rate Limit) чи збоїв"
+    )
+    last_failover_at = models.DateTimeField(
+        'Час останнього перемикання',
+        null=True,
+        blank=True
+    )
+    last_failover_reason = models.TextField(
+        'Причина останнього перемикання',
+        blank=True,
+        default=''
+    )
+
+    # ── Загальні параметри генерації та черги моделей ──────────────────────────
+    saved_models_list = models.TextField('Збережені моделі з пріоритетами', blank=True, default='[{"name": "gemini-3.8-flash", "priority": 1, "enabled": true}, {"name": "gemini-3.7-flash", "priority": 2, "enabled": true}, {"name": "gemini-3.1-flash-lite", "priority": 3, "enabled": true}, {"name": "gemini-3.1-pro-preview", "priority": 4, "enabled": true}]')
     system_prompt = models.TextField('Системний промт (Критерії НУШ)', default=DEFAULT_NUS_SYSTEM_PROMPT)
     temperature = models.FloatField('Температура (креативність)', default=0.2)
     ai_detector_tolerance_percent = models.IntegerField(
@@ -2861,12 +2961,64 @@ class AISettings(models.Model):
             return "0.2"
 
     class Meta:
-        verbose_name = 'Налаштування ШІ (Gemini)'
-        verbose_name_plural = 'Налаштування ШІ (Gemini)'
+        verbose_name = 'Налаштування ШІ'
+        verbose_name_plural = 'Налаштування ШІ'
+
+    def get_active_config(self):
+        """
+        Повертає конфігурацію поточного активного API:
+        (provider: str, api_key: str, model_name: str, custom_url: str, is_backup: bool)
+        """
+        if self.active_api_type == 'backup' and self.backup_api_key.strip():
+            return (
+                self.backup_ai_provider or 'gemini',
+                self.backup_api_key.strip(),
+                (self.backup_model_name.strip() or self.model_name or 'gemini-3.8-flash'),
+                (self.backup_custom_api_url or '').strip(),
+                True
+            )
+        return (
+            self.ai_provider or 'gemini',
+            self.api_key.strip(),
+            (self.model_name or 'gemini-3.8-flash').strip(),
+            (self.custom_api_url or '').strip(),
+            False
+        )
+
+    def get_backup_config(self):
+        """
+        Повертає конфігурацію альтернативного/резервного API:
+        (provider: str, api_key: str, model_name: str, custom_url: str) | None
+        """
+        if self.active_api_type == 'backup':
+            # Якщо активним є резервний, то резервом для нього стає основний (якщо заповнений)
+            if self.api_key.strip():
+                return (
+                    self.ai_provider or 'gemini',
+                    self.api_key.strip(),
+                    (self.model_name or 'gemini-2.5-flash').strip(),
+                    (self.custom_api_url or '').strip()
+                )
+            return None
+        else:
+            if self.backup_api_key.strip():
+                return (
+                    self.backup_ai_provider or 'gemini',
+                    self.backup_api_key.strip(),
+                    (self.backup_model_name.strip() or self.model_name or 'gemini-2.5-flash'),
+                    (self.backup_custom_api_url or '').strip()
+                )
+            return None
+
+    def has_backup_configured(self):
+        """Перевіряє, чи налаштовано альтернативний API ключ."""
+        return bool(self.get_backup_config() is not None)
 
     def __str__(self):
-        status = "Увімкнено" if (self.is_enabled and self.api_key) else "Вимкнено"
-        return f"Gemini AI ({self.model_name}) — {status}"
+        active_provider, active_key, active_model, _, is_backup = self.get_active_config()
+        status = "Увімкнено" if (self.is_enabled and active_key) else "Вимкнено"
+        key_label = "Резервний" if is_backup else "Основний"
+        return f"{active_provider.title()} AI ({active_model}, {key_label}) — {status}"
 
     @classmethod
     def get_solo(cls):
@@ -2881,7 +3033,7 @@ class AISettings(models.Model):
         """
         result = []
         seen_names = set()
-        default_names = ['gemini-2.5-flash', 'gemini-1.5-flash', 'gemini-2.5-pro', 'gemini-3.6-flash']
+        default_names = ['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.1-flash-lite', 'gemini-3.1-pro-preview']
 
         try:
             raw_data = json.loads(self.saved_models_list) if self.saved_models_list else []

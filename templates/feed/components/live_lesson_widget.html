@@ -46,8 +46,8 @@
                     </div>
 
                     {% if live_lesson_status.status_type == 'in_lesson' or live_lesson_status.status_type == 'in_break' %}
-                    <div style="margin-top: 6px; width: 100%; max-width: 260px; height: 5px; background: rgba(0,0,0,0.08); border-radius: 3px; overflow: hidden;">
-                        <div id="live-lesson-progress-fill" style="height: 100%; width: {{ live_lesson_status.progress_percent|default:0 }}%; background: {% if live_lesson_status.status_type == 'in_break' %}linear-gradient(90deg, #f59e0b, #d97706){% else %}linear-gradient(90deg, #10b981, #059669){% endif %}; border-radius: 3px; transition: width 0.4s ease;"></div>
+                    <div style="margin-top: 6px; width: 100%; max-width: 260px; height: 6px; background: rgba(0,0,0,0.08); border-radius: 3px; overflow: hidden; position: relative;">
+                        <div id="live-lesson-progress-fill" class="live-lesson-progress-fill" style="height: 100%; width: {{ live_lesson_status.progress_percent|default:0 }}%; background: {% if live_lesson_status.status_type == 'in_break' %}linear-gradient(90deg, #f59e0b, #fbbf24, #d97706){% else %}linear-gradient(90deg, #10b981, #34d399, #059669){% endif %}; border-radius: 3px; transition: width 0.4s ease; animation: liveBarShimmer 2.5s ease-in-out infinite;"></div>
                     </div>
                     {% endif %}
                 </div>
@@ -69,12 +69,22 @@
                 </a>
                 {% endif %}
 
+                {% if current_tab == 'schedule' or request.GET.tab == 'schedule' %}
+                <button type="button" 
+                        onclick="openTodayScheduleModal()" 
+                        class="btn btn-secondary btn-sm" 
+                        title="Відкрити детальний розклад дзвінків на сьогодні"
+                        style="font-size: 12px; font-weight: 600; border-radius: var(--radius-sm); white-space: nowrap;">
+                    📅 Сьогодні
+                </button>
+                {% else %}
                 <a href="{% url 'teacher_students' %}?tab=schedule" 
                    class="btn btn-secondary btn-sm" 
                    title="Переглянути та редагувати розклад уроків"
                    style="font-size: 12px; font-weight: 600; border-radius: var(--radius-sm); white-space: nowrap;">
                     📅 Мій розклад
                 </a>
+                {% endif %}
             </div>
 
         </div>

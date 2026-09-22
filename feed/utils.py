@@ -105,16 +105,27 @@ def sanitize_html(raw_html: str) -> str:
                             elem.attrib[attr] = f"https://{val.strip()}"
                     elif attr_lower == 'style':
                         val_clean = re.sub(r'(expression|behavior|javascript|vbscript)', '', val, flags=re.I)
-                        elem.attrib[attr] = val_clean
+                        # Очищаємо інлайн-стилі від жорстких темних кольорів та білих фонів, які зливаються в темній темі
+                        val_clean = re.sub(r'color\s*:\s*(#000000|#000|black|rgb\s*\(\s*0\s*,\s*0\s*,\s*0\s*\)|#0f172a|#1e293b|#111827|#334155)\s*;?', '', val_clean, flags=re.I)
+                        val_clean = re.sub(r'background(-color)?\s*:\s*(#ffffff|#fff|white|rgb\s*\(\s*255\s*,\s*255\s*,\s*255\s*\))\s*;?', '', val_clean, flags=re.I).strip().strip(';')
+                        if val_clean:
+                            elem.attrib[attr] = val_clean
+                        else:
+                            del elem.attrib[attr]
 
         for a_elem in doc.iter('a'):
             a_elem.set('target', '_blank')
             a_elem.set('rel', 'noopener noreferrer')
 
-        cleaned_html = "".join([html.tostring(child, encoding='unicode') for child in doc])
-        if not cleaned_html:
-            cleaned_html = doc.text or ""
-        return cleaned_html.strip()
+        full_html = html.tostring(doc, encoding='unicode')
+        if full_html.startswith('<div>') and full_html.endswith('</div>'):
+            cleaned_html = full_html[5:-6].strip()
+        elif full_html.startswith('<div ') and full_html.endswith('</div>'):
+            first_gt = full_html.find('>')
+            cleaned_html = full_html[first_gt + 1:-6].strip()
+        else:
+            cleaned_html = full_html.strip()
+        return cleaned_html
     except Exception:
         return py_html.escape(raw_html)
 
@@ -152,8 +163,14 @@ def convert_docx_to_html(file_path: str) -> Tuple[str, Optional[str]]:
                 if os.path.exists(cached_docx) and os.path.getmtime(cached_docx) >= os.path.getmtime(file_path):
                     converted_docx = cached_docx
                 else:
-                    cmd = ['libreoffice', '--headless', '--convert-to', 'docx', '--outdir', cache_dir, file_path]
-                    proc = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=25)
+                    import tempfile
+                    temp_profile_dir = tempfile.mkdtemp(prefix='lo_doc_profile_')
+                    try:
+                        lo_bin = 'libreoffice' if shutil.which('libreoffice') else 'soffice'
+                        cmd = [lo_bin, '--headless', f'-env:UserInstallation=file://{temp_profile_dir}', '--convert-to', 'docx', '--outdir', cache_dir, file_path]
+                        proc = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=25)
+                    finally:
+                        shutil.rmtree(temp_profile_dir, ignore_errors=True)
                     raw_docx = os.path.join(cache_dir, os.path.splitext(os.path.basename(file_path))[0] + '.docx')
                     if os.path.exists(raw_docx):
                         if raw_docx != cached_docx:
@@ -368,9 +385,9 @@ strike => s
 
 
 
-def convert_xlsx_to_html(file_path: str, max_rows: int = 100) -> Tuple[str, Optional[str]]:
+def _convert_xlsx_openpyxl_to_html(file_path: str, max_rows: int = 100) -> Tuple[str, Optional[str]]:
     """
-    Конвертує .xlsx файл у HTML таблиці з підтримкою формул та стилів.
+    Конвертує сучасний .xlsx файл у HTML таблиці за допомогою openpyxl.
     """
     try:
         from openpyxl import load_workbook
@@ -476,6 +493,162 @@ def convert_xlsx_to_html(file_path: str, max_rows: int = 100) -> Tuple[str, Opti
     except Exception as e:
         error_msg = f"Помилка при читанні таблиці: {str(e)}"
         return "", error_msg
+
+
+def _convert_xls_to_html(file_path: str, max_rows: int = 100) -> Tuple[str, Optional[str]]:
+    """
+    Конвертує застарілий бінарний .xls (Excel 97-2003) файл у HTML таблиці за допомогою xlrd.
+    """
+    try:
+        import xlrd
+        import html
+
+        try:
+            wb = xlrd.open_workbook(file_path, formatting_info=True)
+        except Exception:
+            # Деякі версії/діалекти XLS не підтримують formatting_info
+            wb = xlrd.open_workbook(file_path, formatting_info=False)
+
+        html_parts = []
+
+        for sheet_name in wb.sheet_names():
+            sheet = wb.sheet_by_name(sheet_name)
+
+            html_parts.append('<div class="document-page excel-sheet mb-4">')
+            html_parts.append(f'<h4 class="sheet-title mb-3" style="color:var(--color-primary, #6366f1);font-weight:700;">📊 Аркуш: {sheet_name}</h4>')
+
+            max_row = min(sheet.nrows, max_rows)
+            max_col = sheet.ncols
+
+            if max_row == 0 or max_col == 0:
+                html_parts.append('<p class="text-muted">Аркуш порожній</p>')
+                html_parts.append('</div>')
+                continue
+
+            html_parts.append('<div class="table-responsive" style="overflow-x:auto;">')
+            html_parts.append('<table class="excel-table table table-bordered" style="width:100%;border-collapse:collapse;font-size:13px;">')
+
+            # Column headers (A, B, C...)
+            html_parts.append('<thead><tr style="background:var(--color-bg-secondary,#f8fafc);"><th class="row-header" style="width:40px;text-align:center;">#</th>')
+            for col in range(max_col):
+                col_letter = xlrd.colname(col)
+                html_parts.append(f'<th style="text-align:center;padding:6px 10px;font-weight:600;">{col_letter}</th>')
+            html_parts.append('</tr></thead>')
+
+            html_parts.append('<tbody>')
+
+            for row_idx in range(max_row):
+                html_parts.append('<tr>')
+                html_parts.append(f'<td class="row-header" style="background:var(--color-bg-secondary,#f8fafc);text-align:center;font-weight:600;width:40px;">{row_idx + 1}</td>')
+
+                for col_idx in range(max_col):
+                    cell = sheet.cell(row_idx, col_idx)
+
+                    # Форматування значення клітинки відповідно до типу
+                    if cell.ctype == xlrd.XL_CELL_DATE:
+                        try:
+                            dt = xlrd.xldate_as_datetime(cell.value, wb.datemode)
+                            if dt.time() == dt.time().min:
+                                val_str = dt.strftime('%d.%m.%Y')
+                            else:
+                                val_str = dt.strftime('%d.%m.%Y %H:%M')
+                        except Exception:
+                            val_str = str(cell.value)
+                    elif cell.ctype == xlrd.XL_CELL_NUMBER:
+                        val = cell.value
+                        if isinstance(val, float) and val.is_integer():
+                            val_str = str(int(val))
+                        else:
+                            val_str = str(val)
+                    elif cell.ctype == xlrd.XL_CELL_BOOLEAN:
+                        val_str = 'ТАК' if cell.value else 'НІ'
+                    elif cell.ctype == xlrd.XL_CELL_ERROR:
+                        val_str = xlrd.error_text_from_code.get(cell.value, '#ПОМИЛКА!')
+                    elif cell.ctype in (xlrd.XL_CELL_EMPTY, xlrd.XL_CELL_BLANK):
+                        val_str = ''
+                    else:
+                        val_str = str(cell.value) if cell.value is not None else ''
+
+                    style_parts = ['padding:6px 10px;', 'border:1px solid var(--color-border, #e2e8f0);']
+
+                    # Стилі шрифту та кольори, якщо є formatting_info
+                    try:
+                        if hasattr(cell, 'xf_index') and getattr(wb, 'formatting_info', False):
+                            xf = wb.xf_list[cell.xf_index]
+                            font = wb.font_list[xf.font_index]
+                            if font.bold:
+                                style_parts.append('font-weight: bold;')
+                            if font.italic:
+                                style_parts.append('font-style: italic;')
+                            if font.colour_index and font.colour_index in wb.colour_map:
+                                rgb = wb.colour_map[font.colour_index]
+                                if rgb and rgb != (0, 0, 0):
+                                    style_parts.append(f'color: #{rgb[0]:02x}{rgb[1]:02x}{rgb[2]:02x};')
+                            bg_idx = xf.background.pattern_colour_index
+                            if bg_idx and bg_idx in wb.colour_map:
+                                rgb = wb.colour_map[bg_idx]
+                                if rgb and rgb not in [(255, 255, 255), (0, 0, 0)]:
+                                    style_parts.append(f'background-color: #{rgb[0]:02x}{rgb[1]:02x}{rgb[2]:02x};')
+                    except Exception:
+                        pass
+
+                    style_attr = f'style="{ " ".join(style_parts) }"'
+                    escaped_val = html.escape(val_str)
+                    escaped_formula = html.escape(val_str, quote=True)
+
+                    html_parts.append(f'<td {style_attr} data-formula="{escaped_formula}" onclick="showFormula(this)" style="cursor:pointer;">{escaped_val}</td>')
+
+                html_parts.append('</tr>')
+
+            html_parts.append('</tbody>')
+            html_parts.append('</table>')
+            html_parts.append('</div>')
+
+            if sheet.nrows > max_rows:
+                html_parts.append(f'<p class="text-muted small mt-2">Показано перші {max_rows} рядків з {sheet.nrows}</p>')
+
+            html_parts.append('</div>')
+
+        html_content = '\n'.join(html_parts)
+        return html_content, None
+
+    except Exception as e:
+        error_msg = f"Помилка при читанні таблиці XLS: {str(e)}"
+        return "", error_msg
+
+
+def convert_xlsx_to_html(file_path: str, max_rows: int = 100) -> Tuple[str, Optional[str]]:
+    """
+    Конвертує .xlsx або .xls файл у HTML таблиці з підтримкою формул та стилів.
+    Автоматично визначає формат файлу:
+    - Для сучасних .xlsx використовує openpyxl
+    - Для старих бінарних .xls (Excel 97-2003) використовує xlrd
+    - Забезпечує плавний двосторонній fallback у разі неправильного розширення.
+    """
+    ext = os.path.splitext(file_path)[1].lower() if file_path else ""
+
+    if ext == '.xls':
+        # Спершу пробуємо прочитати через xlrd
+        html_res, err = _convert_xls_to_html(file_path, max_rows=max_rows)
+        if not err:
+            return html_res, None
+        # Якщо файл насправді виявився OpenXML (.xlsx) під розширенням .xls:
+        html_xlsx, err_xlsx = _convert_xlsx_openpyxl_to_html(file_path, max_rows=max_rows)
+        if not err_xlsx:
+            return html_xlsx, None
+        return "", err
+    else:
+        # Для .xlsx або інших розширень
+        html_res, err = _convert_xlsx_openpyxl_to_html(file_path, max_rows=max_rows)
+        if not err:
+            return html_res, None
+        # Якщо openpyxl повідомив, що це старий бінарний .xls (або файл перейменований):
+        err_lower = str(err).lower()
+        if "xlrd" in err_lower or "xls" in err_lower or "openpyxl does not support" in err_lower:
+            html_xls, err_xls = _convert_xls_to_html(file_path, max_rows=max_rows)
+            if not err_xls:
+                return html_xls, None
+        return "", err
 
 
 def convert_pptx_to_html(file_path: str) -> Tuple[str, Optional[str]]:
@@ -832,15 +1005,15 @@ def get_archive_content(file_path: str, file_ext: str) -> Tuple[list, Optional[s
 def get_file_type_info(file_ext: str) -> dict:
     """Повертає інформацію про тип файлу (назва, іконка, прев'ю)."""
     file_types = {
-        '.doc': {'name': 'Word документ', 'icon': '📝', 'color': 'primary', 'preview': False},
+        '.doc': {'name': 'Word документ', 'icon': '📝', 'color': 'primary', 'preview': True},
         '.docx': {'name': 'Word документ', 'icon': '📝', 'color': 'primary', 'preview': True},
         '.odt': {'name': 'OpenDocument Текст', 'icon': '📝', 'color': 'primary', 'preview': True},
         
-        '.xls': {'name': 'Excel таблиця', 'icon': '📊', 'color': 'success', 'preview': False},
+        '.xls': {'name': 'Excel таблиця', 'icon': '📊', 'color': 'success', 'preview': True},
         '.xlsx': {'name': 'Excel таблиця', 'icon': '📊', 'color': 'success', 'preview': True},
         '.ods': {'name': 'OpenDocument Таблиця', 'icon': '📊', 'color': 'success', 'preview': True},
         
-        '.ppt': {'name': 'PowerPoint', 'icon': '📽️', 'color': 'warning', 'preview': False},
+        '.ppt': {'name': 'PowerPoint', 'icon': '📽️', 'color': 'warning', 'preview': True},
         '.pptx': {'name': 'PowerPoint', 'icon': '📽️', 'color': 'warning', 'preview': True},
         '.odp': {'name': 'OpenDocument Презентація', 'icon': '📽️', 'color': 'warning', 'preview': True},
         
