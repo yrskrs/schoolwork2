@@ -620,13 +620,15 @@ class SubmissionForm(forms.Form):
         })
     )
     comment_student = forms.CharField(
-        label='Коментар (необов\'язково)',
+        label='Висновки по роботі або коментар',
         required=False,
         widget=forms.Textarea(attrs={
-            'placeholder': 'Висновки по роботі (якщо немає у файлі або забули дописати), номер завдання, коментар чи співавтори...',
+            'placeholder': 'Напишіть висновки по роботі (якщо забули записати у файлі), номер завдання, коментар або співавторів...',
             'class': 'form-input',
             'rows': 3,
             'id': 'id_comment_student',
+            'oninput': 'autoResizeComment(this);',
+            'onfocus': 'autoResizeComment(this);',
         })
     )
 
