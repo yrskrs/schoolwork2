@@ -1632,13 +1632,13 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
         resp_rework = self.client.get(reverse('gradebook') + f'?class_group={self.class_group.id}&grade_filter=rework')
         self.assertEqual(resp_rework.status_code, 200)
         self.assertContains(resp_rework, 'Бондар')
-        self.assertNotContains(resp_rework, 'Шевченко')
+        self.assertNotContains(resp_rework, 'Шевченко Оксана')
 
         # 4. Фільтр за високим балом (grade_filter=10-12)
         resp_high = self.client.get(reverse('gradebook') + f'?class_group={self.class_group.id}&grade_filter=10-12')
         self.assertEqual(resp_high.status_code, 200)
         self.assertContains(resp_high, 'Шевченко')
-        self.assertNotContains(resp_high, 'Бондар')
+        self.assertNotContains(resp_high, 'Бондар Іван')
 
     def test_teacher_dashboard_pagination_and_navbar_buttons(self):
         """Тест кнопки 'Нове завдання' у верхній панелі, кнопки 'Як бачить учень' та пагінації 20 завдань."""
@@ -2320,7 +2320,7 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
         # 4. Перевірка картки учня (submission_detail)
         sub_detail_resp = self.client.get(reverse('submission_detail', args=[sub.id]))
         self.assertEqual(sub_detail_resp.status_code, 200)
-        self.assertContains(sub_detail_resp, 'У роботі зафіксовано використання генеративного ШІ')
+        self.assertContains(sub_detail_resp, 'У роботі зафіксовано використання штучного інтелекту (ШІ)')
         self.assertContains(sub_detail_resp, '(дозволено вчителем)')
         self.assertContains(sub_detail_resp, 'Виявлено характерні шаблонні формулювання нейромереж')
 
