@@ -364,20 +364,92 @@
     }
 }
 
-/* Компактні поля форми */
-#submit-form .form-input,
-#submit-form .form-select {
-    padding: 6px 10px !important;
-    font-size: 13px !important;
-    height: 36px !important;
+/* ── Помітні, чіткі та контрастні поля форми ── */
+#submit-form .form-label {
+    font-size: 12.5px !important;
+    font-weight: 800 !important;
+    color: var(--color-text-primary) !important;
+    margin-bottom: 4px !important;
+    display: flex;
+    align-items: center;
+    gap: 4px;
 }
 
+#submit-form .form-input,
+#submit-form .form-select {
+    padding: 8px 12px !important;
+    font-size: 13.5px !important;
+    font-weight: 500 !important;
+    height: 40px !important;
+    border: 1.5px solid #94a3b8 !important;
+    border-radius: var(--radius-sm) !important;
+    background: var(--color-surface) !important;
+    color: var(--color-text-primary) !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04) !important;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease !important;
+}
+
+#submit-form .form-input:hover,
+#submit-form .form-select:hover,
+#submit-form textarea.form-input:hover {
+    border-color: #64748b !important;
+}
+
+#submit-form .form-input:focus,
+#submit-form .form-select:focus,
+#submit-form textarea.form-input:focus {
+    border-color: var(--color-primary) !important;
+    box-shadow: 0 0 0 3.5px rgba(99, 102, 241, 0.22) !important;
+    background: var(--color-surface) !important;
+    outline: none !important;
+}
+
+[data-theme="dark"] #submit-form .form-input,
+[data-theme="dark"] #submit-form .form-select,
+[data-theme="dark"] #submit-form textarea.form-input {
+    border: 1.5px solid #64748b !important;
+    background: #1e293b !important;
+}
+
+[data-theme="dark"] #submit-form .form-input:hover,
+[data-theme="dark"] #submit-form .form-select:hover,
+[data-theme="dark"] #submit-form textarea.form-input:hover {
+    border-color: #94a3b8 !important;
+}
+
+[data-theme="dark"] #submit-form .form-input:focus,
+[data-theme="dark"] #submit-form .form-select:focus,
+[data-theme="dark"] #submit-form textarea.form-input:focus {
+    border-color: var(--color-primary) !important;
+    box-shadow: 0 0 0 3.5px rgba(99, 102, 241, 0.35) !important;
+}
+
+/* Поле коментаря, що автоматично розширюється відповідно до введеного тексту */
 #submit-form textarea.form-input {
-    height: 44px !important;
-    min-height: 44px !important;
-    resize: none !important;
-    padding: 5px 8px !important;
-    font-size: 12px !important;
+    height: auto !important;
+    min-height: 68px !important;
+    max-height: 380px !important;
+    resize: vertical !important;
+    padding: 10px 12px !important;
+    font-size: 13.5px !important;
+    line-height: 1.5 !important;
+    border: 1.5px solid #94a3b8 !important;
+    border-radius: var(--radius-sm) !important;
+    box-sizing: border-box !important;
+    overflow-y: hidden;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
+}
+
+#submit-form .file-drop-zone {
+    border: 2px dashed #94a3b8 !important;
+    background: var(--color-bg-secondary) !important;
+    transition: all 0.2s ease !important;
+}
+
+#submit-form .file-drop-zone:hover,
+#submit-form .file-drop-zone.dragover {
+    border-color: var(--color-primary) !important;
+    background: rgba(99, 102, 241, 0.05) !important;
 }
 </style>
 {% endblock %}
@@ -397,6 +469,7 @@ let fileStore = new DataTransfer();
 
 function getFileIconByExt(name) {
     const ext = (name.split('.').pop() || '').toLowerCase();
+    if (['accdb', 'mdb', 'accde', 'mde', 'sqlite', 'db'].includes(ext)) return '🗄️';
     if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'heic'].includes(ext)) return '🖼️';
     if (['pdf'].includes(ext)) return '📄';
     if (['doc', 'docx', 'odt', 'rtf'].includes(ext)) return '📝';
@@ -489,36 +562,51 @@ function hideFileAccessWarning() {
 
 function addFilesToStore(newFiles) {
     hideFileAccessWarning();
-    const officeExts = ['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'odt', 'ods', 'odp', 'pdf'];
+    const officeExts = ['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'odt', 'ods', 'odp', 'pdf', 'accdb', 'mdb', 'accde', 'mde'];
     const filesToTest = Array.from(newFiles);
 
     filesToTest.forEach(function(file) {
         const lowerName = file.name.toLowerCase();
         const ext = lowerName.split('.').pop();
+        const isAccessLock = (ext === 'laccdb' || ext === 'ldb');
+        const isOfficeLock = file.name.startsWith('~$') || file.name.startsWith('.~lock.');
 
-        // 1. Службові файли блокування Word/Excel (~$ або .~lock.)
-        if (file.name.startsWith('~$') || file.name.startsWith('.~lock.')) {
-            showFileAccessWarning(
-                '⚠️ Обрано тимчасовий файл автозбереження',
-                'Файл <strong>«' + file.name + '»</strong> є службовим тимчасовим файлом блокування Microsoft Word або Excel. ' +
-                'Схоже, що ваш документ зараз відкритий у програмі.<br><br>' +
-                '<strong>Що потрібно зробити:</strong><br>' +
-                '1. Збережіть роботу в програмі («Файл» → «Зберегти»).<br>' +
-                '2. Закрийте програму (Word або Excel).<br>' +
-                '3. Прикріпіть ваш основний збережений документ (без знаків «~$» на початку назви).'
-            );
+        // 1. Службові файли блокування (Access .laccdb/.ldb, Word/Excel ~$..., LibreOffice .~lock...)
+        if (isAccessLock || isOfficeLock) {
+            if (isAccessLock) {
+                showFileAccessWarning(
+                    '⚠️ Обрано службовий файл блокування Microsoft Access',
+                    'Файл <strong>«' + file.name + '»</strong> є тимчасовим файлом блокування Microsoft Access (.' + ext + '). ' +
+                    'Схоже, що база даних зараз відкрита у програмі Access.<br><br>' +
+                    '<strong>Що потрібно зробити:</strong><br>' +
+                    '1. Збережіть роботу та <strong>закрийте Microsoft Access</strong>.<br>' +
+                    '2. Прикріпіть ваш основний файл бази даних (<strong>.accdb</strong> або <strong>.mdb</strong>), а не файл блокування (.' + ext + ').'
+                );
+            } else {
+                showFileAccessWarning(
+                    '⚠️ Обрано тимчасовий файл автозбереження/блокування',
+                    'Файл <strong>«' + file.name + '»</strong> є службовим тимчасовим файлом Microsoft Word, Excel або LibreOffice. ' +
+                    'Схоже, що ваш документ зараз відкритий у програмі.<br><br>' +
+                    '<strong>Що потрібно зробити:</strong><br>' +
+                    '1. Збережіть роботу в програмі («Файл» → «Зберегти»).<br>' +
+                    '2. Закрийте програму (Word, Excel тощо).<br>' +
+                    '3. Прикріпіть ваш основний збережений документ (без знаків «~$» на початку назви).'
+                );
+            }
             return;
         }
 
-        // 2. Порожні офісні файли (0 байтів)
+        // 2. Порожні офісні файли та бази даних (0 байтів)
         if (file.size === 0 && officeExts.includes(ext)) {
+            const isAccess = ['accdb', 'mdb', 'accde', 'mde'].includes(ext);
             showFileAccessWarning(
                 '⚠️ Файл порожній (0 байтів)',
                 'Файл <strong>«' + file.name + '»</strong> має нульовий розмір (0 байтів). ' +
-                'Якщо ви зараз працюєте над ним у Word або Excel, зміни ще не записані на диск.<br><br>' +
-                '<strong>Що потрібно зробити:</strong><br>' +
-                '1. Відкрийте програму та натисніть «Зберегти» (Ctrl + S).<br>' +
-                '2. Закрийте програму та прикріпіть збережений файл знову.'
+                (isAccess ?
+                    'Якщо ви зараз створюєте базу даних у Microsoft Access, зміни ще не записані на диск.<br><br><strong>Що потрібно зробити:</strong><br>1. Збережіть базу даних у Microsoft Access («Файл» → «Зберегти»).<br>2. Закрийте Access та прикріпіть збережений файл (.accdb або .mdb) знову.'
+                    :
+                    'Якщо ви зараз працюєте над ним у Word або Excel, зміни ще не записані на диск.<br><br><strong>Що потрібно зробити:</strong><br>1. Відкрийте програму та натисніть «Зберегти» (Ctrl + S).<br>2. Закрийте програму та прикріпіть збережений файл знову.'
+                )
             );
             return;
         }
@@ -542,10 +630,10 @@ function addFilesToStore(newFiles) {
             showFileAccessWarning(
                 '⚠️ Файл відкритий у програмі або заблокований',
                 'Не вдалося прочитати вміст файлу <strong>«' + file.name + '»</strong>.<br>' +
-                'Цей файл зараз <strong>відкритий в іншій програмі</strong> (наприклад, Word або Excel) з блокуванням доступу або зайнятий системою.<br><br>' +
+                'Цей файл зараз <strong>відкритий в іншій програмі</strong> (наприклад, Word, Excel, Microsoft Access) з монопольним блокуванням або зайнятий системою.<br><br>' +
                 '<strong>Що потрібно зробити, щоб виправити:</strong><br>' +
-                '1. Збережіть документ у програмі.<br>' +
-                '2. <strong>Закрийте програму</strong> (Microsoft Word, Excel тощо), де відкрито цей файл.<br>' +
+                '1. Збережіть зміни у програмі.<br>' +
+                '2. <strong>Закрийте програму</strong> (Microsoft Word, Excel, Access тощо), де відкрито цей файл.<br>' +
                 '3. Спробуйте прикріпити файл повторно.'
             );
         };
@@ -1008,29 +1096,48 @@ if (submitForm) {
         }
 
         if (hasFiles) {
-            const officeExts = ['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'odt', 'ods', 'odp', 'pdf'];
+            const officeExts = ['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'odt', 'ods', 'odp', 'pdf', 'accdb', 'mdb', 'accde', 'mde'];
             for (let k = 0; k < fileStore.files.length; k++) {
                 const fItem = fileStore.files[k];
-                if (fItem.name.startsWith('~$') || fItem.name.startsWith('.~lock.')) {
+                const ext = fItem.name.toLowerCase().split('.').pop();
+                const isAccessLock = (ext === 'laccdb' || ext === 'ldb');
+                const isOfficeLock = fItem.name.startsWith('~$') || fItem.name.startsWith('.~lock.');
+
+                if (isAccessLock || isOfficeLock) {
                     e.preventDefault();
-                    showFileAccessWarning(
-                        '⚠️ Обрано тимчасовий файл автозбереження',
-                        'Файл <strong>«' + fItem.name + '»</strong> є службовим тимчасовим файлом Microsoft Word або Excel. ' +
-                        'Схоже, що ваш документ зараз відкритий у програмі.<br><br>' +
-                        '<strong>Що потрібно зробити:</strong><br>' +
-                        '1. Збережіть роботу в програмі («Файл» → «Зберегти»).<br>' +
-                        '2. Закрийте програму (Word або Excel).<br>' +
-                        '3. Прикріпіть ваш основний збережений документ (без знаків «~$» на початку назви).'
-                    );
+                    if (isAccessLock) {
+                        showFileAccessWarning(
+                            '⚠️ Обрано службовий файл блокування Microsoft Access',
+                            'Файл <strong>«' + fItem.name + '»</strong> є тимчасовим файлом блокування Microsoft Access (.' + ext + '). ' +
+                            'Схоже, що база даних зараз відкрита у програмі Access.<br><br>' +
+                            '<strong>Що потрібно зробити:</strong><br>' +
+                            '1. Збережіть роботу та <strong>закрийте Microsoft Access</strong>.<br>' +
+                            '2. Прикріпіть ваш основний файл бази даних (<strong>.accdb</strong> або <strong>.mdb</strong>), а не файл блокування.'
+                        );
+                    } else {
+                        showFileAccessWarning(
+                            '⚠️ Обрано тимчасовий файл автозбереження/блокування',
+                            'Файл <strong>«' + fItem.name + '»</strong> є службовим тимчасовим файлом Microsoft Word, Excel або LibreOffice. ' +
+                            'Схоже, що ваш документ зараз відкритий у програмі.<br><br>' +
+                            '<strong>Що потрібно зробити:</strong><br>' +
+                            '1. Збережіть роботу в програмі («Файл» → «Зберегти»).<br>' +
+                            '2. Закрийте програму (Word, Excel тощо).<br>' +
+                            '3. Прикріпіть ваш основний збережений документ (без знаків «~$» на початку назви).'
+                        );
+                    }
                     return false;
                 }
-                const ext = fItem.name.toLowerCase().split('.').pop();
                 if (fItem.size === 0 && officeExts.includes(ext)) {
                     e.preventDefault();
+                    const isAccess = ['accdb', 'mdb', 'accde', 'mde'].includes(ext);
                     showFileAccessWarning(
                         '⚠️ Файл порожній (0 байтів)',
                         'Файл <strong>«' + fItem.name + '»</strong> має нульовий розмір (0 байтів). ' +
-                        'Будь ласка, збережіть документ у програмі (Ctrl + S), закрийте її та прикріпіть файл знову.'
+                        (isAccess ?
+                            'Якщо ви зараз створюєте базу даних у Microsoft Access, зміни ще не записані на диск.<br><br><strong>Що потрібно зробити:</strong><br>1. Збережіть базу даних у Microsoft Access («Файл» → «Зберегти»).<br>2. Закрийте Access та прикріпіть збережений файл (.accdb або .mdb) знову.'
+                            :
+                            'Будь ласка, збережіть документ у програмі (Ctrl + S), закрийте її та прикріпіть файл знову.'
+                        )
                     );
                     return false;
                 }
@@ -1049,6 +1156,35 @@ if (submitForm) {
             submitBtn.style.cursor = 'wait';
         }
     });
+}
+
+// ── Автоматичне розширення висоти поля коментаря відповідно до введеного тексту ──
+function initAutoResizeComment() {
+    const commentEl = document.getElementById('id_comment_student');
+    if (!commentEl) return;
+
+    function resize() {
+        commentEl.style.height = 'auto';
+        const scrollH = commentEl.scrollHeight;
+        const minH = 68;
+        const maxH = 380;
+        if (scrollH > maxH) {
+            commentEl.style.height = maxH + 'px';
+            commentEl.style.overflowY = 'auto';
+        } else {
+            commentEl.style.height = Math.max(minH, scrollH + 2) + 'px';
+            commentEl.style.overflowY = 'hidden';
+        }
+    }
+
+    commentEl.addEventListener('input', resize);
+    commentEl.addEventListener('change', resize);
+    commentEl.addEventListener('keyup', resize);
+    commentEl.addEventListener('paste', function() { setTimeout(resize, 20); });
+    commentEl.addEventListener('focus', resize);
+
+    // Початкове масштабування при завантаженні сторінки
+    resize();
 }
 
 // ── Перемикання відображення лівого блоку умови завдання ──
@@ -1095,6 +1231,7 @@ document.addEventListener('DOMContentLoaded', function() {
         localStorage.removeItem('submit_show_condition');
     } catch (e) {}
     toggleTaskCondition(false);
+    initAutoResizeComment();
 });
 </script>
 {% include 'feed/components/criteria_modal.html' %}

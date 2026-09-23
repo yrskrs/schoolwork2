@@ -51,26 +51,49 @@ class MultipleFileField(forms.FileField):
             return []
         if not isinstance(data, list):
             data = [data]
-        office_exts = {'.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.odt', '.ods', '.odp', '.pdf'}
+        office_exts = {
+            '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
+            '.odt', '.ods', '.odp', '.pdf',
+            '.accdb', '.mdb', '.accde', '.mde'
+        }
         result = []
         for item in data:
             if not item:
                 continue
             fname = getattr(item, 'name', '') or ''
             base_name = os.path.basename(fname)
+            ext = os.path.splitext(base_name)[1].lower()
+
+            # 1. Службові файли блокування (Access .laccdb/.ldb, Word/Excel ~$..., LibreOffice .~lock...)
+            if ext in ('.laccdb', '.ldb'):
+                raise ValidationError(
+                    f"Файл «{base_name}» є службовим тимчасовим файлом блокування Microsoft Access ({ext}). "
+                    "Схоже, ця база даних зараз відкрита в Access. Будь ласка, збережіть її, "
+                    "закрийте Microsoft Access та оберіть ваш основний файл бази даних (.accdb або .mdb)."
+                )
             if base_name.startswith('~$') or base_name.startswith('.~lock.'):
                 raise ValidationError(
-                    f"Файл «{base_name}» є тимчасовим службовим файлом автозбереження Word/Excel. "
+                    f"Файл «{base_name}» є тимчасовим службовим файлом автозбереження/блокування. "
                     "Схоже, цей документ зараз відкритий у програмі. Будь ласка, збережіть його, "
-                    "закрийте програму (Word або Excel) та оберіть ваш основний збережений документ (без знаків «~$» на початку)."
+                    "закрийте програму (Word, Excel тощо) та оберіть ваш основний збережений документ (без знаків «~$» на початку)."
                 )
-            ext = os.path.splitext(base_name)[1].lower()
+
+            # 2. Порожні офісні файли та бази даних (0 байтів)
             if getattr(item, 'size', 0) == 0 and ext in office_exts:
-                raise ValidationError(
-                    f"Файл «{base_name}» порожній (0 байтів). "
-                    "Якщо ви зараз працюєте над ним у Word або Excel, зміни ще не збережено на диск. "
-                    "Будь ласка, збережіть документ («Файл» → «Зберегти»), закрийте програму та прикріпіть його повторно."
-                )
+                if ext in ('.accdb', '.mdb', '.accde', '.mde'):
+                    raise ValidationError(
+                        f"Файл «{base_name}» порожній (0 байтів). "
+                        "Якщо ви зараз створюєте базу даних у Microsoft Access, зміни ще не збережено на диск. "
+                        "Будь ласка, збережіть файл бази даних, закрийте Microsoft Access та прикріпіть його (.accdb або .mdb) повторно."
+                    )
+                else:
+                    raise ValidationError(
+                        f"Файл «{base_name}» порожній (0 байтів). "
+                        "Якщо ви зараз працюєте над ним у Word або Excel, зміни ще не збережено на диск. "
+                        "Будь ласка, збережіть документ («Файл» → «Зберегти»), закрийте програму та прикріпіть його повторно."
+                    )
+
+            # 3. Перевірка на ексклюзивне блокування читання файловою системою
             try:
                 if hasattr(item, 'seek'):
                     item.seek(0)
@@ -80,7 +103,7 @@ class MultipleFileField(forms.FileField):
             except (PermissionError, OSError, IOError):
                 raise ValidationError(
                     f"Не вдалося прочитати вміст файлу «{base_name}» (файл заблокований або відкритий в іншій програмі). "
-                    "Будь ласка, збережіть та закрийте програму, де відкрито цей файл, і спробуйте знову."
+                    "Будь ласка, збережіть та закрийте програму (Word, Excel, Access тощо), де відкрито цей файл, і спробуйте знову."
                 )
             result.append(super().clean(item, initial))
         return result
@@ -648,24 +671,47 @@ class SubmissionForm(forms.Form):
             if key not in seen_keys:
                 seen_keys.add(key)
                 all_uploaded.append(f)
-        # Перевірка на заблоковані або тимчасові службові файли Word/Excel
-        office_exts = {'.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.odt', '.ods', '.odp', '.pdf'}
+        # Перевірка на заблоковані або тимчасові службові файли (Word, Excel, LibreOffice, MS Access)
+        office_exts = {
+            '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
+            '.odt', '.ods', '.odp', '.pdf',
+            '.accdb', '.mdb', '.accde', '.mde'
+        }
         for f in all_uploaded:
             fname = getattr(f, 'name', '') or ''
             base_name = os.path.basename(fname)
+            ext = os.path.splitext(base_name)[1].lower()
+
+            # 1. Службові файли блокування (Access .laccdb/.ldb, Word/Excel ~$..., LibreOffice .~lock...)
+            if ext in ('.laccdb', '.ldb'):
+                raise forms.ValidationError(
+                    f"Файл «{base_name}» є службовим тимчасовим файлом блокування Microsoft Access ({ext}). "
+                    "Схоже, ця база даних зараз відкрита в Access. Будь ласка, збережіть її, "
+                    "закрийте Microsoft Access та оберіть ваш основний файл бази даних (.accdb або .mdb)."
+                )
             if base_name.startswith('~$') or base_name.startswith('.~lock.'):
                 raise forms.ValidationError(
-                    f"Файл «{base_name}» є тимчасовим службовим файлом автозбереження Word/Excel. "
+                    f"Файл «{base_name}» є тимчасовим службовим файлом автозбереження/блокування. "
                     "Схоже, цей документ зараз відкритий у програмі. Будь ласка, збережіть його, "
-                    "закрийте програму (Word або Excel) та оберіть ваш основний збережений документ (без знаків «~$» на початку)."
+                    "закрийте програму (Word, Excel тощо) та оберіть ваш основний збережений документ (без знаків «~$» на початку)."
                 )
-            ext = os.path.splitext(base_name)[1].lower()
+
+            # 2. Порожні офісні файли та бази даних (0 байтів)
             if getattr(f, 'size', 0) == 0 and ext in office_exts:
-                raise forms.ValidationError(
-                    f"Файл «{base_name}» порожній (0 байтів). "
-                    "Якщо ви зараз працюєте над ним у Word або Excel, зміни ще не збережено на диск. "
-                    "Будь ласка, збережіть документ («Файл» → «Зберегти»), закрийте програму та прикріпіть його повторно."
-                )
+                if ext in ('.accdb', '.mdb', '.accde', '.mde'):
+                    raise forms.ValidationError(
+                        f"Файл «{base_name}» порожній (0 байтів). "
+                        "Якщо ви зараз створюєте базу даних у Microsoft Access, зміни ще не збережено на диск. "
+                        "Будь ласка, збережіть файл бази даних, закрийте Microsoft Access та прикріпіть його (.accdb або .mdb) повторно."
+                    )
+                else:
+                    raise forms.ValidationError(
+                        f"Файл «{base_name}» порожній (0 байтів). "
+                        "Якщо ви зараз працюєте над ним у Word або Excel, зміни ще не збережено на диск. "
+                        "Будь ласка, збережіть документ («Файл» → «Зберегти»), закрийте програму та прикріпіть його повторно."
+                    )
+
+            # 3. Перевірка на ексклюзивне блокування читання
             try:
                 if hasattr(f, 'seek'):
                     f.seek(0)
@@ -675,7 +721,7 @@ class SubmissionForm(forms.Form):
             except (PermissionError, OSError, IOError):
                 raise forms.ValidationError(
                     f"Не вдалося прочитати вміст файлу «{base_name}» (файл заблокований або відкритий в іншій програмі). "
-                    "Будь ласка, збережіть та закрийте програму, де відкрито цей файл, і спробуйте знову."
+                    "Будь ласка, збережіть та закрийте програму (Word, Excel, Access тощо), де відкрито цей файл, і спробуйте знову."
                 )
 
         cleaned_data['all_files'] = all_uploaded

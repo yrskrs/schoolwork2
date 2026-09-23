@@ -3486,7 +3486,7 @@ class AssignmentFileAIAndCoauthorTests(TestCase):
         self.assertIn("є тимчасовим службовим файлом", err_text1)
         self.assertIn("закрийте програму", err_text1)
 
-        # 2. Спроба прикріпити 0-байтовий Word-файл (несбережений через відкриття)
+        # 2. Спроба прикріпити 0-байтовий Word-файл (незбережений через відкриття)
         empty_docx = SimpleUploadedFile("Практична_1.docx", b"")
         form2 = SubmissionForm(
             data={'full_name': 'Іван Петренко', 'class_group': self.class_group.id},
@@ -3497,6 +3497,54 @@ class AssignmentFileAIAndCoauthorTests(TestCase):
         err_text2 = form2.errors.as_text()
         self.assertIn("порожній (0 байтів)", err_text2)
         self.assertIn("збережіть документ", err_text2)
+
+        # 3. Спроба прикріпити службовий файл блокування MS Access нового формату (.laccdb)
+        temp_access_new = SimpleUploadedFile("База_Даних_1.laccdb", b"access lock data")
+        form3 = SubmissionForm(
+            data={'full_name': 'Іван Петренко', 'class_group': self.class_group.id},
+            files={'files': [temp_access_new]},
+            assignment=asg
+        )
+        self.assertFalse(form3.is_valid())
+        err_text3 = form3.errors.as_text()
+        self.assertIn("службовим тимчасовим файлом блокування Microsoft Access", err_text3)
+        self.assertIn(".accdb або .mdb", err_text3)
+
+        # 4. Спроба прикріпити службовий файл блокування MS Access класичного формату (.ldb)
+        temp_access_old = SimpleUploadedFile("Students.ldb", b"access old lock data")
+        form4 = SubmissionForm(
+            data={'full_name': 'Іван Петренко', 'class_group': self.class_group.id},
+            files={'files': [temp_access_old]},
+            assignment=asg
+        )
+        self.assertFalse(form4.is_valid())
+        err_text4 = form4.errors.as_text()
+        self.assertIn("службовим тимчасовим файлом блокування Microsoft Access", err_text4)
+        self.assertIn(".accdb або .mdb", err_text4)
+
+        # 5. Спроба прикріпити 0-байтовий файл MS Access (.accdb)
+        empty_accdb = SimpleUploadedFile("Нова_База.accdb", b"")
+        form5 = SubmissionForm(
+            data={'full_name': 'Іван Петренко', 'class_group': self.class_group.id},
+            files={'files': [empty_accdb]},
+            assignment=asg
+        )
+        self.assertFalse(form5.is_valid())
+        err_text5 = form5.errors.as_text()
+        self.assertIn("порожній (0 байтів)", err_text5)
+        self.assertIn("Microsoft Access", err_text5)
+
+        # 6. Спроба прикріпити 0-байтовий файл MS Access старого формату (.mdb)
+        empty_mdb = SimpleUploadedFile("Стара_База.mdb", b"")
+        form6 = SubmissionForm(
+            data={'full_name': 'Іван Петренко', 'class_group': self.class_group.id},
+            files={'files': [empty_mdb]},
+            assignment=asg
+        )
+        self.assertFalse(form6.is_valid())
+        err_text6 = form6.errors.as_text()
+        self.assertIn("порожній (0 байтів)", err_text6)
+        self.assertIn("Microsoft Access", err_text6)
 
     def test_site_guide_modal_and_navbar_buttons(self):
         """Тест наявності кнопки інструкції у верхньому барі учня, в меню вчителя та модального вікна довідки з розділенням ролей."""
