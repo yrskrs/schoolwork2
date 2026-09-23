@@ -21,7 +21,12 @@
                     <div class="page-hero-kicker">Перевірка робіт</div>
                     <h1>Здані роботи учнів</h1>
                 </div>
-                <a href="{% url 'export_grades' %}" class="btn btn-secondary btn-sm">Експорт CSV</a>
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                    <button type="button" onclick="openGuideModal('teacher_submissions')" class="btn btn-secondary btn-sm" style="font-weight:700;">
+                        📖 Інструкція розділу
+                    </button>
+                    <a href="{% url 'export_grades' %}" class="btn btn-secondary btn-sm">Експорт CSV</a>
+                </div>
             </div>
 
             <!-- ── Статистика здач ───────────────────────────────────────────── -->

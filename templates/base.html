@@ -101,15 +101,26 @@
                 </div>
             </div>
 
+            <!-- 📖 Інструкція та довідка сайту (для учнів/гостей) -->
+            <button type="button" 
+                    id="site-guide-btn" 
+                    class="nav-btn-guide" 
+                    onclick="openGuideModal()" 
+                    title="Інструкція: Як користуватися сайтом" 
+                    aria-label="Інструкція: Як користуватися сайтом">
+                <span class="guide-nav-icon" aria-hidden="true">📖</span>
+                <span class="nav-btn-text">Інструкція</span>
+            </button>
+
             <!-- ✨ Оновлення та версія сайту (Changelog для учнів) -->
             <button type="button" 
                     id="site-changelog-btn" 
                     class="nav-btn-changelog" 
                     onclick="openChangelogModal()" 
-                    title="Що нового на сайті (версія {{ site_version_full|default:'2.7.0' }})" 
+                    title="Що нового на сайті (версія {{ site_version_full|default:'2.8.0' }})" 
                     aria-label="Оновлення та історія змін сайту">
                 <span class="changelog-sparkle" aria-hidden="true">✨</span>
-                <span class="changelog-version-tag">{{ site_version|default:"v2.7.0" }}</span>
+                <span class="changelog-version-tag">{{ site_version|default:"v2.8.0" }}</span>
             </button>
             {% endif %}
 
@@ -320,6 +331,11 @@
                         <span class="user-menu-version-badge">{{ site_version|default:"v2.6" }}</span>
                     </button>
 
+                    <button type="button" class="user-menu-link" onclick="openGuideModal()" style="border:none;background:none;width:100%;cursor:pointer;">
+                        <span>📖</span>
+                        <span>Інструкція сайту</span>
+                    </button>
+
                     <div class="user-menu-divider"></div>
 
                     <!-- Вихід -->
@@ -460,6 +476,9 @@
 
 <!-- 📜 Модальне вікно оновлень сайту -->
 {% include 'feed/components/changelog_modal.html' %}
+
+<!-- 📖 Інтерактивна інструкція користувача -->
+{% include 'feed/components/guide_modal.html' %}
 
 </body>
 </html>

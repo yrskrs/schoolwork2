@@ -30,8 +30,11 @@
 
                 <!-- 1.1. Основні дані та фото аватара -->
                 <div class="form-card mb-4">
-                    <div class="form-card-header">
+                    <div class="form-card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
                         <h2 class="form-card-title">✏️ Особисті дані та аватар</h2>
+                        <button type="button" onclick="openGuideModal('teacher_settings')" class="btn btn-secondary btn-sm" style="font-size:12px;font-weight:700;">
+                            📖 Довідка налаштувань
+                        </button>
                     </div>
 
                     <div class="form-card-body">
@@ -278,12 +281,15 @@
                 <div class="form-card mb-4">
                     <div class="form-card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
                         <h2 class="form-card-title">🏫 Параметри закладу освіти</h2>
-                        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                            <button type="button" onclick="openGuideModal('teacher_settings')" class="btn btn-secondary btn-sm" style="font-weight:700;">
+                                📖 Довідка
+                            </button>
                             <a href="{% url 'activity_log' %}" class="btn btn-secondary btn-sm" style="font-weight:700;">
                                 🕒 Журнал дій (Логи)
                             </a>
                             <a href="{% url 'download_database_backup' %}" class="btn btn-secondary btn-sm" style="font-weight:700;color:var(--color-primary);">
-                                💾 Резервна копія БД (SQLite)
+                                💾 Резервна копія БД
                             </a>
                         </div>
                     </div>
@@ -571,8 +577,12 @@
                             </div>
                         </div>
 
-                        <!-- Швидкий перемикач активного API -->
-                        <div style="display:flex;align-items:center;gap:10px;background:var(--color-surface);padding:6px 14px;border-radius:var(--radius-md);border:1px solid var(--color-border);box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+                        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                            <button type="button" onclick="openGuideModal('teacher_ai_settings')" class="btn btn-secondary btn-sm" style="font-weight:700;">
+                                📖 Довідка розділу
+                            </button>
+                            <!-- Швидкий перемикач активного API -->
+                            <div style="display:flex;align-items:center;gap:10px;background:var(--color-surface);padding:6px 14px;border-radius:var(--radius-md);border:1px solid var(--color-border);box-shadow:0 1px 3px rgba(0,0,0,0.05);">
                             <span style="font-size:12px;font-weight:700;color:var(--color-text-secondary);">Активний API:</span>
                             {% if ai_settings.active_api_type == 'backup' %}
                                 <span class="badge" style="background:#f59e0b;color:#fff;font-weight:800;font-size:12px;padding:3px 9px;">🛡️ Резервний API</span>
@@ -586,6 +596,7 @@
                                     🔄 Перемкнути зараз
                                 </button>
                             </form>
+                            </div>
                         </div>
                     </div>
 

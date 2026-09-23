@@ -8,6 +8,7 @@
     - TeacherProfileForm  — редагування профілю вчителя
 """
 
+import os
 from django import forms
 from django.core.exceptions import ValidationError
 from django.contrib.auth.models import User
@@ -50,8 +51,37 @@ class MultipleFileField(forms.FileField):
             return []
         if not isinstance(data, list):
             data = [data]
+        office_exts = {'.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.odt', '.ods', '.odp', '.pdf'}
         result = []
         for item in data:
+            if not item:
+                continue
+            fname = getattr(item, 'name', '') or ''
+            base_name = os.path.basename(fname)
+            if base_name.startswith('~$') or base_name.startswith('.~lock.'):
+                raise ValidationError(
+                    f"Файл «{base_name}» є тимчасовим службовим файлом автозбереження Word/Excel. "
+                    "Схоже, цей документ зараз відкритий у програмі. Будь ласка, збережіть його, "
+                    "закрийте програму (Word або Excel) та оберіть ваш основний збережений документ (без знаків «~$» на початку)."
+                )
+            ext = os.path.splitext(base_name)[1].lower()
+            if getattr(item, 'size', 0) == 0 and ext in office_exts:
+                raise ValidationError(
+                    f"Файл «{base_name}» порожній (0 байтів). "
+                    "Якщо ви зараз працюєте над ним у Word або Excel, зміни ще не збережено на диск. "
+                    "Будь ласка, збережіть документ («Файл» → «Зберегти»), закрийте програму та прикріпіть його повторно."
+                )
+            try:
+                if hasattr(item, 'seek'):
+                    item.seek(0)
+                item.read(512)
+                if hasattr(item, 'seek'):
+                    item.seek(0)
+            except (PermissionError, OSError, IOError):
+                raise ValidationError(
+                    f"Не вдалося прочитати вміст файлу «{base_name}» (файл заблокований або відкритий в іншій програмі). "
+                    "Будь ласка, збережіть та закрийте програму, де відкрито цей файл, і спробуйте знову."
+                )
             result.append(super().clean(item, initial))
         return result
 
@@ -570,7 +600,7 @@ class SubmissionForm(forms.Form):
         label='Коментар (необов\'язково)',
         required=False,
         widget=forms.Textarea(attrs={
-            'placeholder': 'Додаткова інформація до здачі...',
+            'placeholder': 'Висновки по роботі (якщо немає у файлі або забули дописати), номер завдання, коментар чи співавтори...',
             'class': 'form-input',
             'rows': 3,
             'id': 'id_comment_student',
@@ -618,6 +648,35 @@ class SubmissionForm(forms.Form):
             if key not in seen_keys:
                 seen_keys.add(key)
                 all_uploaded.append(f)
+        # Перевірка на заблоковані або тимчасові службові файли Word/Excel
+        office_exts = {'.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.odt', '.ods', '.odp', '.pdf'}
+        for f in all_uploaded:
+            fname = getattr(f, 'name', '') or ''
+            base_name = os.path.basename(fname)
+            if base_name.startswith('~$') or base_name.startswith('.~lock.'):
+                raise forms.ValidationError(
+                    f"Файл «{base_name}» є тимчасовим службовим файлом автозбереження Word/Excel. "
+                    "Схоже, цей документ зараз відкритий у програмі. Будь ласка, збережіть його, "
+                    "закрийте програму (Word або Excel) та оберіть ваш основний збережений документ (без знаків «~$» на початку)."
+                )
+            ext = os.path.splitext(base_name)[1].lower()
+            if getattr(f, 'size', 0) == 0 and ext in office_exts:
+                raise forms.ValidationError(
+                    f"Файл «{base_name}» порожній (0 байтів). "
+                    "Якщо ви зараз працюєте над ним у Word або Excel, зміни ще не збережено на диск. "
+                    "Будь ласка, збережіть документ («Файл» → «Зберегти»), закрийте програму та прикріпіть його повторно."
+                )
+            try:
+                if hasattr(f, 'seek'):
+                    f.seek(0)
+                f.read(512)
+                if hasattr(f, 'seek'):
+                    f.seek(0)
+            except (PermissionError, OSError, IOError):
+                raise forms.ValidationError(
+                    f"Не вдалося прочитати вміст файлу «{base_name}» (файл заблокований або відкритий в іншій програмі). "
+                    "Будь ласка, збережіть та закрийте програму, де відкрито цей файл, і спробуйте знову."
+                )
 
         cleaned_data['all_files'] = all_uploaded
 

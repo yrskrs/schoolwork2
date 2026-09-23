@@ -270,6 +270,18 @@
                         <div id="selected-files-list" style="display:flex;flex-direction:column;gap:4px;"></div>
                     </div>
 
+                    <!-- Попередження про заблокований / відкритий у програмі файл -->
+                    <div id="file-access-warning" style="display:none;margin-top:8px;padding:10px 14px;background:#fffbeb;border:1.5px solid #f59e0b;border-radius:var(--radius-sm);font-size:12px;color:#92400e;line-height:1.45;animation:fadeIn 0.2s ease-in-out;">
+                        <div style="display:flex;align-items:flex-start;gap:8px;">
+                            <span style="font-size:18px;line-height:1;flex-shrink:0;">⚠️</span>
+                            <div style="flex:1;">
+                                <div style="font-weight:800;color:#b45309;margin-bottom:2px;" id="file-access-warning-title">Увага щодо файлу</div>
+                                <div id="file-access-warning-text"></div>
+                            </div>
+                            <button type="button" onclick="document.getElementById('file-access-warning').style.display='none'" style="background:none;border:none;color:#b45309;font-weight:bold;cursor:pointer;font-size:14px;padding:0 4px;" title="Закрити сповіщення">✕</button>
+                        </div>
+                    </div>
+
                     {% if form.files.errors %}
                     <div style="color:#ef4444;font-size:11px;margin-top:2px;">{{ form.files.errors|join:" " }}</div>
                     {% endif %}
@@ -292,8 +304,8 @@
                         💬 {{ form.comment_student.label }} <span style="font-weight:normal;color:var(--color-text-muted);font-size:10.5px;">(необов'язково)</span>
                     </label>
                     {{ form.comment_student }}
-                    <div style="font-size:11px;color:var(--color-text-muted);margin-top:3px;line-height:1.3;">
-                        💡 <em>Якщо вчитель задав роботу з завданнями на вибір, вкажіть тут номер (наприклад: «Виконував завдання 2») або зазначте співавторів групової роботи.</em>
+                    <div style="font-size:11px;color:var(--color-text-muted);margin-top:3px;line-height:1.35;">
+                        💡 <em>Тут ви можете залишити висновки по своїй роботі (якщо самого висновку немає у файлі або ви забули його дописати), вказати номер обраного завдання (наприклад: «Виконував завдання 2») чи зазначити співавторів групової роботи.</em>
                     </div>
                     {% if form.comment_student.errors %}
                     <div style="color:#ef4444;font-size:11px;margin-top:2px;">{{ form.comment_student.errors|join:" " }}</div>
@@ -305,7 +317,7 @@
                 <div style="background:linear-gradient(135deg,rgba(99,102,241,0.08) 0%,rgba(139,92,246,0.08) 100%);border:1.5px dashed #818cf8;border-radius:var(--radius-sm);padding:6px 10px;display:flex;align-items:center;gap:8px;">
                     <span style="font-size:18px;flex-shrink:0;">🤖</span>
                     <div style="font-size:11.5px;color:var(--color-text-secondary);line-height:1.3;">
-                        <strong style="color:var(--color-text-primary);">Після здачі доступна перевірка роботи через ШІ!</strong> Отримайте попередні бали від Google Gemini одразу після надсилання.
+                        <strong style="color:var(--color-text-primary);">Після здачі доступна перевірка роботи через ШІ!</strong> Отримайте попередні результати та оцінку від ШІ одразу після надсилання.
                     </div>
                 </div>
                 {% endif %}
@@ -456,20 +468,97 @@ function updateFilesUI() {
     }
 }
 
-function addFilesToStore(newFiles) {
-    for (let i = 0; i < newFiles.length; i++) {
-        let exists = false;
-        for (let j = 0; j < fileStore.files.length; j++) {
-            if (fileStore.files[j].name === newFiles[i].name && fileStore.files[j].size === newFiles[i].size) {
-                exists = true;
-                break;
-            }
-        }
-        if (!exists) {
-            fileStore.items.add(newFiles[i]);
-        }
+function showFileAccessWarning(title, message) {
+    const warningBox = document.getElementById('file-access-warning');
+    const titleEl = document.getElementById('file-access-warning-title');
+    const textEl = document.getElementById('file-access-warning-text');
+    if (warningBox && textEl) {
+        if (titleEl) titleEl.textContent = title;
+        textEl.innerHTML = message;
+        warningBox.style.display = 'block';
+        warningBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    } else {
+        alert(title + '\n\n' + message.replace(/<[^>]+>/g, ''));
     }
-    updateFilesUI();
+}
+
+function hideFileAccessWarning() {
+    const warningBox = document.getElementById('file-access-warning');
+    if (warningBox) warningBox.style.display = 'none';
+}
+
+function addFilesToStore(newFiles) {
+    hideFileAccessWarning();
+    const officeExts = ['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'odt', 'ods', 'odp', 'pdf'];
+    const filesToTest = Array.from(newFiles);
+
+    filesToTest.forEach(function(file) {
+        const lowerName = file.name.toLowerCase();
+        const ext = lowerName.split('.').pop();
+
+        // 1. Службові файли блокування Word/Excel (~$ або .~lock.)
+        if (file.name.startsWith('~$') || file.name.startsWith('.~lock.')) {
+            showFileAccessWarning(
+                '⚠️ Обрано тимчасовий файл автозбереження',
+                'Файл <strong>«' + file.name + '»</strong> є службовим тимчасовим файлом блокування Microsoft Word або Excel. ' +
+                'Схоже, що ваш документ зараз відкритий у програмі.<br><br>' +
+                '<strong>Що потрібно зробити:</strong><br>' +
+                '1. Збережіть роботу в програмі («Файл» → «Зберегти»).<br>' +
+                '2. Закрийте програму (Word або Excel).<br>' +
+                '3. Прикріпіть ваш основний збережений документ (без знаків «~$» на початку назви).'
+            );
+            return;
+        }
+
+        // 2. Порожні офісні файли (0 байтів)
+        if (file.size === 0 && officeExts.includes(ext)) {
+            showFileAccessWarning(
+                '⚠️ Файл порожній (0 байтів)',
+                'Файл <strong>«' + file.name + '»</strong> має нульовий розмір (0 байтів). ' +
+                'Якщо ви зараз працюєте над ним у Word або Excel, зміни ще не записані на диск.<br><br>' +
+                '<strong>Що потрібно зробити:</strong><br>' +
+                '1. Відкрийте програму та натисніть «Зберегти» (Ctrl + S).<br>' +
+                '2. Закрийте програму та прикріпіть збережений файл знову.'
+            );
+            return;
+        }
+
+        // 3. Тест на ексклюзивне блокування файлу іншим процесом (FileReader)
+        const reader = new FileReader();
+        reader.onload = function() {
+            let exists = false;
+            for (let j = 0; j < fileStore.files.length; j++) {
+                if (fileStore.files[j].name === file.name && fileStore.files[j].size === file.size) {
+                    exists = true;
+                    break;
+                }
+            }
+            if (!exists) {
+                fileStore.items.add(file);
+                updateFilesUI();
+            }
+        };
+        reader.onerror = function() {
+            showFileAccessWarning(
+                '⚠️ Файл відкритий у програмі або заблокований',
+                'Не вдалося прочитати вміст файлу <strong>«' + file.name + '»</strong>.<br>' +
+                'Цей файл зараз <strong>відкритий в іншій програмі</strong> (наприклад, Word або Excel) з блокуванням доступу або зайнятий системою.<br><br>' +
+                '<strong>Що потрібно зробити, щоб виправити:</strong><br>' +
+                '1. Збережіть документ у програмі.<br>' +
+                '2. <strong>Закрийте програму</strong> (Microsoft Word, Excel тощо), де відкрито цей файл.<br>' +
+                '3. Спробуйте прикріпити файл повторно.'
+            );
+        };
+
+        try {
+            reader.readAsArrayBuffer(file.slice(0, Math.min(file.size, 1024)));
+        } catch (e) {
+            showFileAccessWarning(
+                '⚠️ Помилка доступу до файлу',
+                'Файл <strong>«' + file.name + '»</strong> заблокований іншою програмою. Будь ласка, збережіть та закрийте редактор перед прикріпленням.'
+            );
+        }
+    });
 }
 
 window.removeFileByIndex = function(index) {
@@ -916,6 +1005,36 @@ if (submitForm) {
                 }, 200);
             }
             return false;
+        }
+
+        if (hasFiles) {
+            const officeExts = ['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'odt', 'ods', 'odp', 'pdf'];
+            for (let k = 0; k < fileStore.files.length; k++) {
+                const fItem = fileStore.files[k];
+                if (fItem.name.startsWith('~$') || fItem.name.startsWith('.~lock.')) {
+                    e.preventDefault();
+                    showFileAccessWarning(
+                        '⚠️ Обрано тимчасовий файл автозбереження',
+                        'Файл <strong>«' + fItem.name + '»</strong> є службовим тимчасовим файлом Microsoft Word або Excel. ' +
+                        'Схоже, що ваш документ зараз відкритий у програмі.<br><br>' +
+                        '<strong>Що потрібно зробити:</strong><br>' +
+                        '1. Збережіть роботу в програмі («Файл» → «Зберегти»).<br>' +
+                        '2. Закрийте програму (Word або Excel).<br>' +
+                        '3. Прикріпіть ваш основний збережений документ (без знаків «~$» на початку назви).'
+                    );
+                    return false;
+                }
+                const ext = fItem.name.toLowerCase().split('.').pop();
+                if (fItem.size === 0 && officeExts.includes(ext)) {
+                    e.preventDefault();
+                    showFileAccessWarning(
+                        '⚠️ Файл порожній (0 байтів)',
+                        'Файл <strong>«' + fItem.name + '»</strong> має нульовий розмір (0 байтів). ' +
+                        'Будь ласка, збережіть документ у програмі (Ctrl + S), закрийте її та прикріпіть файл знову.'
+                    );
+                    return false;
+                }
+            }
         }
 
         if (filesInput && fileStore) {

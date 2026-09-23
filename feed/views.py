@@ -2763,7 +2763,16 @@ def submit_assignment(request, pk):
     if request.method == 'POST':
         form = SubmissionForm(request.POST, request.FILES, assignment=assignment)
         if form.is_valid():
-            submission = form.save(assignment=assignment)
+            try:
+                submission = form.save(assignment=assignment)
+            except (PermissionError, OSError, IOError):
+                form.add_error(
+                    None,
+                    "Помилка при читанні або збереженні файлу (файл заблокований іншою програмою або системою). "
+                    "Будь ласка, збережіть та закрийте програму (наприклад, Word або Excel), де відкрито цей файл, та спробуйте ще раз."
+                )
+                return render(request, 'feed/submit_assignment.html', {'assignment': assignment, 'form': form})
+
             dup_info = check_submission_duplicates(submission)
             if dup_info['is_duplicate']:
                 request.session['submission_duplicate_warning'] = dup_info['warning_message']
@@ -2821,6 +2830,7 @@ def submit_success(request, pk):
         if recent_sub and (timezone.now() - recent_sub.submitted_at).total_seconds() < 600:
             latest_submission_id = recent_sub.id
 
+    dup_info = None
     if latest_submission_id:
         try:
             latest_submission = Submission.objects.get(pk=latest_submission_id, assignment=assignment)
@@ -2829,6 +2839,11 @@ def submit_success(request, pk):
                 ai_check_already_used = True
             elif assignment.allow_student_ai_check:
                 can_student_ai_check = True
+
+            dup_info = check_submission_duplicates(latest_submission)
+            if dup_info and dup_info.get('is_duplicate') and not duplicate_warning:
+                duplicate_warning = dup_info.get('warning_message')
+                duplicate_type = dup_info.get('type')
         except Submission.DoesNotExist:
             pass
     
@@ -2838,6 +2853,7 @@ def submit_success(request, pk):
         'search_query': search_query,
         'duplicate_warning': duplicate_warning,
         'duplicate_type': duplicate_type,
+        'dup_info': dup_info,
         'latest_submission': latest_submission,
         'can_student_ai_check': can_student_ai_check,
         'ai_check_already_used': ai_check_already_used,
@@ -2911,13 +2927,42 @@ def student_ai_self_check(request, submission_id):
     if unclear_task and not summary_text:
         summary_text = "Не зрозуміло, яке завдання виконане. Будь ласка, вкажіть номер завдання у коментарі до здачі."
     submission.student_ai_summary = summary_text
-    submission.student_ai_feedback = result.get('feedback_comment', '')
+    strengths = result.get('strengths') or []
+    weaknesses = result.get('weaknesses') or []
+
+    clean_fb = result.get('clean_feedback')
+    if not clean_fb:
+        parts = []
+        if strengths and isinstance(strengths, list) and len(strengths) > 0:
+            parts.append("✅ **Сильні сторони:**\n" + "\n".join(f"• {s}" for s in strengths))
+        if weaknesses and isinstance(weaknesses, list) and len(weaknesses) > 0:
+            parts.append("💡 **Зауваження:**\n" + "\n".join(f"• {w}" for w in weaknesses))
+        if result.get('feedback_comment'):
+            parts.append(f"💬 {result.get('feedback_comment')}")
+        clean_fb = "\n\n".join(parts) if parts else (result.get('feedback_comment') or '')
+
+    submission.student_ai_feedback = clean_fb
     submission.student_ai_gr_results = _json.dumps(gr_results, ensure_ascii=False) if (gr_results and not is_traditional) else ''
+
+    if 'ai_generated_detected' in result:
+        submission.ai_generated_detected = bool(result.get('ai_generated_detected'))
+    if 'ai_generated_percent' in result:
+        submission.ai_generated_percent = result.get('ai_generated_percent')
+    if 'ai_generated_confidence' in result:
+        submission.ai_generated_confidence = result.get('ai_generated_confidence') or 'none'
+    if 'ai_generated_details' in result:
+        submission.ai_generated_details = result.get('ai_generated_details') or ''
+
     submission.save(update_fields=[
         'student_ai_checked', 'student_ai_checked_at',
         'student_ai_grade', 'student_ai_level', 'student_ai_summary',
         'student_ai_feedback', 'student_ai_gr_results',
+        'ai_generated_detected', 'ai_generated_percent',
+        'ai_generated_confidence', 'ai_generated_details',
     ])
+
+    # Детектор дублікатів та плагіату для учня
+    dup_info = check_submission_duplicates(submission)
 
     # Якщо це колективна робота — синхронізуємо чернову перевірку для всіх зв'язаних співавторів
     if submission.is_group_work:
@@ -2933,6 +2978,10 @@ def student_ai_self_check(request, submission_id):
             student_ai_summary=submission.student_ai_summary,
             student_ai_feedback=submission.student_ai_feedback,
             student_ai_gr_results=submission.student_ai_gr_results,
+            ai_generated_detected=submission.ai_generated_detected,
+            ai_generated_percent=submission.ai_generated_percent,
+            ai_generated_confidence=submission.ai_generated_confidence,
+            ai_generated_details=submission.ai_generated_details,
         )
 
     # Готуємо відповідь для учня (без технічних полів)
@@ -2946,20 +2995,35 @@ def student_ai_self_check(request, submission_id):
                 'comment': gr.get('comment', ''),
             })
 
+    strengths = result.get('strengths') or []
+    weaknesses = result.get('weaknesses') or []
+    feedback_text = result.get('feedback_comment') or clean_fb
+
     return JsonResponse({
         'ok': True,
         'grade': submission.student_ai_grade,
         'level': submission.student_ai_level,
         'summary': submission.student_ai_summary,
-        'feedback': submission.student_ai_feedback,
+        'feedback': feedback_text,
+        'strengths': strengths,
+        'weaknesses': weaknesses,
         'unclear_task': unclear_task,
         'format_warning': format_warning,
         'is_traditional': is_traditional,
-        'gr_results': student_gr_view,
-        'ai_generated_detected': submission.ai_generated_detected,
-        'ai_generated_confidence': submission.ai_generated_confidence,
-        'ai_generated_details': submission.ai_generated_details,
+        'gr_results': [],
+        'ai_generated_detected': bool(result.get('ai_generated_detected', submission.ai_generated_detected)),
+        'ai_generated_percent': None,
+        'ai_generated_confidence': '',
+        'ai_generated_details': result.get('ai_generated_details', submission.ai_generated_details),
         'allow_ai_usage': bool(assignment.allow_ai_usage),
+        'duplicate_info': {
+            'is_duplicate': bool(dup_info.get('is_duplicate')),
+            'type': dup_info.get('type', 'none'),
+            'warning_message': dup_info.get('warning_message', ''),
+            'teacher_file_name': dup_info.get('teacher_file_name', ''),
+            'duplicate_student_name': dup_info.get('duplicate_student_name', ''),
+            'duplicate_class': dup_info.get('duplicate_class', ''),
+        },
     })
 
 
@@ -3036,11 +3100,14 @@ def submission_detail(request, submission_id):
         else:
             can_student_ai_check = True
 
+    dup_info = check_submission_duplicates(submission)
+
     return render(request, 'feed/submission_detail.html', {
         'submission': submission,
         'comments': comments,
         'can_student_ai_check': can_student_ai_check,
         'ai_check_already_used': ai_check_already_used,
+        'dup_info': dup_info,
     })
 
 

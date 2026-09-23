@@ -2342,6 +2342,98 @@ class Submission(models.Model):
             return format_raw_json_feedback_for_display(text)
         return self.ai_feedback
 
+    def get_student_ai_weaknesses_list(self):
+        """
+        Повертає список зауважень та рекомендацій «Що потрібно доробити» з відгуку ШІ для учня.
+        """
+        text = str(self.student_ai_feedback or '').strip()
+        if not text:
+            text = str(self.ai_feedback or '').strip()
+        if not text:
+            return []
+
+        # Спроба розпарсити JSON
+        if text.startswith('{') or '"weaknesses"' in text:
+            try:
+                import json as _json
+                data = _json.loads(text)
+                if isinstance(data, dict) and data.get('weaknesses') and isinstance(data['weaknesses'], list):
+                    return [w.strip() for w in data['weaknesses'] if str(w).strip()]
+            except Exception:
+                pass
+
+        # Парсинг із форматованого тексту
+        lines = []
+        in_weaknesses = False
+        for line in text.splitlines():
+            line_s = line.strip()
+            if any(marker in line_s for marker in ['💡 **Зауваження', '💡 **Що потрібно доробити', 'Зауваження та неточності', 'Що доробити']):
+                in_weaknesses = True
+                continue
+            elif in_weaknesses and line_s.startswith(('✅', '📌', '💬', '⚠️', '📊')):
+                break
+            elif in_weaknesses and line_s.startswith(('•', '-', '*')):
+                item = line_s.lstrip('•-* ').strip()
+                if item:
+                    lines.append(item)
+            elif in_weaknesses and line_s:
+                lines.append(line_s)
+        return lines
+
+    def get_student_ai_strengths_list(self):
+        """
+        Повертає список сильних сторін із відгуку ШІ для учня.
+        """
+        text = str(self.student_ai_feedback or '').strip()
+        if not text:
+            text = str(self.ai_feedback or '').strip()
+        if not text:
+            return []
+
+        if text.startswith('{') or '"strengths"' in text:
+            try:
+                import json as _json
+                data = _json.loads(text)
+                if isinstance(data, dict) and data.get('strengths') and isinstance(data['strengths'], list):
+                    return [s.strip() for s in data['strengths'] if str(s).strip()]
+            except Exception:
+                pass
+
+        lines = []
+        in_strengths = False
+        for line in text.splitlines():
+            line_s = line.strip()
+            if '✅ **Сильні сторони' in line_s:
+                in_strengths = True
+                continue
+            elif in_strengths and line_s.startswith(('💡', '📌', '💬', '⚠️', '📊')):
+                break
+            elif in_strengths and line_s.startswith(('•', '-', '*')):
+                item = line_s.lstrip('•-* ').strip()
+                if item:
+                    lines.append(item)
+            elif in_strengths and line_s:
+                lines.append(line_s)
+        return lines
+
+    def get_student_ai_clean_feedback(self):
+        """
+        Повертає загальну пораду/відгук без службових маркерів списку.
+        """
+        text = str(self.student_ai_feedback or '').strip()
+        if not text:
+            return ""
+        for line in text.splitlines():
+            line_s = line.strip()
+            if line_s.startswith('💬'):
+                clean = line_s.lstrip('💬 ').replace('**Рекомендація учню:**', '').replace('**Рекомендація:**', '').strip()
+                if clean:
+                    return clean
+        # Якщо немає префікса 💬, повертаємо текст, якщо він не є суто списком
+        if not text.startswith(('✅', '💡', '📌')):
+            return text
+        return ""
+
     @property
     def effective_grade_date(self):
         """

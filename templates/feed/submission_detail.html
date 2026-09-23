@@ -131,7 +131,7 @@
                                 Перевірте цю роботу через ШІ!
                             </div>
                             <div style="font-size:12px;color:var(--color-text-secondary);margin-top:2px;">
-                                Вам доступна 1 спроба самоперевірки через <strong>Google Gemini AI</strong>.
+                                Вам доступна 1 спроба самоперевірки через <strong>ШІ</strong>.
                             </div>
                         </div>
                     </div>
@@ -143,29 +143,121 @@
                 </div>
                 <div id="student-ai-result" style="display:none;margin-bottom:18px;"></div>
                 {% elif submission.student_ai_checked %}
-                <div style="margin-bottom:18px;padding:12px 16px;background:var(--color-surface);border:1.5px solid {% if submission.student_ai_grade == 'Доопрацювати' %}rgba(245,158,11,0.5){% else %}rgba(99,102,241,0.3){% endif %};border-radius:var(--radius-md);">
-                    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:4px;">
-                        <div style="font-weight:800;font-size:13.5px;color:var(--color-primary);display:flex;align-items:center;gap:6px;">
+                <div style="margin-bottom:18px;background:var(--color-surface);border:1.5px solid {% if submission.student_ai_grade == 'Доопрацювати' %}rgba(245,158,11,0.5){% else %}rgba(99,102,241,0.3){% endif %};border-radius:var(--radius-md);overflow:hidden;">
+                    <div style="padding:12px 16px;background:linear-gradient(135deg,rgba(99,102,241,0.06),rgba(139,92,246,0.06));border-bottom:1px solid var(--color-border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+                        <div style="font-weight:800;font-size:14px;color:var(--color-text-primary);display:flex;align-items:center;gap:6px;">
                             <span>🤖</span> <span>Попередня оцінка ШІ (самоперевірка)</span>
                         </div>
-                        <span class="badge" style="{% if submission.student_ai_grade == 'Доопрацювати' %}background:#fef3c7;color:#d97706;border:1px solid #fcd34d;{% else %}background:#10b981;color:#fff;{% endif %}font-weight:800;font-size:12px;padding:2px 8px;border-radius:8px;">
+                        <span class="badge" style="{% if submission.student_ai_grade == 'Доопрацювати' %}background:#fef3c7;color:#d97706;border:1px solid #fcd34d;{% else %}background:rgba(16,185,129,0.15);color:#059669;{% endif %}font-weight:800;font-size:12px;padding:3px 10px;border-radius:12px;">
                             {{ submission.student_ai_grade }}{% if submission.student_ai_level %} ({{ submission.student_ai_level }}){% endif %}
                         </span>
                     </div>
-                    {% if "не зрозуміло" in submission.student_ai_summary|lower or "незрозуміло" in submission.student_ai_summary|lower or "не зрозуміло" in submission.student_ai_feedback|lower or "незрозуміло" in submission.student_ai_feedback|lower %}
-                    <div style="margin-top:8px;margin-bottom:8px;padding:10px 12px;background:#fffbeb;border:1px solid #fde68a;border-radius:var(--radius-sm);display:flex;align-items:flex-start;gap:8px;">
-                        <span style="font-size:18px;line-height:1;">⚠️</span>
-                        <div>
-                            <div style="font-weight:800;font-size:12.5px;color:#b45309;">Не зрозуміло, яке завдання виконане</div>
-                            <div style="font-size:11.5px;color:#92400e;line-height:1.35;">ШІ не зміг визначити номер чи назву виконаного завдання. Будь ласка, вкажіть його у коментарі до здачі та надішліть роботу повторно.</div>
+
+                    <div style="padding:14px 16px;">
+                        {% if "не зрозуміло" in submission.student_ai_summary|lower or "незрозуміло" in submission.student_ai_summary|lower or "не зрозуміло" in submission.student_ai_feedback|lower or "незрозуміло" in submission.student_ai_feedback|lower %}
+                        <div style="margin-bottom:12px;padding:12px 14px;background:#fffbeb;border:1.5px solid #f59e0b;border-radius:var(--radius-sm);display:flex;align-items:flex-start;gap:10px;">
+                            <span style="font-size:20px;line-height:1;">⚠️</span>
+                            <div>
+                                <div style="font-weight:800;font-size:13px;color:#b45309;margin-bottom:2px;">Не зрозуміло, яке завдання виконане</div>
+                                <div style="font-size:12px;color:#92400e;line-height:1.4;">ШІ не зміг визначити номер чи назву виконаного завдання. Будь ласка, вкажіть його у коментарі до здачі та надішліть роботу повторно.</div>
+                            </div>
                         </div>
+                        {% endif %}
+
+                        <!-- Перевірка на ШІ -->
+                        {% if submission.ai_generated_detected %}
+                        <div style="margin-bottom:12px;padding:12px 16px;background:{% if submission.is_ai_allowed %}rgba(16,185,129,0.08){% else %}rgba(239,68,68,0.08){% endif %};border:1.5px solid {% if submission.is_ai_allowed %}#10b981{% else %}#ef4444{% endif %};border-radius:var(--radius-sm);">
+                            <div style="font-weight:800;font-size:13px;color:{% if submission.is_ai_allowed %}#065f46{% else %}#b91c1c{% endif %};display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;margin-bottom:4px;">
+                                <span style="display:inline-flex;align-items:center;gap:6px;">
+                                    <span>🤖</span>
+                                    <span>{% if submission.is_ai_allowed %}У роботі зафіксовано використання штучного інтелекту (ШІ) (дозволено вчителем){% else %}У роботі виявлено ознаки використання штучного інтелекту (ШІ){% endif %}</span>
+                                </span>
+                            </div>
+                            {% if submission.ai_generated_details %}
+                            <div style="font-size:12px;color:var(--color-text-secondary);line-height:1.4;margin:4px 0;">
+                                {{ submission.ai_generated_details }}
+                            </div>
+                            {% endif %}
+                            <div style="font-size:11px;color:var(--color-text-muted);">
+                                {% if submission.is_ai_allowed %}
+                                💡 Вчитель дозволив використання ШІ для виконання цього завдання.
+                                {% else %}
+                                ⚠️ Для цього завдання вчитель вимагав повністю самостійного виконання учнем!
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        <!-- Перевірка на плагіат / дублікат -->
+                        {% if dup_info and dup_info.is_duplicate %}
+                        <div style="margin-bottom:12px;padding:12px 16px;background:{% if dup_info.type == 'teacher_duplicate' %}rgba(239,68,68,0.09){% else %}rgba(245,158,11,0.09){% endif %};border:1.5px solid {% if dup_info.type == 'teacher_duplicate' %}#ef4444{% else %}#f59e0b{% endif %};border-radius:var(--radius-sm);display:flex;align-items:flex-start;gap:10px;">
+                            <span style="font-size:22px;line-height:1;flex-shrink:0;">{% if dup_info.type == 'teacher_duplicate' %}🚫{% else %}⚠️{% endif %}</span>
+                            <div>
+                                <div style="font-weight:800;font-size:13px;color:{% if dup_info.type == 'teacher_duplicate' %}#b91c1c{% else %}#b45309{% endif %};margin-bottom:2px;">
+                                    {% if dup_info.type == 'teacher_duplicate' %}Увага: Здано вихідний файл завдання замість розв'язку!{% else %}Увага: Виявлено збіг або схожість із роботою іншого учня!{% endif %}
+                                </div>
+                                <div style="font-size:12px;color:var(--color-text-secondary);line-height:1.4;">
+                                    {{ dup_info.warning_message }}
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        {% if submission.student_ai_summary %}
+                        <div style="font-size:13px;color:var(--color-text-secondary);line-height:1.5;margin-bottom:10px;padding:10px 14px;background:var(--color-bg-secondary);border-radius:var(--radius-sm);">
+                            <strong>📌 Резюме:</strong> {{ submission.student_ai_summary }}
+                        </div>
+                        {% endif %}
+
+                        <!-- Блок «Що потрібно доробити» -->
+                        {% with weaknesses=submission.get_student_ai_weaknesses_list %}
+                        {% if weaknesses %}
+                        <div style="margin-bottom:12px;padding:14px 18px;background:rgba(245,158,11,0.08);border:2px solid #f59e0b;border-radius:var(--radius-md);box-shadow:0 3px 12px rgba(245,158,11,0.12);">
+                            <div style="display:flex;align-items:center;gap:8px;font-weight:900;font-size:13.5px;color:#b45309;margin-bottom:8px;">
+                                <span style="font-size:18px;">💡</span>
+                                <span>Що потрібно доробити, щоб покращити роботу (Зауваження ШІ):</span>
+                            </div>
+                            <ul style="margin:0;padding-left:20px;font-size:12.5px;color:var(--color-text-primary);line-height:1.5;display:flex;flex-direction:column;gap:5px;">
+                                {% for w in weaknesses %}
+                                <li>{{ w }}</li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                        {% elif submission.student_ai_feedback and not submission.get_student_ai_strengths_list %}
+                        <div style="margin-bottom:12px;padding:12px 16px;background:rgba(245,158,11,0.06);border:1.5px solid rgba(245,158,11,0.4);border-radius:var(--radius-sm);font-size:12.5px;color:var(--color-text-primary);line-height:1.45;">
+                            <div style="font-weight:800;color:#b45309;margin-bottom:4px;display:flex;align-items:center;gap:6px;">
+                                <span>💡</span> <span>Зауваження та поради ШІ:</span>
+                            </div>
+                            <div style="white-space:pre-wrap;">{{ submission.student_ai_feedback }}</div>
+                        </div>
+                        {% endif %}
+                        {% endwith %}
+
+                        <!-- Блок «Сильні сторони» -->
+                        {% with strengths=submission.get_student_ai_strengths_list %}
+                        {% if strengths %}
+                        <div style="margin-bottom:12px;padding:12px 16px;background:rgba(16,185,129,0.06);border:1.5px solid #10b981;border-radius:var(--radius-sm);">
+                            <div style="display:flex;align-items:center;gap:6px;font-weight:800;font-size:13px;color:#065f46;margin-bottom:6px;">
+                                <span>✅</span> <span>Що зроблено добре (Сильні сторони):</span>
+                            </div>
+                            <ul style="margin:0;padding-left:20px;font-size:12.5px;color:var(--color-text-secondary);line-height:1.45;display:flex;flex-direction:column;gap:4px;">
+                                {% for s in strengths %}
+                                <li>{{ s }}</li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                        {% endif %}
+                        {% endwith %}
+
+                        {% with clean_fb=submission.get_student_ai_clean_feedback %}
+                        {% if clean_fb %}
+                        <div style="margin-top:8px;padding:10px 14px;background:var(--color-bg-secondary);border-left:4px solid var(--color-primary);border-radius:0 var(--radius-sm) var(--radius-sm) 0;font-size:12.5px;color:var(--color-text-primary);line-height:1.45;">
+                            <strong style="color:var(--color-primary);">💬 Порада від ШІ:</strong> {{ clean_fb }}
+                        </div>
+                        {% endif %}
+                        {% endwith %}
                     </div>
-                    {% endif %}
-                    {% if submission.student_ai_summary or submission.student_ai_feedback %}
-                    <div style="font-size:12px;color:var(--color-text-secondary);line-height:1.4;">
-                        {{ submission.student_ai_summary|default:submission.student_ai_feedback }}
-                    </div>
-                    {% endif %}
+                    <div style="padding:10px 16px;background:rgba(16,185,129,0.05);border-top:1px solid var(--color-border);font-size:11.5px;color:var(--color-text-muted);">ℹ️ Попередня оцінка від ШІ. Остаточну оцінку виставляє вчитель.</div>
                 </div>
                 {% endif %}
 
@@ -261,7 +353,7 @@
                 <div style="margin-bottom:20px;padding:16px 20px;background:{% if submission.is_ai_allowed %}rgba(16,185,129,0.08){% else %}rgba(239,68,68,0.08){% endif %};border:1.5px solid {% if submission.is_ai_allowed %}#10b981{% else %}#ef4444{% endif %};border-radius:var(--radius-md);">
                     <div style="display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;color:{% if submission.is_ai_allowed %}#065f46{% else %}#b91c1c{% endif %};margin-bottom:4px;">
                         <span>🤖</span>
-                        <span>{% if submission.is_ai_allowed %}У роботі зафіксовано використання генеративного ШІ{% if submission.ai_generated_percent is not None %} (~{{ submission.ai_generated_percent }}%){% endif %} (дозволено вчителем){% else %}У роботі виявлено ознаки використання штучного інтелекту (ШІ){% if submission.ai_generated_percent is not None %} (~{{ submission.ai_generated_percent }}%){% endif %}{% endif %}</span>
+                        <span>{% if submission.is_ai_allowed %}У роботі зафіксовано використання штучного інтелекту (ШІ) (дозволено вчителем){% else %}У роботі виявлено ознаки використання штучного інтелекту (ШІ){% endif %}</span>
                     </div>
                     {% if submission.ai_generated_details %}
                     <div style="font-size:12.5px;color:var(--color-text-secondary);line-height:1.4;margin-bottom:6px;">
@@ -274,47 +366,6 @@
                         {% else %}
                         ⚠️ Для цього завдання вчитель вимагав повністю самостійне виконання учнем.
                         {% endif %}
-                    </div>
-                </div>
-                {% endif %}
-
-                {% if submission.has_gr_results and not submission.is_traditional_grading %}
-                <!-- Оцінювання за групами результатів (ГР НУШ) -->
-                <div style="margin-top:20px;padding:18px 20px;background:var(--color-surface);border:1px solid rgba(99,102,241,0.25);border-radius:var(--radius-md);box-shadow:0 2px 8px rgba(0,0,0,0.03);">
-                    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
-                        <h3 style="font-size:1.1rem;font-weight:800;margin:0;color:var(--color-primary);display:flex;align-items:center;gap:8px;">
-                            <span>📊</span> <span>Оцінювання за групами результатів (ГР НУШ)</span>
-                        </h3>
-                        {% if submission.get_ai_gr_average %}
-                        <div style="display:inline-flex;align-items:center;gap:8px;background:rgba(16,185,129,0.12);border:1px solid rgba(16,185,129,0.3);border-radius:20px;padding:4px 14px;">
-                            <span style="font-size:12px;font-weight:700;color:#065f46;">Загальна середня оцінка по ГР:</span>
-                            <span class="badge" style="background:#10b981;color:#fff;font-size:13px;font-weight:800;">
-                                {{ submission.get_ai_gr_average_display }} б.
-                            </span>
-                        </div>
-                        {% endif %}
-                    </div>
-                    <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(260px, 1fr));gap:12px;">
-                        {% for gr in submission.get_ai_gr_results_list %}
-                        <div style="background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:12px 14px;">
-                            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:6px;">
-                                <strong style="color:var(--color-text-primary);font-size:13px;">{{ gr.code }}: {{ gr.name }}</strong>
-                                <span class="badge" style="background:rgba(99,102,241,0.15);color:var(--color-primary);font-weight:800;font-size:12px;white-space:nowrap;">
-                                    {{ gr.grade|default:"—" }} б.
-                                </span>
-                            </div>
-                            {% if gr.level %}
-                            <div style="font-size:11.5px;color:var(--color-text-muted);font-weight:700;margin-bottom:4px;">
-                                Рівень: <span style="color:var(--color-text-primary);">{{ gr.level }}</span>
-                            </div>
-                            {% endif %}
-                            {% if gr.comment %}
-                            <div style="font-size:12px;color:var(--color-text-secondary);line-height:1.4;">
-                                {{ gr.comment }}
-                            </div>
-                            {% endif %}
-                        </div>
-                        {% endfor %}
                     </div>
                 </div>
                 {% endif %}
@@ -408,6 +459,86 @@ function runStudentAICheck(subId) {
             ? 'background:rgba(16,185,129,0.15);color:#059669;'
             : 'background:#fef3c7;color:#d97706;border:1px solid #fcd34d;';
 
+        var aiDetectionHtml = '';
+        if (data.ai_generated_detected) {
+            var isAllowed = data.allow_ai_usage;
+            var alertBg = isAllowed ? 'rgba(16,185,129,0.08)' : 'rgba(239,68,68,0.08)';
+            var alertBorder = isAllowed ? '#10b981' : '#ef4444';
+            var alertColor = isAllowed ? '#065f46' : '#b91c1c';
+            var alertTitle = isAllowed ? 'У роботі зафіксовано використання штучного інтелекту (ШІ) (дозволено вчителем)' : 'У роботі виявлено ознаки використання штучного інтелекту (ШІ)';
+            var alertNote = isAllowed ? '💡 Вчитель дозволив використання ШІ для виконання цього завдання.' : '⚠️ Для цього завдання вчитель вимагав повністю самостійного виконання учнем!';
+
+            var detailsText = data.ai_generated_details ? '<div style="margin:4px 0;font-size:12px;color:var(--color-text-secondary);line-height:1.4;">' + data.ai_generated_details + '</div>' : '';
+
+            aiDetectionHtml = '<div style="margin-bottom:12px;padding:12px 16px;background:' + alertBg + ';border:1.5px solid ' + alertBorder + ';border-radius:var(--radius-sm);">' +
+                '<div style="font-weight:800;font-size:13px;color:' + alertColor + ';display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;margin-bottom:4px;">' +
+                    '<span style="display:inline-flex;align-items:center;gap:6px;"><span>🤖</span> <span>' + alertTitle + '</span></span>' +
+                '</div>' +
+                detailsText +
+                '<div style="margin-top:3px;font-size:11px;color:var(--color-text-muted);">' + alertNote + '</div>' +
+            '</div>';
+        }
+
+        var duplicateHtml = '';
+        if (data.duplicate_info && data.duplicate_info.is_duplicate) {
+            var dup = data.duplicate_info;
+            var isTeacher = dup.type === 'teacher_duplicate';
+            var dupBg = isTeacher ? 'rgba(239,68,68,0.09)' : 'rgba(245,158,11,0.09)';
+            var dupBorder = isTeacher ? '#ef4444' : '#f59e0b';
+            var dupColor = isTeacher ? '#b91c1c' : '#b45309';
+            var dupIcon = isTeacher ? '🚫' : '⚠️';
+            var dupTitle = isTeacher ? 'Увага: Здано вихідний файл завдання замість розв\'язку!' : 'Увага: Виявлено збіг або схожість із роботою іншого учня!';
+
+            duplicateHtml = '<div style="margin-bottom:12px;padding:12px 16px;background:' + dupBg + ';border:1.5px solid ' + dupBorder + ';border-radius:var(--radius-sm);display:flex;align-items:flex-start;gap:10px;">' +
+                '<span style="font-size:22px;line-height:1;flex-shrink:0;">' + dupIcon + '</span>' +
+                '<div>' +
+                    '<div style="font-weight:800;font-size:13px;color:' + dupColor + ';margin-bottom:2px;">' + dupTitle + '</div>' +
+                    '<div style="font-size:12px;color:var(--color-text-secondary);line-height:1.4;">' + (dup.warning_message || '') + '</div>' +
+                '</div>' +
+            '</div>';
+        }
+
+        var weaknessesHtml = '';
+        if (data.weaknesses && data.weaknesses.length > 0) {
+            weaknessesHtml = '<div style="margin-bottom:12px;padding:14px 18px;background:rgba(245,158,11,0.08);border:2px solid #f59e0b;border-radius:var(--radius-md);box-shadow:0 3px 12px rgba(245,158,11,0.12);">' +
+                '<div style="display:flex;align-items:center;gap:8px;font-weight:900;font-size:13.5px;color:#b45309;margin-bottom:8px;">' +
+                    '<span style="font-size:18px;">💡</span>' +
+                    '<span>Що потрібно доробити, щоб покращити роботу (Зауваження ШІ):</span>' +
+                '</div>' +
+                '<ul style="margin:0;padding-left:20px;font-size:12.5px;color:var(--color-text-primary);line-height:1.5;display:flex;flex-direction:column;gap:5px;">';
+            data.weaknesses.forEach(function(w) {
+                weaknessesHtml += '<li>' + w + '</li>';
+            });
+            weaknessesHtml += '</ul></div>';
+        }
+
+        var strengthsHtml = '';
+        if (data.strengths && data.strengths.length > 0) {
+            strengthsHtml = '<div style="margin-bottom:12px;padding:12px 16px;background:rgba(16,185,129,0.06);border:1.5px solid #10b981;border-radius:var(--radius-sm);">' +
+                '<div style="display:flex;align-items:center;gap:6px;font-weight:800;font-size:13px;color:#065f46;margin-bottom:6px;">' +
+                    '<span>✅</span> <span>Що зроблено добре (Сильні сторони):</span>' +
+                '</div>' +
+                '<ul style="margin:0;padding-left:20px;font-size:12.5px;color:var(--color-text-secondary);line-height:1.45;display:flex;flex-direction:column;gap:4px;">';
+            data.strengths.forEach(function(s) {
+                strengthsHtml += '<li>' + s + '</li>';
+            });
+            strengthsHtml += '</ul></div>';
+        }
+
+        var feedbackCommentHtml = '';
+        if (data.feedback && (!data.weaknesses || data.weaknesses.length === 0) && (!data.strengths || data.strengths.length === 0)) {
+            feedbackCommentHtml = '<div style="margin-bottom:12px;padding:12px 16px;background:rgba(245,158,11,0.06);border:1.5px solid rgba(245,158,11,0.4);border-radius:var(--radius-sm);font-size:12.5px;color:var(--color-text-primary);line-height:1.45;">' +
+                '<div style="font-weight:800;color:#b45309;margin-bottom:4px;display:flex;align-items:center;gap:6px;">' +
+                    '<span>💡</span> <span>Зауваження та поради ШІ:</span>' +
+                '</div>' +
+                '<div style="white-space:pre-wrap;">' + data.feedback + '</div>' +
+            '</div>';
+        } else if (data.feedback) {
+            feedbackCommentHtml = '<div style="margin-top:8px;padding:10px 14px;background:var(--color-bg-secondary);border-left:4px solid var(--color-primary);border-radius:0 var(--radius-sm) var(--radius-sm) 0;font-size:12.5px;color:var(--color-text-primary);line-height:1.45;">' +
+                '<strong style="color:var(--color-primary);">💬 Порада від ШІ:</strong> ' + data.feedback +
+            '</div>';
+        }
+
         var unclearTaskHtml = '';
         var isUnclear = Boolean(
             data.unclear_task ||
@@ -438,9 +569,12 @@ function runStudentAICheck(subId) {
             '</div>' +
             '<div style="padding:14px 16px;">' +
             unclearTaskHtml +
-            (data.summary ? '<div style="font-size:12.5px;color:var(--color-text-secondary);line-height:1.45;margin-bottom:8px;padding:8px 12px;background:var(--color-bg-secondary);border-radius:var(--radius-sm);">' + data.summary + '</div>' : '') +
-            (grHtml ? '<div style="font-weight:800;font-size:12px;color:var(--color-text-primary);margin-bottom:4px;">📊 Оцінки за групами результатів:</div>' + grHtml : '') +
-            (data.feedback ? '<div style="margin-top:8px;font-size:12px;color:var(--color-text-muted);line-height:1.4;border-top:1px solid var(--color-border);padding-top:8px;"><strong>Відгук:</strong> ' + data.feedback + '</div>' : '') +
+            duplicateHtml +
+            aiDetectionHtml +
+            (data.summary ? '<div style="font-size:12.5px;color:var(--color-text-secondary);line-height:1.45;margin-bottom:8px;padding:8px 12px;background:var(--color-bg-secondary);border-radius:var(--radius-sm);"><strong>📌 Резюме:</strong> ' + data.summary + '</div>' : '') +
+            weaknessesHtml +
+            strengthsHtml +
+            feedbackCommentHtml +
             '</div>' +
             '<div style="padding:8px 16px;background:rgba(16,185,129,0.05);border-top:1px solid var(--color-border);font-size:11px;color:var(--color-text-muted);">ℹ️ Попередня оцінка від ШІ. Остаточну оцінку виставляє вчитель.</div>' +
             '</div>';

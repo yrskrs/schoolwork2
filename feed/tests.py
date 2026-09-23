@@ -3387,6 +3387,187 @@ class AssignmentFileAIAndCoauthorTests(TestCase):
         self.assertEqual(succ_resp.status_code, 200)
         self.assertContains(succ_resp, 'Не зрозуміло, яке завдання виконане')
 
+    @patch('feed.gemini_service.evaluate_submission_with_gemini')
+    def test_student_ai_self_check_ai_detection_plagiarism_and_weaknesses(self, mock_eval):
+        """Тест перевірки ШІ для учня: детекція ШІ, плагіат/дублікати, слабкі сторони та коментарі."""
+        asg = Assignment.objects.create(
+            teacher=self.teacher,
+            subject=self.subject,
+            title='Практична робота з інформатики',
+            description='Створіть документ',
+            status=Assignment.STATUS_PUBLISHED,
+            allow_student_ai_check=True,
+            allow_ai_usage=False
+        )
+        asg.classes.add(self.class_group)
+
+        sub = Submission.objects.create(
+            assignment=asg,
+            first_name='Олександр',
+            last_name='Коваленко',
+            class_group=self.class_group,
+            comment_student='Ось мій висновок: під час роботи було досліджено алгоритми сортування.'
+        )
+
+        mock_eval.return_value = {
+            'status': 'success',
+            'suggested_grade': '8',
+            'level': 'Достатній (7-9)',
+            'summary': 'Робота виконана непогано, але є ознаки генерації ШІ.',
+            'feedback_comment': 'Порада: допишіть висновок у файлі.',
+            'weaknesses': ['Немає власного висновку в документі', 'Пункт 3 виконано частково'],
+            'strengths': ['Таблиця оформлена акуратно'],
+            'ai_generated_detected': True,
+            'ai_generated_percent': 85,
+            'ai_generated_confidence': 'high',
+            'ai_generated_details': 'Виявлено структуру та формулювання, характерні для ChatGPT.',
+            'is_traditional': True,
+            'gr_results': []
+        }
+
+        resp = self.client.post(reverse('student_ai_self_check', args=[sub.id]), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertTrue(data['ok'])
+        self.assertTrue(data['ai_generated_detected'])
+        self.assertIsNone(data['ai_generated_percent'])  # Для учня відсоток приховано
+        self.assertEqual(data['gr_results'], [])  # Оцінки за ГР для учня приховано
+        self.assertFalse(data['allow_ai_usage'])
+        self.assertIn('duplicate_info', data)
+        self.assertEqual(len(data['weaknesses']), 2)
+        self.assertEqual(len(data['strengths']), 1)
+
+        sub.refresh_from_db()
+        self.assertTrue(sub.ai_generated_detected)
+        self.assertEqual(sub.ai_generated_percent, 85)  # Для вчителя в БД збережено повний відсоток
+        self.assertEqual(sub.ai_generated_confidence, 'high')
+        self.assertEqual(len(sub.get_student_ai_weaknesses_list()), 2)
+        self.assertEqual(len(sub.get_student_ai_strengths_list()), 1)
+
+        # Перевірка відображення на submission_detail
+        detail_resp = self.client.get(reverse('submission_detail', args=[sub.id]))
+        self.assertEqual(detail_resp.status_code, 200)
+        self.assertContains(detail_resp, 'У роботі виявлено ознаки використання штучного інтелекту')
+        self.assertNotContains(detail_resp, '85%')  # Відсоток ШІ приховано для учня
+        self.assertNotContains(detail_resp, 'Google Gemini')  # Згадування конкретно Google Gemini прибрано
+        self.assertNotContains(detail_resp, 'Оцінки за групами результатів')  # Оцінки за ГР приховано
+        self.assertContains(detail_resp, 'Що потрібно доробити, щоб покращити роботу (Зауваження ШІ):')
+        self.assertContains(detail_resp, 'Немає власного висновку в документі')
+
+        # Перевірка підказки щодо висновків на сторінці здачі роботи submit_assignment
+        form_resp = self.client.get(reverse('submit_assignment', args=[asg.id]))
+        self.assertEqual(form_resp.status_code, 200)
+        self.assertContains(form_resp, 'висновки по своїй роботі')
+        self.assertContains(form_resp, 'Висновки по роботі')
+        self.assertNotContains(form_resp, 'Google Gemini')  # Замінено на загальне ШІ
+
+    def test_submission_form_rejects_open_or_temp_office_files(self):
+        """Тест відхилення відкритих/тимчасових службових файлів Word/Excel зі зрозумілим поясненням."""
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from feed.forms import SubmissionForm
+
+        asg = Assignment.objects.create(
+            teacher=self.teacher,
+            subject=self.subject,
+            title='Перевірка відкритих файлів',
+            status=Assignment.STATUS_PUBLISHED
+        )
+        asg.classes.add(self.class_group)
+
+        # 1. Спроба прикріпити службовий файл Word (~$Документ.docx)
+        temp_word_file = SimpleUploadedFile("~$Практична_1.docx", b"office lock dummy data")
+        form1 = SubmissionForm(
+            data={'full_name': 'Іван Петренко', 'class_group': self.class_group.id},
+            files={'files': [temp_word_file]},
+            assignment=asg
+        )
+        self.assertFalse(form1.is_valid())
+        err_text1 = form1.errors.as_text()
+        self.assertIn("є тимчасовим службовим файлом", err_text1)
+        self.assertIn("закрийте програму", err_text1)
+
+        # 2. Спроба прикріпити 0-байтовий Word-файл (несбережений через відкриття)
+        empty_docx = SimpleUploadedFile("Практична_1.docx", b"")
+        form2 = SubmissionForm(
+            data={'full_name': 'Іван Петренко', 'class_group': self.class_group.id},
+            files={'files': [empty_docx]},
+            assignment=asg
+        )
+        self.assertFalse(form2.is_valid())
+        err_text2 = form2.errors.as_text()
+        self.assertIn("порожній (0 байтів)", err_text2)
+        self.assertIn("збережіть документ", err_text2)
+
+    def test_site_guide_modal_and_navbar_buttons(self):
+        """Тест наявності кнопки інструкції у верхньому барі учня, в меню вчителя та модального вікна довідки з розділенням ролей."""
+        # 1. Перевірка для учня/гостя (неавторизований перегляд)
+        student_resp = self.client.get(reverse('index'))
+        self.assertEqual(student_resp.status_code, 200)
+        self.assertContains(student_resp, 'id="site-guide-btn"')
+        self.assertContains(student_resp, 'nav-btn-guide')
+        self.assertContains(student_resp, 'id="guide-modal"')
+        # Учень має доступ ТІЛЬКИ до учнівського блоку інструкції
+        self.assertContains(student_resp, 'id="guide-pane-student"')
+        self.assertContains(student_resp, 'id="guide-category-index"')
+        self.assertContains(student_resp, 'id="guide-category-submit-assignment"')
+        self.assertContains(student_resp, '📍 Ви зараз на цій сторінці')
+        # Для учня ЖОДНА вчительська категорія чи панель НЕ повинна рендеритися
+        self.assertNotContains(student_resp, 'id="guide-pane-teacher"')
+        self.assertNotContains(student_resp, 'guide-tab-btn-teacher')
+        self.assertNotContains(student_resp, 'guide-category-teacher-dashboard')
+        self.assertNotContains(student_resp, 'guide-category-teacher-settings')
+        self.assertNotContains(student_resp, 'guide-category-teacher-ai-settings')
+        self.assertNotContains(student_resp, 'guide-category-teacher-fileviewer')
+        self.assertNotContains(student_resp, 'guide-category-teacher-submissions')
+        self.assertNotContains(student_resp, 'guide-category-teacher-gradebook')
+        self.assertNotContains(student_resp, 'guide-category-teacher-classes')
+        self.assertNotContains(student_resp, 'guide-category-teacher-reschedule')
+        self.assertNotContains(student_resp, 'guide-category-teacher-activity')
+        self.assertNotContains(student_resp, 'guide-category-teacher-zip-import-export')
+
+        # 2. Перевірка наявності модального вікна на сторінці здачі роботи
+        asg = Assignment.objects.create(
+            teacher=self.teacher,
+            subject=self.subject,
+            title="Завдання для довідки",
+            description="Опис",
+            status=Assignment.STATUS_PUBLISHED,
+            due_date=timezone.localdate() + timezone.timedelta(days=2)
+        )
+        asg.classes.add(self.class_group)
+        submit_page_resp = self.client.get(reverse('submit_assignment', args=[asg.pk]))
+        self.assertEqual(submit_page_resp.status_code, 200)
+        self.assertContains(submit_page_resp, 'id="site-guide-btn"')
+        self.assertContains(submit_page_resp, 'id="guide-modal"')
+        self.assertContains(submit_page_resp, 'id="guide-pane-student"')
+        self.assertNotContains(submit_page_resp, 'id="guide-pane-teacher"')
+
+        # 3. Перевірка для вчителя (сховано у меню профілю, є вкладки для вчителя та учня)
+        self.client.force_login(self.user)
+        teacher_resp = self.client.get(reverse('teacher_dashboard'))
+        self.assertEqual(teacher_resp.status_code, 200)
+        # Для вчителя окремої кнопки у барі немає (вона схована у випадаюче меню профілю)
+        self.assertNotContains(teacher_resp, 'id="site-guide-btn"')
+        # Але в меню профілю є виклик openGuideModal()
+        self.assertContains(teacher_resp, 'openGuideModal()')
+        self.assertContains(teacher_resp, 'Інструкція сайту')
+        self.assertContains(teacher_resp, 'id="guide-modal"')
+        # Вчитель має доступ до 10 вчительських блоків, перемикача вкладок та учнівського блоку
+        self.assertContains(teacher_resp, 'id="guide-pane-teacher"')
+        self.assertContains(teacher_resp, 'guide-tab-btn-teacher')
+        self.assertContains(teacher_resp, 'guide-tab-btn-student')
+        self.assertContains(teacher_resp, 'guide-category-teacher-dashboard')
+        self.assertContains(teacher_resp, 'guide-category-teacher-settings')
+        self.assertContains(teacher_resp, 'guide-category-teacher-ai-settings')
+        self.assertContains(teacher_resp, 'guide-category-teacher-fileviewer')
+        self.assertContains(teacher_resp, 'guide-category-teacher-submissions')
+        self.assertContains(teacher_resp, 'guide-category-teacher-gradebook')
+        self.assertContains(teacher_resp, 'guide-category-teacher-classes')
+        self.assertContains(teacher_resp, 'guide-category-teacher-reschedule')
+        self.assertContains(teacher_resp, 'guide-category-teacher-activity')
+        self.assertContains(teacher_resp, 'guide-category-teacher-zip-import-export')
+        self.assertContains(teacher_resp, 'id="guide-pane-student"')
+
     def test_calendar_badge_count_always_matches_filtered_feed(self):
         """Тест повної відповідності між бейджами календаря та видачею завдань при кліку на будь-яку дату."""
         from feed.views import get_calendar_context, _filter_assignments_by_lesson_date, get_visible_assignments
