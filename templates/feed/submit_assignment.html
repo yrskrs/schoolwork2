@@ -242,7 +242,7 @@
                         <span style="font-size:11px;font-weight:700;color:var(--color-primary);background:rgba(99,102,241,0.08);padding:2px 8px;border-radius:10px;">Word, Excel, Access, PDF, фото</span>
                     </label>
                     <div class="file-drop-zone" id="file-drop-zone" onclick="document.getElementById('id_files').click();"
-                         style="border:2.5px dashed #6366f1;border-radius:var(--radius-sm);padding:12px 14px;text-align:center;background:rgba(99,102,241,0.04);cursor:pointer;transition:all 0.2s;display:flex;align-items:center;justify-content:center;gap:12px;">
+                         style="border:2px dashed var(--color-border);border-radius:var(--radius-sm);padding:12px 14px;text-align:center;background:var(--color-bg-secondary);cursor:pointer;transition:all 0.2s;display:flex;align-items:center;justify-content:center;gap:12px;">
                         <span style="font-size:26px;flex-shrink:0;">📁</span>
                         <div style="text-align:left;">
                             <div style="font-weight:800;font-size:13px;color:var(--color-text-primary);" id="file-drop-label">
@@ -366,12 +366,12 @@
     }
 }
 
-/* ── Помітні, чіткі, контрастні та жирні поля форми ── */
+/* ── Охайні, чіткі та делікатні поля форми (у єдиному стилі системи) ── */
 #submit-form .form-label {
-    font-size: 13px !important;
-    font-weight: 800 !important;
+    font-size: 12.5px !important;
+    font-weight: 700 !important;
     color: var(--color-text-primary) !important;
-    margin-bottom: 5px !important;
+    margin-bottom: 4px !important;
     display: flex !important;
     align-items: center !important;
     gap: 4px !important;
@@ -379,83 +379,103 @@
 
 #submit-form .form-input,
 #submit-form .form-select {
-    padding: 9px 12px !important;
-    font-size: 14px !important;
-    font-weight: 600 !important;
-    height: 42px !important;
-    border: 2px solid #475569 !important;
+    padding: 8px 12px !important;
+    font-size: 13.5px !important;
+    font-weight: 500 !important;
+    height: 40px !important;
+    border: 1px solid var(--color-border) !important;
     border-radius: var(--radius-sm) !important;
-    background: #ffffff !important;
-    color: #0f172a !important;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08) !important;
-    transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease !important;
+    background: var(--color-surface) !important;
+    color: var(--color-text-primary) !important;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04) !important;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
 }
 
 #submit-form .form-input:hover,
-#submit-form .form-select:hover,
-#submit-form textarea.form-input:hover {
-    border-color: #0f172a !important;
+#submit-form .form-select:hover {
+    border-color: var(--color-text-muted) !important;
 }
 
 #submit-form .form-input:focus,
-#submit-form .form-select:focus,
-#submit-form textarea.form-input:focus {
-    border-color: #4f46e5 !important;
-    box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.28) !important;
-    background: #ffffff !important;
+#submit-form .form-select:focus {
+    border-color: var(--color-primary) !important;
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.18) !important;
+    background: var(--color-surface) !important;
     outline: none !important;
 }
 
 [data-theme="dark"] #submit-form .form-input,
-[data-theme="dark"] #submit-form .form-select,
-[data-theme="dark"] #submit-form textarea.form-input {
-    border: 2px solid #64748b !important;
-    background: #1e293b !important;
-    color: #f8fafc !important;
+[data-theme="dark"] #submit-form .form-select {
+    border: 1px solid var(--color-border) !important;
+    background: var(--color-surface) !important;
+    color: var(--color-text-primary) !important;
 }
 
 [data-theme="dark"] #submit-form .form-input:hover,
-[data-theme="dark"] #submit-form .form-select:hover,
-[data-theme="dark"] #submit-form textarea.form-input:hover {
-    border-color: #cbd5e1 !important;
+[data-theme="dark"] #submit-form .form-select:hover {
+    border-color: #64748b !important;
 }
 
 [data-theme="dark"] #submit-form .form-input:focus,
-[data-theme="dark"] #submit-form .form-select:focus,
-[data-theme="dark"] #submit-form textarea.form-input:focus {
-    border-color: #818cf8 !important;
-    box-shadow: 0 0 0 4px rgba(129, 140, 248, 0.35) !important;
-    background: #1e293b !important;
+[data-theme="dark"] #submit-form .form-select:focus {
+    border-color: var(--color-primary) !important;
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.25) !important;
 }
 
-/* Поле коментаря, що автоматично розширюється відповідно до введеного тексту */
+/* Поле коментаря: авторозширення при введенні + ручний resize за бажанням + завжди доступна прокрутка */
 #submit-form textarea.form-input {
-    height: auto !important;
     min-height: 84px !important;
-    max-height: 480px !important;
     resize: vertical !important;
-    padding: 10px 14px !important;
-    font-size: 14px !important;
+    overflow-y: auto !important;
+    padding: 10px 12px !important;
+    font-size: 13.5px !important;
     font-weight: 500 !important;
-    line-height: 1.55 !important;
-    border: 2px solid #475569 !important;
+    line-height: 1.5 !important;
+    border: 1px solid var(--color-border) !important;
     border-radius: var(--radius-sm) !important;
+    background: var(--color-surface) !important;
+    color: var(--color-text-primary) !important;
     box-sizing: border-box !important;
-    overflow-y: hidden;
     transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
 }
 
+#submit-form textarea.form-input:hover {
+    border-color: var(--color-text-muted) !important;
+}
+
+#submit-form textarea.form-input:focus {
+    border-color: var(--color-primary) !important;
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.18) !important;
+    background: var(--color-surface) !important;
+    outline: none !important;
+}
+
+[data-theme="dark"] #submit-form textarea.form-input {
+    border: 1px solid var(--color-border) !important;
+    background: var(--color-surface) !important;
+    color: var(--color-text-primary) !important;
+}
+
+[data-theme="dark"] #submit-form textarea.form-input:hover {
+    border-color: #64748b !important;
+}
+
+[data-theme="dark"] #submit-form textarea.form-input:focus {
+    border-color: var(--color-primary) !important;
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.25) !important;
+}
+
 #submit-form .file-drop-zone {
-    border: 2.5px dashed #6366f1 !important;
+    border: 2px dashed var(--color-border) !important;
     border-radius: var(--radius-sm) !important;
-    background: rgba(99, 102, 241, 0.04) !important;
+    background: var(--color-bg-secondary) !important;
     transition: all 0.2s ease !important;
 }
 
 #submit-form .file-drop-zone:hover,
 #submit-form .file-drop-zone.dragover {
-    border-color: #4f46e5 !important;
-    background: rgba(99, 102, 241, 0.1) !important;
+    border-color: var(--color-primary) !important;
+    background: rgba(99, 102, 241, 0.05) !important;
 }
 </style>
 {% endblock %}
@@ -1165,20 +1185,33 @@ if (submitForm) {
 }
 
 // ── Автоматичне розширення висоти поля коментаря відповідно до введеного тексту ──
+let userCommentManualHeight = 0;
+let isProgrammaticResize = false;
+
 function autoResizeComment(el) {
     if (!el) el = document.getElementById('id_comment_student');
     if (!el) return;
-    el.style.height = 'auto';
-    const scrollH = el.scrollHeight;
+
+    isProgrammaticResize = true;
+
+    // 1. Прокрутка ЗАВЖДИ доступна: текст ніколи не ховається і не блокується
+    el.style.setProperty('overflow-y', 'auto', 'important');
+
+    // 2. Скидаємо інлайн-висоту, щоб scrollHeight точно обчислив реальну висоту всього введеного тексту
+    el.style.setProperty('height', 'auto', 'important');
+
     const minH = 84;
-    const maxH = 500;
-    if (scrollH > maxH) {
-        el.style.height = maxH + 'px';
-        el.style.overflowY = 'auto';
-    } else {
-        el.style.height = Math.max(minH, scrollH + 4) + 'px';
-        el.style.overflowY = 'hidden';
-    }
+    const contentH = el.scrollHeight;
+
+    // 3. Якщо користувач власноруч потягнув за куточок і розширив поле (userCommentManualHeight),
+    // зберігаємо обрану ним висоту. Якщо ж тексту стало більше ніж висота вікна —
+    // поле автоматично продовжує розширюватись, щоб учень бачив весь свій текст одразу!
+    const targetHeight = Math.max(minH, userCommentManualHeight, contentH + 4);
+    el.style.setProperty('height', targetHeight + 'px', 'important');
+
+    setTimeout(function() {
+        isProgrammaticResize = false;
+    }, 40);
 }
 window.autoResizeComment = autoResizeComment;
 
@@ -1186,13 +1219,35 @@ function initAutoResizeComment() {
     const commentEl = document.getElementById('id_comment_student');
     if (!commentEl) return;
 
+    // Відстежуємо ручну зміну розміру вікна користувачем (через ResizeObserver або mouseup)
+    if (window.ResizeObserver) {
+        try {
+            const ro = new ResizeObserver(function(entries) {
+                for (let entry of entries) {
+                    if (!isProgrammaticResize && entry.target === commentEl) {
+                        if (commentEl.offsetHeight > 0) {
+                            userCommentManualHeight = commentEl.offsetHeight;
+                        }
+                    }
+                }
+            });
+            ro.observe(commentEl);
+        } catch (e) {}
+    }
+
+    commentEl.addEventListener('mouseup', function() {
+        if (!isProgrammaticResize && this.offsetHeight > 0) {
+            userCommentManualHeight = this.offsetHeight;
+        }
+    });
+
     commentEl.addEventListener('input', function() { autoResizeComment(this); });
     commentEl.addEventListener('change', function() { autoResizeComment(this); });
     commentEl.addEventListener('keyup', function() { autoResizeComment(this); });
-    commentEl.addEventListener('paste', function() { setTimeout(() => autoResizeComment(this), 20); });
+    commentEl.addEventListener('paste', function() { setTimeout(() => autoResizeComment(this), 15); });
     commentEl.addEventListener('focus', function() { autoResizeComment(this); });
 
-    // Початкове масштабування при завантаженні сторінки
+    // Початкове масштабування при завантаженні сторінки (якщо вже є введений текст)
     autoResizeComment(commentEl);
     setTimeout(function() { autoResizeComment(commentEl); }, 100);
 }
