@@ -647,7 +647,17 @@ def extract_images_from_pptx(file_path, max_images=6, max_bytes_per_img=8 * 1024
     extracted = []
     has_charts = False
     try:
-        with zipfile.ZipFile(file_path, 'r') as z:
+        target_path = file_path
+        ext_lower = os.path.splitext(file_path)[1].lower() if file_path else ""
+        if ext_lower == '.ppt' or not zipfile.is_zipfile(file_path):
+            from .document_parsers import convert_ppt_to_pptx
+            converted = convert_ppt_to_pptx(file_path)
+            if converted and os.path.exists(converted):
+                target_path = converted
+            else:
+                return []
+
+        with zipfile.ZipFile(target_path, 'r') as z:
             chart_files = [f for f in z.namelist() if f.startswith('ppt/charts/')]
             has_charts = len(chart_files) > 0
 
@@ -1008,10 +1018,18 @@ def parse_powerpoint_charts(file_path):
     if not file_path or not os.path.exists(file_path):
         return charts_info
 
+    target_path = file_path
+    ext_lower = os.path.splitext(file_path)[1].lower() if file_path else ""
+    if ext_lower == '.ppt' or not zipfile.is_zipfile(file_path):
+        from .document_parsers import convert_ppt_to_pptx
+        converted = convert_ppt_to_pptx(file_path)
+        if converted and os.path.exists(converted):
+            target_path = converted
+
     # Спроба 1: через python-pptx
     try:
         from pptx import Presentation
-        prs = Presentation(file_path)
+        prs = Presentation(target_path)
         for s_idx, slide in enumerate(prs.slides, 1):
             def _find_charts_in_shapes(shapes):
                 for shape in shapes:
@@ -1043,8 +1061,8 @@ def parse_powerpoint_charts(file_path):
 
     # Спроба 2: прямий аналіз OpenXML zip-архіву ppt/charts/
     try:
-        if zipfile.is_zipfile(file_path):
-            with zipfile.ZipFile(file_path, 'r') as z:
+        if zipfile.is_zipfile(target_path):
+            with zipfile.ZipFile(target_path, 'r') as z:
                 chart_files = [f for f in z.namelist() if f.startswith('ppt/charts/chart') and f.endswith('.xml')]
                 chart_files.sort()
 
@@ -1442,33 +1460,52 @@ def extract_text_from_excel(file_path, max_rows=50, max_cols=20):
 def extract_text_from_binary_presentation(file_path, max_chars=40000):
     """
     Резервне видобування тексту зі застарілих бінарних файлів PowerPoint (.ppt)
-    шляхом пошуку юнікод-рядків (UTF-16LE) та кириличних послідовностей (CP1251/UTF-8).
+    шляхом пошуку юнікод-рядків (UTF-16LE, включаючи українську кирилицю \x04)
+    та однобайтових послідовностей (CP1251/UTF-8) з фільтрацією службового сміття.
     """
     try:
         with open(file_path, 'rb') as f:
-            data = f.read(5 * 1024 * 1024)
+            data = f.read(8 * 1024 * 1024)
 
         text_chunks = []
-        # 1. Пошук UTF-16LE рядків
-        utf16_matches = re.findall(b'(?:[\x20-\x7e\t\n\r\x00-\xff]\x00){4,}', data)
-        for m in utf16_matches:
-            try:
-                decoded = m.decode('utf-16le').strip()
-                if len(decoded) > 3 and any(c.isalnum() for c in decoded):
-                    if not any(sub in decoded for sub in ['Current User', 'PowerPoint Document', 'SummaryInformation', 'DocumentSummaryInformation']):
-                        text_chunks.append(decoded)
-            except Exception:
-                pass
+        ignored_patterns = [
+            'root entry', 'current user', 'powerpoint document', 'summaryinformation',
+            'documentsummaryinformation', 'compobj', 'ole', 'pictures',
+            'click to edit master', 'click to edit', 'клацніть для', 'другий рівень структури',
+            'третій рівень структури', 'четвертий рівень', 'п\'ятий рівень',
+            'times new roman', 'calibri', 'arial', 'tahoma', 'noto sans', 'courier new',
+            'comic sans', 'georgia', 'trebuchet', 'verdana', 'impact', 'garamond'
+        ]
 
-        # 2. Пошук ASCII / CP1251 рядків
-        ascii_matches = re.findall(b'[\x20-\x7e\t\n\r\xc0-\xff]{6,}', data)
+        def _is_valid(s):
+            s_clean = s.strip()
+            if len(s_clean) < 4 or not any(c.isalnum() for c in s_clean):
+                return False
+            s_low = s_clean.lower()
+            if any(p in s_low for p in ignored_patterns):
+                return False
+            return True
+
+        # 1. Пошук UTF-16LE рядків (ASCII + українська кирилиця \x04 + знаки \x20)
+        utf16_pat = rb'(?:(?:[\x20-\x7e\r\n\t]\x00)|(?:[\x00-\xff][\x04\x20]))+'
+        for m in re.finditer(utf16_pat, data):
+            raw = m.group(0)
+            if len(raw) >= 8:
+                try:
+                    dec = raw.decode('utf-16le', errors='ignore').strip()
+                    if _is_valid(dec) and dec not in text_chunks:
+                        text_chunks.append(dec)
+                except Exception:
+                    pass
+
+        # 2. Пошук однобайтових рядків CP1251 / UTF-8
+        ascii_matches = re.findall(rb'[\x20-\x7e\t\n\r\xc0-\xff]{5,}', data)
         for m in ascii_matches:
-            for enc in ['utf-8', 'cp1251', 'latin-1']:
+            for enc in ['utf-8', 'cp1251']:
                 try:
                     s = m.decode(enc).strip()
-                    if s and len(s) > 5 and any(c.isalnum() for c in s):
-                        if s not in text_chunks:
-                            text_chunks.append(s)
+                    if _is_valid(s) and s not in text_chunks:
+                        text_chunks.append(s)
                         break
                 except Exception:
                     pass
@@ -1484,6 +1521,8 @@ def extract_text_from_powerpoint(file_path, max_slides=40):
     """
     Видобуває детальну структуру, слайди, текст, ієрархію списків, таблиці та нотатки
     із презентацій PowerPoint (.pptx та .ppt).
+    Для застарілих бінарних .ppt файлів виконує автоматичну конвертацію в .pptx через LibreOffice,
+    а у разі відсутності — надійне бінарне видобування українського тексту.
     """
     try:
         from pptx import Presentation
@@ -1491,8 +1530,19 @@ def extract_text_from_powerpoint(file_path, max_slides=40):
     except Exception:
         MSO_SHAPE_TYPE = None
 
+    actual_file_path = file_path
+    ext_lower = os.path.splitext(file_path)[1].lower() if file_path else ""
+
+    if ext_lower == '.ppt' or not zipfile.is_zipfile(file_path):
+        from .document_parsers import convert_ppt_to_pptx
+        converted = convert_ppt_to_pptx(file_path)
+        if converted and os.path.exists(converted):
+            actual_file_path = converted
+        else:
+            return extract_text_from_binary_presentation(file_path)
+
     try:
-        prs = Presentation(file_path)
+        prs = Presentation(actual_file_path)
         slides_text = []
         total_slides = len(prs.slides)
 
@@ -1628,7 +1678,7 @@ def extract_text_from_powerpoint(file_path, max_slides=40):
         body_text = overview + "\n\n" + "\n\n".join(slides_text) if slides_text else "[Презентація не містить тексту або порожня]"
 
         # Додаємо повний звіт про виявлені діаграми у файлі презентації
-        charts_info = parse_powerpoint_charts(file_path)
+        charts_info = parse_powerpoint_charts(actual_file_path)
         charts_summary = format_powerpoint_charts_summary(charts_info)
         if charts_summary:
             body_text += "\n\n" + charts_summary
@@ -2103,7 +2153,7 @@ def extract_submission_content(submission):
         elif ext in ['.pptx', '.ppt']:
             pptx_text = extract_text_from_powerpoint(file_path)
             text_parts.append(f"Вміст презентації PowerPoint ({filename}, {file_size_kb:.1f} КБ):\n{pptx_text}")
-            if ext == '.pptx':
+            if ext in ['.pptx', '.ppt']:
                 pptx_imgs = extract_images_from_pptx(file_path)
                 for p_img in pptx_imgs:
                     inline_media.append({
@@ -2629,6 +2679,25 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
         "     * Коментар має бути тактовним, узагальненим («в загальному»), без надмірної прискіпливості до дрібниць, але щоб учень чітко зрозумів причину оцінки та напрямок покращення."
     )
 
+    # ── ДОСЛІДНИЦЬКІ, ПОШУКОВІ ЗАВДАННЯ ТА РОБОТА З ІНФОРМАЦІЄЮ З ІНТЕРНЕТУ ───
+    prompt_lines.append(
+        "🌐 КРИТИЧНЕ ПРАВИЛО: ДОСЛІДНИЦЬКІ, ПОШУКОВІ ЗАВДАННЯ ТА РОБОТА З ІНФОРМАЦІЄЮ З ІНТЕРНЕТУ:\n"
+        "1. Коли завдання передбачає пошук інформації в інтернеті, краєзнавство, опис населеного пункту (міста, села, селища), географічного об'єкта, історичної події чи постаті:\n"
+        "   - Вчитель зазвичай формулює загальний напрямок (наприклад: «Знайдіть в інтернеті інформацію про ваше рідне місто чи село», «Підготуйте повідомлення про населений пункт України», «Знайдіть інформацію про...»).\n"
+        "   - Умова вчителя НЕ містить назв конкретних міст чи сіл кожного учня, оскільки кожен учень самостійно обирає свій населений пункт чи об'єкт для дослідження!\n"
+        "2. ПЕРЕВІРКА ФАКТИЧНОЇ ДОСТОВІРНОСТІ ЗА ВЛАСНИМИ ЗНАННЯМИ ШІ:\n"
+        "   - ШІ ЗОБОВ'ЯЗАНИЙ перевірити правильність та достовірність наданої учнем інформації за власними знаннями (чи правдиві географічні координати, область, річки, історія заснування, пам'ятки, визначні постаті, події обраного населеного пункту/об'єкта).\n"
+        "3. 🚫 СУВОРО ТА КАТЕГОРИЧНО ЗАБОРОНЕНО:\n"
+        "   - Запитувати або писати «а що це таке?», «що це за місто/село?», «чому тут написано про Чернігів/село, якщо в умові цього не було?», «не зрозуміло, яке завдання виконане»!\n"
+        "   - Заявляти, що робота «не відповідає темі завдання», лише через те, що учень досліджував обраний ним населений пункт або навів факти, знайдені в інтернеті!\n"
+        "   - Встановлювати 'unclear_task': true, писати у 'format_warning' зауваження про незрозумілість завдання або повертати роботу на 'Доопрацювати', якщо учень надав змістовну інформацію по темі пошуку!\n"
+        "4. КРИТЕРІЇ ОЦІНЮВАННЯ ПОШУКОВИХ РОБІТ:\n"
+        "   - 10-12 балів (Високий рівень): інформація фактично достовірна, тема розкрита повно, зв'язно, структуровано (розташування, історія, цікаві факти, висновки), робота оформлена охайно.\n"
+        "   - 7-9 балів (Достатній рівень): факти правильні, але опис стислий, бракує окремих деталей або є незначні неточності.\n"
+        "   - 4-6 балів (Середній рівень): фрагментарні уривки (1-2 речення замість повідомлення).\n"
+        "   - 1-3 бали / Доопрацювати: тільки якщо здано сторонній нерелевантний спам (наприклад, кулінарний рецепт замість історії міста/села).\n"
+    )
+
     # ── ОЦІНЮВАННЯ ПРЕЗЕНТАЦІЙ (.pptx, .ppt, .odp) ──────────────────────────
     prompt_lines.append(
         "📽️ ВКАЗІВКИ ДЛЯ ПЕРЕВІРКИ ПРЕЗЕНТАЦІЙ (якщо робота є презентацією):\n"
@@ -3065,6 +3134,16 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
             "  * ⚠️ ОБОВ'ЯЗКОВО вкажи учневі в 'weaknesses' та 'feedback_comment' про недолік оформлення («питання-відповідь»): порадь використовувати формат «питання-відповідь» або чітку нумерацію запитань.\n"
         )
 
+    if "ДОСЛІДНИЦЬКІ, ПОШУКОВІ ЗАВДАННЯ" not in system_instruction:
+        system_instruction += (
+            "\n\nДОСЛІДНИЦЬКІ, ПОШУКОВІ ЗАВДАННЯ ТА РОБОТА З ІНФОРМАЦІЄЮ З ІНТЕРНЕТУ:\n"
+            "- Якщо завдання передбачає пошук в інтернеті, краєзнавство, опис населеного пункту (міста, села, селища) чи обраного об'єкта:\n"
+            "  * Учень самостійно обирає свій населений пункт/об'єкт, тому його назви не може бути в тексті завдання вчителя!\n"
+            "  * ШІ зобов'язаний перевірити фактичну достовірність наведених учнем даних за власними енциклопедичними знаннями.\n"
+            "  * 🚫 СУВОРО ЗАБОРОНЕНО запитувати «а що це таке?», «що це за місто/село?», писати «не відповідає темі завдання», встановлювати 'unclear_task': true або повертати на 'Доопрацювати' через згадку обраного учнем населеного пункту!\n"
+            "  * Оцінюй повноту, достовірність, логічність структури та самостійність викладу (10-12 балів за якісно розкриту тему).\n"
+        )
+
     prompt_content = "\n".join(prompt_lines)
 
     # Формуємо ланцюжок спроб: спочатку активний провайдер, потім резервний (failover)
@@ -3134,7 +3213,7 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                     model_name=c_model,
                     custom_url=c_url,
                     temperature=float(settings.temperature or 0.2),
-                    max_output_tokens=4096,
+                    max_output_tokens=2500,
                     timeout=35,
                     json_mode=True,
                     thinking_budget=thinking_budget_val
@@ -3293,9 +3372,18 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                     student_raw_text = " ".join(text_parts).strip() if text_parts else ""
                     has_substantive_student_work = bool(
                         (answered_count > 0) or
-                        (len(student_raw_text) >= 10 and not any(kw in student_raw_text.lower() for kw in ['не можу', 'не зробив', 'не знаю'])) or
+                        (len(student_raw_text) >= 15 and not any(kw in student_raw_text.lower() for kw in ['не можу', 'не зробив', 'не знаю', 'ось моя робота'])) or
                         (inline_media and len(inline_media) > 0)
                     )
+
+                    # Визначаємо, чи є завдання пошуковим, краєзнавчим або відкритим дослідницьким
+                    is_research_or_search_task = any(kw in combined_task_for_qs.lower() for kw in [
+                        'інтернет', 'пошук', 'знайдіть', 'знайти', 'досліджен', 'місто', 'село',
+                        'населен', 'краєзнав', 'повідомлен', 'відомост', 'реферат', 'інформаці'
+                    ]) or any(kw in (assignment_title or '').lower() for kw in [
+                        'інтернет', 'пошук', 'знайдіть', 'знайти', 'досліджен', 'місто', 'село',
+                        'населен', 'краєзнав', 'повідомлен'
+                    ])
 
                     no_answer_phrases = [
                         'жодної відповіді не дано',
@@ -3314,8 +3402,18 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                             has_false_no_answer_claim = True
                             break
 
-                    if has_substantive_student_work and (has_false_no_answer_claim or (unclear_task and (answered_count > 0 or task_questions))):
-                        # Якщо учень здав відповіді або виконану роботу, скасовуємо помилковий статус «не зрозуміло»
+                    # Зняття помилкового статусу «не зрозуміло, яке завдання» для змістовних робіт та пошукових завдань
+                    should_clear_unclear = (
+                        unclear_task and (
+                            answered_count > 0 or
+                            task_questions or
+                            is_research_or_search_task or
+                            len(student_raw_text) >= 40 or
+                            (inline_media and len(inline_media) > 0)
+                        )
+                    )
+
+                    if has_substantive_student_work and (has_false_no_answer_claim or should_clear_unclear):
                         if unclear_task:
                             unclear_task = False
                             if format_warning and ('не зрозуміло' in format_warning.lower() or 'незрозуміло' in format_warning.lower()):
@@ -3330,13 +3428,49 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                                 feedback_comment = re.sub(re.escape(phrase), 'відповіді надано на частину запитань', feedback_comment, flags=re.IGNORECASE)
                             weaknesses = [w for w in weaknesses if phrase not in w.lower()]
 
-                        if suggested_grade == 'Доопрацювати' and (answered_count > 0 or len(student_raw_text) >= 15):
-                            if total_questions > 0 and answered_count > 0:
+                        if suggested_grade == 'Доопрацювати':
+                            if is_research_or_search_task:
+                                if len(student_raw_text) >= 120 or (inline_media and len(inline_media) > 0):
+                                    suggested_grade = '10'
+                                    level = 'Високий (10-12)'
+                                elif len(student_raw_text) >= 50:
+                                    suggested_grade = '8'
+                                    level = 'Достатній (7-9)'
+                                else:
+                                    suggested_grade = '6'
+                                    level = 'Середній (4-6)'
+                            elif total_questions > 0 and answered_count > 0:
                                 calc_grade = max(4, min(10, int(round((answered_count / total_questions) * 12))))
                                 suggested_grade = str(calc_grade)
+                                level = 'Середній' if int(suggested_grade) <= 6 else 'Достатній'
+                            elif len(student_raw_text) >= 30:
+                                suggested_grade = '7'
+                                level = 'Достатній (7-9)'
                             else:
                                 suggested_grade = '6'
-                            level = 'Середній' if int(suggested_grade) <= 6 else 'Достатній'
+                                level = 'Середній'
+
+                    # Очищення від некоректних здивованих реплік ШІ («а що це таке», «що це за місто» тощо)
+                    if is_research_or_search_task or len(student_raw_text) >= 40:
+                        odd_phrases = [
+                            r'а що це таке\??',
+                            r'а шо це таке\??',
+                            r'що це за місто\??',
+                            r'що це за село\??',
+                            r'незрозуміло,?\s*що це за місто',
+                            r'незрозуміло,?\s*що це за село',
+                            r'чому написано про\s+[^,.]+',
+                            r'в умові не зазначено\s+[^,.]+',
+                            r'в умові завдання немає\s+[^,.]+',
+                            r'немає такого міста в умові',
+                            r'немає такого села в умові'
+                        ]
+                        for oph in odd_phrases:
+                            if re.search(oph, summary, flags=re.IGNORECASE):
+                                summary = re.sub(oph, 'Учень самостійно опрацював та виклав відомості по темі завдання', summary, flags=re.IGNORECASE)
+                            if re.search(oph, feedback_comment, flags=re.IGNORECASE):
+                                feedback_comment = re.sub(oph, 'Ви самостійно підготували цікавий матеріал за результатами пошуку', feedback_comment, flags=re.IGNORECASE)
+                            weaknesses = [w for w in weaknesses if not re.search(oph, w, flags=re.IGNORECASE)]
 
                     # Обов'язкова порада щодо оформлення «питання-відповідь», якщо учень здав лише відповіді без запитань
                     if questions_omitted or (answered_count > 0 and check_student_omitted_questions(task_questions, student_raw_text)):
@@ -3524,8 +3658,17 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                     formatted_feedback = format_raw_json_feedback_for_display(raw_text)
 
                     unclear_task = ('не зрозуміло' in formatted_feedback.lower() and 'завдан' in formatted_feedback.lower()) or ('незрозуміло' in formatted_feedback.lower() and 'завдан' in formatted_feedback.lower())
+                    student_raw_text = " ".join(text_parts).strip() if text_parts else ""
+                    is_research_or_search_task = any(kw in combined_task_for_qs.lower() for kw in [
+                        'інтернет', 'пошук', 'знайдіть', 'знайти', 'досліджен', 'місто', 'село', 'населен'
+                    ])
+                    if unclear_task and (len(student_raw_text) >= 40 or is_research_or_search_task):
+                        unclear_task = False
+
                     if unclear_task:
                         suggested_grade = 'Доопрацювати'
+                    elif suggested_grade == 'Доопрацювати' and len(student_raw_text) >= 40:
+                        suggested_grade = '8'
 
                     submission.ai_suggested_grade = suggested_grade
                     submission.ai_feedback = formatted_feedback

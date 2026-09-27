@@ -6,6 +6,12 @@
 import os
 import io
 import re
+import subprocess
+import tempfile
+import shutil
+import hashlib
+import zipfile
+from django.conf import settings
 
 def extract_text_from_document(file_path_or_file_obj, original_filename=None):
     """
@@ -53,6 +59,16 @@ def extract_text_from_document(file_path_or_file_obj, original_filename=None):
         elif ext in ['.pptx', '.pptm']:
             return _extract_from_pptx(file_bytes)
         elif ext == '.ppt':
+            if isinstance(file_path_or_file_obj, (str, os.PathLike)) and os.path.exists(str(file_path_or_file_obj)):
+                pptx_path = convert_ppt_to_pptx(str(file_path_or_file_obj))
+                if pptx_path and os.path.exists(pptx_path):
+                    try:
+                        with open(pptx_path, 'rb') as f_conv:
+                            t, ok, _ = _extract_from_pptx(f_conv.read())
+                            if ok and t.strip():
+                                return t, True, None
+                    except Exception:
+                        pass
             return _extract_from_ppt(file_bytes)
         elif ext in ['.xlsx', '.xls']:
             return _extract_from_excel(file_bytes)
@@ -766,25 +782,128 @@ def _extract_from_pptx(file_bytes, max_slides=60):
     return "", False, "Не вдалося витягти текст із презентації .pptx."
 
 
-def _extract_from_ppt(file_bytes, max_chars=15000):
-    """Вилучення тексту зі старого бінарного формату PowerPoint .ppt."""
+def convert_ppt_to_pptx(file_path: str) -> str | None:
+    """
+    Конвертує бінарний файл презентації PowerPoint (.ppt) у сучасний OpenXML (.pptx)
+    за допомогою LibreOffice headless з надійним кешуванням результату на диску.
+    Повертає абсолютний шлях до файлу .pptx або None, якщо конвертація не вдалася.
+    """
+    if not file_path or not os.path.exists(file_path):
+        return None
+
+    # Якщо файл вже є валідним OpenXML (ZIP-контейнером)
+    try:
+        if zipfile.is_zipfile(file_path):
+            return file_path
+    except Exception:
+        pass
+
+    try:
+        st = os.stat(file_path)
+        cache_key = hashlib.sha256(f"{os.path.abspath(file_path)}_{st.st_mtime}_{st.st_size}".encode()).hexdigest()[:24]
+
+        media_root = getattr(settings, 'MEDIA_ROOT', '') or tempfile.gettempdir()
+        cache_dir = os.path.join(media_root, 'cache_conversions', 'ppt_to_pptx')
+        os.makedirs(cache_dir, exist_ok=True)
+        cached_pptx = os.path.join(cache_dir, f"{cache_key}.pptx")
+
+        if os.path.exists(cached_pptx) and os.path.getsize(cached_pptx) > 0:
+            if zipfile.is_zipfile(cached_pptx):
+                return cached_pptx
+
+        lo_bin = shutil.which('libreoffice') or shutil.which('soffice')
+        if not lo_bin:
+            for candidate in ['/usr/bin/libreoffice', '/usr/local/bin/libreoffice', '/usr/bin/soffice']:
+                if os.path.exists(candidate) and os.access(candidate, os.X_OK):
+                    lo_bin = candidate
+                    break
+
+        if not lo_bin:
+            return None
+
+        with tempfile.TemporaryDirectory() as tmp_out:
+            cmd = [
+                lo_bin,
+                '--headless',
+                '--invisible',
+                '--nologo',
+                '--nodefault',
+                '--convert-to', 'pptx',
+                file_path,
+                '--outdir', tmp_out
+            ]
+            res = subprocess.run(cmd, capture_output=True, text=True, timeout=40)
+            if res.returncode == 0:
+                out_files = [f for f in os.listdir(tmp_out) if f.lower().endswith('.pptx')]
+                if out_files:
+                    generated_path = os.path.join(tmp_out, out_files[0])
+                    if zipfile.is_zipfile(generated_path) and os.path.getsize(generated_path) > 0:
+                        shutil.copy2(generated_path, cached_pptx)
+                        return cached_pptx
+    except Exception:
+        pass
+
+    return None
+
+
+def _extract_from_ppt(file_bytes, max_chars=25000):
+    """
+    Вилучення тексту зі старого бінарного формату PowerPoint .ppt.
+    Підтримує вилучення як UTF-16LE рядків (включаючи українську кирилицю \x04),
+    так і однобайтових рядків (CP1251, UTF-8) з фільтрацією системних маркерів.
+    """
     try:
         text_chunks = []
-        ascii_matches = re.findall(b'[\x20-\x7e\t\n\r\xc0-\xff]{6,}', file_bytes)
+        ignored_patterns = [
+            'root entry', 'current user', 'powerpoint document', 'summaryinformation',
+            'documentsummaryinformation', 'compobj', 'ole', 'pictures',
+            'click to edit master', 'click to edit', 'клацніть для', 'другий рівень структури',
+            'третій рівень структури', 'четвертий рівень', 'п\'ятий рівень',
+            'times new roman', 'calibri', 'arial', 'tahoma', 'noto sans', 'courier new',
+            'comic sans', 'georgia', 'trebuchet', 'verdana', 'impact', 'garamond',
+            'wingdings', 'symbol', 'cambria', 'consolas', 'segoe ui'
+        ]
+
+        def _is_valid_chunk(s):
+            s_clean = s.strip()
+            if len(s_clean) < 4:
+                return False
+            if not any(c.isalnum() for c in s_clean):
+                return False
+            s_low = s_clean.lower()
+            if any(p in s_low for p in ignored_patterns):
+                return False
+            return True
+
+        # 1. Пошук UTF-16LE рядків (ASCII + кирилиця U+0400-U+04FF + знаки \x20)
+        utf16_pat = rb'(?:(?:[\x20-\x7e\r\n\t]\x00)|(?:[\x00-\xff][\x04\x20]))+'
+        for m in re.finditer(utf16_pat, file_bytes):
+            raw_match = m.group(0)
+            if len(raw_match) >= 8:
+                try:
+                    decoded = raw_match.decode('utf-16le', errors='ignore').strip()
+                    if _is_valid_chunk(decoded) and decoded not in text_chunks:
+                        text_chunks.append(decoded)
+                except Exception:
+                    pass
+
+        # 2. Пошук однобайтових рядків (CP1251 / UTF-8)
+        ascii_matches = re.findall(rb'[\x20-\x7e\t\n\r\xc0-\xff]{5,}', file_bytes)
         for m in ascii_matches:
-            for enc in ['utf-8', 'cp1251', 'latin-1']:
+            for enc in ['utf-8', 'cp1251']:
                 try:
                     s = m.decode(enc).strip()
-                    if s and len(s) > 5 and any(c.isalnum() for c in s):
-                        if s not in text_chunks:
-                            text_chunks.append(s)
+                    if _is_valid_chunk(s) and s not in text_chunks:
+                        text_chunks.append(s)
                         break
                 except Exception:
                     pass
+
         if text_chunks:
             return "Текст презентації (видобуто з .ppt):\n" + "\n".join(text_chunks)[:max_chars], True, None
     except Exception:
         pass
     return "", False, "Формат .ppt не містить розпізнаного тексту."
+
 
 

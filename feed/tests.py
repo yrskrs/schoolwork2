@@ -5,6 +5,7 @@ from django.urls import reverse
 from django.utils import timezone
 import os
 import json
+import tempfile
 from unittest.mock import patch, MagicMock
 
 from .models import (
@@ -5425,6 +5426,112 @@ class QuestionAnswerMappingTests(TestCase):
         has_advice_weaknesses = any('питання-відповідь' in w.lower() for w in result['weaknesses'])
         self.assertTrue(has_advice_weaknesses)
         self.assertIn('питання-відповідь', result['feedback_comment'].lower())
-        self.assertIn('питання-відповідь', result['feedback_comment'].lower())
+
+    def test_ppt_binary_extraction_and_viewer_fallback(self):
+        """Тест видобування тексту з .ppt файлу та відсутності помилки Package not found у переглядачі."""
+        from .document_parsers import _extract_from_ppt
+        from .utils import convert_pptx_to_html
+
+        # Симулюємо бінарний вміст PPT з UTF-16LE українським текстом
+        ukr_text = "Завдання: Дослідження села Диканька. Знайти в інтернеті факти про історію та річку Ворскла."
+        raw_ppt_bytes = b'\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1' + b'\x00' * 512 + ukr_text.encode('utf-16le')
+
+        # 1. Тест вилучення тексту
+        text, ok, err = _extract_from_ppt(raw_ppt_bytes)
+        self.assertTrue(ok)
+        self.assertIn("Диканька", text)
+        self.assertIn("Ворскла", text)
+
+        # 2. Тест переглядача: збережемо у тимчасовий .ppt файл і викликаємо convert_pptx_to_html
+        with tempfile.NamedTemporaryFile(suffix='.ppt', delete=False) as tmp_ppt:
+            tmp_ppt.write(raw_ppt_bytes)
+            tmp_ppt_path = tmp_ppt.name
+
+        try:
+            html_out, err_out = convert_pptx_to_html(tmp_ppt_path)
+            self.assertIsNone(err_out)
+            self.assertNotIn("Package not found", html_out)
+            self.assertIn("Диканька", html_out)
+            self.assertIn("pptx-slide-card", html_out)
+        finally:
+            if os.path.exists(tmp_ppt_path):
+                os.remove(tmp_ppt_path)
+
+    @patch('feed.gemini_service.call_ai_api')
+    def test_ai_evaluation_internet_search_and_local_lore_task(self, mock_call):
+        """Тест: дослідницькі роботи з пошуку інформації в інтернеті про населені пункти не відхиляються з unclear_task."""
+        from .gemini_service import evaluate_submission_with_gemini
+
+        settings = AISettings.get_solo()
+        settings.is_enabled = True
+        settings.api_key = 'fake-api-key'
+        settings.ai_provider = 'gemini'
+        settings.model_name = 'gemini-2.5-flash'
+        settings.save()
+
+        # Завдання вчителя на пошук в інтернеті
+        asg = Assignment.objects.create(
+            teacher=self.teacher,
+            subject=self.subject,
+            title='Дослідження: моє рідне місто або село',
+            description='Знайдіть в інтернеті інформацію про ваш населений пункт (село або місто): історія, розташування, цікаві факти. Оформіть повідомлення.'
+        )
+        asg.classes.add(self.class_group)
+
+        # Учень здав змістовний текст про Чернігів
+        research_text = (
+            "Чернігів — одне з найдавніших міст України, адміністративний центр Чернігівської області. "
+            "Місто розташоване на півночі України на річці Десна. Вперше згадується у літописі в 907 році. "
+            "Серед головних визначних пам'яток — Спасо-Преображенський та Борисоглібський собори, "
+            "Антонієві печери та Троїцько-Іллінський монастир. Населення становить близько 285 тисяч осіб."
+        )
+
+        submission = Submission.objects.create(
+            assignment=asg,
+            class_group=self.class_group,
+            first_name='Тарас',
+            last_name='Шевченко',
+            file=SimpleUploadedFile('дослідження_чернігів.txt', research_text.encode('utf-8'), content_type='text/plain'),
+            comment_student='Ось моє повідомлення про місто Чернігів.'
+        )
+
+        # Симулюємо ситуацію, коли ШІ через нерозуміння теми намагався повернути "Доопрацювати" та "а що це таке?"
+        ai_mock_reply = json.dumps({
+            "suggested_grade": "Доопрацювати",
+            "level": "Початковий (1-3)",
+            "unclear_task": True,
+            "format_warning": "Не зрозуміло, яке саме завдання виконане. В умові не було Чернігова.",
+            "summary": "А що це таке? Незрозуміло, що це за місто, адже в умові вчителя його немає.",
+            "strengths": ["Наведено детальний опис"],
+            "weaknesses": ["А що це таке? Чому написано про Чернігів? Не зрозуміло, яке саме завдання виконане"],
+            "feedback_comment": "Що це за місто? В умові завдання немає Чернігова, тому роботу повернено на доопрацювання.",
+            "ai_generated_percent": 0,
+            "ai_generated_detected": False,
+            "ai_generated_confidence": "none",
+            "ai_generated_details": None
+        }, ensure_ascii=False)
+
+        mock_call.return_value = (200, ai_mock_reply, None, {})
+
+        result = evaluate_submission_with_gemini(submission)
+
+        # Перевіряємо, що промт містить критичні правила щодо пошукових завдань в інтернеті
+        full_prompt = mock_call.call_args.kwargs.get('prompt_text', '')
+        self.assertIn("ДОСЛІДНИЦЬКІ, ПОШУКОВІ ЗАВДАННЯ", full_prompt)
+        self.assertIn("інформації в інтернеті", full_prompt)
+
+        # Перевіряємо пост-обробку:
+        # 1. unclear_task знято (стало False)
+        self.assertFalse(result['unclear_task'])
+        # 2. Оцінку виправлено з 'Доопрацювати' на високу оцінку (10)
+        self.assertEqual(result['suggested_grade'], '10')
+        self.assertIn('Високий', result['level'])
+        # 3. format_warning очищено від неправдивого зауваження
+        self.assertEqual(result.get('format_warning', ''), '')
+        # 4. Некоректні фрази "а що це таке" вичищено
+        self.assertNotIn("а що це таке", result['summary'].lower())
+        self.assertNotIn("а що це таке", result['feedback_comment'].lower())
+        self.assertFalse(any("а що це таке" in w.lower() for w in result['weaknesses']))
+
 
 

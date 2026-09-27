@@ -687,13 +687,61 @@ def convert_xlsx_to_html(file_path: str, max_rows: int = 100) -> Tuple[str, Opti
 @_cache_doc_conversion('pptx')
 def convert_pptx_to_html(file_path: str) -> Tuple[str, Optional[str]]:
     """
-    Конвертує .pptx файл у стильні HTML слайди з текстом, зображеннями та таблицями.
+    Конвертує презентацію (.pptx або старий .ppt) у стильні HTML слайди з текстом, зображеннями та таблицями.
+    Для старих бінарних файлів .ppt автоматично використовує конвертацію в .pptx через LibreOffice
+    або резервне видобування тексту без падіння з помилкою PackageNotFoundError.
     """
     try:
         from pptx import Presentation
         from pptx.enum.shapes import MSO_SHAPE_TYPE
+        import zipfile
+        from .document_parsers import convert_ppt_to_pptx, extract_text_from_document
 
-        prs = Presentation(file_path)
+        actual_file_path = file_path
+        ext_lower = os.path.splitext(file_path)[1].lower() if file_path else ""
+
+        # Якщо це старий .ppt або файл не є OpenXML zip-архівом
+        if ext_lower == '.ppt' or not zipfile.is_zipfile(file_path):
+            converted = convert_ppt_to_pptx(file_path)
+            if converted and os.path.exists(converted):
+                actual_file_path = converted
+            else:
+                # Резервний рендеринг тексту зі старого .ppt без падіння інтерфейсу
+                raw_text, ok, _ = extract_text_from_document(file_path)
+                if raw_text and raw_text.strip():
+                    lines = [l.strip() for l in raw_text.splitlines() if l.strip()]
+                    html_parts = ['<div class="pptx-viewer">']
+                    current_slide_lines = []
+                    slide_num = 1
+                    for line in lines:
+                        if line.startswith(('📽️ Слайд', 'Текст презентації')):
+                            if current_slide_lines:
+                                html_parts.append(
+                                    f'<div class="pptx-slide-card">'
+                                    f'<div class="pptx-slide-header"><span class="pptx-slide-num">Слайд {slide_num}</span><span class="pptx-slide-badge">📽️ Презентація (.ppt)</span></div>'
+                                    f'<div class="pptx-slide-body"><div class="pptx-slide-text">'
+                                )
+                                for cl in current_slide_lines:
+                                    html_parts.append(f'<p>{html.escape(cl)}</p>')
+                                html_parts.append('</div></div></div>')
+                                slide_num += 1
+                                current_slide_lines = []
+                        else:
+                            current_slide_lines.append(line)
+                    if current_slide_lines:
+                        html_parts.append(
+                            f'<div class="pptx-slide-card">'
+                            f'<div class="pptx-slide-header"><span class="pptx-slide-num">Слайд {slide_num}</span><span class="pptx-slide-badge">📽️ Презентація (.ppt)</span></div>'
+                            f'<div class="pptx-slide-body"><div class="pptx-slide-text">'
+                        )
+                        for cl in current_slide_lines:
+                            html_parts.append(f'<p>{html.escape(cl)}</p>')
+                        html_parts.append('</div></div></div>')
+                    html_parts.append('</div>')
+                    return '\n'.join(html_parts), None
+                return '<p class="text-muted" style="text-align:center;padding:20px;">Презентація .ppt не містить розпізнаного контенту.</p>', None
+
+        prs = Presentation(actual_file_path)
         total_slides = len(prs.slides)
         if total_slides == 0:
             return '<p class="text-muted" style="text-align:center;padding:20px;">Презентація не містить слайдів.</p>', None
@@ -877,6 +925,25 @@ def convert_pptx_to_html(file_path: str) -> Tuple[str, Optional[str]]:
         return '\n'.join(html_parts), None
 
     except Exception as e:
+        # Резервна спроба врятувати відображення вмісту без помилки
+        try:
+            from .document_parsers import extract_text_from_document
+            raw_text, ok, _ = extract_text_from_document(file_path)
+            if ok and raw_text and raw_text.strip():
+                lines = [l.strip() for l in raw_text.splitlines() if l.strip()]
+                html_parts = [
+                    '<div class="pptx-viewer">',
+                    '<div class="pptx-slide-card">',
+                    '<div class="pptx-slide-header"><span class="pptx-slide-num">Вміст презентації</span><span class="pptx-slide-badge">📽️ Презентація</span></div>',
+                    '<div class="pptx-slide-body"><div class="pptx-slide-text">'
+                ]
+                for l in lines:
+                    html_parts.append(f'<p>{html.escape(l)}</p>')
+                html_parts.append('</div></div></div></div>')
+                return '\n'.join(html_parts), None
+        except Exception:
+            pass
+
         error_msg = f"Помилка при читанні презентації: {str(e)}"
         return "", error_msg
 
