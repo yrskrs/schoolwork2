@@ -5745,6 +5745,239 @@ class QuestionAnswerMappingTests(TestCase):
         self.assertTrue(dup_info.get('is_duplicate_teacher'))
         self.assertIn("матеріалами вчителя", dup_info.get('warning_message', ''))
 
+    def test_extract_task_questions_from_presentation_slides(self):
+        """Перевірка точного видобування завдань зі слайдів презентації без витоку службових заголовків."""
+        from feed.gemini_service import extract_task_questions, detect_expected_task_count
+
+        slide_text = """
+        [Слайд 1]
+        Практичне завдання
+        Завдання 1.
+        Знайдіть в Інтернет-енциклопедії Вікіпедія відомості про рідне місто (село).
+
+        [Слайд 2]
+        Практичне завдання
+        Завдання 2.
+        Знайдіть в онлайн-словниках пояснення крилатого вислову «ахіллесова п’ята».
+
+        [Слайд 3]
+        Практичне завдання
+        Завдання 3.
+        Використовуючи онлайн-перекладач перекладіть знайдене пояснення крилатого вислову «ахіллесова п’ята» англійською мовою.
+        """
+        qs = extract_task_questions(slide_text)
+        self.assertEqual(len(qs), 3)
+        self.assertIn("Вікіпедія", qs[0])
+        self.assertNotIn("[Слайд 2]", qs[0])
+        self.assertNotIn("Практичне завдання", qs[0])
+        self.assertIn("онлайн-словниках", qs[1])
+        self.assertNotIn("[Слайд 3]", qs[1])
+        self.assertIn("онлайн-перекладач", qs[2])
+
+        # Перевірка визначення очікуваної кількості завдань за текстом інструкції
+        desc_with_typo = "З презентації Завдання виконати всі 3 звадання в одному документі, та здати"
+        self.assertEqual(detect_expected_task_count(desc_with_typo), 3)
+
+        desc_correct = "Будь ласка, виконати всі 4 завдання з файлу."
+        self.assertEqual(detect_expected_task_count(desc_correct), 4)
+
+    @patch('feed.gemini_service.call_ai_api')
+    def test_multi_task_ceiling_blocks_high_grade_for_missing_task_user_scenario(self, mock_call):
+        """
+        Тест ситуації користувача:
+        У презентації 3 завдання (Вікіпедія, Словник, Перекладач).
+        Учень здав лише 2 завдання (Вікіпедія + англійське речення, пропустивши тлумачення в онлайн-словнику).
+        ШІ помилково галюцинував 11 балів.
+        Система ПОВИННА знизити бал до максимуму 8 балів (Достатній рівень),
+        прибрати похвалу за завдання 2, зазначити у зауваженнях пропуск завдання 2 та виправити висновок.
+        """
+        from feed.gemini_service import evaluate_submission_with_gemini
+
+        settings = AISettings.get_solo()
+        settings.is_enabled = True
+        settings.api_key = 'fake-api-key'
+        settings.save()
+
+        assignment = Assignment.objects.create(
+            teacher=self.teacher,
+            subject=self.subject,
+            title="Практична робота: Пошук інформації в Інтернеті",
+            description="З презентації Завдання виконати всі 3 звадання в одному документі, та здати"
+        )
+        assignment.classes.add(self.class_group)
+
+        # Текст презентації як матеріал вчителя
+        slide_text = (
+            "[Слайд 1]\nПрактичне завдання\nЗавдання 1.\n"
+            "Знайдіть в Інтернет-енциклопедії Вікіпедія відомості про рідне місто (село).\n\n"
+            "[Слайд 2]\nПрактичне завдання\nЗавдання 2.\n"
+            "Знайдіть в онлайн-словниках пояснення крилатого вислову «ахіллесова п’ята».\n\n"
+            "[Слайд 3]\nПрактичне завдання\nЗавдання 3.\n"
+            "Використовуючи онлайн-перекладач перекладіть знайдене пояснення крилатого вислову «ахіллесова п’ята» англійською мовою."
+        )
+        t_file = SimpleUploadedFile("presentation.txt", slide_text.encode('utf-8'), content_type="text/plain")
+        AssignmentFile.objects.create(assignment=assignment, file=t_file, original_name="presentation.txt")
+
+        # Відповідь учня: тільки Завдання 1 (Жашків) та Завдання 3 (англійський переклад), без словника
+        student_text = (
+            "Жашків — місто в Україні, в Уманському районі Черкаської області, адміністративний центр "
+            "Жашківської міської громади. Населення становить 13 242 особи.\n\n"
+            "\"Achilles' heel\" is an idiom referring to a weak or vulnerable point in a person or any system."
+        )
+        sub_file = SimpleUploadedFile("student_work.txt", student_text.encode('utf-8'), content_type="text/plain")
+        submission = Submission.objects.create(
+            assignment=assignment,
+            first_name='Аліса',
+            last_name='Петренко',
+            class_group=self.class_group,
+            file=sub_file,
+            is_latest_attempt=True
+        )
+
+        # ШІ галюцинує 11 балів і стверджує, що всі 3 завдання виконано
+        hallucinated_ai_reply = json.dumps({
+            "suggested_grade": "11",
+            "level": "Високий (10-12)",
+            "unclear_task": False,
+            "format_warning": None,
+            "summary": "Учень успішно виконав практичні завдання, продемонструвавши вміння працювати з онлайн-ресурсами для навчання. Робота містить правильні відповіді на завдання 1, 2 та 3.",
+            "strengths": [
+                "Успішний пошук інформації про рідне місто в енциклопедії.",
+                "Коректне знаходження пояснення крилатого вислову в онлайн-словнику.",
+                "Правильне виконання перекладу знайденого пояснення англійською мовою."
+            ],
+            "weaknesses": [
+                "Відсутність формату «питання-відповідь» або нумерації завдань, що ускладнює перевірку."
+            ],
+            "feedback_comment": "Алісо, ти чудово впоралася з практичними завданнями! Ти правильно знайшла інформацію про своє місто, пояснила значення вислову та якісно виконала його переклад.",
+            "gr_results": [
+                {"code": "ГР 2", "name": "Створює інформаційні продукти", "grade": "11", "level": "Високий", "comment": "Практичні завдання виконані повністю"},
+                {"code": "ГР 3", "name": "Працює в цифровому середовищі", "grade": "11", "level": "Високий", "comment": "Впевнене володіння"},
+                {"code": "ГР 4", "name": "Безпечно та відповідально працює з ІТ", "grade": "10", "level": "Високий", "comment": "Самостійно"}
+            ]
+        }, ensure_ascii=False)
+        mock_call.return_value = (200, hallucinated_ai_reply, None, {})
+
+        result = evaluate_submission_with_gemini(submission)
+
+        # Перевірка: оцінка знижена до 8 балів (Достатній рівень, максимум для 2/3 завдань)
+        self.assertEqual(result['suggested_grade'], '8')
+        self.assertIn('Достатній', result['level'])
+
+        # Перевірка: групи результатів обмежені до 8 балів
+        for gr in result['gr_results']:
+            self.assertLessEqual(int(gr['grade']), 8)
+
+        # Перевірка: висновок виправлено (не стверджує, що виконано завдання 1, 2 та 3)
+        self.assertNotIn("відповіді на завдання 1, 2 та 3", result['summary'])
+        self.assertIn("2 із 3", result['summary'])
+
+        # Перевірка: у сильних сторонах відсутнє Завдання 2
+        for s in result['strengths']:
+            self.assertNotIn("пояснення крилатого вислову в онлайн-словнику", s.lower())
+
+        # Перевірка: у зауваженнях чітко зазначено пропуск Завдання 2
+        self.assertTrue(any("завдання 2" in w.lower() for w in result['weaknesses']))
+
+    @patch('feed.gemini_service.call_ai_api')
+    def test_multi_task_one_of_three_capped_at_five(self, mock_call):
+        """Перевірка, що виконання лише 1 із 3 завдань (~33%) обмежується максимум 5 балами (Середній рівень)."""
+        from feed.gemini_service import evaluate_submission_with_gemini
+
+        settings = AISettings.get_solo()
+        settings.is_enabled = True
+        settings.api_key = 'fake-api-key'
+        settings.save()
+
+        assignment = Assignment.objects.create(
+            teacher=self.teacher,
+            subject=self.subject,
+            title="Контрольні 3 вправи",
+            description="Обов'язково виконати всі 3 завдання:\n1. Що таке база даних?\n2. Що таке первинний ключ?\n3. Що таке зв'язок один-до-багатьох?"
+        )
+        assignment.classes.add(self.class_group)
+
+        # Учень відповів лише на 1 питання
+        student_text = "1. База даних — це впорядкована сукупність взаємопов'язаних даних."
+        sub_file = SimpleUploadedFile("ans.txt", student_text.encode('utf-8'), content_type="text/plain")
+        submission = Submission.objects.create(
+            assignment=assignment,
+            first_name='Олег',
+            last_name='Коваленко',
+            class_group=self.class_group,
+            file=sub_file,
+            is_latest_attempt=True
+        )
+
+        ai_reply = json.dumps({
+            "suggested_grade": "9",
+            "level": "Достатній (7-9)",
+            "summary": "Учень відповів на перше запитання. Завдання 2 та 3 пропущено.",
+            "strengths": ["Правильне визначення бази даних."],
+            "weaknesses": ["Завдання 2 пропущено.", "Завдання 3 не виконано."],
+            "feedback_comment": "Добре відповіли на перше питання, проте не виконано завдання 2 та 3.",
+            "gr_results": [
+                {"code": "ГР 2", "name": "Створює інформаційні продукти", "grade": "9", "level": "Достатній", "comment": "Частково"}
+            ]
+        }, ensure_ascii=False)
+        mock_call.return_value = (200, ai_reply, None, {})
+
+        result = evaluate_submission_with_gemini(submission)
+
+        # Перевірка: оцінка 9 знижена до 5 (Середній рівень, оскільки лише 1/3)
+        self.assertLessEqual(int(result['suggested_grade']), 5)
+        self.assertIn('Середній', result['level'])
+
+    @patch('feed.gemini_service.call_ai_api')
+    def test_choice_assignment_not_capped_for_single_task(self, mock_call):
+        """Перевірка, що завдання з вибором («одне завдання на вибір») НЕ обмежується стелею часткового виконання."""
+        from feed.gemini_service import evaluate_submission_with_gemini
+
+        settings = AISettings.get_solo()
+        settings.is_enabled = True
+        settings.api_key = 'fake-api-key'
+        settings.save()
+
+        assignment = Assignment.objects.create(
+            teacher=self.teacher,
+            subject=self.subject,
+            title="Завдання на вибір",
+            description="Виконайте одне завдання на вибір:\n1. Напишіть есе про штучний інтелект.\n2. Створіть презентацію про історію комп'ютерів."
+        )
+        assignment.classes.add(self.class_group)
+
+        student_text = "Есе про штучний інтелект: Штучний інтелект стрімко розвивається..."
+        sub_file = SimpleUploadedFile("essay.txt", student_text.encode('utf-8'), content_type="text/plain")
+        submission = Submission.objects.create(
+            assignment=assignment,
+            first_name='Софія',
+            last_name='Ткаченко',
+            class_group=self.class_group,
+            file=sub_file,
+            comment_student="Виконувала завдання 1",
+            is_latest_attempt=True
+        )
+
+        ai_reply = json.dumps({
+            "suggested_grade": "11",
+            "level": "Високий (10-12)",
+            "summary": "Чудове есе на обрану тему.",
+            "strengths": ["Глибоке розкриття теми штучного інтелекту."],
+            "weaknesses": [],
+            "feedback_comment": "Відмінна робота, Софіє!",
+            "gr_results": [
+                {"code": "ГР 2", "name": "Створює інформаційні продукти", "grade": "11", "level": "Високий", "comment": "Відмінно"}
+            ]
+        }, ensure_ascii=False)
+        mock_call.return_value = (200, ai_reply, None, {})
+
+        result = evaluate_submission_with_gemini(submission)
+
+        # Оцінка 11 залишається без обмеження, оскільки це завдання на вибір
+        self.assertEqual(result['suggested_grade'], '11')
+        self.assertIn('Високий', result['level'])
+
+
 
 
 

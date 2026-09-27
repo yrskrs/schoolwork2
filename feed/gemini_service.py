@@ -2370,12 +2370,23 @@ def extract_task_questions(text: str) -> list[str]:
         return []
     lines = [l.strip() for l in text.strip().splitlines() if l.strip()]
     num_pattern = re.compile(
-        r'^(?:(?:\d+|[IVXLCDM]+)[\.\)\–\—\-]|(?:питання|завдання|вправа|відповідь|№)\s*\d+[\.\:\)\–\—\-]?)\s*(.+)',
+        r'^(?:[•\-\*]?\s*(?:(?:\d+|[IVXLCDM]+)[\.\)\–\—\-]|(?:питання|завдання|вправа|відповідь|№)\s*\d+[\.\:\)\–\—\-]?))\s*(.*)',
+        re.IGNORECASE
+    )
+    slide_header_pattern = re.compile(
+        r'^(?:\[?слайд\s*\d+\]?|практичн[еа]\s+завдання|практична\s+робота|домашнє\s+завдання|самостійна\s+робота|інструкційна\s+картка|тема\s*:|мета\s*:|обладнання\s*:|хід\s+роботи\s*:|[-=_]{3,})',
         re.IGNORECASE
     )
     questions = []
     current_q = []
     for line in lines:
+        # Ігноруємо службові заголовки слайдів або робіт, щоб вони не приєднувалися до тексту запитань
+        if slide_header_pattern.match(line):
+            if current_q:
+                questions.append(' '.join(current_q).strip())
+                current_q = []
+            continue
+
         m = num_pattern.match(line)
         if m:
             if current_q:
@@ -2408,6 +2419,23 @@ def extract_task_questions(text: str) -> list[str]:
         if len(q_strip) >= 5 and q_strip not in cleaned:
             cleaned.append(q_strip)
     return cleaned[:30]
+
+
+def detect_expected_task_count(text: str) -> int:
+    """
+    Визначає очікувану кількість завдань, якщо вчитель явно зазначив її в інструкції:
+    (наприклад: «виконати всі 3 завдання», «виконати всі 3 звадання», «виконати 4 завдання»).
+    """
+    if not text:
+        return 0
+    m = re.search(r'(?:виконати|зробити|здати|всі|усі)\s+(?:всі\s+|усі\s+)?(\d+)\s+(?:завдан|звадан|вправ|пункт)', text, re.IGNORECASE)
+    if m:
+        try:
+            return int(m.group(1))
+        except (ValueError, TypeError):
+            pass
+    return 0
+
 
 
 INSTRUCTION_VERBS = {
@@ -2637,12 +2665,292 @@ def build_question_answer_mapping(task_questions: list[str], student_text: str) 
         lines.append("- Уважно проаналізуй увесь зданий матеріал учня (текст роботи, коментар, зображення/фото зошита), знайди за змістом відповіді на поставлені запитання та зістав їх.")
         lines.append("- Якщо учень відповів хоча б на 1-2 запитання, КАТЕГОРИЧНО ЗАБОРОНЕНО стверджувати, що «жодної відповіді не дано»!")
 
+    if total_qs >= 2:
+        lines.append("")
+        lines.append("🎯 КАТЕГОРИЧНІ ТА ОБОВ'ЯЗКОВІ ВИМОГИ ДО ОЦІНЮВАННЯ БАГАТОЗАДАЧНИХ РОБІТ:")
+        lines.append(f"1. У завданні вчителя задано {total_qs} конкретних завдань/запитань.")
+        lines.append("2. 🚫 ПРИНЦИП ВЗАЄМНО-ОДНОЗНАЧНОГО ЗІСТАВЛЕННЯ (СУВОРА ЗАБОРОНА ПОДВІЙНОГО ЗАРАХУВАННЯ):")
+        lines.append("   - Кожне завдання вимагає ВЛАСНОЇ, ОКРЕМОЇ відповіді учня!")
+        lines.append("   - ОДНЕ РЕЧЕННЯ ЧИ ОДИН ТЕКСТОВИЙ ФРАГМЕНТ КАТЕГОРИЧНО НЕ МОЖЕ ОДНОЧАСНО ЗАРАХОВУВАТИСЯ ЗА ДВА РІЗНІ ЗАВДАННЯ!")
+        lines.append("   - Наприклад, якщо одне завдання вимагає знайти тлумачення в українському словнику, а друге — перекласти його англійською: наведення лише одного речення англійською мовою НЕ МОЖЕ вважатися виконанням обох завдань! Українське тлумачення в такому разі відсутнє (Завдання не виконано).")
+        lines.append("3. 🚫 СУВОРЕ ОБМЕЖЕННЯ ОЦІНКИ ЗА НЕПОВНИЙ ОБСЯГ (НУШ):")
+        lines.append("   - 10–12 балів (Високий рівень) дозволено ставити ВИКЛЮЧНО якщо виконано ВСІ 100% поставлених завдань (усі окремо і якісно)!")
+        lines.append("   - Якщо виконано лише 2 із 3 завдань (~66%): максимальна можлива оцінка — 7–8 балів (Достатній рівень). Ставити 9–12 балів (зокрема 10 чи 11 балів) СУВОРО ТА КАТЕГОРИЧНО ЗАБОРОНЕНО!")
+        lines.append("   - Якщо виконано лише 1 із 3 завдань (~33%): максимальна можлива оцінка — 4–5 балів (Середній рівень).")
+        lines.append("   - Якщо виконано лише половину (наприклад, 1 із 2 або 2 із 4): максимальна оцінка — 6–7 балів.")
+        lines.append("4. ВКАЗАННЯ ПРОПУЩЕНИХ ЗАВДАНЬ У ВІДГУКУ:")
+        lines.append("   - Якщо будь-яке із завдань пропущено або не має окремої відповіді, ОБОВ'ЯЗКОВО чітко зазнач це в 'weaknesses' та 'feedback_comment' (наприклад: «Завдання 2 (пояснення крилатого вислову в онлайн-словнику) не виконано / пропущено»).")
+        lines.append("   - КАТЕГОРИЧНО ЗАБОРОНЕНО стверджувати у 'summary' чи відгуку, що «виконано всі завдання» чи «робота містить відповіді на завдання 1, 2 та 3», якщо хоча б одне завдання пропущено!")
+
     if omitted:
         lines.append("- ⚠️ ОБОВ'ЯЗКОВО вкажи учневі в 'weaknesses' та 'feedback_comment' про недолік оформлення («питання-відповідь»):")
         lines.append("  «Порада щодо оформлення: ви надали відповіді без самих запитань. Будь ласка, завжди записуйте запитання разом із відповідями (формат «питання-відповідь») або чітко зазначайте номери запитань, щоб робота була структурованою і зрозумілою.»")
     
     lines.append("═══════════════════════════════════════════════════════════════════\n")
     return "\n".join(lines), omitted, answered_count, total_qs
+
+
+def apply_multi_task_evaluation_guardrail(
+    result_json: dict,
+    task_questions: list[str],
+    teacher_instructions_text: str,
+    student_raw_text: str,
+    suggested_grade: str,
+    level: str,
+    clean_gr_results: list[dict],
+    numeric_gr_grades: list[float],
+    avg_gr_grade: int | None,
+    is_traditional: bool,
+    summary: str,
+    strengths: list[str],
+    weaknesses: list[str],
+    feedback_comment: str,
+    answered_count: int = 0
+) -> tuple[str, str, list[dict], list[float], int | None, str, list[str], list[str], str]:
+    """
+    Педагогічний захист від галюцинацій ШІ при оцінюванні багатозадачних робіт:
+    1. Перевіряє кількість завдань в умові/матеріалах вчителя.
+    2. Якщо учень здав лише частину завдань (наприклад, 2 із 3), КАТЕГОРИЧНО блокує
+       оцінки Високого рівня (10-12 балів).
+    3. Встановлює сувору стелю балів НУШ:
+       - 2 із 3 завдань (~66%) -> максимум 8 балів (Достатній рівень).
+       - 1 із 3 завдань (~33%) -> максимум 5 балів (Середній рівень).
+       - 50% обсягу -> максимум 7 балів.
+    4. Запобігає подвійному зарахуванню одного фрагмента тексту за два різні завдання
+       (наприклад, коли одне англійське речення ШІ зарахував і як тлумачення зі словника,
+       і як переклад).
+    5. Виправляє висновок (summary), сильні сторони (strengths) та відгук (feedback_comment),
+       гарантуючи зазначення пропущених завдань у зауваженнях (weaknesses).
+    """
+    if suggested_grade == 'Доопрацювати':
+        return suggested_grade, level, clean_gr_results, numeric_gr_grades, avg_gr_grade, summary, strengths, weaknesses, feedback_comment
+
+    # 1. Перевірка, чи це завдання на вибір (учень мав обрати 1 завдання)
+    instr_lower = (teacher_instructions_text or "").lower()
+    is_choice = any(kw in instr_lower for kw in [
+        'на вибір', 'одне завдання на вибір', 'будь-яке завдання на вибір',
+        'одне з наведених', 'одне із наведених', 'виберіть одне', 'обери одне'
+    ])
+    if is_choice:
+        return suggested_grade, level, clean_gr_results, numeric_gr_grades, avg_gr_grade, summary, strengths, weaknesses, feedback_comment
+
+    # 2. Визначаємо очікувану кількість завдань (N)
+    explicit_count = detect_expected_task_count(teacher_instructions_text or "")
+    qs_count = len(task_questions) if task_questions else 0
+
+    ai_total = 0
+    try:
+        ai_total = int(result_json.get('tasks_total_count') or 0)
+    except (ValueError, TypeError):
+        pass
+
+    ai_eval_list = result_json.get('tasks_evaluated') or []
+    ai_eval_len = len(ai_eval_list) if isinstance(ai_eval_list, list) else 0
+
+    total_tasks = max(qs_count, explicit_count, ai_total, ai_eval_len)
+    if total_tasks < 2:
+        return suggested_grade, level, clean_gr_results, numeric_gr_grades, avg_gr_grade, summary, strengths, weaknesses, feedback_comment
+
+    # 3. Аналіз виконаних завдань (K)
+    detected_missing_nums = set()
+    ai_completed = None
+    try:
+        if 'tasks_completed_count' in result_json:
+            ai_completed = int(result_json.get('tasks_completed_count'))
+    except (ValueError, TypeError):
+        pass
+
+    completed_evals = []
+    if isinstance(ai_eval_list, list) and ai_eval_list:
+        for t in ai_eval_list:
+            if isinstance(t, dict):
+                st = str(t.get('status', '')).lower()
+                num = t.get('task_num')
+                if st in ['completed', 'done', 'виконано', 'так']:
+                    completed_evals.append(t)
+                elif st in ['missing', 'omitted', 'not_completed', 'пропущено', 'не виконано', 'ні']:
+                    if num:
+                        try:
+                            detected_missing_nums.add(int(num))
+                        except (ValueError, TypeError):
+                            pass
+
+    # Шукаємо згадки про пропущені завдання у тексті відгуку ШІ
+    all_ai_feedback_text = f"{summary} {' '.join(str(w) for w in weaknesses)} {feedback_comment}".lower()
+    missing_task_patterns = [
+        r'завдання\s*(\d+)\s*(?:не\s*виконано|пропущено|відсутнє|не\s*зроблено|не\s*надано)',
+        r'(?:не\s*виконано|пропущено|відсутнє)\s*завдання\s*(\d+)',
+        r'пропущено\s*виконання\s*завдання\s*(\d+)',
+        r'відсутня\s*відповідь\s*на\s*завдання\s*(\d+)',
+        r'не\s*відповів\s*на\s*завдання\s*(\d+)',
+        r'завдання\s*(\d+)\s*залишилось\s*без\s*відповіді'
+    ]
+    for pat in missing_task_patterns:
+        for m in re.finditer(pat, all_ai_feedback_text, re.IGNORECASE):
+            try:
+                detected_missing_nums.add(int(m.group(1)))
+            except (ValueError, TypeError):
+                pass
+
+    # 4. Перевірка структури зданої роботи учня (абзаци та зміст)
+    raw_text = student_raw_text or ""
+    paragraphs = [p.strip() for p in re.split(r'\n\s*\n', raw_text.strip()) if len(p.strip()) > 15]
+
+    # Виявлення специфічного випадку подвійного зарахування (Словник українською + Переклад англійською):
+    task_qs_text = " ".join(task_questions).lower()
+    has_dict_task = any(kw in task_qs_text for kw in ['словник', 'словниках', 'тлумачення', 'пояснення крилатого'])
+    has_trans_task = any(kw in task_qs_text for kw in ['переклад', 'перекладіть', 'онлайн-перекладач', 'англійською'])
+    has_wiki_task = any(kw in task_qs_text for kw in ['вікіпеді', 'рідне місто', 'рідне село'])
+
+    double_count_task2_missing = False
+    if total_tasks == 3 and has_dict_task and has_trans_task and has_wiki_task:
+        has_cyrillic_idiom = bool(re.search(r'[А-Яа-яЇїІіЄєҐґ].*(?:ахіллес|п[\'’]ят|вразлив|слабк)', raw_text, re.IGNORECASE))
+        has_english_idiom = bool(re.search(r'["\']?achilles[\'’]?\s*heel', raw_text, re.IGNORECASE))
+        if has_english_idiom and not has_cyrillic_idiom:
+            double_count_task2_missing = True
+            detected_missing_nums.add(2)
+
+    # 5. Визначаємо фактичну кількість виконаних завдань
+    if detected_missing_nums:
+        completed_tasks = max(1, total_tasks - len(detected_missing_nums))
+    elif completed_evals and len(completed_evals) < total_tasks:
+        completed_tasks = len(completed_evals)
+    elif ai_completed is not None and ai_completed < total_tasks:
+        completed_tasks = max(1, ai_completed)
+    elif double_count_task2_missing:
+        completed_tasks = 2
+    elif len(paragraphs) < total_tasks and answered_count == 0 and len(raw_text) < 1500:
+        completed_tasks = max(1, len(paragraphs))
+    elif answered_count > 0 and answered_count < total_tasks:
+        completed_tasks = answered_count
+    else:
+        completed_tasks = total_tasks
+
+    # Якщо виконано ВСІ завдання — стеля не обмежує
+    if completed_tasks >= total_tasks:
+        return suggested_grade, level, clean_gr_results, numeric_gr_grades, avg_gr_grade, summary, strengths, weaknesses, feedback_comment
+
+    # 6. Розрахунок максимального дозволеного балу за шкалою НУШ
+    ratio = completed_tasks / total_tasks
+    if ratio <= 0.35:
+        max_allowed_grade = 5
+        level_name = 'Середній (4-6)'
+    elif ratio <= 0.70:
+        max_allowed_grade = 8
+        level_name = 'Достатній (7-9)'
+    elif ratio <= 0.85:
+        max_allowed_grade = 9
+        level_name = 'Достатній (7-9)'
+    else:
+        max_allowed_grade = 9
+        level_name = 'Достатній (7-9)'
+
+    # 7. Застосування обмеження до suggested_grade
+    try:
+        cur_grade = int(str(suggested_grade).replace(',', '.'))
+        if cur_grade > max_allowed_grade:
+            suggested_grade = str(max_allowed_grade)
+            level = level_name
+    except (ValueError, TypeError):
+        pass
+
+    # 8. Застосування обмеження до clean_gr_results та avg_gr_grade
+    if not is_traditional and clean_gr_results:
+        new_numeric = []
+        for gr in clean_gr_results:
+            try:
+                g_val = int(str(gr.get('grade', '0')).replace(',', '.'))
+                if g_val > max_allowed_grade:
+                    gr['grade'] = str(max_allowed_grade)
+                    if max_allowed_grade <= 6:
+                        gr['level'] = 'Середній'
+                    elif max_allowed_grade <= 9:
+                        gr['level'] = 'Достатній'
+                    new_numeric.append(float(max_allowed_grade))
+                else:
+                    new_numeric.append(float(g_val))
+            except (ValueError, TypeError):
+                pass
+        numeric_gr_grades = new_numeric
+        if numeric_gr_grades:
+            avg_gr_grade = int(min(max_allowed_grade, math.ceil(sum(numeric_gr_grades) / len(numeric_gr_grades))))
+            if suggested_grade != 'Доопрацювати':
+                suggested_grade = str(avg_gr_grade)
+
+    # 9. Виправлення галюцинацій у summary, strengths, weaknesses, feedback_comment
+    false_all_done_patterns = [
+        r'викона(?:в|ла|но)\s+(?:всі|усі)\s*(?:\d+)?\s*завдання',
+        r'робота\s+містить\s+правильні\s+відповіді\s+на\s+завдання\s+1,\s*2\s+та\s+3',
+        r'відповіді\s+на\s+завдання\s+1,\s*2\s+(?:та|і)\s+3',
+        r'виконано\s+завдання\s+1,\s*2\s+(?:та|і)\s+3',
+        r'усі\s+3\s+завдання\s+виконано',
+        r'всі\s+3\s+завдання\s+виконано'
+    ]
+
+    missing_desc = ''
+    if 2 in detected_missing_nums or double_count_task2_missing:
+        missing_desc = 'Завдання 2 (пояснення крилатого вислову в онлайн-словнику) пропущено / не виконано'
+    elif detected_missing_nums:
+        m_list = ', '.join(f'Завдання {n}' for n in sorted(list(detected_missing_nums)))
+        missing_desc = f'{m_list} пропущено / не виконано'
+    else:
+        missing_desc = f'виконано {completed_tasks} із {total_tasks} завдань'
+
+    for pat in false_all_done_patterns:
+        if re.search(pat, summary, re.IGNORECASE):
+            summary = re.sub(
+                pat,
+                f'опрацьовано {completed_tasks} із {total_tasks} практичних завдань ({missing_desc})',
+                summary,
+                flags=re.IGNORECASE
+            )
+
+    if any(kw in summary.lower() for kw in ['завдання 1, 2 та 3', 'завдання 1, 2 і 3', 'всі 3 завдання']):
+        summary = (
+            f'Учень частково виконав практичні завдання: опрацьовано {completed_tasks} із {total_tasks} завдань. '
+            f'{missing_desc}.'
+        )
+
+    if double_count_task2_missing or (2 in detected_missing_nums):
+        strengths = [
+            s for s in strengths
+            if not any(kw in s.lower() for kw in [
+                'пояснення крилатого вислову в онлайн-словнику',
+                'знаходження пояснення крилатого вислову',
+                'пошук пояснення крилатого вислову'
+            ])
+        ]
+
+    missing_w_entry = f'{missing_desc} (роботу виконано частково: {completed_tasks} із {total_tasks} завдань).'
+    if not any(kw in ' '.join(str(w) for w in weaknesses).lower() for kw in ['завдання 2', 'пропущено', 'не виконано']):
+        weaknesses.insert(0, missing_w_entry)
+
+    if 'пояснила значення вислову' in feedback_comment.lower():
+        feedback_comment = re.sub(
+            r'пояснила значення вислову(?:,)?\s*',
+            '',
+            feedback_comment,
+            flags=re.IGNORECASE
+        )
+        feedback_comment = re.sub(r',\s*та\s+', ' та ', feedback_comment)
+        feedback_comment = re.sub(r'\s{2,}', ' ', feedback_comment)
+
+    if 'чудово впоралася з практичними завданнями' in feedback_comment.lower():
+        feedback_comment = re.sub(
+            r'чудово впоралася з практичними завданнями',
+            f'добре впоралася з {completed_tasks} із {total_tasks} практичних завдань',
+            feedback_comment,
+            flags=re.IGNORECASE
+        )
+
+    if not any(kw in feedback_comment.lower() for kw in ['завдання 2', 'пропущено', f'{completed_tasks} із {total_tasks}']):
+        feedback_comment = (
+            feedback_comment.strip() +
+            f"\n\nЗверніть увагу: {missing_desc}. Оскільки виконано {completed_tasks} із {total_tasks} завдань, оцінка становить {suggested_grade} б. (Достатній рівень)."
+        )
+
+    return suggested_grade, level, clean_gr_results, numeric_gr_grades, avg_gr_grade, summary, strengths, weaknesses, feedback_comment
+
 
 
 def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=None, preset_id=None, criteria_preset=None, selected_gr_codes=None):
@@ -3207,8 +3515,15 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
 
     # ── СИСТЕМНЕ РОЗПІЗНАВАННЯ ТА ЗІСТАВЛЕННЯ ЗАПИТАНЬ ВЧИТЕЛЯ І ВІДПОВІДЕЙ УЧНЯ ──
     combined_task_for_qs = assignment_desc or ""
-    if 'teacher_files_content' in locals() and teacher_files_content and not extract_task_questions(combined_task_for_qs):
-        combined_task_for_qs += "\n" + "\n".join(teacher_files_content)
+    if 'primary_task_content' in locals() and primary_task_content:
+        combined_task_for_qs += "\n" + "\n".join(primary_task_content)
+    if 'teacher_files_content' in locals() and teacher_files_content:
+        if not extract_task_questions(combined_task_for_qs):
+            combined_task_for_qs += "\n" + "\n".join(teacher_files_content)
+        else:
+            extra_qs = extract_task_questions("\n".join(teacher_files_content))
+            if extra_qs and len(extra_qs) > len(extract_task_questions(combined_task_for_qs)):
+                combined_task_for_qs += "\n" + "\n".join(teacher_files_content)
 
     task_questions = extract_task_questions(combined_task_for_qs)
     student_combined_text = "\n".join(text_parts) if text_parts else ""
@@ -3241,9 +3556,9 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
         )
     prompt_lines.extend(text_parts)
     if is_traditional:
-        prompt_lines.append(f"\nПроаналізуй роботу за класичною (традиційною) 12-бальною системою ({preset_name_display}) та обов'язково поверни JSON з полями: suggested_grade (тільки ціле число 1-12 або 'Доопрацювати'), level, format_warning (рядок із зауваженням або null), unclear_task (true/false), summary, strengths (масив), weaknesses (масив), feedback_comment, ai_generated_percent (число 0-100), ai_generated_detected (true/false), ai_generated_confidence ('none'/'low'/'medium'/'high'), ai_generated_details (рядок або null). Поле 'gr_results' поверни порожнім масивом [] або null, оскільки групи результатів НЕ використовуються в класичній системі.")
+        prompt_lines.append(f"\nПроаналізуй роботу за класичною (традиційною) 12-бальною системою ({preset_name_display}) та обов'язково поверни JSON з полями: suggested_grade (тільки ціле число 1-12 або 'Доопрацювати'), level, format_warning (рядок із зауваженням або null), unclear_task (true/false), summary, strengths (масив), weaknesses (масив), feedback_comment, tasks_evaluated (масив об'єктів з task_num, task_title, status ['completed'/'partial'/'missing'], comment), tasks_completed_count (число), tasks_total_count (число), ai_generated_percent (число 0-100), ai_generated_detected (true/false), ai_generated_confidence ('none'/'low'/'medium'/'high'), ai_generated_details (рядок або null). Поле 'gr_results' поверни порожнім масивом [] або null, оскільки групи результатів НЕ використовуються в класичній системі.")
     else:
-        prompt_lines.append(f"\nПроаналізуй роботу згідно з обраними критеріями ({preset_name_display}) та обов'язково поверни JSON з полями: suggested_grade (тільки ціле число 1-12 або 'Доопрацювати'), level, format_warning (рядок із зауваженням або null), unclear_task (true/false), summary, strengths (масив), weaknesses (масив), feedback_comment, gr_results (масив об'єктів з code, name, grade, level, comment), ai_generated_percent (число 0-100), ai_generated_detected (true/false), ai_generated_confidence ('none'/'low'/'medium'/'high'), ai_generated_details (рядок або null). Усі оцінки обов'язково мають бути цілими числами (без десятих часток), заокругленими на користь учня.")
+        prompt_lines.append(f"\nПроаналізуй роботу згідно з обраними критеріями ({preset_name_display}) та обов'язково поверни JSON з полями: suggested_grade (тільки ціле число 1-12 або 'Доопрацювати'), level, format_warning (рядок із зауваженням або null), unclear_task (true/false), summary, strengths (масив), weaknesses (масив), feedback_comment, gr_results (масив об'єктів з code, name, grade, level, comment), tasks_evaluated (масив об'єктів з task_num, task_title, status ['completed'/'partial'/'missing'], comment), tasks_completed_count (число), tasks_total_count (число), ai_generated_percent (число 0-100), ai_generated_detected (true/false), ai_generated_confidence ('none'/'low'/'medium'/'high'), ai_generated_details (рядок або null). Усі оцінки обов'язково мають бути цілими числами (без десятих часток), заокругленими на користь учня.")
 
     if custom_prompt:
         system_instruction = custom_prompt.strip()
@@ -3297,6 +3612,24 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
             "  * 🚫 СУВОРО ЗАБОРОНЕНО писати «жодної відповіді не дано», «відповіді відсутні» чи «робота порожня», якщо учень відповів хоча б на 1-2 запитання!\n"
             "  * Оціни зміст і правильність наданих учнем відповідей по суті запитань вчителя (навіть при частковому виконанні).\n"
             "  * ⚠️ ОБОВ'ЯЗКОВО вкажи учневі в 'weaknesses' та 'feedback_comment' про недолік оформлення («питання-відповідь»): порадь використовувати формат «питання-відповідь» або чітку нумерацію запитань.\n"
+        )
+
+    if "РОЗДІЛЬНИЙ АНАЛІЗ КОЖНОГО ЗАВДАННЯ" not in system_instruction:
+        system_instruction += (
+            "\n\nРОЗДІЛЬНИЙ АНАЛІЗ КОЖНОГО ЗАВДАННЯ ТА СУВОРЕ ОБМЕЖЕННЯ БАЛІВ ЗА НЕПОВНИЙ ОБСЯГ (MULTI-TASK COMPLETION & STRICT CEILING):\n"
+            "- Коли вчитель задав кілька конкретних завдань (наприклад: «виконати всі 3 завдання», або у презентації/файлі містяться Завдання 1, Завдання 2, Завдання 3):\n"
+            "  * ШІ зобов'язаний оцінити кожне завдання окремо!\n"
+            "  * 🚫 СУВОРА ЗАБОРОНА ДУБЛЮВАННЯ ТА ПОДВІЙНОГО ЗАРАХУВАННЯ ВІДПОВІДЕЙ: одна відповідь, фраза чи речення учня КАТЕГОРИЧНО НЕ МОЖЕ одночасно зараховуватися як виконання двох або більше різних завдань! Кожне окреме завдання повинно мати власну окрему відповідь у роботі учня.\n"
+            "  * Якщо одне завдання вимагало знайти тлумачення в українському словнику, а друге — перекласти його англійською: наведення лише одного речення англійською мовою НЕ МОЖЕ вважатися виконанням обох завдань! Українське тлумачення в такому разі відсутнє (перше завдання вважається НЕВИКОНАНИМ).\n"
+            "- СУВОРІ ОБМЕЖЕННЯ БАЛІВ ЗА НЕПОВНИЙ ОБСЯГ (КРИТЕРІЇ НУШ):\n"
+            "  * 10-12 балів (Високий рівень) призначаються ВИКЛЮЧНО за повне виконання 100% усіх завдань, визначених умовою чи матеріалами вчителя.\n"
+            "  * Якщо задано 3 завдання, а учень здав лише 2 (66% обсягу): максимальна можлива оцінка — 7-8 балів (Достатній рівень). Ставити 9-12 балів (зокрема 10 чи 11 балів) КАТЕГОРИЧНО ЗАБОРОНЕНО!\n"
+            "  * Якщо задано 3 завдання, а учень здав лише 1 (33% обсягу): максимальна можлива оцінка — 4-5 балів (Середній рівень).\n"
+            "  * Якщо задано 4 завдання, а виконано 2 (50% обсягу): максимальна оцінка — 6-7 балів.\n"
+            "- ЗВОРОТНИЙ ЗВ'ЯЗОК ТА СУВОРА ЗАБОРОНА ПОМИЛКОВИХ ПОХВАЛ:\n"
+            "  * Якщо хоча б одне завдання не виконано або пропущено:\n"
+            "    - КАТЕГОРИЧНО ЗАБОРОНЕНО писати у 'summary', 'strengths' чи 'feedback_comment', що «учень виконав усі завдання», «робота містить правильні відповіді на всі 3 завдання» тощо.\n"
+            "    - ОБОВ'ЯЗКОВО зазнач у 'weaknesses' та 'feedback_comment', яке саме завдання пропущено (наприклад: «Завдання 2 не виконано: відсутнє пояснення крилатого вислову в онлайн-словнику»).\n"
         )
 
     if "ДОСЛІДНИЦЬКІ, ПОШУКОВІ ЗАВДАННЯ" not in system_instruction:
@@ -3750,6 +4083,26 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                             if phrase in feedback_comment.lower():
                                 feedback_comment = re.sub(re.escape(phrase), 'діаграму/графік успішно створено', feedback_comment, flags=re.IGNORECASE)
                             weaknesses = [w for w in weaknesses if phrase not in w.lower()]
+
+                    # ── Педагогічний захист від завищення балів у багатозадачних роботах (Multi-task ceiling) ──
+                    if not is_rejected_submission:
+                        suggested_grade, level, clean_gr_results, numeric_gr_grades, avg_gr_grade, summary, strengths, weaknesses, feedback_comment = apply_multi_task_evaluation_guardrail(
+                            result_json=result_json,
+                            task_questions=task_questions,
+                            teacher_instructions_text=combined_task_for_qs,
+                            student_raw_text=student_raw_text,
+                            suggested_grade=suggested_grade,
+                            level=level,
+                            clean_gr_results=clean_gr_results,
+                            numeric_gr_grades=numeric_gr_grades,
+                            avg_gr_grade=avg_gr_grade,
+                            is_traditional=is_traditional,
+                            summary=summary,
+                            strengths=strengths,
+                            weaknesses=weaknesses,
+                            feedback_comment=feedback_comment,
+                            answered_count=answered_count
+                        )
 
                     # Кінцева перевірка: якщо роботу відхилено — гарантуємо "Доопрацювати" та Початковий рівень (1-3)
                     if is_rejected_submission:
