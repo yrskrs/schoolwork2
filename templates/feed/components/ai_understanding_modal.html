@@ -1,0 +1,349 @@
+<!-- ── Модальне вікно перевірки розуміння завдання штучним інтелектом (ШІ) ── -->
+<div id="ai-understanding-modal" style="display:none;position:fixed;inset:0;width:100%;height:100%;background:rgba(15,23,42,0.72);z-index:99999;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(6px);box-sizing:border-box;">
+    <div class="custom-modal-content" style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);width:100%;max-width:760px;max-height:92vh;display:flex;flex-direction:column;box-shadow:0 25px 50px -12px rgba(0,0,0,0.35);animation:aiModalFadeIn 0.22s cubic-bezier(0.16,1,0.3,1);overflow:hidden;">
+        
+        <!-- Заголовок модального вікна -->
+        <div style="padding:16px 20px;background:var(--color-bg-secondary);border-bottom:1px solid var(--color-border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+            <div style="display:flex;align-items:center;gap:12px;">
+                <div style="width:38px;height:38px;border-radius:10px;background:linear-gradient(135deg,#4f46e5,#7c3aed);display:flex;align-items:center;justify-content:center;color:#fff;font-size:20px;box-shadow:0 2px 8px rgba(79,70,229,0.3);">
+                    🤖
+                </div>
+                <div>
+                    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                        <h3 style="font-size:1.1rem;font-weight:800;margin:0;color:var(--color-text-primary);line-height:1.25;">
+                            Як ШІ розуміє це завдання
+                        </h3>
+                        <span id="ai-und-status-badge" class="badge" style="background:rgba(99,102,241,0.12);color:var(--color-primary);border:1px solid rgba(99,102,241,0.25);font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;">
+                            Перевірка умов та матеріалів
+                        </span>
+                    </div>
+                    <div id="ai-und-updated-at" style="font-size:11.5px;color:var(--color-text-muted);margin-top:2px;">
+                        Аналіз сформовано на основі опису та прикріплених файлів
+                    </div>
+                </div>
+            </div>
+            <button type="button" onclick="closeAiUnderstandingModal()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--color-text-muted);line-height:1;padding:4px 8px;border-radius:6px;transition:all 0.15s;" title="Закрити (Esc)">✕</button>
+        </div>
+
+        <!-- Тіло модального вікна -->
+        <div id="ai-und-body" style="padding:20px;overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:16px;">
+            
+            <!-- Стан завантаження -->
+            <div id="ai-und-loading" style="display:none;padding:40px 20px;text-align:center;">
+                <div class="ai-und-spinner" style="width:44px;height:44px;margin:0 auto 16px;border:3px solid rgba(99,102,241,0.2);border-top-color:#4f46e5;border-radius:50%;animation:aiUndSpin 0.8s linear infinite;"></div>
+                <div style="font-size:15px;font-weight:700;color:var(--color-text-primary);margin-bottom:6px;">
+                    ШІ аналізує навчальні матеріали...
+                </div>
+                <div style="font-size:12.5px;color:var(--color-text-muted);max-width:440px;margin:0 auto;line-height:1.45;">
+                    Перевіряються вказівки вчителя, слайди презентацій (.pptx, .pdf) та формується точний перелік обов'язкових практичних завдань для учнів.
+                </div>
+            </div>
+
+            <!-- Стан помилки -->
+            <div id="ai-und-error" style="display:none;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);border-radius:var(--radius-md);padding:16px;color:#dc2626;font-size:13.5px;">
+                <div style="display:flex;align-items:center;gap:8px;font-weight:750;margin-bottom:4px;">
+                    <span>⚠️</span>
+                    <span>Не вдалося завершити аналіз завдання</span>
+                </div>
+                <div id="ai-und-error-text" style="font-size:12.5px;color:var(--color-text-secondary);margin-bottom:12px;"></div>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="fetchAiUnderstanding(window.__currentAiUndAssignmentId, true)">
+                    🔄 Спробувати знову
+                </button>
+            </div>
+
+            <!-- Контейнер з результатами аналізу -->
+            <div id="ai-und-content" style="display:none;display:flex;flex-direction:column;gap:16px;">
+
+                <!-- 1. ТЕМА ТА СУТЬ РОБОТИ -->
+                <div style="background:linear-gradient(135deg, rgba(79,70,229,0.06), rgba(124,58,237,0.06));border:1.5px solid rgba(79,70,229,0.25);border-radius:var(--radius-md);padding:14px 16px;">
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+                        <span style="font-size:16px;">🎯</span>
+                        <span style="font-weight:800;font-size:13px;color:var(--color-primary);text-transform:uppercase;letter-spacing:0.04em;">
+                            Тема та суть навчального завдання
+                        </span>
+                    </div>
+                    <div id="ai-und-topic-goal" style="font-size:13.5px;line-height:1.55;color:var(--color-text-primary);font-weight:600;"></div>
+                    <div id="ai-und-source-info" style="font-size:12px;color:var(--color-text-muted);margin-top:6px;display:flex;align-items:center;gap:5px;"></div>
+                </div>
+
+                <!-- 2. ПЕРЕЛІК ВИЯВЛЕНИХ ЗАВДАНЬ -->
+                <div style="background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:16px;">
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
+                        <div style="display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;color:var(--color-text-primary);">
+                            <span style="font-size:17px;">📋</span>
+                            <span>Конкретні завдання для учнів</span>
+                        </div>
+                        <div id="ai-und-task-count-badge" class="badge" style="background:#4f46e5;color:#fff;font-size:11.5px;font-weight:750;padding:3px 10px;border-radius:12px;"></div>
+                    </div>
+
+                    <div id="ai-und-tasks-list" style="display:flex;flex-direction:column;gap:10px;"></div>
+                </div>
+
+                <!-- 3. ОЧІКУВАНИЙ ФОРМАТ ЗДАЧІ -->
+                <div style="background:var(--color-surface);border:1px solid var(--color-border);border-left:4px solid #3b82f6;border-radius:var(--radius-md);padding:12px 16px;">
+                    <div style="font-weight:750;font-size:13px;color:var(--color-text-primary);margin-bottom:4px;display:flex;align-items:center;gap:6px;">
+                        <span>📥</span>
+                        <span>Вимоги до зданої учнем роботи:</span>
+                    </div>
+                    <div id="ai-und-submission-format" style="font-size:13px;line-height:1.5;color:var(--color-text-secondary);"></div>
+                </div>
+
+                <!-- 4. ПРАВИЛА ТА ШКАЛА ОЦІНЮВАННЯ (НУШ) -->
+                <div style="background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:16px;">
+                    <div style="font-weight:800;font-size:13.5px;color:var(--color-text-primary);margin-bottom:12px;display:flex;align-items:center;gap:8px;">
+                        <span style="font-size:16px;">⚖️</span>
+                        <span>Шкала та критерії оцінювання ШІ (НУШ 1–12 б.)</span>
+                    </div>
+
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(210px, 1fr));gap:10px;margin-bottom:12px;">
+                        <div style="background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.25);border-radius:var(--radius-sm);padding:10px 12px;">
+                            <div style="font-weight:800;font-size:13px;color:#059669;margin-bottom:4px;">10–12 б. (Високий)</div>
+                            <div id="ai-und-grade-full" style="font-size:12px;line-height:1.4;color:var(--color-text-primary);"></div>
+                        </div>
+                        <div style="background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.25);border-radius:var(--radius-sm);padding:10px 12px;">
+                            <div style="font-weight:800;font-size:13px;color:#2563eb;margin-bottom:4px;">7–8 б. (Достатній)</div>
+                            <div id="ai-und-grade-partial-2" style="font-size:12px;line-height:1.4;color:var(--color-text-primary);"></div>
+                        </div>
+                        <div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);border-radius:var(--radius-sm);padding:10px 12px;">
+                            <div style="font-weight:800;font-size:13px;color:#d97706;margin-bottom:4px;">4–5 б. (Середній)</div>
+                            <div id="ai-und-grade-partial-1" style="font-size:12px;line-height:1.4;color:var(--color-text-primary);"></div>
+                        </div>
+                    </div>
+
+                    <div id="ai-und-rules-wrap" style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:10px 12px;">
+                        <div style="font-weight:750;font-size:12px;color:var(--color-text-primary);margin-bottom:6px;">
+                            🔒 Запобіжні правила перевірки ШІ:
+                        </div>
+                        <ul id="ai-und-rules-list" style="margin:0;padding-left:18px;font-size:12px;color:var(--color-text-secondary);line-height:1.5;"></ul>
+                    </div>
+                </div>
+
+                <!-- 5. ПОРАДИ ВЧИТЕЛЮ -->
+                <div id="ai-und-tips-card" style="background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.25);border-radius:var(--radius-md);padding:12px 16px;">
+                    <div style="font-weight:750;font-size:13px;color:#b45309;margin-bottom:6px;display:flex;align-items:center;gap:6px;">
+                        <span>💡</span>
+                        <span>Поради ШІ для вчителя:</span>
+                    </div>
+                    <ul id="ai-und-tips-list" style="margin:0;padding-left:18px;font-size:12.5px;color:var(--color-text-primary);line-height:1.5;"></ul>
+                </div>
+
+            </div>
+
+        </div>
+
+        <!-- Підвал модального вікна -->
+        <div style="padding:12px 20px;background:var(--color-bg-secondary);border-top:1px solid var(--color-border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;flex-shrink:0;">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="fetchAiUnderstanding(window.__currentAiUndAssignmentId, true)" id="btn-ai-und-refresh" style="display:inline-flex;align-items:center;gap:6px;font-weight:700;">
+                <span>🔄</span>
+                <span>Оновити аналіз ШІ</span>
+            </button>
+            <button type="button" class="btn btn-primary btn-sm" onclick="closeAiUnderstandingModal()" style="font-weight:700;padding:6px 18px;">
+                Зрозуміло
+            </button>
+        </div>
+
+    </div>
+</div>
+
+<style>
+@keyframes aiModalFadeIn {
+    from { opacity: 0; transform: scale(0.96) translateY(-8px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
+}
+@keyframes aiUndSpin {
+    to { transform: rotate(360deg); }
+}
+.ai-task-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    padding: 10px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    transition: border-color 0.15s ease;
+}
+.ai-task-card:hover {
+    border-color: rgba(79, 70, 229, 0.4);
+}
+</style>
+
+<script>
+window.__currentAiUndAssignmentId = null;
+
+function openAiUnderstandingModal(assignmentId) {
+    window.__currentAiUndAssignmentId = assignmentId;
+    const modal = document.getElementById('ai-understanding-modal');
+    if (!modal) return;
+
+    modal.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+
+    // Слухач Esc
+    window.addEventListener('keydown', handleAiUndEsc);
+
+    // Завантажуємо аналіз
+    fetchAiUnderstanding(assignmentId, false);
+}
+
+function closeAiUnderstandingModal() {
+    const modal = document.getElementById('ai-understanding-modal');
+    if (modal) modal.style.display = 'none';
+    document.body.style.overflow = '';
+    window.removeEventListener('keydown', handleAiUndEsc);
+}
+
+function handleAiUndEsc(e) {
+    if (e.key === 'Escape') closeAiUnderstandingModal();
+}
+
+// Закриття по кліку на бекдроп
+document.getElementById('ai-understanding-modal')?.addEventListener('click', function(e) {
+    if (e.target === this) closeAiUnderstandingModal();
+});
+
+function fetchAiUnderstanding(assignmentId, forceRefresh) {
+    if (!assignmentId) return;
+
+    const loadingEl = document.getElementById('ai-und-loading');
+    const contentEl = document.getElementById('ai-und-content');
+    const errorEl = document.getElementById('ai-und-error');
+    const refreshBtn = document.getElementById('btn-ai-und-refresh');
+
+    loadingEl.style.display = 'block';
+    contentEl.style.display = 'none';
+    errorEl.style.display = 'none';
+    if (refreshBtn) refreshBtn.disabled = true;
+
+    const url = `/teacher/assignment/${assignmentId}/ai-understanding/${forceRefresh ? '?refresh=1' : ''}`;
+    const opts = forceRefresh ? {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': getCookie('csrftoken') || (document.querySelector('[name=csrfmiddlewaretoken]')?.value || '')
+        }
+    } : { method: 'GET' };
+
+    fetch(url, opts)
+        .then(res => res.json())
+        .then(res => {
+            loadingEl.style.display = 'none';
+            if (refreshBtn) refreshBtn.disabled = false;
+
+            if (res.status === 'success' && res.data) {
+                renderAiUnderstandingData(res.data, res.updated_at, res.cached);
+                contentEl.style.display = 'flex';
+            } else {
+                showAiUnderstandingError(res.message || 'Не вдалося завантажити аналіз завдання.');
+            }
+        })
+        .catch(err => {
+            loadingEl.style.display = 'none';
+            if (refreshBtn) refreshBtn.disabled = false;
+            showAiUnderstandingError('Помилка мережі: ' + err.message);
+        });
+}
+
+function renderAiUnderstandingData(data, updatedAt, isCached) {
+    // Дата та статус
+    const badge = document.getElementById('ai-und-status-badge');
+    const updatedEl = document.getElementById('ai-und-updated-at');
+    if (updatedAt) {
+        updatedEl.textContent = `Останній аналіз: ${updatedAt}${isCached ? ' (зі збереженої копії)' : ' (щойно оновлено)'}`;
+    }
+
+    // 1. Тема та мета
+    const topicGoalEl = document.getElementById('ai-und-topic-goal');
+    topicGoalEl.textContent = data.topic_and_goal || 'Навчальне практичне завдання';
+
+    const sourceInfoEl = document.getElementById('ai-und-source-info');
+    sourceInfoEl.innerHTML = `<span>📍</span> <span>Джерело завдань: <strong>${escapeHtml(data.tasks_source_info || 'Умова та презентація')}</strong></span>`;
+
+    // 2. Кількість завдань
+    const countBadge = document.getElementById('ai-und-task-count-badge');
+    const totalCount = data.tasks_total_count || (data.tasks ? data.tasks.length : 1);
+    countBadge.textContent = `Виявлено обов'язкових завдань: ${totalCount}`;
+
+    // Перелік завдань
+    const tasksListEl = document.getElementById('ai-und-tasks-list');
+    tasksListEl.innerHTML = '';
+    const tasks = data.tasks || [];
+    if (tasks.length > 0) {
+        tasks.forEach(t => {
+            const card = document.createElement('div');
+            card.className = 'ai-task-card';
+            card.innerHTML = `
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+                    <div style="font-weight:750;font-size:13px;color:var(--color-primary);display:flex;align-items:center;gap:6px;">
+                        <span>📌</span>
+                        <span>Завдання ${t.num || ''}: ${escapeHtml(t.title || '')}</span>
+                    </div>
+                    ${t.source ? `<span style="font-size:11px;background:rgba(99,102,241,0.08);color:var(--color-text-secondary);padding:2px 7px;border-radius:4px;border:1px solid var(--color-border);">${escapeHtml(t.source)}</span>` : ''}
+                </div>
+                <div style="font-size:12.5px;color:var(--color-text-primary);margin-top:2px;">
+                    <strong>Що потрібно зробити:</strong> ${escapeHtml(t.expected_actions || '')}
+                </div>
+                ${t.expected_submission ? `
+                <div style="font-size:12px;color:var(--color-text-muted);margin-top:2px;">
+                    <strong>Очікувана відповідь:</strong> ${escapeHtml(t.expected_submission)}
+                </div>` : ''}
+            `;
+            tasksListEl.appendChild(card);
+        });
+    } else {
+        tasksListEl.innerHTML = `<div style="font-size:12.5px;color:var(--color-text-muted);">Завдання визначаються загальною умовою уроку.</div>`;
+    }
+
+    // 3. Формат здачі
+    const formatEl = document.getElementById('ai-und-submission-format');
+    formatEl.textContent = data.submission_format_expected || 'Один документ або файл відповідно до інструкцій.';
+
+    // 4. Шкала оцінювання
+    const gb = data.grading_breakdown || {};
+    document.getElementById('ai-und-grade-full').textContent = gb.full_completion || `Якісне виконання всіх ${totalCount} завдань у повному обсязі.`;
+    document.getElementById('ai-und-grade-partial-2').textContent = gb.partial_two_tasks || 'Виконання близько 66% обсягу завдань (наприклад 2 з 3).';
+    document.getElementById('ai-und-grade-partial-1').textContent = gb.partial_one_task || 'Виконання близько 33% обсягу завдань (1 з 3).';
+
+    // Правила ШІ
+    const rulesListEl = document.getElementById('ai-und-rules-list');
+    rulesListEl.innerHTML = '';
+    const rules = gb.rules || [
+        'Кожне практичне завдання вимагає окремої відповіді учня.',
+        'Одне речення або фраза не може зараховуватися одночасно за два різні завдання.',
+        'При частковому виконанні оцінка обмежується суворою педагогічною стелею НУШ (не більше 8 балів за 2 з 3 завдань).'
+    ];
+    rules.forEach(r => {
+        const li = document.createElement('li');
+        li.textContent = r;
+        rulesListEl.appendChild(li);
+    });
+
+    // 5. Поради вчителю
+    const tipsListEl = document.getElementById('ai-und-tips-list');
+    tipsListEl.innerHTML = '';
+    const tips = data.teacher_recommendations || [];
+    if (tips.length > 0) {
+        document.getElementById('ai-und-tips-card').style.display = 'block';
+        tips.forEach(tp => {
+            const li = document.createElement('li');
+            li.textContent = tp;
+            tipsListEl.appendChild(li);
+        });
+    } else {
+        document.getElementById('ai-und-tips-card').style.display = 'none';
+    }
+}
+
+function showAiUnderstandingError(msg) {
+    const errorEl = document.getElementById('ai-und-error');
+    const errText = document.getElementById('ai-und-error-text');
+    errText.textContent = msg;
+    errorEl.style.display = 'block';
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+</script>

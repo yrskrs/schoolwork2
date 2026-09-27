@@ -620,6 +620,27 @@ class Assignment(models.Model):
         default=False,
         help_text='Якщо увімкнено — на сайті вимикається кнопка здачі робіт для учнів (робота не передбачає завантаження матеріалів на сервер)'
     )
+    ai_task_understanding = models.TextField(
+        'Аналіз розуміння завдання ШІ (JSON)',
+        blank=True,
+        default='',
+        help_text='Збережений результат попереднього аналізу завдання штучним інтелектом (виявлені завдання, вимоги, критерії)'
+    )
+    ai_task_understanding_updated_at = models.DateTimeField(
+        'Час останнього аналізу розуміння ШІ',
+        null=True,
+        blank=True
+    )
+
+    def get_ai_task_understanding_data(self):
+        """Повертає розпарсений словник аналізу розуміння завдання ШІ."""
+        if not self.ai_task_understanding:
+            return None
+        try:
+            import json as _json
+            return _json.loads(self.ai_task_understanding)
+        except Exception:
+            return None
 
     def get_default_gr_list(self):
         """Повертає список активних ГР за замовчуванням для цього завдання."""

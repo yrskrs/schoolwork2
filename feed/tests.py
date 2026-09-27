@@ -5254,6 +5254,8 @@ class QuestionAnswerMappingTests(TestCase):
     """
 
     def setUp(self):
+        from feed.middleware import set_has_admin
+        set_has_admin(True)
         self.user = User.objects.create_user(username='teacher_qa', password='password123')
         self.teacher = Teacher.objects.create(user=self.user, full_name='Олена Сергіївна')
         self.class_group = ClassGroup.objects.create(name='9-Б')
@@ -5976,6 +5978,195 @@ class QuestionAnswerMappingTests(TestCase):
         # Оцінка 11 залишається без обмеження, оскільки це завдання на вибір
         self.assertEqual(result['suggested_grade'], '11')
         self.assertIn('Високий', result['level'])
+
+    def test_extract_task_questions_smart_filters_slides_when_practical_tasks_present(self):
+        """Перевірка, що ШІ виділяє саме 3 практичні завдання зі слайдів, а не 18 теоретичних пунктів лекції."""
+        from feed.gemini_service import extract_task_questions, detect_expected_task_count
+
+        presentation_text = """
+        [Слайд 1] Мережа Інтернет
+        1. Історія розвитку інтернету
+        2. Поняття про протокол TCP/IP
+        [Слайд 2] Пошукові системи
+        1. Google Пошук
+        2. Пошукові каталоги
+        3. Енциклопедії онлайн
+        [Слайд 10] Онлайн-перекладачі
+        1. Google Translate
+        2. DeepL
+        [Слайд 17] Повторення матеріалу
+        1. Що таке браузер?
+        2. Що таке пошукова система?
+        [Слайд 18] Практичне завдання
+        Завдання 1. Знайдіть в Інтернет-енциклопедії Вікіпедія відомості про рідне місто (село)
+        Завдання 2. Знайдіть в онлайн-словниках пояснення крилатого вислову «ахіллесова п'ята»
+        Завдання 3. Використовуючи онлайн-перекладач перекладіть знайдене пояснення крилатого вислову «ахіллесова п'ята» англійською мовою
+        """
+        teacher_instruction = "З презентації Завдання виконати всі 3 звадання в одному документі, та здати"
+
+        explicit_count = detect_expected_task_count(teacher_instruction)
+        self.assertEqual(explicit_count, 3)
+
+        questions = extract_task_questions(presentation_text, explicit_count=explicit_count)
+        self.assertEqual(len(questions), 3)
+        self.assertIn("Вікіпедія відомості про рідне місто", questions[0])
+        self.assertIn("онлайн-словниках пояснення крилатого вислову", questions[1])
+        self.assertIn("онлайн-перекладач перекладіть", questions[2])
+        # Перевірка: теоретичні пункти лекції НЕ потрапили до завдань
+        self.assertFalse(any("Історія розвитку інтернету" in q for q in questions))
+        self.assertFalse(any("Що таке браузер" in q for q in questions))
+
+    def test_detect_expected_task_count_user_formats(self):
+        """Перевірка розпізнавання кількості завдань за різними формулюваннями вчителя."""
+        from feed.gemini_service import detect_expected_task_count
+
+        self.assertEqual(detect_expected_task_count("З презентації Завдання виконати всі 3 звадання в одному документі, та здати"), 3)
+        self.assertEqual(detect_expected_task_count("Виконати всі 3 завдання з презентації"), 3)
+        self.assertEqual(detect_expected_task_count("Виконайте завдання 1-3 у зошиті"), 3)
+        self.assertEqual(detect_expected_task_count("Зробити 4 вправи на закріплення"), 4)
+        self.assertEqual(detect_expected_task_count("3 практичні завдання з файлу"), 3)
+        self.assertEqual(detect_expected_task_count("Звичайний опис уроку без вказівки числа"), 0)
+
+    @patch('feed.gemini_service.call_ai_api')
+    def test_multi_task_ceiling_blocks_false_18_tasks_and_grades_at_eight(self, mock_call):
+        """
+        Перевірка випадку користувача:
+        У презентації 18 слайдів/пунктів, вчитель вказав виконати всі 3 завдання.
+        Учень здав 2 з 3 завдань (Жашків + англійський переклад, без українського словника).
+        ШІ помилково поставив 11 балів.
+        Запобіжник повинен:
+        1. Встановити total_tasks = 3 (НЕ 18!).
+        2. Обмежити оцінку 8 балами (Достатній рівень, НЕ 5 балів!).
+        3. Зазначити '2 із 3 завдань' у зауваженнях та відгуку.
+        """
+        from feed.gemini_service import evaluate_submission_with_gemini
+
+        settings = AISettings.get_solo()
+        settings.is_enabled = True
+        settings.api_key = 'fake-api-key'
+        settings.save()
+
+        assignment = Assignment.objects.create(
+            teacher=self.teacher,
+            subject=self.subject,
+            title="Пошук інформації в Інтернеті",
+            description="З презентації Завдання виконати всі 3 звадання в одному документі, та здати"
+        )
+        assignment.classes.add(self.class_group)
+
+        # Додаємо файл презентації до завдання
+        presentation_file_content = (
+            "[Слайд 1] Теорія 1\n1. Вступ\n2. Огляд\n"
+            "[Слайд 17] Теорія 17\n1. Підсумок\n"
+            "[Слайд 18] Практичне завдання\n"
+            "Завдання 1. Знайдіть в Інтернет-енциклопедії Вікіпедія відомості про рідне місто (село)\n"
+            "Завдання 2. Знайдіть в онлайн-словниках пояснення крилатого вислову «ахіллесова п'ята»\n"
+            "Завдання 3. Використовуючи онлайн-перекладач перекладіть знайдене пояснення крилатого вислову «ахіллесова п'ята» англійською мовою\n"
+        )
+        af_file = SimpleUploadedFile("Internet_lesson.txt", presentation_file_content.encode('utf-8'), content_type="text/plain")
+        AssignmentFile.objects.create(
+            assignment=assignment,
+            file=af_file,
+            original_name="Internet_lesson.txt"
+        )
+
+        # Робота Тимура: Завдання 1 (Жашків) та Завдання 3 (Achilles' heel), Завдання 2 (словник) відсутнє
+        student_text = (
+            "Жашків — місто в Уманському районі Черкаської області України, центр Жашківської міської громади.\n\n"
+            '"Achilles\' heel" is an idiom referring to a weak or vulnerable point in a person or any system.'
+        )
+        sub_file = SimpleUploadedFile("timur_work.txt", student_text.encode('utf-8'), content_type="text/plain")
+        submission = Submission.objects.create(
+            assignment=assignment,
+            first_name='Тимур',
+            last_name='Гончаренко',
+            class_group=self.class_group,
+            file=sub_file,
+            is_latest_attempt=True
+        )
+
+        # Моделюємо сиру галюцинацію ШІ на 11 балів із похвалою за всі 3 завдання
+        ai_reply = json.dumps({
+            "suggested_grade": "11",
+            "level": "Високий (10-12)",
+            "summary": "📌 Висновок: Учень виконав усі три практичні завдання, продемонструвавши вміння користуватися інтернет-ресурсами. Робота виконана якісно та відповідає вимогам уроку.",
+            "strengths": [
+                "Повне та правильне виконання всіх практичних завдань.",
+                "Вміння використовувати інтернет для пошуку та перекладу інформації."
+            ],
+            "weaknesses": [
+                "Відсутність формату «питання-відповідь» або чіткої нумерації завдань."
+            ],
+            "feedback_comment": "Тимур, ти чудово впорався з практичними завданнями! Ти самостійно знайшов інформацію про рідне місто, пояснив значення фразеологізму та правильно переклав його англійською мовою.",
+            "gr_results": [
+                {"code": "ГР 2", "name": "Створює інформаційні продукти", "grade": "11", "level": "Високий", "comment": "Інформаційний продукт створено"},
+                {"code": "ГР 3", "name": "Працює в цифровому середовищі", "grade": "11", "level": "Високий", "comment": "Орієнтується в сервісах"}
+            ]
+        }, ensure_ascii=False)
+        mock_call.return_value = (200, ai_reply, None, {})
+
+        result = evaluate_submission_with_gemini(submission)
+
+        # 1. Оцінка обмежена рівно 8 балами (Достатній рівень, НЕ 11 і НЕ 5 балів!)
+        self.assertEqual(result['suggested_grade'], '8')
+        self.assertIn('Достатній', result['level'])
+
+        # 2. Немає жодної згадки про "18 завдань"!
+        self.assertNotIn("18", result['summary'])
+        self.assertNotIn("18", ' '.join(result['weaknesses']))
+        self.assertNotIn("18", result['feedback_comment'])
+
+        # 3. Чітко зафіксовано виконання 2 із 3 завдань
+        self.assertIn("2 із 3", ' '.join(result['weaknesses']))
+        self.assertIn("2 із 3", result['feedback_comment'])
+
+        # 4. Пропущене Завдання 2 названо у зауваженнях
+        self.assertTrue(any('завдання 2' in w.lower() for w in result['weaknesses']))
+
+        # 5. Хибна похвала "виконав усі три завдання" усунена
+        self.assertNotIn("виконав усі три", result['summary'].lower())
+        self.assertFalse(any("виконання всіх практичних завдань" in s.lower() for s in result['strengths']))
+
+    def test_assignment_ai_understanding_endpoint(self):
+        """Тест endpoint'у розуміння завдання ШІ (/teacher/assignment/<id>/ai-understanding/)."""
+        self.client.login(username='teacher_qa', password='password123')
+
+        assignment = Assignment.objects.create(
+            teacher=self.teacher,
+            subject=self.subject,
+            title="Практична робота: Пошук у Вікіпедії",
+            description="З презентації Завдання виконати всі 3 звадання в одному документі, та здати"
+        )
+        assignment.classes.add(self.class_group)
+
+        # 1. GET-запит (генерує або повертає аналіз розуміння завдання)
+        url = reverse('assignment_ai_understanding', args=[assignment.id])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+
+        data = response.json()
+        self.assertEqual(data['status'], 'success')
+        self.assertIn('data', data)
+        report = data['data']
+        self.assertEqual(report['tasks_total_count'], 3)
+        self.assertIn('grading_breakdown', report)
+
+        # Перевірка оновлення моделі
+        assignment.refresh_from_db()
+        self.assertTrue(bool(assignment.ai_task_understanding))
+        self.assertIsNotNone(assignment.ai_task_understanding_updated_at)
+
+        # 2. POST-запит (примусове оновлення аналізу)
+        resp_post = self.client.post(url)
+        self.assertEqual(resp_post.status_code, 200)
+        self.assertEqual(resp_post.json()['status'], 'success')
+
+        # 3. Перевірка обмеження доступу для стороннього користувача
+        other_user = User.objects.create_user(username='other_teacher', password='password123')
+        self.client.login(username='other_teacher', password='password123')
+        resp_forbidden = self.client.get(url)
+        self.assertEqual(resp_forbidden.status_code, 403)
+
 
 
 

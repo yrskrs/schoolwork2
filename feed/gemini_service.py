@@ -2361,26 +2361,127 @@ def extract_json_from_text(text):
 # (ПІДСТАНОВКА ВІДПОВІДЕЙ У ФОРМАТІ «ПИТАННЯ-ВІДПОВІДЬ»)
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def extract_task_questions(text: str) -> list[str]:
+def detect_expected_task_count(text: str) -> int:
     """
-    Виявляє та видобуває формулювання запитань або пронумерованих завдань
+    Визначає очікувану кількість завдань, якщо вчитель явно зазначив її в інструкції:
+    (наприклад: «виконати всі 3 завдання», «виконати всі 3 звадання», «виконати 4 завдання»,
+    «3 практичні завдання», «виконати завдання 1-3», «виконати 3 вправи»).
+    """
+    if not text:
+        return 0
+    patterns = [
+        # «виконати всі 3 завдання», «зробити всі 3 звадання», «виконати 3 завдання»
+        r'(?:виконати|зробити|здати|опрацювати|написати)\s+(?:всі\s+|усі\s+)?(\d+)\s+(?:практичн\w*\s+)?(?:завдан|звадан|вправ|пункт)',
+        # «всі 3 завдання», «усі 3 практичні завдання»
+        r'(?:всі|усі)\s+(\d+)\s+(?:практичн\w*\s+)?(?:завдан|звадан|вправ|пункт)',
+        # «3 завдання з презентації», «3 практичні завдання»
+        r'(\d+)\s+(?:практичн\w+\s+)?(?:завдан|звадан|вправ|пункт)\w*\s+(?:з|із|із\s+презентації|у|в)',
+        # «завдання 1-3», «завдання 1–3», «вправи 1-4»
+        r'(?:завдання|вправи)\s*(?:№\s*)?1\s*[-–—]\s*(\d+)'
+    ]
+    for pat in patterns:
+        m = re.search(pat, text, re.IGNORECASE)
+        if m:
+            try:
+                cnt = int(m.group(1))
+                if 1 <= cnt <= 30:
+                    return cnt
+            except (ValueError, TypeError):
+                pass
+    return 0
+
+
+def extract_task_questions(text: str, explicit_count: int = 0) -> list[str]:
+    """
+    Виявляє та видобуває формулювання запитань або практичних завдань
     із тексту завдання вчителя (опису або матеріалів).
+    Розумно розрізняє теоретичні нумеровані списки на слайдах лекції
+    та реальні практичні завдання (наприклад, Завдання 1..3 на фінальних слайдах).
     """
     if not text or not text.strip():
         return []
+
+    if explicit_count <= 0:
+        explicit_count = detect_expected_task_count(text)
+
     lines = [l.strip() for l in text.strip().splitlines() if l.strip()]
-    num_pattern = re.compile(
-        r'^(?:[•\-\*]?\s*(?:(?:\d+|[IVXLCDM]+)[\.\)\–\—\-]|(?:питання|завдання|вправа|відповідь|№)\s*\d+[\.\:\)\–\—\-]?))\s*(.*)',
+
+    # Патерн явної назви завдання («Завдання 1», «Практичне завдання 2», «Вправа 3»)
+    task_named_pattern = re.compile(
+        r'^(?:[•\-\*]?\s*(?:(?:практичн[еа]\s+)?(?:завдання|вправа|пункт)\s*(\d+)[\.\:\)\–\—\-]?))\s*(.*)',
         re.IGNORECASE
     )
+
     slide_header_pattern = re.compile(
         r'^(?:\[?слайд\s*\d+\]?|практичн[еа]\s+завдання|практична\s+робота|домашнє\s+завдання|самостійна\s+робота|інструкційна\s+картка|тема\s*:|мета\s*:|обладнання\s*:|хід\s+роботи\s*:|[-=_]{3,})',
         re.IGNORECASE
     )
+
+    practical_section_pattern = re.compile(
+        r'^(?:\[?слайд\s*\d+\]?[\s\:\-]*)?(?:практичн[еа]\s+завдання|практична\s+робота|домашнє\s+завдання|завдання\s+до\s+уроку|завдання\s+для\s+закріплення|самостійна\s+робота)',
+        re.IGNORECASE
+    )
+
+    # 1. Спочатку перевіряємо, чи є в тексті чітко названі завдання («Завдання 1», «Завдання 2»...)
+    explicit_named_tasks = []
+    current_named = []
+    for line in lines:
+        if slide_header_pattern.match(line):
+            if current_named:
+                explicit_named_tasks.append(' '.join(current_named).strip())
+                current_named = []
+            continue
+
+        m = task_named_pattern.match(line)
+        if m:
+            if current_named:
+                explicit_named_tasks.append(' '.join(current_named).strip())
+                current_named = []
+            current_named.append(line)
+        elif current_named and not line.startswith(('http://', 'https://')):
+            if len(current_named) < 4 and len(line) < 250:
+                current_named.append(line)
+            else:
+                explicit_named_tasks.append(' '.join(current_named).strip())
+                current_named = []
+
+    if current_named:
+        explicit_named_tasks.append(' '.join(current_named).strip())
+
+    cleaned_named = []
+    for q in explicit_named_tasks:
+        q_strip = q.strip()
+        if len(q_strip) >= 5 and q_strip not in cleaned_named:
+            cleaned_named.append(q_strip)
+
+    # Якщо знайдено 2+ явно названих завдань — це саме практичні завдання!
+    # Вони мають безумовний пріоритет над теоретичними списками на слайдах.
+    if len(cleaned_named) >= 2:
+        if explicit_count > 0:
+            return cleaned_named[:explicit_count]
+        return cleaned_named[:30]
+
+    # 2. Якщо явно названих завдань немає, шукаємо розділ «Практичне завдання» / «Домашнє завдання»
+    # і витягуємо завдання саме з цього розділу
+    practical_lines = []
+    in_practical_section = False
+    for line in lines:
+        if practical_section_pattern.match(line):
+            in_practical_section = True
+            continue
+        if in_practical_section:
+            practical_lines.append(line)
+
+    target_lines = practical_lines if practical_lines else lines
+
+    num_pattern = re.compile(
+        r'^(?:[•\-\*]?\s*(?:(?:\d+|[IVXLCDM]+)[\.\)\–\—\-]|(?:питання|завдання|вправа|відповідь|№)\s*\d+[\.\:\)\–\—\-]?))\s*(.*)',
+        re.IGNORECASE
+    )
+
     questions = []
     current_q = []
-    for line in lines:
-        # Ігноруємо службові заголовки слайдів або робіт, щоб вони не приєднувалися до тексту запитань
+    for line in target_lines:
         if slide_header_pattern.match(line):
             if current_q:
                 questions.append(' '.join(current_q).strip())
@@ -2413,28 +2514,17 @@ def extract_task_questions(text: str) -> list[str]:
             rq_clean = rq.strip(' \t\n\r-•*–')
             if len(rq_clean) > 8 and rq_clean not in questions:
                 questions.append(rq_clean)
+
     cleaned = []
     for q in questions:
         q_strip = q.strip()
         if len(q_strip) >= 5 and q_strip not in cleaned:
             cleaned.append(q_strip)
+
+    if explicit_count > 0 and len(cleaned) >= explicit_count:
+        return cleaned[:explicit_count]
+
     return cleaned[:30]
-
-
-def detect_expected_task_count(text: str) -> int:
-    """
-    Визначає очікувану кількість завдань, якщо вчитель явно зазначив її в інструкції:
-    (наприклад: «виконати всі 3 завдання», «виконати всі 3 звадання», «виконати 4 завдання»).
-    """
-    if not text:
-        return 0
-    m = re.search(r'(?:виконати|зробити|здати|всі|усі)\s+(?:всі\s+|усі\s+)?(\d+)\s+(?:завдан|звадан|вправ|пункт)', text, re.IGNORECASE)
-    if m:
-        try:
-            return int(m.group(1))
-        except (ValueError, TypeError):
-            pass
-    return 0
 
 
 
@@ -2747,7 +2837,21 @@ def apply_multi_task_evaluation_guardrail(
     ai_eval_list = result_json.get('tasks_evaluated') or []
     ai_eval_len = len(ai_eval_list) if isinstance(ai_eval_list, list) else 0
 
-    total_tasks = max(qs_count, explicit_count, ai_total, ai_eval_len)
+    if explicit_count > 0:
+        total_tasks = explicit_count
+    else:
+        named_tasks = [q for q in task_questions if re.search(r'^(?:практичне\s+)?(?:завдання|вправа)\s*\d+', q, re.IGNORECASE)]
+        if len(named_tasks) >= 2:
+            total_tasks = len(named_tasks)
+        elif 0 < ai_total <= 12:
+            total_tasks = ai_total
+        elif 0 < ai_eval_len <= 12:
+            total_tasks = ai_eval_len
+        elif 0 < qs_count <= 12:
+            total_tasks = qs_count
+        else:
+            total_tasks = min(qs_count, 10) if qs_count else 0
+
     if total_tasks < 2:
         return suggested_grade, level, clean_gr_results, numeric_gr_grades, avg_gr_grade, summary, strengths, weaknesses, feedback_comment
 
@@ -2798,13 +2902,13 @@ def apply_multi_task_evaluation_guardrail(
 
     # Виявлення специфічного випадку подвійного зарахування (Словник українською + Переклад англійською):
     task_qs_text = " ".join(task_questions).lower()
-    has_dict_task = any(kw in task_qs_text for kw in ['словник', 'словниках', 'тлумачення', 'пояснення крилатого'])
+    has_dict_task = any(kw in task_qs_text for kw in ['словник', 'словниках', 'тлумачення', 'пояснення крилатого', 'крилатого вислову'])
     has_trans_task = any(kw in task_qs_text for kw in ['переклад', 'перекладіть', 'онлайн-перекладач', 'англійською'])
     has_wiki_task = any(kw in task_qs_text for kw in ['вікіпеді', 'рідне місто', 'рідне село'])
 
     double_count_task2_missing = False
-    if total_tasks == 3 and has_dict_task and has_trans_task and has_wiki_task:
-        has_cyrillic_idiom = bool(re.search(r'[А-Яа-яЇїІіЄєҐґ].*(?:ахіллес|п[\'’]ят|вразлив|слабк)', raw_text, re.IGNORECASE))
+    if total_tasks == 3 and (has_dict_task or has_trans_task):
+        has_cyrillic_idiom = bool(re.search(r'[А-Яа-яЇїІіЄєҐґ].*(?:ахіллес|п[\'’]ят|вразлив|слабк|міф)', raw_text, re.IGNORECASE))
         has_english_idiom = bool(re.search(r'["\']?achilles[\'’]?\s*heel', raw_text, re.IGNORECASE))
         if has_english_idiom and not has_cyrillic_idiom:
             double_count_task2_missing = True
@@ -2879,12 +2983,15 @@ def apply_multi_task_evaluation_guardrail(
 
     # 9. Виправлення галюцинацій у summary, strengths, weaknesses, feedback_comment
     false_all_done_patterns = [
-        r'викона(?:в|ла|но)\s+(?:всі|усі)\s*(?:\d+)?\s*завдання',
+        r'викона(?:в|ла|но)\s+(?:всі|усі)\s*(?:\d+|три|два|чотири|п[\'’]ять)?\s*(?:практичн\w+)?\s*завдання',
         r'робота\s+містить\s+правильні\s+відповіді\s+на\s+завдання\s+1,\s*2\s+та\s+3',
         r'відповіді\s+на\s+завдання\s+1,\s*2\s+(?:та|і)\s+3',
         r'виконано\s+завдання\s+1,\s*2\s+(?:та|і)\s+3',
-        r'усі\s+3\s+завдання\s+виконано',
-        r'всі\s+3\s+завдання\s+виконано'
+        r'усі\s+(?:\d+|три)\s+завдання\s+виконано',
+        r'всі\s+(?:\d+|три)\s+завдання\s+виконано',
+        r'завдання\s+виконано\s+у\s+повному\s+обсязі',
+        r'робота\s+виконана\s+у\s+повному\s+обсязі',
+        r'відповідає\s+вимогам\s+уроку\s*у\s*повному\s*обсязі'
     ]
 
     missing_desc = ''
@@ -2905,43 +3012,63 @@ def apply_multi_task_evaluation_guardrail(
                 flags=re.IGNORECASE
             )
 
-    if any(kw in summary.lower() for kw in ['завдання 1, 2 та 3', 'завдання 1, 2 і 3', 'всі 3 завдання']):
+    if any(kw in summary.lower() for kw in ['завдання 1, 2 та 3', 'завдання 1, 2 і 3', 'всі 3 завдання', 'усі три практичні завдання', 'виконав усі три']):
         summary = (
             f'Учень частково виконав практичні завдання: опрацьовано {completed_tasks} із {total_tasks} завдань. '
             f'{missing_desc}.'
         )
 
-    if double_count_task2_missing or (2 in detected_missing_nums):
-        strengths = [
-            s for s in strengths
-            if not any(kw in s.lower() for kw in [
+    # Очищення сильних сторін від помилкових похвал за "повне виконання всіх завдань"
+    clean_strengths = []
+    has_filtered_all_done = False
+    for s in strengths:
+        s_lower = str(s).lower()
+        if any(kw in s_lower for kw in [
+            'повне та правильне виконання всіх', 'виконання всіх практичних завдань',
+            'виконання усіх практичних завдань', 'виконання всіх завдань', 'виконано всі завдання',
+            'повне виконання всіх'
+        ]):
+            has_filtered_all_done = True
+            continue
+        if double_count_task2_missing or (2 in detected_missing_nums):
+            if any(kw in s_lower for kw in [
                 'пояснення крилатого вислову в онлайн-словнику',
                 'знаходження пояснення крилатого вислову',
                 'пошук пояснення крилатого вислову'
-            ])
-        ]
+            ]):
+                continue
+        clean_strengths.append(s)
+
+    if has_filtered_all_done:
+        clean_strengths.insert(0, f'Якісне опрацювання виконаних практичних завдань ({completed_tasks} із {total_tasks}).')
+    strengths = clean_strengths
 
     missing_w_entry = f'{missing_desc} (роботу виконано частково: {completed_tasks} із {total_tasks} завдань).'
     if not any(kw in ' '.join(str(w) for w in weaknesses).lower() for kw in ['завдання 2', 'пропущено', 'не виконано']):
         weaknesses.insert(0, missing_w_entry)
 
-    if 'пояснила значення вислову' in feedback_comment.lower():
-        feedback_comment = re.sub(
-            r'пояснила значення вислову(?:,)?\s*',
-            '',
-            feedback_comment,
-            flags=re.IGNORECASE
-        )
-        feedback_comment = re.sub(r',\s*та\s+', ' та ', feedback_comment)
-        feedback_comment = re.sub(r'\s{2,}', ' ', feedback_comment)
+    # Очищення відгуку від похвал за пропущені завдання (як чоловічого, так і жіночого роду)
+    feedback_comment = re.sub(
+        r'(?:пояснив|пояснила|пояснено)\s+значення\s+(?:вислову|фразеологізму|крилатого\s+вислову)(?:,)?\s*',
+        '',
+        feedback_comment,
+        flags=re.IGNORECASE
+    )
+    feedback_comment = re.sub(r',\s*та\s+', ' та ', feedback_comment)
+    feedback_comment = re.sub(r'\s{2,}', ' ', feedback_comment)
 
-    if 'чудово впоралася з практичними завданнями' in feedback_comment.lower():
-        feedback_comment = re.sub(
-            r'чудово впоралася з практичними завданнями',
-            f'добре впоралася з {completed_tasks} із {total_tasks} практичних завдань',
-            feedback_comment,
-            flags=re.IGNORECASE
-        )
+    feedback_comment = re.sub(
+        r'чудово\s+впора(?:вся|лася)\s+з\s+практичними\s+завданнями',
+        f'добре впоралися з {completed_tasks} із {total_tasks} практичних завдань',
+        feedback_comment,
+        flags=re.IGNORECASE
+    )
+    feedback_comment = re.sub(
+        r'викона(?:в|ла|но)\s+(?:всі|усі)\s*(?:\d+|три)?\s*(?:практичн\w+)?\s*завдання',
+        f'виконано {completed_tasks} із {total_tasks} завдань',
+        feedback_comment,
+        flags=re.IGNORECASE
+    )
 
     if not any(kw in feedback_comment.lower() for kw in ['завдання 2', 'пропущено', f'{completed_tasks} із {total_tasks}']):
         feedback_comment = (
@@ -4514,5 +4641,236 @@ def generate_criteria_with_gemini(teacher_notes, assignment_title='', assignment
     return {
         'status': 'error',
         'message': f"Не вдалося згенерувати критерії через тимчасову недоступність моделі ШІ{detail}. Спробуйте ще раз або перевірте налаштування ШІ."
+    }
+
+
+def analyze_assignment_task_understanding(assignment, force_refresh=False) -> dict:
+    """
+    Аналізує навчальне завдання за допомогою ШІ та формує звіт для вчителя:
+    - Тема, мета уроку та змістовий контекст
+    - Чіткий перелік та точна кількість виявлених обов'язкових практичних завдань
+      (зокрема на фінальних слайдах презентацій чи сторінках PDF)
+    - Очікуваний результат та формат здачі від учнів
+    - Шкала та правила оцінювання (НУШ: 100% = 10-12 б., 2 з 3 = 7-8 б., 1 з 3 = 4-5 б.,
+      заборона зарахування однієї фрази за два різні завдання)
+    - Педагогічні зауваження та поради вчителю
+    """
+    if not force_refresh and assignment.ai_task_understanding:
+        try:
+            cached_data = json.loads(assignment.ai_task_understanding)
+            if isinstance(cached_data, dict):
+                return {
+                    'status': 'success',
+                    'data': cached_data,
+                    'cached': True,
+                    'updated_at': assignment.ai_task_understanding_updated_at.strftime('%d.%m.%Y о %H:%M') if assignment.ai_task_understanding_updated_at else None
+                }
+        except Exception:
+            pass
+
+    assignment_title = assignment.title or ""
+    assignment_desc = assignment.description or ""
+    subject_name = assignment.subject.name if assignment.subject else "Навчальний предмет"
+    classes_str = ", ".join(c.name for c in assignment.classes.all()) or "Всі класи"
+    custom_criteria = assignment.custom_criteria or ""
+
+    files_content_parts = []
+    inline_media = []
+
+    if assignment.files.exists():
+        for af in assignment.files.all():
+            if af.file and os.path.exists(af.file.path):
+                af_name = af.original_name or os.path.basename(af.file.name)
+                af_ext = af.get_extension()
+                af_text = ""
+                if af_ext in ['.pptx', '.ppt']:
+                    try:
+                        af_text = extract_text_from_powerpoint(af.file.path)
+                    except Exception:
+                        pass
+                elif af_ext == '.odp':
+                    try:
+                        af_text = extract_text_from_opendocument(af.file.path)
+                    except Exception:
+                        pass
+
+                if not af_text:
+                    try:
+                        af_text = get_normalized_file_content(af.file.path, af.file.name)
+                    except Exception:
+                        pass
+
+                if af_text and af_text.strip():
+                    files_content_parts.append(f"• Матеріал вчителя «{af_name}» ({af_ext}):\n{af_text[:16000]}")
+
+                if af_ext in ['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif']:
+                    try:
+                        b_data, mime_t = _optimize_image_for_ai(af.file.path)
+                        if b_data:
+                            inline_media.append({
+                                "mime_type": mime_t,
+                                "data": base64.b64encode(b_data).decode('utf-8')
+                            })
+                    except Exception:
+                        pass
+                elif af_ext == '.pdf':
+                    try:
+                        pdf_size = os.path.getsize(af.file.path)
+                        if pdf_size <= 6 * 1024 * 1024:
+                            with open(af.file.path, 'rb') as f_pdf:
+                                inline_media.append({
+                                    "mime_type": "application/pdf",
+                                    "data": base64.b64encode(f_pdf.read()).decode('utf-8')
+                                })
+                    except Exception:
+                        pass
+
+    combined_text = assignment_desc + "\n" + "\n".join(files_content_parts)
+    explicit_count = detect_expected_task_count(assignment_desc)
+    extracted_qs = extract_task_questions(combined_text, explicit_count=explicit_count)
+
+    prompt_lines = [
+        f"ПРЕДМЕТ: {subject_name}",
+        f"КЛАС: {classes_str}",
+        f"ТЕМА ЗАВДАННЯ: {assignment_title}",
+        f"\nОПИС / ВКАЗІВКИ ВЧИТЕЛЯ:\n{assignment_desc}"
+    ]
+    if custom_criteria:
+        prompt_lines.append(f"\nКРИТЕРІЇ ВЧИТЕЛЯ:\n{custom_criteria}")
+    if files_content_parts:
+        prompt_lines.append("\nПРИКРІПЛЕНІ НАВЧАЛЬНІ МАТЕРІАЛИ (ПРЕЗЕНТАЦІЇ, PDF, ДОКУМЕНТИ):")
+        prompt_lines.extend(files_content_parts)
+
+    if explicit_count > 0:
+        prompt_lines.append(f"\n⚠️ ВКАЗІВКА ВЧИТЕЛЯ ЩОДО ОБСЯГУ: Вчитель чітко зазначив обов'язкову кількість завдань: {explicit_count}.")
+
+    prompt_lines.append(
+        "\nЗАВДАННЯ ДЛЯ ТЕБЕ (ЕКСПЕРТНИЙ АНАЛІЗ ЗАВДАННЯ):\n"
+        "1. Уважно прочитай опис та проаналізуй усі прикріплені матеріали (слайди презентацій чи сторінки PDF).\n"
+        "2. Відрізняй теоретичні слайди (поняття, вступні тези, списки означень) від РЕАЛЬНИХ практичних завдань для учнів (наприклад, Завдання 1..3 на фінальних слайдах).\n"
+        "3. Визнач кількість обов'язкових завдань та деталізуй кожне з них.\n"
+        "4. Опиши вимоги до зданої роботи та шкалу оцінювання за критеріями НУШ (100% обсягу = 10-12 б., ~66% = 7-8 б., ~33% = 4-5 б.).\n"
+        "5. Зазнач суворе правило: одна фраза не може зараховуватися одночасно за два різні завдання (наприклад, тлумачення в українському словнику та англійський переклад — це два окремі пункти).\n"
+        "6. Поверни виключно валідний JSON згідно зі схемою."
+    )
+
+    system_instruction = (
+        "Ти — провідний експерт-методист та педагогічний ШІ шкільної платформи (НУШ).\n"
+        "Твоя мета — проаналізувати опубліковане вчителем завдання та пояснити вчителю, ЯК ШІ РОЗУМІЄ ЦЕ ЗАВДАННЯ:\n"
+        "- чітко вказати тему, мету уроку;\n"
+        "- скільки конкретних завдань виявлено (якщо вчитель вказав «виконати всі 3 завдання», їх РІВНО 3, а не 18 за кількістю слайдів чи пунктів лекції);\n"
+        "- перелічити кожне виявлене завдання з джерелом (наприклад, «Слайд 18 презентації»);\n"
+        "- роз'яснити вимоги до оформлення та шкалу оцінювання (заборона подвійного зарахування однієї фрази за два завдання);\n"
+        "- надати корисні поради вчителю.\n"
+        "Обов'язково повертай JSON за вказаною схемою:\n"
+        "{\n"
+        '  "topic_and_goal": "Короткий опис теми та мети роботи",\n'
+        '  "tasks_source_info": "Звідки витягнуто завдання (наприклад: Слайд 18 презентації)",\n'
+        '  "tasks_total_count": 3,\n'
+        '  "is_choice_based": false,\n'
+        '  "tasks": [\n'
+        '    {\n'
+        '      "num": 1,\n'
+        '      "title": "Назва завдання",\n'
+        '      "source": "Слайд 18",\n'
+        '      "expected_actions": "Що учень має зробити",\n'
+        '      "expected_submission": "Що має бути у відповіді"\n'
+        '    }\n'
+        '  ],\n'
+        '  "submission_format_expected": "Вимоги до формату здачі",\n'
+        '  "grading_breakdown": {\n'
+        '    "full_completion": "10-12 б. (Високий рівень) — ...",\n'
+        '    "partial_two_tasks": "7-8 б. (Достатній рівень) — ...",\n'
+        '    "partial_one_task": "4-5 б. (Середній рівень) — ...",\n'
+        '    "rules": ["Правило 1", "Правило 2"]\n'
+        '  },\n'
+        '  "teacher_recommendations": ["Порада 1"]\n'
+        "}"
+    )
+
+    settings = get_ai_settings()
+    act_provider, act_key, act_model, act_url, is_backup_active = settings.get_active_config()
+
+    result_data = None
+    if act_key or act_provider == 'custom':
+        try:
+            status_code, raw_text, err_msg, raw_data = call_ai_api(
+                prompt_text="\n".join(prompt_lines),
+                system_prompt=system_instruction,
+                inline_media=inline_media,
+                provider=act_provider,
+                api_key=act_key,
+                model_name=act_model,
+                custom_url=act_url,
+                temperature=0.2,
+                max_output_tokens=2500,
+                timeout=40,
+                json_mode=True
+            )
+            if status_code == 200 and raw_text:
+                parsed = extract_json_from_text(raw_text)
+                if isinstance(parsed, dict) and 'tasks_total_count' in parsed:
+                    result_data = parsed
+        except Exception:
+            pass
+
+    # Якщо ШІ API недоступне або повернуло некоректну відповідь — генеруємо якісний структурний звіт на основі видобутих даних
+    if not result_data or not isinstance(result_data, dict):
+        total_cnt = explicit_count if explicit_count > 0 else (len(extracted_qs) if extracted_qs else 1)
+        tasks_list = []
+        if extracted_qs:
+            for idx, q in enumerate(extracted_qs, 1):
+                clean_q = re.sub(r'^(?:[•\-\*]?\s*(?:(?:\d+|[IVXLCDM]+)[\.\)\–\—\-]|(?:питання|завдання|вправа|відповідь|№)\s*\d+[\.\:\)\–\—\-]?))\s*', '', q).strip()
+                tasks_list.append({
+                    "num": idx,
+                    "title": f"Завдання {idx}",
+                    "source": "Матеріали уроку / презентація",
+                    "expected_actions": clean_q or q,
+                    "expected_submission": "Відповідь або виконаний файл відповідно до умови"
+                })
+        else:
+            tasks_list.append({
+                "num": 1,
+                "title": assignment_title or "Навчальне завдання",
+                "source": "Опис завдання",
+                "expected_actions": assignment_desc[:300] if assignment_desc else "Виконати завдання згідно з інструкцією",
+                "expected_submission": "Здана робота у відповідному форматі"
+            })
+
+        result_data = {
+            "topic_and_goal": f"{assignment_title}. {subject_name}, {classes_str}.",
+            "tasks_source_info": "Умова та прикріплені матеріали завдання",
+            "tasks_total_count": total_cnt,
+            "is_choice_based": False,
+            "tasks": tasks_list,
+            "submission_format_expected": "Один спільний документ або файл відповідно до вказівок вчителя",
+            "grading_breakdown": {
+                "full_completion": f"10-12 б. (Високий рівень) — якісне виконання всіх {total_cnt} завдань у повному обсязі.",
+                "partial_two_tasks": f"7-8 б. (Достатній рівень) — часткове виконання (близько 66% завдань).",
+                "partial_one_task": f"4-5 б. (Середній рівень) — виконання початкового обсягу (близько 33% завдань).",
+                "rules": [
+                    "Кожне завдання вимагає окремої відповіді. Одне речення не зараховується за два завдання.",
+                    "При неповному обсязі оцінка суворо обмежується відповідною стелею НУШ."
+                ]
+            },
+            "teacher_recommendations": [
+                "Умова містить конкретні завдання. Нагадуйте учням нумерувати свої відповіді у форматі «питання-відповідь»."
+            ]
+        }
+
+    # Зберігаємо результат в базі даних
+    try:
+        from django.utils import timezone
+        assignment.ai_task_understanding = json.dumps(result_data, ensure_ascii=False, indent=2)
+        assignment.ai_task_understanding_updated_at = timezone.now()
+        assignment.save(update_fields=['ai_task_understanding', 'ai_task_understanding_updated_at'])
+    except Exception:
+        pass
+
+    return {
+        'status': 'success',
+        'data': result_data,
+        'cached': False,
+        'updated_at': assignment.ai_task_understanding_updated_at.strftime('%d.%m.%Y о %H:%M') if assignment.ai_task_understanding_updated_at else None
     }
 

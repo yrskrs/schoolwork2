@@ -3839,6 +3839,34 @@ def delete_comment(request, comment_id):
 # ПЕРЕГЛЯД ЗДАЧ ПО ЗАВДАННЮ ТА ЗАГАЛЬНИЙ ДАШБОРД
 # ═══════════════════════════════════════════════════════════════════════════════
 
+@login_required
+def assignment_ai_understanding(request, pk):
+    """
+    AJAX endpoint для перегляду та генерації звіту розуміння завдання штучним інтелектом (для вчителя).
+    Вчитель може перевірити, скільки завдань виявив ШІ (зокрема зі слайдів), які вимоги очікуються та як ШІ планує оцінювати роботи учнів.
+    """
+    assignment = get_object_or_404(
+        Assignment.objects.prefetch_related('classes', 'files'),
+        pk=pk
+    )
+
+    is_owner = hasattr(request.user, 'teacher_profile') and assignment.teacher == request.user.teacher_profile
+    if not (request.user.is_superuser or is_owner):
+        return JsonResponse({'status': 'error', 'message': 'Доступ заборонено. Переглядати аналіз ШІ може тільки автор завдання або адміністратор.'}, status=403)
+
+    force_refresh = (request.method == 'POST') or (request.GET.get('refresh') in ['1', 'true'])
+
+    try:
+        from .gemini_service import analyze_assignment_task_understanding
+        result = analyze_assignment_task_understanding(assignment, force_refresh=force_refresh)
+        return JsonResponse(result)
+    except Exception as e:
+        return JsonResponse({
+            'status': 'error',
+            'message': f'Помилка під час аналізу завдання ШІ: {str(e)}'
+        }, status=500)
+
+
 @teacher_required
 def assignment_submissions(request, pk):
     """

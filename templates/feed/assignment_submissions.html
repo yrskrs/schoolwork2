@@ -60,6 +60,10 @@
                         📖 Без здачі робіт
                     </span>
                     {% endif %}
+                    <button type="button" class="btn btn-outline-primary btn-sm" onclick="openAiUnderstandingModal({{ assignment.pk }})" style="display:inline-flex;align-items:center;gap:6px;font-weight:750;border:1.5px solid var(--color-primary);color:var(--color-primary);background:rgba(var(--color-primary-rgb, 79, 70, 229), 0.06);" title="Перевірити, як штучний інтелект сприймає завдання та презентації">
+                        <span>🤖</span>
+                        <span>Розуміння ШІ</span>
+                    </button>
                     <a href="{% url 'assignment_edit' assignment.pk %}" class="btn btn-secondary btn-sm">
                         ✏️ Редагувати
                     </a>
@@ -558,4 +562,5 @@ function addComment(subId) {
     .catch(console.error);
 }
 </script>
+{% include 'feed/components/ai_understanding_modal.html' %}
 {% endblock %}
