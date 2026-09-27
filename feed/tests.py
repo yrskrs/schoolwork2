@@ -5243,3 +5243,188 @@ class MultiProviderAndFailoverAITests(TestCase):
         self.assertIsNotNone(settings.last_failover_at)
         self.assertIn('Deepseek', settings.last_failover_reason)
 
+
+class QuestionAnswerMappingTests(TestCase):
+    """
+    Тести для розпізнавання запитань вчителя, автоматичного зіставлення
+    та підстановки відповідей учня (навіть якщо учень не переписав самі запитання),
+    захисту від хибного висновку «жодної відповіді не дано», та рекомендацій
+    щодо оформлення у форматі «питання-відповідь».
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='teacher_qa', password='password123')
+        self.teacher = Teacher.objects.create(user=self.user, full_name='Олена Сергіївна')
+        self.class_group = ClassGroup.objects.create(name='9-Б')
+        self.subject = Subject.objects.create(name='Біологія')
+        self.assignment = Assignment.objects.create(
+            teacher=self.teacher,
+            subject=self.subject,
+            title='Біосфера та її межі',
+            description=(
+                "Опрацювати параграф 18. Дати письмові відповіді на запитання:\n"
+                "1. Що таке біосфера та хто є основоположником вчення про біосферу?\n"
+                "2. Які межі біосфери в атмосфері, гідросфері та літосфері?\n"
+                "3. Яке значення має озоновий екран для життя на Землі?"
+            ),
+            status=Assignment.STATUS_PUBLISHED
+        )
+        self.assignment.classes.add(self.class_group)
+
+    def test_extract_task_questions(self):
+        from feed.gemini_service import extract_task_questions
+
+        text = (
+            "Опрацювати матеріал.\n"
+            "1. Що таке фотосинтез?\n"
+            "2) Які умови необхідні для процесу?\n"
+            "№3. Які кінцеві продукти утворюються?\n"
+        )
+        questions = extract_task_questions(text)
+        self.assertEqual(len(questions), 3)
+        self.assertIn("Що таке фотосинтез?", questions[0])
+        self.assertIn("Які умови необхідні", questions[1])
+        self.assertIn("Які кінцеві продукти", questions[2])
+
+        # Тест запитань без нумерації, але зі знаком '?'
+        unnum_text = "Яка температура кипіння води? Чому лід плаває на поверхні?"
+        questions_unnum = extract_task_questions(unnum_text)
+        self.assertEqual(len(questions_unnum), 2)
+        self.assertIn("Яка температура кипіння води?", questions_unnum)
+        self.assertIn("Чому лід плаває на поверхні?", questions_unnum)
+
+    def test_extract_student_answers(self):
+        from feed.gemini_service import extract_student_answers
+
+        student_text = (
+            "1. Біосфера - це оболонка планети, заселена живими організмами. В.І. Вернадський.\n"
+            "2) Верхня межа до 20-25 км, нижня межа в літосфері до 3-4 км.\n"
+        )
+        answers = extract_student_answers(student_text)
+        self.assertIn(1, answers)
+        self.assertIn(2, answers)
+        self.assertNotIn(3, answers)
+        self.assertIn("В.І. Вернадський", answers[1])
+        self.assertIn("20-25 км", answers[2])
+
+    def test_check_student_omitted_questions(self):
+        from feed.gemini_service import check_student_omitted_questions
+
+        task_qs = [
+            "1. Що таке біосфера та хто є основоположником вчення про біосферу?",
+            "2. Які межі біосфери в атмосфері, гідросфері та літосфері?",
+            "3. Яке значення має озоновий екран для життя на Землі?"
+        ]
+
+        # Учень здав лише відповіді
+        student_answers_only = (
+            "1. Оболонка Землі, заселена живими організмами. Вернадський.\n"
+            "2. Охоплює нижню частину атмосфери та гідросферу."
+        )
+        self.assertTrue(check_student_omitted_questions(task_qs, student_answers_only))
+
+        # Учень скопіював запитання вчителя разом з відповідями
+        student_with_qs = (
+            "1. Що таке біосфера та хто є основоположником вчення про біосферу?\n"
+            "Відповідь: Оболонка Землі, Вернадський.\n"
+            "2. Які межі біосфери в атмосфері, гідросфері та літосфері?\n"
+            "Відповідь: Нижня частина атмосфери."
+        )
+        self.assertFalse(check_student_omitted_questions(task_qs, student_with_qs))
+
+    def test_build_question_answer_mapping(self):
+        from feed.gemini_service import build_question_answer_mapping
+
+        task_qs = [
+            "1. Що таке біосфера?",
+            "2. Які межі біосфери?",
+            "3. Чим важливий озоновий шар?"
+        ]
+        student_text = (
+            "1. Оболонка планети.\n"
+            "2. Атмосфера, гідросфера, літосфера."
+        )
+
+        mapping, omitted, answered_count, total_qs = build_question_answer_mapping(task_qs, student_text)
+        self.assertTrue(omitted)
+        self.assertEqual(answered_count, 2)
+        self.assertEqual(total_qs, 3)
+        self.assertIn("СИСТЕМНЕ ЗІСТАВЛЕННЯ", mapping)
+        self.assertIn("ПІДСТАВЛЕНА ВІДПОВІДЬ УЧНЯ №1: «Оболонка планети.»", mapping)
+        self.assertIn("ПІДСТАВЛЕНА ВІДПОВІДЬ УЧНЯ №2: «Атмосфера, гідросфера, літосфера.»", mapping)
+        self.assertIn("ВІДПОВІДЬ УЧНЯ: [Відповідь не виявлена за номером або учень пропустив це запитання]", mapping)
+        self.assertIn("СУВОРО ТА БЕЗАПЕЛЯЦІЙНО ЗАБОРОНЕНО писати, що «жодної відповіді не дано»", mapping)
+        self.assertIn("формат «питання-відповідь»", mapping)
+
+    @patch('feed.gemini_service.call_ai_api')
+    def test_evaluate_submission_maps_answers_and_prevents_false_no_answers_claim(self, mock_call):
+        from feed.gemini_service import evaluate_submission_with_gemini
+
+        settings = AISettings.get_solo()
+        settings.is_enabled = True
+        settings.api_key = 'fake-api-key'
+        settings.ai_provider = 'gemini'
+        settings.model_name = 'gemini-2.5-flash'
+        settings.save()
+
+        # Учень здав відповіді на запитання 1 та 2 (без тексту самих запитань)
+        student_answer = (
+            "1. Біосфера — оболонка Землі, заселена живими істотами. Вчення створив Володимир Вернадський.\n"
+            "2. В атмосфері сягає до 20 км, гідросфера повністю, літосфера — до 3 км."
+        )
+        submission = Submission.objects.create(
+            assignment=self.assignment,
+            class_group=self.class_group,
+            last_name='Коваленко',
+            first_name='Андрій',
+            comment_student=student_answer
+        )
+
+        # Моделюємо ситуацію, коли ШІ помилково стверджує «жодної відповіді не дано»
+        # та встановлює статус 'Доопрацювати'
+        mock_raw_json = json.dumps({
+            "suggested_grade": "Доопрацювати",
+            "level": "Початковий",
+            "unclear_task": True,
+            "format_warning": "Не зрозуміло, яке саме завдання виконане.",
+            "summary": "Жодної відповіді не дано на поставлені запитання вчителя.",
+            "strengths": ["Старанність при здачі"],
+            "weaknesses": [
+                "Не зрозуміло, яке саме завдання виконане",
+                "Жодної відповіді не дано"
+            ],
+            "feedback_comment": "У роботі не надано жодної відповіді на запитання вчителя. Здайте роботу повторно.",
+            "status": "success"
+        })
+        mock_call.return_value = (200, mock_raw_json, None, {})
+
+        result = evaluate_submission_with_gemini(submission)
+
+        # 1. Перевіряємо, що в промт до ШІ було передано системне зіставлення запитань та відповідей
+        full_prompt = mock_call.call_args.kwargs.get('prompt_text', '')
+        self.assertIn("СИСТЕМНЕ ЗІСТАВЛЕННЯ", full_prompt)
+        self.assertIn("ПІДСТАВЛЕНА ВІДПОВІДЬ УЧНЯ №1", full_prompt)
+        self.assertIn("ПІДСТАВЛЕНА ВІДПОВІДЬ УЧНЯ №2", full_prompt)
+        self.assertIn("СУВОРО ТА БЕЗАПЕЛЯЦІЙНО ЗАБОРОНЕНО писати, що «жодної відповіді не дано»", full_prompt)
+
+        # 2. Перевіряємо пост-обробку:
+        # - unclear_task знято (стало False)
+        # - оцінка перерахована (не 'Доопрацювати')
+        # - хибне твердження «жодної відповіді не дано» виправлено
+        # - додано пораду щодо формату «питання-відповідь»
+        self.assertEqual(result['status'], 'success')
+        self.assertFalse(result['unclear_task'])
+        self.assertNotEqual(result['suggested_grade'], 'Доопрацювати')
+        self.assertIn(result['suggested_grade'], ['6', '7', '8', '9', '10'])
+
+        # Перевірка очищення від фрази «жодної відповіді не дано»
+        self.assertNotIn("жодної відповіді не дано", result['summary'].lower())
+        self.assertNotIn("не надано жодної відповіді", result['feedback_comment'].lower())
+
+        # Перевірка наявності поради про формат «питання-відповідь»
+        has_advice_weaknesses = any('питання-відповідь' in w.lower() for w in result['weaknesses'])
+        self.assertTrue(has_advice_weaknesses)
+        self.assertIn('питання-відповідь', result['feedback_comment'].lower())
+        self.assertIn('питання-відповідь', result['feedback_comment'].lower())
+
+

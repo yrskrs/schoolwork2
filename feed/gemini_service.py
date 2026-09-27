@@ -2064,6 +2064,167 @@ def extract_json_from_text(text):
     return None
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# РОЗПІЗНАВАННЯ ТА ЗІСТАВЛЕННЯ ЗАПИТАНЬ ВЧИТЕЛЯ І ВІДПОВІДЕЙ УЧНІВ
+# (ПІДСТАНОВКА ВІДПОВІДЕЙ У ФОРМАТІ «ПИТАННЯ-ВІДПОВІДЬ»)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def extract_task_questions(text: str) -> list[str]:
+    """
+    Виявляє та видобуває формулювання запитань або пронумерованих завдань
+    із тексту завдання вчителя (опису або матеріалів).
+    """
+    if not text or not text.strip():
+        return []
+    lines = [l.strip() for l in text.strip().splitlines() if l.strip()]
+    num_pattern = re.compile(
+        r'^(?:(?:\d+|[IVXLCDM]+)[\.\)\–\—\-]|(?:питання|завдання|вправа|відповідь|№)\s*\d+[\.\:\)\–\—\-]?)\s*(.+)',
+        re.IGNORECASE
+    )
+    questions = []
+    current_q = []
+    for line in lines:
+        m = num_pattern.match(line)
+        if m:
+            if current_q:
+                questions.append(' '.join(current_q).strip())
+                current_q = []
+            current_q.append(line)
+        elif current_q and not line.startswith(('http://', 'https://')):
+            if len(current_q) < 4 and len(line) < 250:
+                current_q.append(line)
+            else:
+                questions.append(' '.join(current_q).strip())
+                current_q = []
+        elif '?' in line:
+            sub_qs = re.findall(r'[^.!?\n]+(?:\?)', line)
+            for sq in sub_qs:
+                sq_clean = sq.strip(' -•*–')
+                if len(sq_clean) > 8 and sq_clean not in questions:
+                    questions.append(sq_clean)
+    if current_q:
+        questions.append(' '.join(current_q).strip())
+    if not questions:
+        raw_qs = re.findall(r'[^.!?\n\r]+(?:\?)', text)
+        for rq in raw_qs:
+            rq_clean = rq.strip(' \t\n\r-•*–')
+            if len(rq_clean) > 8 and rq_clean not in questions:
+                questions.append(rq_clean)
+    cleaned = []
+    for q in questions:
+        q_strip = q.strip()
+        if len(q_strip) >= 5 and q_strip not in cleaned:
+            cleaned.append(q_strip)
+    return cleaned[:30]
+
+
+def extract_student_answers(text: str) -> dict[int, str]:
+    """
+    Виявляє та видобуває відповіді учня за номерами (1. ..., 2) ..., Відповідь 1: ...).
+    """
+    if not text or not text.strip():
+        return {}
+    start_pattern = re.compile(
+        r'(?:^|\n)\s*[«"\'\(\[]?\s*(?:(\d+)\s*[\.\)\–\—\-\]»"\'\:]|(?:питання|завдання|вправа|відповідь|№)\s*(\d+)\s*[\.\:\)\–\—\-\]»"\'\:]?)\s*',
+        re.IGNORECASE
+    )
+    matches = list(start_pattern.finditer(text))
+    if not matches:
+        return {}
+    answers = {}
+    for i, m in enumerate(matches):
+        num_str = m.group(1) or m.group(2)
+        start_idx = m.end()
+        end_idx = matches[i + 1].start() if i + 1 < len(matches) else len(text)
+        content = text[start_idx:end_idx].strip().rstrip('»"\'')
+        if num_str and content:
+            try:
+                num = int(num_str)
+                answers[num] = content
+            except ValueError:
+                pass
+    return answers
+
+
+def check_student_omitted_questions(task_questions: list[str], student_text: str) -> bool:
+    """
+    Перевіряє, чи учень надав відповіді без переписування самих запитань.
+    Повертає True, якщо у тексті учня відсутні формулювання запитань вчителя.
+    """
+    if not task_questions or not student_text or not student_text.strip():
+        return False
+    overlap_count = 0
+    checked_qs = 0
+    for q in task_questions[:10]:
+        q_clean = re.sub(r'^(?:(?:\d+|[IVXLCDM]+)[\.\)\–\—\-]|(?:питання|завдання|вправа|відповідь|№)\s*\d+[\.\:\)\–\—\-]?)\s*', '', q, flags=re.IGNORECASE).strip()
+        q_clean = q_clean.rstrip('?!.').strip()
+        if len(q_clean) >= 15:
+            checked_qs += 1
+            sample_part = q_clean[:min(30, len(q_clean))].lower()
+            if sample_part in student_text.lower():
+                overlap_count += 1
+    if checked_qs > 0 and overlap_count == 0:
+        return True
+    return False
+
+
+def build_question_answer_mapping(task_questions: list[str], student_text: str) -> tuple[str, bool, int, int]:
+    """
+    Якщо в завданні вчителя виявлено конкретні запитання, а учень надав відповіді
+    (особливо без повторення тексту запитань), формує структурований блок
+    підстановки відповідей учня до кожного запитання вчителя.
+    
+    Повертає (prompt_mapping_block: str, questions_omitted: bool, answered_count: int, total_questions: int).
+    """
+    if not task_questions:
+        return "", False, 0, 0
+
+    student_answers = extract_student_answers(student_text) if student_text else {}
+    omitted = check_student_omitted_questions(task_questions, student_text) if student_text else False
+    
+    lines = []
+    lines.append("═══════════════════════════════════════════════════════════════════")
+    lines.append("📋 СИСТЕМНЕ ЗІСТАВЛЕННЯ «ЗАПИТАННЯ ВЧИТЕЛЯ ↔ ВІДПОВІДІ УЧНЯ» (ПІДСТАНОВКА ВІДПОВІДЕЙ):")
+    if omitted:
+        lines.append("⚠️ УВАГА: Учень надав відповіді БЕЗ переписування тексту самих запитань вчителя!")
+        lines.append("Система автоматично виявила запитання в завданні та підставила знайдені відповіді учня нижче:")
+    else:
+        lines.append("Перелік запитань завдання та відповіді учня для зіставлення:")
+
+    answered_count = 0
+    total_qs = len(task_questions)
+
+    for i, q in enumerate(task_questions, 1):
+        ans = student_answers.get(i)
+        q_display = q.strip()
+        lines.append(f"• Запитання {i}: {q_display}")
+        if ans:
+            lines.append(f"  ↳ ПІДСТАВЛЕНА ВІДПОВІДЬ УЧНЯ №{i}: «{ans}»")
+            answered_count += 1
+        else:
+            lines.append(f"  ↳ ВІДПОВІДЬ УЧНЯ: [Відповідь не виявлена за номером або учень пропустив це запитання]")
+
+    lines.append("")
+    lines.append("🎯 КАТЕГОРИЧНІ ВКАЗІВКИ ДЛЯ ШІ ЩОДО ЦИХ ВІДПОВІДЕЙ:")
+    if answered_count > 0:
+        lines.append(f"- Учень надав відповіді щонайменше на {answered_count} із {total_qs} запитань вчителя.")
+        lines.append("- 🚫 СУВОРО ТА БЕЗАПЕЛЯЦІЙНО ЗАБОРОНЕНО писати, що «жодної відповіді не дано», «відповіді відсутні» чи «робота порожня»!")
+        lines.append("- Оціни зміст та правильність кожної наданої учнем відповіді відповідно до поставленого запитання.")
+        if answered_count < total_qs:
+            lines.append(f"- Оскільки виконано {answered_count} із {total_qs} запитань, оціни роботу відповідно до якості виконаних відповідей (як часткове виконання), вказавши у відгуку, які запитання залишились без відповіді.")
+    else:
+        lines.append("- Учень не використав стандартну цифрову нумерацію у тексті або надав розв'язок іншим способом.")
+        lines.append("- Уважно проаналізуй увесь зданий матеріал учня (текст роботи, коментар, зображення/фото зошита), знайди за змістом відповіді на поставлені запитання та зістав їх.")
+        lines.append("- Якщо учень відповів хоча б на 1-2 запитання, КАТЕГОРИЧНО ЗАБОРОНЕНО стверджувати, що «жодної відповіді не дано»!")
+
+    if omitted:
+        lines.append("- ⚠️ ОБОВ'ЯЗКОВО вкажи учневі в 'weaknesses' та 'feedback_comment' про недолік оформлення («питання-відповідь»):")
+        lines.append("  «Порада щодо оформлення: ви надали відповіді без самих запитань. Будь ласка, завжди записуйте запитання разом із відповідями (формат «питання-відповідь») або чітко зазначайте номери запитань, щоб робота була структурованою і зрозумілою.»")
+    
+    lines.append("═══════════════════════════════════════════════════════════════════\n")
+    return "\n".join(lines), omitted, answered_count, total_qs
+
+
 def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=None, preset_id=None, criteria_preset=None, selected_gr_codes=None):
     """
     Виконує педагогічний аналіз та попереднє оцінювання роботи учня за допомогою Google Gemini.
@@ -2192,6 +2353,13 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
         "7. ВИСНОВКИ В КОМЕНТАРІ УЧНЯ ДО ЗДАЧІ:\n"
         "   - Учні мають можливість залишити висновки по своїй роботі в полі коментаря (якщо самого висновку немає у файлі або учень забув його туди дописати).\n"
         "   - Якщо учень зазначив висновки або підсумки в коментарі до здачі роботи — ШІ ЗОБОВ'ЯЗАНИЙ повністю зарахувати їх як наявний та повноцінний висновок до завдання при оцінюванні!\n"
+        "8. ЗІСТАВЛЕННЯ ВІДПОВІДЕЙ УЧНЯ ІЗ ЗАПИТАННЯМИ ВЧИТЕЛЯ (ВІДПОВІДІ БЕЗ ПЕРЕПИСУВАННЯ ЗАПИТАНЬ):\n"
+        "   - Дуже часто учні записують у роботі ТІЛЬКИ ВІДПОВІДІ (наприклад, номери «1. ...», «2. ...» або прямий текст відповідей) і НЕ переписують самі запитання вчителя.\n"
+        "   - Також учень може надати відповіді лише на 1-2 питання із завдання (часткове виконання).\n"
+        "   - ШІ ЗОБОВ'ЯЗАНИЙ взяти формулювання запитань із завдання вчителя (з опису чи слайдів) і САМОСТІЙНО ПІДСТАВИТИ відповіді учня до кожного відповідного запитання!\n"
+        "   - 🚫 СУВОРО ТА КАТЕГОРИЧНО ЗАБОРОНЕНО стверджувати «жодної відповіді не дано», «відповіді відсутні» чи «робота порожня», якщо учень надав хоча б 1-2 відповіді чи фрагменти відповідей на запитання з умови!\n"
+        "   - ШІ зобов'язаний оцінити правильність і змістовність наданих учнем відповідей до відповідних запитань.\n"
+        "   - ⚠️ ОБОВ'ЯЗКОВО вкажи учневі про недолік оформлення («питання-відповідь») у 'weaknesses' та 'feedback_comment': порадь завжди записувати запитання разом із відповідями (формат «питання-відповідь») або чітко зазначати номери запитань, щоб робота була структурованою і легкою для перевірки.\n"
     )
 
     # ── КРИТИЧНО: ТОЧНЕ РОЗУМІННЯ СУТІ ЗАВДАННЯ, ЗМІСТОВА ВІДПОВІДНІСТЬ ТА ПОВНОТА ──
@@ -2559,7 +2727,41 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
         )
 
     prompt_lines.append(f"\nДАНІ УЧНЯ: {submission.get_student_full_name()} ({class_name})")
+
+    # ── СИСТЕМНЕ РОЗПІЗНАВАННЯ ТА ЗІСТАВЛЕННЯ ЗАПИТАНЬ ВЧИТЕЛЯ І ВІДПОВІДЕЙ УЧНЯ ──
+    combined_task_for_qs = assignment_desc or ""
+    if 'teacher_files_content' in locals() and teacher_files_content and not extract_task_questions(combined_task_for_qs):
+        combined_task_for_qs += "\n" + "\n".join(teacher_files_content)
+
+    task_questions = extract_task_questions(combined_task_for_qs)
+    student_combined_text = "\n".join(text_parts) if text_parts else ""
+
+    qa_mapping_block, questions_omitted, answered_count, total_questions = build_question_answer_mapping(
+        task_questions, student_combined_text
+    )
+
+    if qa_mapping_block:
+        prompt_lines.append(qa_mapping_block)
+    elif task_questions:
+        prompt_lines.append("═══════════════════════════════════════════════════════════════════")
+        prompt_lines.append("📋 КОНКРЕТНІ ЗАПИТАННЯ / ВПРАВИ ІЗ ЗАВДАННЯ ВЧИТЕЛЯ ДЛЯ ПІДСТАНОВКИ ВІДПОВІДЕЙ:")
+        for idx, q in enumerate(task_questions, 1):
+            prompt_lines.append(f"  {idx}. {q}")
+        prompt_lines.append(
+            "\n⚠️ ВКАЗІВКА ДЛЯ ШІ ЩОДО ВІДПОВІДЕЙ НА ЗОБРАЖЕННЯХ / У ФАЙЛАХ:\n"
+            "- Учень міг написати на фото зошита чи у файлі ТІЛЬКИ ВІДПОВІДІ (наприклад, номери «1. ...», «2. ...») БЕЗ переписування тексту самих запитань!\n"
+            "- ШІ ЗОБОВ'ЯЗАНИЙ підставити знайдені на зображенні/у файлі відповіді учня до відповідних запитань вище та оцінити їхню правильність.\n"
+            "- Навіть якщо учень відповів лише на 1-2 запитання, ШІ ЗОБОВ'ЯЗАНИЙ зарахувати їх. КАТЕГОРИЧНО ЗАБОРОНЕНО заявляти «жодної відповіді не дано»!\n"
+            "- Якщо учень не переписав запитання: обов'язково порадь у 'weaknesses' та 'feedback_comment' дотримуватися формату «питання-відповідь»."
+        )
+        prompt_lines.append("═══════════════════════════════════════════════════════════════════\n")
+
     prompt_lines.append("ВИКОНАНА РОБОТА УЧНЯ ДЛЯ ОЦІНЮВАННЯ:")
+    if questions_omitted:
+        prompt_lines.append(
+            "⚠️ ЗВЕРНИ УВАГУ: Учень надав відповіді без переписування тексту самих запитань. "
+            "Оціни повноту та зміст відповідей відповідно до зіставлених вище запитань вчителя, але обов'язково зазнач рекомендацію щодо формату «питання-відповідь»."
+        )
     prompt_lines.extend(text_parts)
     if is_traditional:
         prompt_lines.append(f"\nПроаналізуй роботу за класичною (традиційною) 12-бальною системою ({preset_name_display}) та обов'язково поверни JSON з полями: suggested_grade (тільки ціле число 1-12 або 'Доопрацювати'), level, format_warning (рядок із зауваженням або null), unclear_task (true/false), summary, strengths (масив), weaknesses (масив), feedback_comment, ai_generated_percent (число 0-100), ai_generated_detected (true/false), ai_generated_confidence ('none'/'low'/'medium'/'high'), ai_generated_details (рядок або null). Поле 'gr_results' поверни порожнім масивом [] або null, оскільки групи результатів НЕ використовуються в класичній системі.")
@@ -2608,6 +2810,16 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
             "- Аналізуй, яку саме форму та зміст вимагає завдання (список дат з подіями, твір, таблиця, задачі тощо).\n"
             "- Оцінки 10-12 балів ставляться ВИКЛЮЧНО за повне, змістовне та структуроване виконання завдання. Фрагментарні або мінімальні відповіді (одне речення замість списку дат, картинка з парою слів) категорично не можуть отримувати 10-12 балів (максимум 4-6 балів, або 1-3/'Доопрацювати').\n"
             "- Якщо оцінка менше 10 балів (або 'Доопрацювати'): обов'язково опиши в 'weaknesses' та 'feedback_comment' в загальному, що саме виконано не так і чого не вистачає для досягнення вищого балу.\n"
+        )
+
+    if "ЗІСТАВЛЕННЯ ВІДПОВІДЕЙ УЧНЯ ІЗ ЗАПИТАННЯМИ ВЧИТЕЛЯ" not in system_instruction:
+        system_instruction += (
+            "\n\nЗІСТАВЛЕННЯ ВІДПОВІДЕЙ УЧНЯ ІЗ ЗАПИТАННЯМИ ВЧИТЕЛЯ (ФОРМАТ «ПИТАННЯ-ВІДПОВІДЬ»):\n"
+            "- Якщо учень здав лише відповіді (номери 1, 2... або текст без переписування запитань):\n"
+            "  * Візьми запитання з умови завдання чи матеріалів вчителя та підстав відповіді учня до кожного відповідного запитання.\n"
+            "  * 🚫 СУВОРО ЗАБОРОНЕНО писати «жодної відповіді не дано», «відповіді відсутні» чи «робота порожня», якщо учень відповів хоча б на 1-2 запитання!\n"
+            "  * Оціни зміст і правильність наданих учнем відповідей по суті запитань вчителя (навіть при частковому виконанні).\n"
+            "  * ⚠️ ОБОВ'ЯЗКОВО вкажи учневі в 'weaknesses' та 'feedback_comment' про недолік оформлення («питання-відповідь»): порадь використовувати формат «питання-відповідь» або чітку нумерацію запитань.\n"
         )
 
     prompt_content = "\n".join(prompt_lines)
@@ -2833,6 +3045,66 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                         f_ext = os.path.splitext(submission.file.path)[1].lower()
                         if not f_ext:
                             format_warning = "Файл прикріплено без розширення (для належної здачі файл потрібно зберігати з відповідним розширенням, наприклад .py для коду)."
+
+                    # ── Захист від помилкового твердження «жодної відповіді не дано» та зняття помилкового unclear_task ──
+                    student_raw_text = " ".join(text_parts).strip() if text_parts else ""
+                    has_substantive_student_work = bool(
+                        (answered_count > 0) or
+                        (len(student_raw_text) >= 10 and not any(kw in student_raw_text.lower() for kw in ['не можу', 'не зробив', 'не знаю'])) or
+                        (inline_media and len(inline_media) > 0)
+                    )
+
+                    no_answer_phrases = [
+                        'жодної відповіді не дано',
+                        'не надано жодної відповіді',
+                        'жодної відповіді немає',
+                        'відповіді не надано',
+                        'відповідей не надано',
+                        'не містить жодної відповіді',
+                        'не надав жодної відповіді',
+                        'жодної відповіді',
+                    ]
+
+                    has_false_no_answer_claim = False
+                    for phrase in no_answer_phrases:
+                        if phrase in sum_lower or phrase in fb_lower or any(phrase in w.lower() for w in weaknesses):
+                            has_false_no_answer_claim = True
+                            break
+
+                    if has_substantive_student_work and (has_false_no_answer_claim or (unclear_task and (answered_count > 0 or task_questions))):
+                        # Якщо учень здав відповіді або виконану роботу, скасовуємо помилковий статус «не зрозуміло»
+                        if unclear_task:
+                            unclear_task = False
+                            if format_warning and ('не зрозуміло' in format_warning.lower() or 'незрозуміло' in format_warning.lower()):
+                                format_warning = ''
+                            weaknesses = [w for w in weaknesses if 'не зрозуміло, яке саме завдання виконане' not in w.lower()]
+
+                        # Очищаємо або замінюємо твердження про «жодної відповіді»
+                        for phrase in no_answer_phrases:
+                            if phrase in summary.lower():
+                                summary = re.sub(re.escape(phrase), 'надано відповіді на частину поставлених запитань', summary, flags=re.IGNORECASE)
+                            if phrase in feedback_comment.lower():
+                                feedback_comment = re.sub(re.escape(phrase), 'відповіді надано на частину запитань', feedback_comment, flags=re.IGNORECASE)
+                            weaknesses = [w for w in weaknesses if phrase not in w.lower()]
+
+                        if suggested_grade == 'Доопрацювати' and (answered_count > 0 or len(student_raw_text) >= 15):
+                            if total_questions > 0 and answered_count > 0:
+                                calc_grade = max(4, min(10, int(round((answered_count / total_questions) * 12))))
+                                suggested_grade = str(calc_grade)
+                            else:
+                                suggested_grade = '6'
+                            level = 'Середній' if int(suggested_grade) <= 6 else 'Достатній'
+
+                    # Обов'язкова порада щодо оформлення «питання-відповідь», якщо учень здав лише відповіді без запитань
+                    if questions_omitted or (answered_count > 0 and check_student_omitted_questions(task_questions, student_raw_text)):
+                        format_advice_phrase = "Порада щодо оформлення: ви надали відповіді без самих запитань. Будь ласка, записуйте самі запитання разом із відповідями (формат «питання-відповідь») або чітко вказуйте номери запитань, щоб робота була структурованою і зрозумілою."
+                        has_advice_in_weaknesses = any(kw in w.lower() for w in weaknesses for kw in ['питання-відповідь', 'без запитань', 'запитання разом'])
+                        if not has_advice_in_weaknesses:
+                            weaknesses.append(format_advice_phrase)
+
+                        has_advice_in_fb = any(kw in feedback_comment.lower() for kw in ['питання-відповідь', 'без запитань', 'запитання разом'])
+                        if not has_advice_in_fb:
+                            feedback_comment = (feedback_comment.strip() + f"\n\n💡 {format_advice_phrase}").strip()
 
                     # Гарантуємо, що при оцінці менше 10 балів або "Доопрацювати" обов'язково є узагальнені зауваження (weaknesses)
                     is_sub_ten = False
