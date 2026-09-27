@@ -26,6 +26,7 @@ import shutil
 from django.utils import timezone
 from .models import AISettings, Submission, DEFAULT_NUS_SYSTEM_PROMPT, AICriteriaPreset
 from .duplicate_detector import check_submission_duplicates, get_normalized_file_content
+from .document_parsers import parse_drawingml_chart_xml, format_python_pptx_chart_info
 
 GEMINI_API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 OPENAI_API_BASE_URL = "https://api.openai.com/v1"
@@ -638,11 +639,18 @@ def extract_images_from_pptx(file_path, max_images=6, max_bytes_per_img=8 * 1024
     """
     Видобуває вбудовані зображення (слайди, схеми, фотографії, графіки)
     із презентації PowerPoint (.pptx), які зберігаються у zip-папці ppt/media/.
+    Якщо вбудованих зображень немає або у презентації є створені діаграми,
+    автоматично візуально рендерить слайди через LibreOffice + pdftoppm,
+    щоб ШІ Gemini міг безпосередньо оцінити діаграми та оформлення.
     Повертає список словників: [{'name': filename, 'mime_type': mime, 'data': base64_str, 'size_kb': float}].
     """
     extracted = []
+    has_charts = False
     try:
         with zipfile.ZipFile(file_path, 'r') as z:
+            chart_files = [f for f in z.namelist() if f.startswith('ppt/charts/')]
+            has_charts = len(chart_files) > 0
+
             media_files = [f for f in z.namelist() if f.startswith('ppt/media/')]
             img_exts = {
                 '.png': 'image/png',
@@ -671,6 +679,18 @@ def extract_images_from_pptx(file_path, max_images=6, max_bytes_per_img=8 * 1024
                             break
     except Exception:
         pass
+
+    # Якщо растрових медіа-зображень немає або у презентації є діаграми — рендеримо візуальні слайди у PNG
+    if (len(extracted) == 0 or has_charts) and len(extracted) < max_images:
+        try:
+            rendered_slides = render_presentation_to_images(file_path, max_pages=min(4, max_images - len(extracted)))
+            for rs in rendered_slides:
+                extracted.append(rs)
+                if len(extracted) >= max_images:
+                    break
+        except Exception:
+            pass
+
     return extracted
 
 
@@ -977,6 +997,179 @@ def format_excel_charts_summary(charts_info):
                 lines.append(f"    * {s}")
     lines.append("════════════════════════════════════════════════════════════════════")
     return "\n".join(lines)
+
+
+def parse_powerpoint_charts(file_path):
+    """
+    Аналізує структуру презентації (.pptx, .ppt) та витягує інформацію
+    про всі вбудовані діаграми та графіки на слайдах.
+    """
+    charts_info = []
+    if not file_path or not os.path.exists(file_path):
+        return charts_info
+
+    # Спроба 1: через python-pptx
+    try:
+        from pptx import Presentation
+        prs = Presentation(file_path)
+        for s_idx, slide in enumerate(prs.slides, 1):
+            def _find_charts_in_shapes(shapes):
+                for shape in shapes:
+                    if hasattr(shape, "shapes"):
+                        _find_charts_in_shapes(shape.shapes)
+                    elif hasattr(shape, "has_chart") and shape.has_chart:
+                        try:
+                            c_info = format_python_pptx_chart_info(shape.chart)
+                            charts_info.append({
+                                'slide_idx': s_idx,
+                                'type': c_info['type'],
+                                'title': c_info['title'],
+                                'categories': c_info['categories'],
+                                'series': c_info['series']
+                            })
+                        except Exception:
+                            charts_info.append({
+                                'slide_idx': s_idx,
+                                'type': 'Вбудована діаграма',
+                                'title': '(без назви)',
+                                'categories': [],
+                                'series': []
+                            })
+            _find_charts_in_shapes(slide.shapes)
+        if charts_info:
+            return charts_info
+    except Exception:
+        pass
+
+    # Спроба 2: прямий аналіз OpenXML zip-архіву ppt/charts/
+    try:
+        if zipfile.is_zipfile(file_path):
+            with zipfile.ZipFile(file_path, 'r') as z:
+                chart_files = [f for f in z.namelist() if f.startswith('ppt/charts/chart') and f.endswith('.xml')]
+                chart_files.sort()
+
+                chart_to_slide = {}
+                slide_rels = [f for f in z.namelist() if f.startswith('ppt/slides/_rels/slide') and f.endswith('.xml.rels')]
+                for sr in slide_rels:
+                    try:
+                        m = re.search(r'slide(\d+)\.xml\.rels', sr)
+                        slide_num = int(m.group(1)) if m else 1
+                        rels_content = z.read(sr)
+                        r_root = ET.fromstring(rels_content)
+                        for r_elem in r_root:
+                            target = r_elem.get('Target', '')
+                            if 'chart' in target:
+                                ch_name = os.path.basename(target)
+                                chart_to_slide[ch_name] = slide_num
+                    except Exception:
+                        pass
+
+                for cf in chart_files:
+                    c_info = parse_drawingml_chart_xml(z.read(cf))
+                    if c_info:
+                        s_idx = chart_to_slide.get(os.path.basename(cf), 1)
+                        charts_info.append({
+                            'slide_idx': s_idx,
+                            'type': c_info['type'],
+                            'title': c_info['title'],
+                            'categories': c_info['categories'],
+                            'series': c_info['series']
+                        })
+    except Exception:
+        pass
+
+    return charts_info
+
+
+def format_powerpoint_charts_summary(charts_info):
+    """
+    Форматує структурований інформаційний опис виявлених у презентації діаграм для промпту ШІ.
+    """
+    if not charts_info:
+        return ""
+
+    lines = [
+        "════════════════════════════════════════════════════════════════════",
+        f"📊 ВИЯВЛЕНІ ВБУДОВАНІ ДІАГРАМИ ТА ГРАФІКИ У ПРЕЗЕНТАЦІЇ ({len(charts_info)} шт.):",
+        "Учень створив у презентації наступні діаграми/графіки (дані витягнуто безпосередньо зі структури слайдів):",
+    ]
+    for idx, c in enumerate(charts_info, 1):
+        lines.append(f"• Діаграма #{idx} (Слайд {c['slide_idx']}):")
+        lines.append(f"  - Тип діаграми: {c['type']}")
+        lines.append(f"  - Назва (заголовок): {c['title']}")
+        if c.get('categories'):
+            lines.append(f"  - Категорії (осі X): {', '.join(str(cat) for cat in c['categories'][:10])}")
+        if c.get('series'):
+            lines.append("  - Ряди та значення даних:")
+            for s in c['series']:
+                lines.append(f"    * {s}")
+    lines.append("════════════════════════════════════════════════════════════════════")
+    return "\n".join(lines)
+
+
+def render_presentation_to_images(file_path, max_pages=4):
+    """
+    Рендерить слайди презентації (.pptx, .ppt, .odp) у візуальні PNG зображення
+    через headless LibreOffice та pdftoppm, щоб передати їх у мультимодальний зір ШІ Gemini.
+    """
+    rendered = []
+    if not file_path or not os.path.exists(file_path):
+        return rendered
+
+    lo_bin = 'libreoffice' if shutil.which('libreoffice') else ('soffice' if shutil.which('soffice') else None)
+    ppm_bin = shutil.which('pdftoppm')
+
+    if not lo_bin or not ppm_bin:
+        return rendered
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        try:
+            pdf_cmd = [
+                lo_bin,
+                '--headless',
+                f'-env:UserInstallation=file://{tmp_dir}/lo_profile',
+                '--convert-to', 'pdf',
+                '--outdir', tmp_dir,
+                file_path
+            ]
+            res = subprocess.run(pdf_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30)
+            if res.returncode != 0:
+                return rendered
+
+            pdf_files = glob.glob(os.path.join(tmp_dir, '*.pdf'))
+            if not pdf_files:
+                return rendered
+            pdf_file = pdf_files[0]
+
+            page_prefix = os.path.join(tmp_dir, 'slide_page')
+            ppm_cmd = [
+                ppm_bin,
+                '-png',
+                '-r', '150',
+                pdf_file,
+                page_prefix
+            ]
+            subprocess.run(ppm_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=25)
+
+            png_files = sorted(glob.glob(os.path.join(tmp_dir, 'slide_page-*.png')))
+            for idx, pf in enumerate(png_files[:max_pages]):
+                try:
+                    with open(pf, 'rb') as f:
+                        data = f.read()
+                    if 0 < len(data) <= 8 * 1024 * 1024:
+                        b64 = base64.b64encode(data).decode('utf-8')
+                        rendered.append({
+                            'name': f'presentation_slide_{idx+1}.png',
+                            'mime_type': 'image/png',
+                            'data': b64,
+                            'size_kb': len(data) / 1024
+                        })
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    return rendered
 
 
 def render_spreadsheet_to_images(file_path, max_pages=4):
@@ -1307,15 +1500,17 @@ def extract_text_from_powerpoint(file_path, max_slides=40):
             lines = []
             img_c = 0
             tbl_c = 0
+            chart_c = 0
 
             # Рекурсивна обробка груп фігур
             if hasattr(shape, "shapes"):
                 for sub_sh in shape.shapes:
-                    sub_lines, sub_img, sub_tbl = _process_shape(sub_sh)
+                    sub_lines, sub_img, sub_tbl, sub_ch = _process_shape(sub_sh)
                     lines.extend(sub_lines)
                     img_c += sub_img
                     tbl_c += sub_tbl
-                return lines, img_c, tbl_c
+                    chart_c += sub_ch
+                return lines, img_c, tbl_c, chart_c
 
             # Таблиця
             if hasattr(shape, "has_table") and shape.has_table:
@@ -1325,7 +1520,24 @@ def extract_text_from_powerpoint(file_path, max_slides=40):
                     row_cells = [cell.text.strip().replace('\n', ' ') for cell in row.cells]
                     if any(row_cells):
                         lines.append(" | ".join(row_cells))
-                return lines, img_c, tbl_c
+                return lines, img_c, tbl_c, chart_c
+
+            # Діаграма / графік на слайді
+            if hasattr(shape, "has_chart") and shape.has_chart:
+                chart_c += 1
+                try:
+                    c_info = format_python_pptx_chart_info(shape.chart)
+                    c_title = c_info.get('title') or '(без назви)'
+                    c_type = c_info.get('type') or 'Діаграма'
+                    lines.append(f"[Діаграма на слайді: {c_type}, назва: «{c_title}»]")
+                    if c_info.get('categories'):
+                        lines.append(f"  Категорії: {', '.join(str(c) for c in c_info['categories'][:8])}")
+                    if c_info.get('series'):
+                        for s in c_info['series'][:4]:
+                            lines.append(f"  Ряд даних: {s}")
+                except Exception:
+                    lines.append("[Вбудована діаграма на слайді]")
+                return lines, img_c, tbl_c, chart_c
 
             # Текстовий блок
             if hasattr(shape, "has_text_frame") and shape.has_text_frame:
@@ -1347,7 +1559,7 @@ def extract_text_from_powerpoint(file_path, max_slides=40):
                 elif hasattr(shape, "image"):
                     img_c += 1
 
-            return lines, img_c, tbl_c
+            return lines, img_c, tbl_c, chart_c
 
         # УВАГА: не використовувати зріз prs.slides[:max_slides], бо python-pptx викидає
         # AttributeError: 'list' object has no attribute 'rId'!
@@ -1371,6 +1583,7 @@ def extract_text_from_powerpoint(file_path, max_slides=40):
             slide_lines = [slide_header]
             slide_imgs = 0
             slide_tbls = 0
+            slide_charts = 0
 
             for shape in slide.shapes:
                 try:
@@ -1379,16 +1592,19 @@ def extract_text_from_powerpoint(file_path, max_slides=40):
                 except Exception:
                     pass
 
-                sh_lines, sh_img, sh_tbl = _process_shape(shape)
+                sh_lines, sh_img, sh_tbl, sh_ch = _process_shape(shape)
                 slide_lines.extend(sh_lines)
                 slide_imgs += sh_img
                 slide_tbls += sh_tbl
+                slide_charts += sh_ch
 
             visual_indicators = []
             if slide_imgs > 0:
                 visual_indicators.append(f"{slide_imgs} ілюстрацій/зображень")
             if slide_tbls > 0:
                 visual_indicators.append(f"{slide_tbls} таблиць")
+            if slide_charts > 0:
+                visual_indicators.append(f"{slide_charts} діаграм/графіків")
             if visual_indicators:
                 slide_lines.append(f"  [Візуальне оформлення слайда: {', '.join(visual_indicators)}]")
 
@@ -1409,7 +1625,15 @@ def extract_text_from_powerpoint(file_path, max_slides=40):
         if total_slides > max_slides:
             overview += f" (Опрацьовано перші {max_slides} слайдів)."
 
-        return overview + "\n\n" + "\n\n".join(slides_text) if slides_text else "[Презентація не містить тексту або порожня]"
+        body_text = overview + "\n\n" + "\n\n".join(slides_text) if slides_text else "[Презентація не містить тексту або порожня]"
+
+        # Додаємо повний звіт про виявлені діаграми у файлі презентації
+        charts_info = parse_powerpoint_charts(file_path)
+        charts_summary = format_powerpoint_charts_summary(charts_info)
+        if charts_summary:
+            body_text += "\n\n" + charts_summary
+
+        return body_text
     except Exception as e:
         ext_lower = os.path.splitext(file_path)[1].lower()
         if ext_lower == '.ppt' or 'not a zip' in str(e).lower() or 'PackageNotFoundError' in str(e):
@@ -1810,6 +2034,24 @@ def extract_submission_content(submission):
                     "data": d_img['data']
                 })
                 text_parts.append(f"[У документі Word ({filename}) виявлено вбудоване зображення/скриншот: {d_img['name']} ({d_img['size_kb']:.1f} КБ) — передано на візуальний мультимодальний аналіз ШІ]")
+
+            # 📊 Перевірка вбудованих діаграм у Word (.docx)
+            try:
+                if zipfile.is_zipfile(file_path):
+                    with zipfile.ZipFile(file_path, 'r') as z:
+                        chart_files = [f for f in z.namelist() if f.startswith('word/charts/chart') and f.endswith('.xml')]
+                        if chart_files:
+                            docx_charts_lines = [f"\n[У документі Word ({filename}) виявлено {len(chart_files)} вбудованих діаграм/графіків:]"]
+                            for c_idx, cf in enumerate(sorted(chart_files), 1):
+                                c_info = parse_drawingml_chart_xml(z.read(cf))
+                                if c_info:
+                                    c_desc = f"• Діаграма #{c_idx}: {c_info['type']}, назва: «{c_info['title']}»"
+                                    if c_info.get('categories'):
+                                        c_desc += f", категорії: {', '.join(str(c) for c in c_info['categories'][:6])}"
+                                    docx_charts_lines.append(c_desc)
+                            text_parts.append("\n".join(docx_charts_lines))
+            except Exception:
+                pass
 
         elif ext == '.doc':
             doc_text = extract_text_from_doc(file_path)
@@ -2392,6 +2634,7 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
         "📽️ ВКАЗІВКИ ДЛЯ ПЕРЕВІРКИ ПРЕЗЕНТАЦІЙ (якщо робота є презентацією):\n"
         "- Оцінюй презентацію комплексно: змістовну глибину розкриття теми, логічну структуру (титульний слайд, вступ, основні тези, висновки), лаконічність формулювання думок на слайдах (тези замість перевантаження суцільним текстом).\n"
         "- Враховуй візуальне наповнення (наявність ілюстрацій, схем, таблиць, зафіксованих у структурі слайдів).\n"
+        "- 📊 ДІАГРАМИ ТА ГРАФІКИ НА СЛАЙДАХ: уважно перевіряй блок «ВИЯВЛЕНІ ВБУДОВАНІ ДІАГРАМИ ТА ГРАФІКИ У ПРЕЗЕНТАЦІЇ» та передані візуальні зображення слайдів! Якщо учень побудував діаграму, графік чи схему — КАТЕГОРИЧНО ЗАБОРОНЕНО стверджувати, що діаграма відсутня! Оцінюй доцільність вибору типу діаграми, заголовки, підписи та структуру відображених даних.\n"
         "- У 'strengths' та 'weaknesses' відзначай як відповідність темі, так і якість оформлення презентації."
     )
 
@@ -3105,6 +3348,40 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                         has_advice_in_fb = any(kw in feedback_comment.lower() for kw in ['питання-відповідь', 'без запитань', 'запитання разом'])
                         if not has_advice_in_fb:
                             feedback_comment = (feedback_comment.strip() + f"\n\n💡 {format_advice_phrase}").strip()
+
+                    # ── Захист від помилкового твердження «діаграма відсутня» при наявності діаграм у роботі ──
+                    has_charts_in_work = False
+                    if student_raw_text:
+                        has_charts_in_work = bool(
+                            ('ВИЯВЛЕНІ ВБУДОВАНІ ДІАГРАМИ ТА ГРАФІКИ' in student_raw_text) or
+                            ('Діаграма на слайді' in student_raw_text) or
+                            ('вбудованих діаграм/графіків' in student_raw_text)
+                        )
+
+                    if has_charts_in_work:
+                        no_chart_phrases = [
+                            'діаграма відсутня',
+                            'діаграми відсутні',
+                            'діаграму не побудовано',
+                            'діаграму не створено',
+                            'графік відсутній',
+                            'графік не побудовано',
+                            'не побудовано діаграм',
+                            'не створено діаграм',
+                            'немає діаграми',
+                            'відсутній графік',
+                            'відсутня діаграма',
+                        ]
+                        for phrase in no_chart_phrases:
+                            if phrase in summary.lower():
+                                summary = re.sub(re.escape(phrase), 'діаграму побудовано у файлі роботи', summary, flags=re.IGNORECASE)
+                            if phrase in feedback_comment.lower():
+                                feedback_comment = re.sub(re.escape(phrase), 'діаграму/графік успішно створено', feedback_comment, flags=re.IGNORECASE)
+                            weaknesses = [w for w in weaknesses if phrase not in w.lower()]
+
+                        if suggested_grade == 'Доопрацювати' and not unclear_task:
+                            suggested_grade = '8'
+                            level = 'Достатній'
 
                     # Гарантуємо, що при оцінці менше 10 балів або "Доопрацювати" обов'язково є узагальнені зауваження (weaknesses)
                     is_sub_ten = False

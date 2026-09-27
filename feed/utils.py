@@ -727,6 +727,7 @@ def convert_pptx_to_html(file_path: str) -> Tuple[str, Optional[str]]:
 
             pictures = []
             tables = []
+            charts = []
             texts = []
 
             for shape in all_shapes:
@@ -792,7 +793,37 @@ def convert_pptx_to_html(file_path: str) -> Tuple[str, Optional[str]]:
                     except Exception:
                         pass
 
-                # 3. Текстові блоки
+                # 3. Вбудовані діаграми та графіки
+                elif getattr(shape, 'has_chart', False):
+                    try:
+                        from .document_parsers import format_python_pptx_chart_info
+                        c_info = format_python_pptx_chart_info(shape.chart)
+                        c_title = c_info.get('title') or '(без назви)'
+                        c_type = c_info.get('type') or 'Вбудована діаграма'
+                        cats = c_info.get('categories') or []
+                        series = c_info.get('series') or []
+
+                        ch_html = [
+                            '<div class="pptx-slide-chart-card" style="margin:12px 0;padding:12px 16px;background:var(--color-bg-secondary,#f8fafc);border:1.5px solid rgba(99,102,241,0.25);border-radius:10px;">',
+                            '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;gap:8px;flex-wrap:wrap;">',
+                            f'<strong style="color:var(--color-primary,#6366f1);font-size:13px;display:flex;align-items:center;gap:6px;"><span>📊</span> <span>{html.escape(c_title)}</span></strong>',
+                            f'<span class="badge" style="background:rgba(99,102,241,0.12);color:var(--color-primary,#6366f1);font-size:11px;font-weight:700;">{html.escape(c_type)}</span>',
+                            '</div>'
+                        ]
+                        if cats:
+                            cats_str = ", ".join(html.escape(str(c)) for c in cats[:8])
+                            ch_html.append(f'<div style="font-size:11.5px;color:var(--color-text-secondary,#64748b);margin-bottom:4px;"><strong>Категорії (вісь X):</strong> {cats_str}</div>')
+                        if series:
+                            ch_html.append('<div style="font-size:11px;color:var(--color-text-muted,#94a3b8);display:flex;flex-direction:column;gap:2px;">')
+                            for s in series[:4]:
+                                ch_html.append(f'<div>• {html.escape(str(s))}</div>')
+                            ch_html.append('</div>')
+                        ch_html.append('</div>')
+                        charts.append(''.join(ch_html))
+                    except Exception:
+                        charts.append('<div class="pptx-slide-chart-card" style="margin:8px 0;padding:8px 12px;background:var(--color-bg-secondary);border:1px dashed var(--color-border);border-radius:8px;font-size:12px;">📊 Вбудована діаграма на слайді</div>')
+
+                # 4. Текстові блоки
                 elif hasattr(shape, 'text') and shape.text.strip():
                     texts.append(shape.text.strip())
 
@@ -822,6 +853,12 @@ def convert_pptx_to_html(file_path: str) -> Tuple[str, Optional[str]]:
                                 else:
                                     html_parts.append(f'<p>{html.escape(line_clean)}</p>')
                 html_parts.append('</div>')
+                content_rendered = True
+
+            # Діаграми слайду
+            if charts:
+                for ch_html in charts:
+                    html_parts.append(ch_html)
                 content_rendered = True
 
             # Таблиці слайду

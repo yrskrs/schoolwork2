@@ -105,16 +105,22 @@ def fuzzy_search_submissions(queryset, query_str: str):
                 Q(first_name__icontains=t) |
                 Q(last_name__icontains=t_tr) |
                 Q(first_name__icontains=t_tr) |
+                Q(group_authors__icontains=t) |
+                Q(group_authors__icontains=t_tr) |
+                Q(coauthor_submissions__last_name__icontains=t) |
+                Q(coauthor_submissions__first_name__icontains=t) |
+                Q(coauthor_submissions__last_name__icontains=t_tr) |
+                Q(coauthor_submissions__first_name__icontains=t_tr) |
                 Q(assignment__title__icontains=t) |
                 Q(assignment__title__icontains=t_tr) |
                 Q(class_group__name__icontains=t)
             )
 
-        sql_results = queryset.filter(token_q)
+        sql_results = queryset.filter(token_q).distinct()
         sql_matched_ids = set(sql_results.values_list('id', flat=True))
 
         # Нечітке доповнення (для пестливих імен, відмінків та одруків)
-        candidates = queryset.values('id', 'first_name', 'last_name', 'assignment__title')
+        candidates = queryset.values('id', 'first_name', 'last_name', 'group_authors', 'assignment__title')
         fuzzy_matched_ids = set()
 
         for item in candidates:
@@ -123,6 +129,7 @@ def fuzzy_search_submissions(queryset, query_str: str):
 
             sub_last = item['last_name'] or ''
             sub_first = item['first_name'] or ''
+            sub_group = item.get('group_authors') or ''
             sub_title = item['assignment__title'] or ''
 
             # Інтелектуальна перевірка особи учня (Прізвище + Ім'я)
@@ -130,7 +137,8 @@ def fuzzy_search_submissions(queryset, query_str: str):
                 is_same_student_identity(cand_last1, cand_first1, sub_last, sub_first) or
                 is_same_student_identity(cand_last2, cand_first2, sub_last, sub_first) or
                 is_same_student_identity(cand_last_tr1, cand_first_tr1, sub_last, sub_first) or
-                is_same_student_identity(cand_last_tr2, cand_first_tr2, sub_last, sub_first)
+                is_same_student_identity(cand_last_tr2, cand_first_tr2, sub_last, sub_first) or
+                (sub_group and (cand_last1.lower() in sub_group.lower() or cand_last_tr1.lower() in sub_group.lower()))
             )
             if is_student_match:
                 fuzzy_matched_ids.add(item['id'])
@@ -153,15 +161,21 @@ def fuzzy_search_submissions(queryset, query_str: str):
         Q(first_name__icontains=token) |
         Q(last_name__icontains=token_tr) |
         Q(first_name__icontains=token_tr) |
+        Q(group_authors__icontains=token) |
+        Q(group_authors__icontains=token_tr) |
+        Q(coauthor_submissions__last_name__icontains=token) |
+        Q(coauthor_submissions__first_name__icontains=token) |
+        Q(coauthor_submissions__last_name__icontains=token_tr) |
+        Q(coauthor_submissions__first_name__icontains=token_tr) |
         Q(assignment__title__icontains=token) |
         Q(assignment__title__icontains=token_tr) |
         Q(class_group__name__icontains=token)
     )
 
-    sql_results = queryset.filter(exact_q)
+    sql_results = queryset.filter(exact_q).distinct()
     sql_matched_ids = set(sql_results.values_list('id', flat=True))
 
-    candidates = queryset.values('id', 'first_name', 'last_name', 'assignment__title')
+    candidates = queryset.values('id', 'first_name', 'last_name', 'group_authors', 'assignment__title')
     fuzzy_matched_ids = set()
 
     for item in candidates:

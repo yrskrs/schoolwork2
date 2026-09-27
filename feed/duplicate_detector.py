@@ -241,8 +241,12 @@ def check_submission_duplicates(submission):
         # Перевірка: чи є учень співавтором або чи увімкнено ігнорування плагіату
         is_coauthor = (
             (hasattr(submission, 'is_coauthor_with') and submission.is_coauthor_with(other)) or
+            (hasattr(other, 'is_coauthor_with') and other.is_coauthor_with(submission)) or
             getattr(submission, 'ignore_plagiarism', False) or
-            getattr(other, 'ignore_plagiarism', False)
+            getattr(other, 'ignore_plagiarism', False) or
+            (submission.primary_submission_id and submission.primary_submission_id == other.primary_submission_id) or
+            (submission.primary_submission_id and submission.primary_submission_id == other.id) or
+            (other.primary_submission_id and other.primary_submission_id == submission.id)
         )
 
         is_binary_match = bool(sub_hash and other_hash and sub_hash == other_hash)

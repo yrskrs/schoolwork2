@@ -2831,8 +2831,8 @@ def submit_assignment(request, pk):
 def submit_success(request, pk):
     """Сторінка підтвердження успішної здачі роботи."""
     assignment = get_object_or_404(Assignment, pk=pk, status__in=[Assignment.STATUS_PUBLISHED, Assignment.STATUS_ARCHIVED])
-    # Відображаємо тільки актуальні (останні) здачі учнів без дублювання записів
-    submissions = Submission.objects.filter(assignment=assignment, is_latest_attempt=True).order_by('-submitted_at').select_related('class_group')
+    # Відображаємо тільки актуальні (останні) здачі учнів без дублювання записів та співавторів
+    submissions = Submission.objects.filter(assignment=assignment, is_latest_attempt=True, primary_submission__isnull=True).order_by('-submitted_at').select_related('class_group')
     
     search_query = request.GET.get('search', '').strip()
     if search_query:
@@ -2983,18 +2983,30 @@ def student_ai_self_check(request, submission_id):
     if 'ai_generated_details' in result:
         submission.ai_generated_details = result.get('ai_generated_details') or ''
 
+    teacher_fb = result.get('feedback') or result.get('feedback_comment') or clean_fb
+    submission.ai_suggested_grade = submission.student_ai_grade
+    submission.ai_score_level = submission.student_ai_level
+    submission.ai_feedback = teacher_fb
+    submission.ai_gr_results = submission.student_ai_gr_results
+    submission.ai_status = 'success'
+    submission.ai_error_reason = ''
+    submission.ai_reviewed_at = submission.student_ai_checked_at
+    submission.ai_model_used = result.get('model_used') or 'Google Gemini AI'
+
     submission.save(update_fields=[
         'student_ai_checked', 'student_ai_checked_at',
         'student_ai_grade', 'student_ai_level', 'student_ai_summary',
         'student_ai_feedback', 'student_ai_gr_results',
         'ai_generated_detected', 'ai_generated_percent',
         'ai_generated_confidence', 'ai_generated_details',
+        'ai_suggested_grade', 'ai_score_level', 'ai_feedback', 'ai_gr_results',
+        'ai_status', 'ai_error_reason', 'ai_reviewed_at', 'ai_model_used'
     ])
 
     # Детектор дублікатів та плагіату для учня
     dup_info = check_submission_duplicates(submission)
 
-    # Якщо це колективна робота — синхронізуємо чернову перевірку для всіх зв'язаних співавторів
+    # Якщо це колективна робота — синхронізуємо оцінку та аналіз ШІ для всіх зв'язаних співавторів
     if submission.is_group_work:
         from django.db.models import Q
         root_pk = submission.primary_submission_id or submission.pk
@@ -3012,6 +3024,14 @@ def student_ai_self_check(request, submission_id):
             ai_generated_percent=submission.ai_generated_percent,
             ai_generated_confidence=submission.ai_generated_confidence,
             ai_generated_details=submission.ai_generated_details,
+            ai_suggested_grade=submission.ai_suggested_grade,
+            ai_score_level=submission.ai_score_level,
+            ai_feedback=submission.ai_feedback,
+            ai_gr_results=submission.ai_gr_results,
+            ai_status='success',
+            ai_error_reason='',
+            ai_reviewed_at=submission.ai_reviewed_at,
+            ai_model_used=submission.ai_model_used,
         )
 
     # Готуємо відповідь для учня (без технічних полів)
@@ -3209,40 +3229,66 @@ def view_file(request, submission_id):
 
         elif action == 'grade':
             grade = request.POST.get('grade', '').strip()
-            if grade:
-                submission.grade = grade
-                submission.graded_by = request.user
-                submission.graded_at = timezone.now()
-                submission.save(update_fields=['grade', 'graded_by', 'graded_at'])
+            group_members = submission.get_all_group_submissions() if (submission.is_group_work or submission.primary_submission_id or submission.coauthor_submissions.exists()) else [submission]
+            graded_members = []
 
-                coauthors_graded = sync_grades_to_coauthors(submission, grade, request.user)
+            for m in group_members:
+                m_grade = request.POST.get(f'member_grade_{m.id}', '').strip()
+                if not m_grade and grade:
+                    m_grade = grade
 
-                log_msg = f"Вчитель {teacher.full_name} оцінив роботу {submission.get_student_full_name()}: {grade}"
-                if coauthors_graded:
-                    log_msg += f" (також виставлено оцінку співавторам: {', '.join(coauthors_graded)})"
+                m.grade = m_grade or None
+                m.graded_by = request.user
+                if m_grade:
+                    m.graded_at = timezone.now()
+                    graded_members.append(f"{m.get_student_full_name()} ({m_grade})")
 
-                log_submission_activity(
-                    request.user,
-                    'grading',
-                    log_msg,
-                    submission=submission
-                )
+                update_f = ['grade', 'graded_by']
+                if m_grade:
+                    update_f.append('graded_at')
+                if submission.teacher_comment and m.id != submission.id:
+                    m.teacher_comment = submission.teacher_comment
+                    update_f.append('teacher_comment')
+                m.save(update_fields=update_f)
 
-                if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-                    return JsonResponse({
-                        'status': 'success',
-                        'grade': grade,
-                        'coauthors_graded': coauthors_graded,
-                    })
+            submission.refresh_from_db()
 
-                succ_msg = f'Оцінку {grade} успішно збережено!'
-                if coauthors_graded:
-                    succ_msg += f" Оцінку також виставлено співавторам: {', '.join(coauthors_graded)}."
-                messages.success(request, succ_msg)
-                redirect_url = reverse('view_file', kwargs={'submission_id': submission_id})
-                if request.GET:
-                    redirect_url = f"{redirect_url}?{request.GET.urlencode()}"
-                return redirect(redirect_url)
+            coauthors_graded = [
+                m.get_student_full_name() for m in group_members if m.id != submission.id and m.grade
+            ]
+
+            # Фолбек для синхронізації якщо є нестворені зв'язані роботи
+            if grade and len(group_members) <= 1:
+                synced = sync_grades_to_coauthors(submission, grade, request.user)
+                for c_name in synced:
+                    if c_name not in coauthors_graded:
+                        coauthors_graded.append(c_name)
+                for c_name in coauthors_graded:
+                    if not any(c_name in gm for gm in graded_members):
+                        graded_members.append(f"{c_name} ({grade})")
+
+            log_msg = f"Вчитель {teacher.full_name} оцінив роботу: {', '.join(graded_members) if graded_members else (grade or 'знято')}"
+            log_submission_activity(
+                request.user,
+                'grading',
+                log_msg,
+                submission=submission
+            )
+
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({
+                    'status': 'success',
+                    'grade': submission.grade or grade,
+                    'graded_members': graded_members,
+                    'coauthors_graded': coauthors_graded,
+                })
+
+            succ_msg = f"Оцінку успішно збережено: {', '.join(graded_members)}!" if graded_members else f"Оцінку {grade} успішно збережено!"
+            messages.success(request, succ_msg)
+            redirect_url = reverse('view_file', kwargs={'submission_id': submission_id})
+            if request.GET:
+                redirect_url = f"{redirect_url}?{request.GET.urlencode()}"
+            return redirect(redirect_url)
 
     # ── Логіка черги та навігації (Попередня / Наступна робота) ───────────────
     # Зчитуємо фільтри: клас, завдання, статус оцінювання, дата, пошук, режим, сортування
@@ -3316,6 +3362,9 @@ def view_file(request, submission_id):
 
     if show_mode == 'grouped':
         nav_qs = nav_qs.filter(Q(is_latest_attempt=True) | Q(id=submission.id))
+
+    # Виключаємо дублювання співавторських робіт у черзі навігації
+    nav_qs = nav_qs.filter(Q(primary_submission__isnull=True) | Q(id=submission.id))
 
     # Сортування
     if sort_by == 'student':
@@ -3589,8 +3638,13 @@ def view_file(request, submission_id):
 
     dup_info = check_submission_duplicates(submission)
 
+    group_members = []
+    if submission.is_collective_work() or submission.is_group_work or submission.primary_submission_id:
+        group_members = submission.get_all_group_submissions()
+
     context = {
         'submission': submission,
+        'group_members': group_members,
         'submission_files': submission_files,
         'selected_file_obj': selected_file_obj,
         'active_file_id': selected_file_obj.id if selected_file_obj else None,
@@ -3806,6 +3860,9 @@ def assignment_submissions(request, pk):
         assignment=assignment
     ).select_related('class_group', 'teacher', 'previous_submission').prefetch_related('comments', 'files', 'subsequent_submissions').order_by('-submitted_at')
 
+    # Не дублювати колективні роботи: показуємо одну основну здачу групи зі списком усіх співавторів
+    submissions_qs = submissions_qs.filter(primary_submission__isnull=True)
+
     if show_mode == 'grouped':
         submissions_qs = submissions_qs.filter(is_latest_attempt=True)
 
@@ -3937,15 +3994,16 @@ def all_submissions_dashboard(request):
     teacher = request.user.teacher_profile
 
     if request.user.is_superuser:
-        submissions_qs = Submission.objects.all()
+        submissions_qs = Submission.objects.filter(primary_submission__isnull=True)
     else:
         submissions_qs = Submission.objects.filter(
-            Q(assignment__teacher=teacher) | Q(teacher=teacher)
+            Q(assignment__teacher=teacher) | Q(teacher=teacher),
+            primary_submission__isnull=True
         )
 
     submissions_qs = submissions_qs.select_related(
         'assignment', 'class_group', 'teacher'
-    ).prefetch_related('comments').order_by('-submitted_at')
+    ).prefetch_related('comments', 'coauthor_submissions').order_by('-submitted_at')
 
     class_filter = request.GET.get('class')
     assignment_filter = request.GET.get('assignment')
@@ -4200,7 +4258,7 @@ def sync_grades_to_coauthors(submission, grade, graded_by_user):
 
 @teacher_required
 def grade_submission(request, sub_id):
-    """AJAX: виставлення або зміна оцінки здачі роботи з підтримкою співавторів."""
+    """AJAX: виставлення або зміна оцінки здачі роботи з підтримкою співавторів та індивідуальних оцінок."""
     if request.method != 'POST':
         return JsonResponse({'status': 'error', 'message': 'Method not allowed'}, status=405)
 
@@ -4211,17 +4269,35 @@ def grade_submission(request, sub_id):
         return JsonResponse({'status': 'error', 'message': 'Немає доступу'}, status=403)
 
     grade = request.POST.get('grade', '').strip()
-    submission.grade = grade or None
-    submission.graded_by = request.user
-    if grade:
-        submission.graded_at = timezone.now()
-    submission.save(update_fields=['grade', 'graded_by', 'graded_at'])
+    group_members = submission.get_all_group_submissions() if (submission.is_group_work or submission.primary_submission_id or submission.coauthor_submissions.exists()) else [submission]
+    graded_members = []
+
+    for m in group_members:
+        m_grade = request.POST.get(f'member_grade_{m.id}', '').strip()
+        if not m_grade and grade:
+            m_grade = grade
+
+        m.grade = m_grade or None
+        m.graded_by = request.user
+        if m_grade:
+            m.graded_at = timezone.now()
+            graded_members.append(f"{m.get_student_full_name()} ({m_grade})")
+
+        update_f = ['grade', 'graded_by']
+        if m_grade:
+            update_f.append('graded_at')
+        m.save(update_fields=update_f)
+
+    submission.refresh_from_db()
 
     coauthors_graded = []
-    if grade:
+    if grade and len(group_members) <= 1:
         coauthors_graded = sync_grades_to_coauthors(submission, grade, request.user)
+        for c_name in coauthors_graded:
+            if not any(c_name in gm for gm in graded_members):
+                graded_members.append(f"{c_name} ({grade})")
 
-    log_msg = f"Оцінено роботу {submission.get_student_full_name()} -> {grade or 'оцінку знято'}"
+    log_msg = f"Оцінено роботу {submission.get_student_full_name()}: {', '.join(graded_members) if graded_members else (grade or 'оцінку знято')}"
     if coauthors_graded:
         log_msg += f" (також виставлено оцінку співавторам: {', '.join(coauthors_graded)})"
 
@@ -4232,13 +4308,14 @@ def grade_submission(request, sub_id):
         submission=submission
     )
 
-    # Оновлюємо актуальний лічильник робіт без оцінки для інтерфейсу вчителя
+    # Оновлюємо актуальний лічильник робіт без оцінки для інтерфейсу вчителя (без дублів колективних робіт)
     if request.user.is_superuser or request.session.get('superadmin_mode'):
-        remaining_pending = Submission.objects.filter(is_latest_attempt=True).filter(Q(grade__isnull=True) | Q(grade='')).count()
+        remaining_pending = Submission.objects.filter(is_latest_attempt=True, primary_submission__isnull=True).filter(Q(grade__isnull=True) | Q(grade='')).count()
     elif teacher:
         remaining_pending = Submission.objects.filter(
             assignment__teacher=teacher,
-            is_latest_attempt=True
+            is_latest_attempt=True,
+            primary_submission__isnull=True
         ).filter(
             Q(grade__isnull=True) | Q(grade='')
         ).count()
@@ -4253,6 +4330,7 @@ def grade_submission(request, sub_id):
         'status': 'success',
         'grade': submission.grade or '',
         'is_graded': bool(submission.grade),
+        'graded_members': graded_members,
         'coauthors_graded': coauthors_graded,
         'message': log_msg,
         'pending_submissions_count': remaining_pending,
