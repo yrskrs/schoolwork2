@@ -2391,6 +2391,96 @@ def detect_expected_task_count(text: str) -> int:
     return 0
 
 
+def parse_teacher_specific_task_numbers(description: str) -> list[int]:
+    """
+    Розпізнає конкретні номери завдань, які вчитель задав у полі «Що потрібно зробити».
+    Наприклад:
+      «виконати завдання 1 з практичної»         → [1]
+      «зробити завдання 1 та 2»                  → [1, 2]
+      «виконати завдання 2 і 3 зі слайду»        → [2, 3]
+      «завдання 3»                               → [3]
+      «виконати вправу 2»                        → [2]
+      «зробити завдання 1-2»                     → [1, 2]
+      «виконати завдання 2, 4»                   → [2, 4]
+      «виконати всі 3 завдання»                  → []  (не конкретні – лише загальна кількість)
+      «опрацювати презентацію»                   → []  (загальна вказівка)
+
+    Повертає список цілих чисел номерів завдань або порожній список,
+    якщо вчитель не вказав конкретних номерів.
+    """
+    if not description or not description.strip():
+        return []
+
+    text = description.strip()
+    found_nums: set[int] = set()
+
+    # Ключові слова-якорі
+    KEYWORD_PAT = re.compile(
+        r'\b(?:практичн[еа]\s+)?(?:завдання|вправ[уиі]|пункт)\b',
+        re.IGNORECASE
+    )
+
+    # Роздільники між числами після ключового слова
+    # Дозволяємо: пробіли, коми, «та», «і», «й», «та й», «і», «and», «№»
+    SEP_PAT = re.compile(r'(?:\s*(?:,|та|і|й|and)\s*|\s+)(?:№\s*)?', re.IGNORECASE)
+    NUM_PAT = re.compile(r'\d+')
+
+    # Спочатку обробляємо діапазони «завдання 1-3» → [1, 2, 3]
+    range_pat = re.compile(
+        r'\b(?:практичн[еа]\s+)?(?:завдання|вправ[уиі]|пункт)\s*(?:№\s*)?(\d+)\s*[-–—]\s*(\d+)',
+        re.IGNORECASE
+    )
+    for m in range_pat.finditer(text):
+        start, end = int(m.group(1)), int(m.group(2))
+        if start < end <= start + 9:
+            for n in range(start, end + 1):
+                found_nums.add(n)
+
+    # Якщо діапазони вже знайдено — повертаємо їх (діапазон завжди конкретний)
+    # (але продовжуємо шукати й окремі числа якщо діапазонів немає)
+
+    # Потім шукаємо всі входження ключового слова та числа після нього
+    for kw_match in KEYWORD_PAT.finditer(text):
+        pos = kw_match.end()
+        # Після ключового слова зчитуємо числа, розділені сепараторами
+        while pos < len(text):
+            # Пробуємо підібрати сепаратор (або просто пробіл) + число
+            sep_m = SEP_PAT.match(text, pos)
+            if sep_m:
+                after_sep = sep_m.end()
+            else:
+                after_sep = pos
+
+            num_m = NUM_PAT.match(text, after_sep)
+            if not num_m:
+                break
+            n = int(num_m.group(0))
+            if 1 <= n <= 30:
+                found_nums.add(n)
+            pos = num_m.end()
+
+    # Якщо вчитель вжив конструкцію «всі N завдань» — це ЗАГАЛЬНА кількість, не конкретні номери
+    all_N_pattern = re.compile(
+        r'(?:всі|усі)\s+\d+\s+(?:практичн\w+\s+)?(?:завдан|вправ|пункт)',
+        re.IGNORECASE
+    )
+    if all_N_pattern.search(text) and not found_nums:
+        return []
+
+    # Якщо знайдена лише «загальна кількість» через «всі 3 завдання»,
+    # але вчитель окремо не вказав конкретні номери — повертаємо []
+    # (detect_expected_task_count уже обробить загальну кількість окремо)
+    if found_nums:
+        # Перевіряємо: чи немає «всі N завдань» без конкретних номерів,
+        # де N = кількість знайдених чисел (це просто збіг «всі 3 завдання» + «завдання 1 2 3»)
+        pass  # знайдені номери — конкретні, повертаємо
+
+    return sorted(found_nums)
+
+
+
+
+
 def extract_task_questions(text: str, explicit_count: int = 0) -> list[str]:
     """
     Виявляє та видобуває формулювання запитань або практичних завдань
@@ -2795,7 +2885,8 @@ def apply_multi_task_evaluation_guardrail(
     strengths: list[str],
     weaknesses: list[str],
     feedback_comment: str,
-    answered_count: int = 0
+    answered_count: int = 0,
+    teacher_scoped_task_nums: list[int] | None = None,
 ) -> tuple[str, str, list[dict], list[float], int | None, str, list[str], list[str], str]:
     """
     Педагогічний захист від галюцинацій ШІ при оцінюванні багатозадачних робіт:
@@ -2825,32 +2916,37 @@ def apply_multi_task_evaluation_guardrail(
         return suggested_grade, level, clean_gr_results, numeric_gr_grades, avg_gr_grade, summary, strengths, weaknesses, feedback_comment
 
     # 2. Визначаємо очікувану кількість завдань (N)
-    explicit_count = detect_expected_task_count(teacher_instructions_text or "")
-    qs_count = len(task_questions) if task_questions else 0
-
-    ai_total = 0
-    try:
-        ai_total = int(result_json.get('tasks_total_count') or 0)
-    except (ValueError, TypeError):
-        pass
-
-    ai_eval_list = result_json.get('tasks_evaluated') or []
-    ai_eval_len = len(ai_eval_list) if isinstance(ai_eval_list, list) else 0
-
-    if explicit_count > 0:
-        total_tasks = explicit_count
+    # НАЙВИЩИЙ ПРІОРИТЕТ: якщо вчитель явно задав конкретні номери завдань —
+    # total_tasks = кількість заданих, незалежно від вмісту файлів.
+    if teacher_scoped_task_nums:
+        total_tasks = len(teacher_scoped_task_nums)
     else:
-        named_tasks = [q for q in task_questions if re.search(r'^(?:практичне\s+)?(?:завдання|вправа)\s*\d+', q, re.IGNORECASE)]
-        if len(named_tasks) >= 2:
-            total_tasks = len(named_tasks)
-        elif 0 < ai_total <= 12:
-            total_tasks = ai_total
-        elif 0 < ai_eval_len <= 12:
-            total_tasks = ai_eval_len
-        elif 0 < qs_count <= 12:
-            total_tasks = qs_count
+        explicit_count = detect_expected_task_count(teacher_instructions_text or "")
+        qs_count = len(task_questions) if task_questions else 0
+
+        ai_total = 0
+        try:
+            ai_total = int(result_json.get('tasks_total_count') or 0)
+        except (ValueError, TypeError):
+            pass
+
+        ai_eval_list = result_json.get('tasks_evaluated') or []
+        ai_eval_len = len(ai_eval_list) if isinstance(ai_eval_list, list) else 0
+
+        if explicit_count > 0:
+            total_tasks = explicit_count
         else:
-            total_tasks = min(qs_count, 10) if qs_count else 0
+            named_tasks = [q for q in task_questions if re.search(r'^(?:практичне\s+)?(?:завдання|вправа)\s*\d+', q, re.IGNORECASE)]
+            if len(named_tasks) >= 2:
+                total_tasks = len(named_tasks)
+            elif 0 < ai_total <= 12:
+                total_tasks = ai_total
+            elif 0 < ai_eval_len <= 12:
+                total_tasks = ai_eval_len
+            elif 0 < qs_count <= 12:
+                total_tasks = qs_count
+            else:
+                total_tasks = min(qs_count, 10) if qs_count else 0
 
     if total_tasks < 2:
         return suggested_grade, level, clean_gr_results, numeric_gr_grades, avg_gr_grade, summary, strengths, weaknesses, feedback_comment
@@ -3652,8 +3748,65 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
             if extra_qs and len(extra_qs) > len(extract_task_questions(combined_task_for_qs)):
                 combined_task_for_qs += "\n" + "\n".join(teacher_files_content)
 
-    task_questions = extract_task_questions(combined_task_for_qs)
+    # ── КЛЮЧОВА ЛОГІКА: КОНКРЕТНІ НОМЕРИ ЗАВДАНЬ З ІНСТРУКЦІЇ ВЧИТЕЛЯ ──────────
+    # Якщо вчитель вказав конкретні номери (напр. «виконати завдання 1» або
+    # «завдання 2 і 3»), фільтруємо task_questions лише до цих завдань.
+    # Решта завдань з файлу вважаються незаданими.
+    teacher_specific_task_nums = parse_teacher_specific_task_numbers(assignment_desc or "")
+
+    all_task_questions = extract_task_questions(combined_task_for_qs)
     student_combined_text = "\n".join(text_parts) if text_parts else ""
+
+    # Якщо вчитель задав конкретні номери — залишаємо тільки їх
+    if teacher_specific_task_nums and all_task_questions:
+        filtered_task_questions = []
+        for num in teacher_specific_task_nums:
+            # Шукаємо завдання з відповідним номером у списку
+            idx_0based = num - 1  # 0-based index
+            if 0 <= idx_0based < len(all_task_questions):
+                filtered_task_questions.append(all_task_questions[idx_0based])
+            else:
+                # Якщо за індексом не знайшли — шукаємо за номером у тексті завдання
+                for q in all_task_questions:
+                    if re.search(rf'\b(?:завдання|вправ[уи]|пункт)\s*(?:№\s*)?{num}\b', q, re.IGNORECASE):
+                        if q not in filtered_task_questions:
+                            filtered_task_questions.append(q)
+                        break
+        task_questions = filtered_task_questions if filtered_task_questions else all_task_questions
+    else:
+        task_questions = all_task_questions
+
+    # ── ПРОМПТ: SCOPE BLOCK — повідомляємо ШІ про конкретний обсяг завдання ────
+    if teacher_specific_task_nums:
+        nums_str = ', '.join(str(n) for n in teacher_specific_task_nums)
+        all_nums_in_file = list(range(1, len(all_task_questions) + 1)) if all_task_questions else []
+        extra_nums = [n for n in all_nums_in_file if n not in teacher_specific_task_nums]
+
+        scope_block_lines = [
+            "═══════════════════════════════════════════════════════════════════",
+            f"🎯 ТОЧНИЙ ОБСЯГ ЗАВДАННЯ ВІД ВЧИТЕЛЯ (TEACHER SCOPE — НАЙВИЩИЙ ПРІОРИТЕТ):",
+            f"Вчитель у полі «Що потрібно зробити» ЯВНО вказав виконати КОНКРЕТНЕ ЗАВДАННЯ: № {nums_str}.",
+            f"",
+            f"КАТЕГОРИЧНІ ВИМОГИ ДО ОЦІНЮВАННЯ:",
+            f"1. ✅ ОЦІНЮЙ ВИКЛЮЧНО завдання № {nums_str} — саме воно задане вчителем.",
+            f"2. 🚫 КАТЕГОРИЧНО ЗАБОРОНЕНО знижувати оцінку або писати у 'weaknesses' чи 'feedback_comment', "
+            f"що учень 'не виконав інші завдання' {'(№ ' + ', '.join(str(n) for n in extra_nums) + ')' if extra_nums else ''}. "
+            f"Ці завдання є НЕЗАДАНИМИ і не враховуються при оцінюванні!",
+            f"3. ✅ Якщо учень якісно виконав завдання № {nums_str} — робота вважається виконаною на 100% і заслуговує на найвищий бал відповідно до якості!",
+        ]
+
+        # Якщо учень зробив більше ніж вчитель задав — це БОНУС
+        scope_block_lines += [
+            f"4. 🌟 БОНУС ЗА ІНІЦІАТИВУ: Якщо учень, крім заданого завдання № {nums_str}, самостійно виконав "
+            f"додаткові завдання {'(№ ' + ', '.join(str(n) for n in extra_nums) + ')' if extra_nums else 'з файлу'} — "
+            f"це вияв ініціативи та старанності. ШІ ЗОБОВ'ЯЗАНИЙ відзначити це у 'strengths' та 'feedback_comment' "
+            f"як позитивну якість (наприклад: «Учень виявив ініціативу та виконав додаткові завдання понад вимогу вчителя»). "
+            f"Це може позитивно вплинути на оцінку!",
+            f"5. ⚙️ У полі 'tasks_total_count' повертай {len(teacher_specific_task_nums)} (кількість ЗАДАНИХ завдань), "
+            f"у 'tasks_completed_count' — скільки з них виконав учень.",
+            "═══════════════════════════════════════════════════════════════════",
+        ]
+        prompt_lines.append("\n".join(scope_block_lines))
 
     qa_mapping_block, questions_omitted, answered_count, total_questions = build_question_answer_mapping(
         task_questions, student_combined_text
@@ -3674,6 +3827,7 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
             "- Якщо учень не переписав запитання: обов'язково порадь у 'weaknesses' та 'feedback_comment' дотримуватися формату «питання-відповідь»."
         )
         prompt_lines.append("═══════════════════════════════════════════════════════════════════\n")
+
 
     prompt_lines.append("ВИКОНАНА РОБОТА УЧНЯ ДЛЯ ОЦІНЮВАННЯ:")
     if questions_omitted:
@@ -4228,7 +4382,8 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                             strengths=strengths,
                             weaknesses=weaknesses,
                             feedback_comment=feedback_comment,
-                            answered_count=answered_count
+                            answered_count=answered_count,
+                            teacher_scoped_task_nums=teacher_specific_task_nums if 'teacher_specific_task_nums' in locals() else None,
                         )
 
                     # Кінцева перевірка: якщо роботу відхилено — гарантуємо "Доопрацювати" та Початковий рівень (1-3)
