@@ -143,10 +143,15 @@ def check_submission_duplicates(submission):
         'teacher_file_name': None,
         'is_duplicate_student': False,
         'duplicate_student_name': None,
+        'duplicate_student_first_name': None,
+        'duplicate_student_last_name': None,
         'duplicate_class': None,
+        'duplicate_submission_id': None,
         'duplicate_submitted_at': None,
         'type': 'none',
-        'warning_message': ''
+        'warning_message': '',
+        'plagiarism_ignored': getattr(submission, 'ignore_plagiarism', False),
+        'is_coauthor': False,
     }
 
     if not submission:
@@ -171,45 +176,46 @@ def check_submission_duplicates(submission):
     assignment = submission.assignment
 
     # ── 1. ПЕРЕВІРКА НА ЗБІГ З ФАЙЛАМИ ВЧИТЕЛЯ ─────────────────────────────────
-    for af in assignment.files.all():
-        if not af.file or not os.path.exists(af.file.path):
-            continue
+    if not getattr(submission, 'ignore_plagiarism', False):
+        for af in assignment.files.all():
+            if not af.file or not os.path.exists(af.file.path):
+                continue
 
-        teacher_file_path = af.file.path
-        teacher_hash = get_file_sha256(teacher_file_path)
-        teacher_name = af.original_name or os.path.basename(af.file.name)
+            teacher_file_path = af.file.path
+            teacher_hash = get_file_sha256(teacher_file_path)
+            teacher_name = af.original_name or os.path.basename(af.file.name)
 
-        # Точний двійковий збіг
-        if sub_hash and teacher_hash and sub_hash == teacher_hash:
-            result.update({
-                'is_duplicate': True,
-                'is_duplicate_teacher': True,
-                'teacher_file_name': teacher_name,
-                'type': 'teacher_duplicate',
-                'warning_message': (
-                    f"⚠️ Увага: вміст прикріпленого файлу повністю збігається з файлом вчителя «{teacher_name}» до цього завдання. "
-                    f"Схоже, що ви здали вихідний файл завдання замість виконаної роботи!"
-                )
-            })
-            submission._cached_dup_info = result
-            return result
-
-        # Текстовий/нормалізований збіг (якщо текст не порожній і довший 20 символів)
-        if sub_text_len >= 20:
-            teacher_norm_text = get_normalized_file_content(teacher_file_path, af.file.name)
-            if teacher_norm_text and sub_norm_text == teacher_norm_text:
+            # Точний двійковий збіг
+            if sub_hash and teacher_hash and sub_hash == teacher_hash:
                 result.update({
                     'is_duplicate': True,
                     'is_duplicate_teacher': True,
                     'teacher_file_name': teacher_name,
                     'type': 'teacher_duplicate',
                     'warning_message': (
-                        f"⚠️ Увага: текстовий вміст вашого файлу повністю збігається з вихідним файлом вчителя «{teacher_name}». "
-                        f"Перевірте, чи ви не здали умову завдання без розв'язку!"
+                        f"⚠️ Увага: вміст прикріпленого файлу повністю збігається з файлом вчителя «{teacher_name}» до цього завдання. "
+                        f"Схоже, що ви здали вихідний файл завдання замість виконаної роботи!"
                     )
                 })
                 submission._cached_dup_info = result
                 return result
+
+            # Текстовий/нормалізований збіг (якщо текст не порожній і довший 20 символів)
+            if sub_text_len >= 20:
+                teacher_norm_text = get_normalized_file_content(teacher_file_path, af.file.name)
+                if teacher_norm_text and sub_norm_text == teacher_norm_text:
+                    result.update({
+                        'is_duplicate': True,
+                        'is_duplicate_teacher': True,
+                        'teacher_file_name': teacher_name,
+                        'type': 'teacher_duplicate',
+                        'warning_message': (
+                            f"⚠️ Увага: текстовий вміст вашого файлу повністю збігається з вихідним файлом вчителя «{teacher_name}». "
+                            f"Перевірте, чи ви не здали умову завдання без розв'язку!"
+                        )
+                    })
+                    submission._cached_dup_info = result
+                    return result
 
     # ── 2. ПЕРЕВІРКА НА ЗБІГ З РОБОТАМИ ІНШИХ УЧНІВ ────────────────────────────
     other_submissions = assignment.submissions.filter(file__isnull=False)
@@ -232,30 +238,45 @@ def check_submission_duplicates(submission):
            other.class_group_id == submission.class_group_id:
             continue
 
-        # Точний двійковий збіг з роботою іншого учня
-        if sub_hash and other_hash and sub_hash == other_hash:
-            result.update({
-                'is_duplicate': True,
-                'is_duplicate_student': True,
-                'duplicate_submission_id': other.id,
-                'duplicate_student_name': other_name,
-                'duplicate_student_first_name': other.first_name,
-                'duplicate_student_last_name': other.last_name,
-                'duplicate_class': other_class,
-                'duplicate_submitted_at': other.submitted_at,
-                'type': 'student_duplicate',
-                'warning_message': (
-                    f"⚠️ Увага: вміст прикріпленого файлу повністю збігається з файлом, який раніше вже здав(ла) {other_name} ({other_class}). "
-                    f"Система зафіксувала однаковий вміст файлу як підозру на дублікат або списування!"
-                )
-            })
-            submission._cached_dup_info = result
-            return result
+        # Перевірка: чи є учень співавтором або чи увімкнено ігнорування плагіату
+        is_coauthor = (
+            (hasattr(submission, 'is_coauthor_with') and submission.is_coauthor_with(other)) or
+            getattr(submission, 'ignore_plagiarism', False) or
+            getattr(other, 'ignore_plagiarism', False)
+        )
 
-        # Текстовий/нормалізований збіг коду чи тексту
-        if sub_text_len >= 30:
+        is_binary_match = bool(sub_hash and other_hash and sub_hash == other_hash)
+        is_text_match = False
+        if not is_binary_match and sub_text_len >= 30:
             other_norm_text = get_normalized_file_content(other_file_path, other.file.name)
             if other_norm_text and sub_norm_text == other_norm_text:
+                is_text_match = True
+
+        if is_binary_match or is_text_match:
+            if is_coauthor:
+                # Встановлено спільну роботу / ігнорування плагіату: не вважаємо плагіатом!
+                result.update({
+                    'is_duplicate': False,
+                    'is_duplicate_student': False,
+                    'plagiarism_ignored': True,
+                    'is_coauthor': True,
+                    'duplicate_submission_id': other.id,
+                    'duplicate_student_name': other_name,
+                    'duplicate_student_first_name': other.first_name,
+                    'duplicate_student_last_name': other.last_name,
+                    'duplicate_class': other_class,
+                    'duplicate_submitted_at': other.submitted_at,
+                    'type': 'ignored_collaboration',
+                    'warning_message': (
+                        f"👥 Спільна/колективна робота: файл збігається з роботою співавтора {other_name} ({other_class}). "
+                        f"Плагіат виключено (робота оцінюється за спільний результат)."
+                    )
+                })
+                submission._cached_dup_info = result
+                return result
+            else:
+                # Звичайний дублікат / плагіат
+                match_reason = "вміст прикріпленого файлу повністю збігається з файлом" if is_binary_match else "текстовий вміст вашої роботи на 100% збігається з роботою"
                 result.update({
                     'is_duplicate': True,
                     'is_duplicate_student': True,
@@ -267,8 +288,8 @@ def check_submission_duplicates(submission):
                     'duplicate_submitted_at': other.submitted_at,
                     'type': 'student_duplicate',
                     'warning_message': (
-                        f"⚠️ Увага: текстовий вміст вашої роботи на 100% збігається з роботою, яку здав(ла) {other_name} ({other_class}). "
-                        f"Система зафіксувала однаковий вміст як підозру на дублікат або списування!"
+                        f"⚠️ Увага: {match_reason}, яку раніше здав(ла) {other_name} ({other_class}). "
+                        f"Система зафіксувала однаковий вміст файлу як підозру на дублікат або списування!"
                     )
                 })
                 submission._cached_dup_info = result

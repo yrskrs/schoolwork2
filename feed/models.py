@@ -2161,6 +2161,83 @@ class Submission(models.Model):
         related_name='coauthor_submissions',
         verbose_name='Основна робота групи'
     )
+    ignore_plagiarism = models.BooleanField(
+        'Ігнорувати плагіат / спільна робота',
+        default=False,
+        db_index=True,
+        help_text='Дозволяє вчителю вимкнути попередження про дублікати та плагіат, якщо учні виконували роботу спільно, але не зазначили співавторів при здачі.'
+    )
+
+    def is_coauthor_with(self, other_sub):
+        """
+        Перевіряє, чи є інша робота співавторською (колективною) відносно поточної:
+        1. Той самий ID.
+        2. Вчитель позначив ігнорування плагіату (ignore_plagiarism) на одній із робіт.
+        3. Є явною парою primary_submission / coauthor_submissions або спільним primary.
+        4. Імена або прізвища збігаються в group_authors чи списку учасників колективної роботи.
+        5. У коментарях зазначено іншого учня як співавтора (через extract_coauthors_from_comment).
+        """
+        if not other_sub:
+            return False
+        if self.id and other_sub.id and self.id == other_sub.id:
+            return True
+        if getattr(self, 'ignore_plagiarism', False) or getattr(other_sub, 'ignore_plagiarism', False):
+            return True
+
+        # Зв'язок за primary_submission
+        if self.primary_submission_id and self.primary_submission_id == other_sub.id:
+            return True
+        if other_sub.primary_submission_id and other_sub.primary_submission_id == self.id:
+            return True
+        if (self.primary_submission_id and other_sub.primary_submission_id and
+                self.primary_submission_id == other_sub.primary_submission_id):
+            return True
+
+        # Перевірка через group_authors / учасників групи
+        self_members = [m.strip().lower() for m in self.get_group_members_display() if m.strip()]
+        other_name = other_sub.get_student_full_name().strip().lower()
+        if other_name in self_members:
+            return True
+        if other_sub.last_name.strip().lower() and any(other_sub.last_name.strip().lower() in m for m in self_members):
+            return True
+
+        other_members = [m.strip().lower() for m in other_sub.get_group_members_display() if m.strip()]
+        self_name = self.get_student_full_name().strip().lower()
+        if self_name in other_members:
+            return True
+        if self.last_name.strip().lower() and any(self.last_name.strip().lower() in m for m in other_members):
+            return True
+
+        # Перевірка через розпізнавання співавторів у коментарях
+        try:
+            from .student_matcher import extract_coauthors_from_comment
+            if self.comment_student:
+                coauthors = extract_coauthors_from_comment(
+                    self.comment_student,
+                    class_group=self.class_group,
+                    exclude_last_name=self.last_name,
+                    exclude_first_name=self.first_name
+                )
+                if any(c.get('full_name', '').strip().lower() == other_name for c in coauthors):
+                    return True
+                if other_sub.last_name and any(c.get('last_name', '').strip().lower() == other_sub.last_name.strip().lower() for c in coauthors):
+                    return True
+
+            if other_sub.comment_student:
+                coauthors_other = extract_coauthors_from_comment(
+                    other_sub.comment_student,
+                    class_group=other_sub.class_group,
+                    exclude_last_name=other_sub.last_name,
+                    exclude_first_name=other_sub.first_name
+                )
+                if any(c.get('full_name', '').strip().lower() == self_name for c in coauthors_other):
+                    return True
+                if self.last_name and any(c.get('last_name', '').strip().lower() == self.last_name.strip().lower() for c in coauthors_other):
+                    return True
+        except Exception:
+            pass
+
+        return False
 
     def is_collective_work(self):
         """Визначає, чи є робота колективною (груповою)."""

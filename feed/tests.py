@@ -2467,6 +2467,193 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
         self.assertContains(resp, f'href="{expected_url}"')
         self.assertContains(resp, 'Бондаренко Анастасія')
 
+    def test_coauthor_submission_does_not_flag_plagiarism(self):
+        """Перевірка, що колективна робота зі співавторами не позначається як плагіат чи дублікат."""
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from .duplicate_detector import check_submission_duplicates
+
+        file_content = b"# Group collaborative solution\ndef group_work():\n    return 'success'\n"
+        f1 = SimpleUploadedFile("group_task.py", file_content, content_type="text/x-python")
+        
+        # 1. Створюємо первинну здачу групи
+        sub1 = Submission.objects.create(
+            assignment=self.assignment,
+            last_name='Мельник',
+            first_name='Олександр',
+            class_group=self.class_group,
+            is_group_work=True,
+            group_authors='Шевченко Тарас, Мельник Олександр',
+            file=f1,
+            is_latest_attempt=True,
+        )
+
+        # 2. Створюємо здачу співавтора
+        f2 = SimpleUploadedFile("group_task.py", file_content, content_type="text/x-python")
+        sub2 = Submission.objects.create(
+            assignment=self.assignment,
+            last_name='Шевченко',
+            first_name='Тарас',
+            class_group=self.class_group,
+            is_group_work=True,
+            group_authors='Шевченко Тарас, Мельник Олександр',
+            primary_submission=sub1,
+            file=f2,
+            is_latest_attempt=True,
+        )
+
+        # Перевіряємо метод is_coauthor_with
+        self.assertTrue(sub1.is_coauthor_with(sub2))
+        self.assertTrue(sub2.is_coauthor_with(sub1))
+
+        # Перевіряємо duplicate detector
+        dup_info1 = check_submission_duplicates(sub1)
+        self.assertFalse(dup_info1['is_duplicate'])
+        self.assertFalse(dup_info1['is_duplicate_student'])
+
+        dup_info2 = check_submission_duplicates(sub2)
+        self.assertFalse(dup_info2['is_duplicate'])
+        self.assertFalse(dup_info2['is_duplicate_student'])
+        self.assertTrue(dup_info2.get('plagiarism_ignored'))
+        self.assertTrue(dup_info2.get('is_coauthor'))
+
+    def test_teacher_toggle_ignore_plagiarism(self):
+        """Перевірка прапорця вчителя 'Ігнорувати плагіат' для парних робіт."""
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from .duplicate_detector import check_submission_duplicates
+
+        file_content = b"# Shared project code without coauthors filled\ndef shared_proj():\n    return 100\n"
+        f1 = SimpleUploadedFile("shared_project.py", file_content, content_type="text/x-python")
+        sub1 = Submission.objects.create(
+            assignment=self.assignment,
+            last_name='Лисенко',
+            first_name='Микола',
+            class_group=self.class_group,
+            file=f1,
+            is_latest_attempt=True,
+        )
+
+        f2 = SimpleUploadedFile("shared_project.py", file_content, content_type="text/x-python")
+        sub2 = Submission.objects.create(
+            assignment=self.assignment,
+            last_name='Франко',
+            first_name='Іван',
+            class_group=self.class_group,
+            file=f2,
+            is_latest_attempt=True,
+        )
+
+        # Спочатку дублікат фіксується
+        dup_before = check_submission_duplicates(sub2)
+        self.assertTrue(dup_before['is_duplicate'])
+        self.assertTrue(dup_before['is_duplicate_student'])
+
+        # Вчитель вмикає ігнорування плагіату через AJAX
+        self.client.login(username='teacher1', password='password123')
+        resp = self.client.post(
+            reverse('toggle_submission_ignore_plagiarism', args=[sub2.id]),
+            {'ignore': 'true'}
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data['status'], 'success')
+        self.assertTrue(data['ignore_plagiarism'])
+
+        sub2.refresh_from_db()
+        sub1.refresh_from_db()
+        self.assertTrue(sub2.ignore_plagiarism)
+        self.assertTrue(sub1.ignore_plagiarism)
+
+        # Тепер перевірка дублікатів показує plagiarism_ignored і is_duplicate=False
+        if hasattr(sub2, '_cached_dup_info'):
+            delattr(sub2, '_cached_dup_info')
+        dup_after = check_submission_duplicates(sub2)
+        self.assertFalse(dup_after['is_duplicate'])
+        self.assertFalse(dup_after['is_duplicate_student'])
+        self.assertTrue(dup_after.get('plagiarism_ignored'))
+
+        # Вчитель відкриває вікно перевірки - бачить позначку про спільну роботу
+        resp_view = self.client.get(reverse('view_file', args=[sub2.id]))
+        self.assertEqual(resp_view.status_code, 200)
+        self.assertContains(resp_view, 'Плагіат проігноровано')
+        self.assertContains(resp_view, 'ignore-plagiarism-checkbox')
+
+        # Вчитель вимикає ігнорування плагіату
+        resp_off = self.client.post(
+            reverse('toggle_submission_ignore_plagiarism', args=[sub2.id]),
+            {'ignore': 'false'}
+        )
+        self.assertEqual(resp_off.status_code, 200)
+        sub2.refresh_from_db()
+        self.assertFalse(sub2.ignore_plagiarism)
+
+    @patch('feed.gemini_service._http_post_json')
+    def test_ai_evaluation_collaborative_work_no_plagiarism_penalty(self, mock_http_post):
+        """Перевірка формування промпта для ШІ: спільна робота не отримує інструкцій про плагіат."""
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from .models import AISettings
+        from .gemini_service import evaluate_submission_with_gemini
+
+        settings = AISettings.get_solo()
+        settings.api_key = 'fake-api-key'
+        settings.is_enabled = True
+        settings.save()
+
+        mock_data = {
+            "candidates": [{
+                "content": {
+                    "parts": [{
+                        "text": json.dumps({
+                            "suggested_grade": 11,
+                            "level": "Високий (10-12)",
+                            "summary": "Чудова спільна робота.",
+                            "feedback_comment": "Добре виконано проект.",
+                            "strengths": ["Гарна реалізація"],
+                            "weaknesses": []
+                        })
+                    }]
+                }
+            }]
+        }
+        mock_http_post.return_value = (200, mock_data, json.dumps(mock_data))
+
+        file_content = b"# Shared code\ndef test(): return 1\n"
+        f1 = SimpleUploadedFile("task1.py", file_content, content_type="text/x-python")
+        sub1 = Submission.objects.create(
+            assignment=self.assignment,
+            last_name='Петренко',
+            first_name='Петро',
+            class_group=self.class_group,
+            file=f1,
+            is_latest_attempt=True,
+        )
+
+        f2 = SimpleUploadedFile("task1.py", file_content, content_type="text/x-python")
+        sub2 = Submission.objects.create(
+            assignment=self.assignment,
+            last_name='Сидоренко',
+            first_name='Сидір',
+            class_group=self.class_group,
+            file=f2,
+            ignore_plagiarism=True,
+            is_latest_attempt=True,
+        )
+
+        res = evaluate_submission_with_gemini(sub2)
+        self.assertEqual(res['status'], 'success')
+        self.assertEqual(str(res['suggested_grade']), '11')
+
+        # Перевіряємо аргументи виклику _http_post_json, щоб переконатися, що в prompt було передано спільну роботу
+        sent_payload = mock_http_post.call_args[0][1]
+        sent_prompt = ""
+        for content in sent_payload.get('contents', []):
+            for part in content.get('parts', []):
+                if 'text' in part:
+                    sent_prompt += part['text']
+
+        self.assertIn('СПІЛЬНЕ / КОЛЕКТИВНЕ ВИКОНАННЯ РОБОТИ (ПЛАГІАТ ВИКЛЮЧЕНО)', sent_prompt)
+        self.assertIn('КАТЕГОРИЧНО ЗАБОРОНЕНО знижувати оцінку чи встановлювати штраф за плагіат або списування', sent_prompt)
+        self.assertNotIn('КРИТИЧНЕ ЗАУВАЖЕННЯ СИСТЕМИ АНТИПЛАГІАТУ:\nВстановлено 100% збіг', sent_prompt)
+
     def test_assignment_form_preset_select_attributes(self):
         """Перевірка коректного класу та стилізації випадаючого списку шаблону критеріїв."""
         self.client.login(username='teacher1', password='password123')

@@ -55,6 +55,7 @@ urlpatterns = [
     path('teacher/submission/<int:sub_id>/grade/', views.grade_submission, name='grade_submission'),
     path('teacher/submissions/mass-grade/', views.mass_grade_submissions, name='mass_grade_submissions'),
     path('teacher/submission/<int:sub_id>/comment/', views.add_submission_comment, name='add_submission_comment'),
+    path('teacher/submission/<int:sub_id>/toggle-ignore-plagiarism/', views.toggle_submission_ignore_plagiarism, name='toggle_submission_ignore_plagiarism'),
     path('teacher/submission/<int:sub_id>/delete/', views.delete_submission, name='delete_submission'),
     path('api/teacher/live-status/', views.teacher_live_status, name='teacher_live_status'),
 

@@ -2402,7 +2402,26 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
 
     # ── ПЕРЕВІРКА НА ДУБЛІКАТ ТА ПЛАГІАТ ──────────────────────────────────────
     dup_info = check_submission_duplicates(submission)
-    if dup_info['is_duplicate_teacher']:
+    is_plagiarism_ignored = (
+        getattr(submission, 'ignore_plagiarism', False) or
+        submission.is_group_work or
+        bool(submission.primary_submission_id) or
+        dup_info.get('plagiarism_ignored', False) or
+        dup_info.get('is_coauthor', False)
+    )
+
+    if is_plagiarism_ignored and (dup_info.get('plagiarism_ignored') or dup_info.get('is_coauthor') or dup_info.get('is_duplicate_student')):
+        coauthor_name = dup_info.get('duplicate_student_name') or 'іншим учнем'
+        prompt_lines.append(
+            "\n👥 СПІЛЬНЕ / КОЛЕКТИВНЕ ВИКОНАННЯ РОБОТИ (ПЛАГІАТ ВИКЛЮЧЕНО):\n"
+            f"Встановлено однаковий або спільний вміст файлу з роботою учня ({coauthor_name}). "
+            "Вчитель або система підтвердили, що учні виконували дане завдання спільно у групі/парі (або однаковий вміст дозволено вчителем як спільний проект).\n"
+            "КАТЕГОРИЧНІ ВИМОГИ ДО ОЦІНЮВАННЯ:\n"
+            "- КАТЕГОРИЧНО ЗАБОРОНЕНО знижувати оцінку чи встановлювати штраф за плагіат або списування!\n"
+            "- Оціни якість розв'язку та повноту виконання завдання по суті за встановленими критеріями оцінювання як спільний результат.\n"
+            "- У 'summary' та 'feedback_comment' відзнач спільне виконання проекту та дай конструктивний відгук за змістом роботи.\n"
+        )
+    elif dup_info['is_duplicate_teacher'] and not is_plagiarism_ignored:
         prompt_lines.append(
             "\n🚨 КРИТИЧНЕ ЗАУВАЖЕННЯ СИСТЕМИ АНТИПЛАГІАТУ ТА ПЕРЕВІРКИ:\n"
             f"Встановлено 100% збіг: прикріплений учнем файл є точною копією вихідного файлу завдання вчителя («{dup_info['teacher_file_name']}»)! "
@@ -2412,7 +2431,7 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
             "- У 'summary' та 'feedback_comment' прямо напиши учню: «Здано оригінальний файл завдання вчителя без виконання розв'язку. Робота не зарахована. Необхідно самостійно виконати завдання та надіслати свій результат на доопрацювання.»\n"
             "- У 'weaknesses' обов'язково зазнач: «Здано вихідний файл завдання замість виконаної роботи».\n"
         )
-    elif dup_info['is_duplicate_student']:
+    elif dup_info['is_duplicate_student'] and not is_plagiarism_ignored:
         prompt_lines.append(
             "\n🚨 КРИТИЧНЕ ЗАУВАЖЕННЯ СИСТЕМИ АНТИПЛАГІАТУ:\n"
             f"Встановлено 100% збіг: вміст прикріпленого файлу повністю ідентичний файлу, який раніше здав інший учень ({dup_info['duplicate_student_name']})!\n"
@@ -2525,11 +2544,11 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
     except Exception:
         pass
 
-    if submission.is_group_work or submission.group_authors:
+    if submission.is_group_work or submission.group_authors or getattr(submission, 'ignore_plagiarism', False):
         authors_str = submission.group_authors or submission.get_student_full_name()
         prompt_lines.append(
-            f"👥 КОЛЕКТИВНА РОБОТА / СПІВАВТОРИ: Роботу виконано спільно командою учнів ({authors_str}). "
-            "Оцінюй виконання як командний проєкт, враховуючи спільний внесок."
+            f"👥 КОЛЕКТИВНА РОБОТА / СПІВАВТОРИ: Роботу виконано спільно учнями ({authors_str}) (підтверджено вчителем або системою). "
+            "Оцінюй виконання як командний проєкт, враховуючи спільний внесок без зниження оцінки за дублювання."
         )
 
     # ── ВРАХУВАННЯ КОМЕНТАРЯ УЧНЯ ─────────────────────────────────────────────

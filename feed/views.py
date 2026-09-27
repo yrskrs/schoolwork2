@@ -4261,6 +4261,85 @@ def grade_submission(request, sub_id):
 
 
 @teacher_required
+def toggle_submission_ignore_plagiarism(request, sub_id):
+    """
+    AJAX: Вчитель вмикає або вимикає ігнорування плагіату для зданої роботи.
+    Дозволяє позначити спільну роботу учнів, навіть якщо вони не зазначили співавторів при здачі.
+    При увімкненні автоматично синхронізує прапорець із парними роботами з таким самим файлом.
+    """
+    if request.method != 'POST':
+        return JsonResponse({'status': 'error', 'message': 'Method not allowed'}, status=405)
+
+    submission = get_object_or_404(Submission, id=sub_id)
+    teacher = getattr(request.user, 'teacher_profile', None)
+
+    if not (request.user.is_superuser or (submission.teacher == teacher) or (submission.assignment and submission.assignment.teacher == teacher)):
+        return JsonResponse({'status': 'error', 'message': 'Немає доступу'}, status=403)
+
+    raw_ignore = request.POST.get('ignore')
+    if raw_ignore is None:
+        try:
+            import json
+            data = json.loads(request.body.decode('utf-8'))
+            raw_ignore = data.get('ignore')
+        except Exception:
+            pass
+
+    if raw_ignore is not None:
+        new_val = str(raw_ignore).strip().lower() in ('true', '1', 'yes')
+    else:
+        new_val = not submission.ignore_plagiarism
+
+    submission.ignore_plagiarism = new_val
+    submission.save(update_fields=['ignore_plagiarism'])
+    if hasattr(submission, '_cached_dup_info'):
+        delattr(submission, '_cached_dup_info')
+
+    # Синхронізуємо прапорець із парними роботами в межах цього завдання, які мають такий самий файл
+    paired_students = []
+    if submission.file and submission.assignment:
+        try:
+            file_path = submission.file.path if submission.file else None
+            if file_path and os.path.exists(file_path):
+                from .duplicate_detector import get_file_sha256
+                sub_hash = get_file_sha256(file_path)
+                if sub_hash:
+                    matching_subs = submission.assignment.submissions.exclude(id=submission.id).filter(file__isnull=False)
+                    for other in matching_subs:
+                        if other.file and os.path.exists(other.file.path):
+                            if get_file_sha256(other.file.path) == sub_hash:
+                                other.ignore_plagiarism = new_val
+                                other.save(update_fields=['ignore_plagiarism'])
+                                if hasattr(other, '_cached_dup_info'):
+                                    delattr(other, '_cached_dup_info')
+                                paired_students.append(other.get_student_full_name())
+        except Exception:
+            pass
+
+    action_text = "увімкнено" if new_val else "вимкнено"
+    log_msg = f"Вчитель {action_text} ігнорування плагіату (спільна робота) для {submission.get_student_full_name()}"
+    if paired_students:
+        log_msg += f" (також оновлено для {', '.join(paired_students)})"
+
+    log_submission_activity(
+        request.user,
+        'update',
+        log_msg,
+        submission=submission
+    )
+
+    dup_info = check_submission_duplicates(submission)
+
+    return JsonResponse({
+        'status': 'success',
+        'ignore_plagiarism': submission.ignore_plagiarism,
+        'dup_info': dup_info,
+        'message': 'Плагіат проігноровано: роботу позначено як спільну' if new_val else 'Ігнорування плагіату вимкнено',
+        'paired_students': paired_students,
+    })
+
+
+@teacher_required
 def mass_grade_submissions(request):
     """
     AJAX / POST: Масове виставлення оцінок кільком здачам робіт одночасно.
