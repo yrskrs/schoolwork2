@@ -50,6 +50,16 @@
                     <span>📋</span>
                     <span>Критерії оцінювання</span>
                 </button>
+                {% elif is_archived or assignment.status == 'archived' or assignment.is_archived %}
+                <div class="page-hero-kicker" style="margin-bottom:6px;color:#d97706;">📦 Архівне завдання</div>
+                <h3 style="font-size:1.05rem;font-weight:750;margin:0 0 8px;color:var(--color-text-primary);">Прийом закрито</h3>
+                <p style="font-size:12.5px;color:var(--color-text-muted);line-height:1.45;margin:0 0 12px;">
+                    Це завдання знаходиться в архіві (минуло понад 14 днів). Якщо вам потрібно здати роботу із запізненням, зверніться до вчителя для розархівації.
+                </p>
+                <button type="button" class="btn btn-secondary btn-block" onclick="openCriteriaModal()" style="padding:9px 12px;font-weight:750;display:flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;" title="Ознайомитися з критеріями оцінювання цього завдання">
+                    <span>📋</span>
+                    <span>Критерії оцінювання</span>
+                </button>
                 {% else %}
                 <div class="page-hero-kicker" style="margin-bottom:6px;">Для учнів</div>
                 <h3 style="font-size:1.05rem;font-weight:750;margin:0 0 10px;">Виконали завдання?</h3>
@@ -389,7 +399,15 @@
                         {% endif %}
                     </div>
 
-
+                    {% if is_archived %}
+                    <div style="margin-bottom: 16px; padding: 14px 18px; border-radius: var(--radius-md); background: rgba(245, 158, 11, 0.12); border: 1.5px solid rgba(245, 158, 11, 0.4); display: flex; align-items: center; gap: 14px; color: var(--color-text-primary);">
+                        <span style="font-size: 24px; flex-shrink: 0;">📦</span>
+                        <div style="font-size: 13.5px; line-height: 1.45;">
+                            <strong style="color: #d97706; font-size: 14.5px; display: block; margin-bottom: 2px;">Завдання заархівовано (понад 2 тижні тому)</strong>
+                            Термін прийому робіт минув, це завдання переміщено в архів. Ви можете переглядати опис завдання та свої здані відповіді в розділі <a href="{% url 'student_submissions_portal' %}" style="color: var(--color-primary); font-weight: 700; text-decoration: underline;">Мої роботи</a>.
+                        </div>
+                    </div>
+                    {% endif %}
 
                     <!-- Назва завдання -->
                     <h1 style="font-size:1.6rem;font-weight:800;margin:0 0 16px;color:var(--color-text-primary);line-height:1.3;">
@@ -401,7 +419,10 @@
                     <div class="assignment-student-top-banner">
                         <div>
                             <div class="top-banner-title">
-                                {% if assignment.no_submission_required %}
+                                {% if is_archived %}
+                                <span>📦</span>
+                                <span>Заархівоване завдання</span>
+                                {% elif assignment.no_submission_required %}
                                 <span>📖</span>
                                 <span>Завдання для опрацювання</span>
                                 {% else %}
@@ -410,7 +431,9 @@
                                 {% endif %}
                             </div>
                             <div class="top-banner-subtitle">
-                                {% if assignment.no_submission_required %}
+                                {% if is_archived %}
+                                ℹ️ Завдання переведено в архів через давність (понад 14 днів). Нові відповіді не приймаються.
+                                {% elif assignment.no_submission_required %}
                                 ℹ️ Це завдання не вимагає здачі робіт на сайті (усне або для самостійного опрацювання)
                                 {% elif assignment.due_date %}
                                 ⏰ Термін здачі: <strong>до {{ assignment.due_date|date:"d.m.Y" }}</strong>
@@ -425,10 +448,16 @@
                                 <span>Критерії оцінювання</span>
                             </button>
                             {% if not assignment.no_submission_required %}
-                            <a href="{% url 'submit_assignment' assignment.pk %}" class="btn btn-primary btn-sm" style="font-weight:800;padding:8px 18px;box-shadow:0 3px 12px rgba(99,102,241,0.3);text-decoration:none;display:inline-flex;align-items:center;gap:6px;">
-                                <span>📤</span>
-                                <span>Здати роботу зараз</span>
-                            </a>
+                                {% if is_archived or assignment.status == 'archived' or assignment.is_archived %}
+                                <span class="badge" style="background: rgba(245, 158, 11, 0.15); color: #b45309; border: 1px solid rgba(245, 158, 11, 0.3); font-weight: 700; padding: 7px 14px; border-radius: var(--radius-sm); font-size: 13px;">
+                                    🔒 Прийом робіт закрито
+                                </span>
+                                {% else %}
+                                <a href="{% url 'submit_assignment' assignment.pk %}" class="btn btn-primary btn-sm" style="font-weight:800;padding:8px 18px;box-shadow:0 3px 12px rgba(99,102,241,0.3);text-decoration:none;display:inline-flex;align-items:center;gap:6px;">
+                                    <span>📤</span>
+                                    <span>Здати роботу зараз</span>
+                                </a>
+                                {% endif %}
                             {% else %}
                             <span class="badge" style="background:var(--color-bg-secondary);border:1px solid var(--color-border);color:var(--color-primary);font-weight:700;padding:6px 12px;font-size:12px;border-radius:var(--radius-sm);">
                                 📖 Без здачі
@@ -928,7 +957,23 @@
                     {% endif %}
 
                     <!-- Нижній блок здачі роботи -->
-                    {% if not assignment.no_submission_required %}
+                    {% if is_archived or assignment.status == 'archived' or assignment.is_archived %}
+                    <div style="padding:18px 22px;background:rgba(245,158,11,0.08);border:1.5px solid rgba(245,158,11,0.35);border-radius:var(--radius-lg);display:flex;justify-content:space-between;align-items:center;flex-wrap:gap;gap:16px;">
+                        <div>
+                            <h4 style="font-size:1.05rem;font-weight:800;margin:0 0 4px;color:#b45309;display:flex;align-items:center;gap:8px;">
+                                <span>🔒</span>
+                                <span>Прийом робіт закрито</span>
+                            </h4>
+                            <p style="font-size:13px;color:var(--color-text-muted);margin:0;">
+                                Це завдання переведено в архів (минуло понад 14 днів). Нові відповіді не приймаються. Якщо вам необхідно надіслати роботу, зверніться до вчителя для розархівації.
+                            </p>
+                        </div>
+                        <button type="button" onclick="openCriteriaModal()" class="btn btn-secondary" style="font-weight:750;display:inline-flex;align-items:center;gap:6px;">
+                            <span>📋</span>
+                            <span>Критерії оцінювання</span>
+                        </button>
+                    </div>
+                    {% elif not assignment.no_submission_required %}
                     <div style="padding:20px;background:linear-gradient(135deg,rgba(99,102,241,0.06),rgba(139,92,246,0.12));border:1px solid rgba(99,102,241,0.25);border-radius:var(--radius-lg);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px;">
                         <div>
                             <h4 style="font-size:1.1rem;font-weight:800;margin:0 0 4px;color:var(--color-text-primary);">

@@ -143,15 +143,65 @@
                 </div>
                 <div id="student-ai-result" style="display:none;margin-bottom:18px;"></div>
                 {% elif submission.student_ai_checked %}
-                <div style="margin-bottom:18px;background:var(--color-surface);border:1.5px solid {% if submission.student_ai_grade == 'Доопрацювати' %}rgba(245,158,11,0.5){% else %}rgba(99,102,241,0.3){% endif %};border-radius:var(--radius-md);overflow:hidden;">
-                    <div style="padding:12px 16px;background:linear-gradient(135deg,rgba(99,102,241,0.06),rgba(139,92,246,0.06));border-bottom:1px solid var(--color-border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
-                        <div style="font-weight:800;font-size:14px;color:var(--color-text-primary);display:flex;align-items:center;gap:6px;">
-                            <span>🤖</span> <span>Попередня оцінка ШІ (самоперевірка)</span>
+                {% with gg=submission.get_ai_grade_group_info %}
+                <div style="margin-bottom:18px;background:var(--color-surface);border:2px solid {% if gg %}{{ gg.border_color }}{% else %}rgba(99,102,241,0.3){% endif %};border-radius:var(--radius-lg);overflow:hidden;box-shadow:0 4px 18px rgba(0,0,0,0.06);">
+                    <div style="padding:14px 20px;background:linear-gradient(135deg,rgba(99,102,241,0.08),rgba(139,92,246,0.08));border-bottom:1.5px solid var(--color-border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+                        <div style="font-weight:800;font-size:15px;color:var(--color-text-primary);display:flex;align-items:center;gap:8px;">
+                            <span style="font-size:20px;">🤖</span>
+                            <span>Попередня оцінка ШІ (за критеріями НУШ)</span>
                         </div>
-                        <span class="badge" style="{% if submission.student_ai_grade == 'Доопрацювати' %}background:#fef3c7;color:#d97706;border:1px solid #fcd34d;{% else %}background:rgba(16,185,129,0.15);color:#059669;{% endif %}font-weight:800;font-size:12px;padding:3px 10px;border-radius:12px;">
-                            {{ submission.student_ai_grade }}{% if submission.student_ai_level %} ({{ submission.student_ai_level }}){% endif %}
-                        </span>
+                        <span style="font-size:12px;color:var(--color-text-muted);font-weight:600;">12-бальна шкала</span>
                     </div>
+
+                    {% if gg %}
+                    <div style="padding:18px 20px;background:var(--color-surface);border-bottom:1px solid var(--color-border);">
+                        <div style="display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap;">
+                            <div style="display:flex;align-items:center;gap:18px;">
+                                <div style="min-width:80px;height:80px;border-radius:20px;background:{{ gg.bg_color }};border:2.5px solid {{ gg.border_color }};display:flex;flex-direction:column;align-items:center;justify-content:center;box-shadow:0 4px 14px {{ gg.bg_color }};">
+                                    <span style="font-size:36px;font-weight:950;line-height:1;color:{{ gg.color }};">{{ gg.raw_grade }}</span>
+                                    {% if gg.level_code != 'rework' %}
+                                    <span style="font-size:11px;font-weight:800;color:{{ gg.color }};opacity:0.85;margin-top:2px;">з 12 балів</span>
+                                    {% endif %}
+                                </div>
+
+                                <div>
+                                    <div style="font-size:11.5px;font-weight:750;color:var(--color-text-muted);text-transform:uppercase;letter-spacing:0.5px;">Група успішності / Рівень:</div>
+                                    <div style="font-size:20px;font-weight:900;color:var(--color-text-primary);margin:2px 0 6px;">{{ gg.icon }} {{ gg.group_name }}</div>
+                                    <div style="display:inline-flex;align-items:center;gap:6px;background:{{ gg.bg_color }};border:1.5px solid {{ gg.border_color }};border-radius:20px;padding:4px 12px;font-size:13px;font-weight:850;color:{{ gg.color }};">
+                                        <span>🎯</span>
+                                        <span>Діапазон оцінок групи: <strong>{{ gg.range_str }}</strong></span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div style="max-width:320px;font-size:12.5px;color:var(--color-text-secondary);line-height:1.45;background:var(--color-bg-secondary);padding:10px 14px;border-radius:var(--radius-md);border:1px solid var(--color-border);">
+                                <strong style="color:var(--color-text-primary);display:block;margin-bottom:2px;">Характеристика відповіді:</strong>
+                                {{ gg.description }}
+                            </div>
+                        </div>
+
+                        <div style="margin-top:16px;padding-top:14px;border-top:1px dashed var(--color-border);">
+                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-size:12px;">
+                                <span style="font-weight:750;color:var(--color-text-secondary);">Шкала рівнів навчальних досягнень:</span>
+                                <span style="font-weight:850;color:{{ gg.color }};">Ваша оцінка <strong>{{ gg.raw_grade }}</strong> належить до групи «{{ gg.group_name }}»</span>
+                            </div>
+                            <div style="display:grid;grid-template-columns:repeat(4, 1fr);gap:6px;">
+                                <div style="padding:7px 8px;border-radius:var(--radius-sm);text-align:center;font-size:11.5px;transition:all 0.2s;{% if gg.level_code == 'low' %}background:rgba(239,68,68,0.18);border:2px solid #ef4444;font-weight:900;color:#b91c1c;box-shadow:0 2px 8px rgba(239,68,68,0.2);{% else %}background:var(--color-bg-secondary);border:1px solid var(--color-border);color:var(--color-text-muted);opacity:0.65;{% endif %}">
+                                    <div>1–3 бали</div><div style="font-size:10.5px;margin-top:1px;">Початковий</div>{% if gg.level_code == 'low' %}<div style="font-size:9.5px;margin-top:2px;">⭐ Ваша оцінка</div>{% endif %}
+                                </div>
+                                <div style="padding:7px 8px;border-radius:var(--radius-sm);text-align:center;font-size:11.5px;transition:all 0.2s;{% if gg.level_code == 'avg' %}background:rgba(245,158,11,0.18);border:2px solid #f59e0b;font-weight:900;color:#b45309;box-shadow:0 2px 8px rgba(245,158,11,0.2);{% else %}background:var(--color-bg-secondary);border:1px solid var(--color-border);color:var(--color-text-muted);opacity:0.65;{% endif %}">
+                                    <div>4–6 балів</div><div style="font-size:10.5px;margin-top:1px;">Середній</div>{% if gg.level_code == 'avg' %}<div style="font-size:9.5px;margin-top:2px;">⭐ Ваша оцінка</div>{% endif %}
+                                </div>
+                                <div style="padding:7px 8px;border-radius:var(--radius-sm);text-align:center;font-size:11.5px;transition:all 0.2s;{% if gg.level_code == 'good' %}background:rgba(37,99,235,0.18);border:2px solid #3b82f6;font-weight:900;color:#1d4ed8;box-shadow:0 2px 8px rgba(37,99,235,0.2);{% else %}background:var(--color-bg-secondary);border:1px solid var(--color-border);color:var(--color-text-muted);opacity:0.65;{% endif %}">
+                                    <div>7–9 балів</div><div style="font-size:10.5px;margin-top:1px;">Достатній</div>{% if gg.level_code == 'good' %}<div style="font-size:9.5px;margin-top:2px;">⭐ Ваша оцінка</div>{% endif %}
+                                </div>
+                                <div style="padding:7px 8px;border-radius:var(--radius-sm);text-align:center;font-size:11.5px;transition:all 0.2s;{% if gg.level_code == 'high' %}background:rgba(16,185,129,0.18);border:2px solid #10b981;font-weight:900;color:#047857;box-shadow:0 2px 8px rgba(16,185,129,0.2);{% else %}background:var(--color-bg-secondary);border:1px solid var(--color-border);color:var(--color-text-muted);opacity:0.65;{% endif %}">
+                                    <div>10–12 балів</div><div style="font-size:10.5px;margin-top:1px;">Високий</div>{% if gg.level_code == 'high' %}<div style="font-size:9.5px;margin-top:2px;">⭐ Ваша оцінка</div>{% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
 
                     <div style="padding:14px 16px;">
                         {% if "не зрозуміло" in submission.student_ai_summary|lower or "незрозуміло" in submission.student_ai_summary|lower or "не зрозуміло" in submission.student_ai_feedback|lower or "незрозуміло" in submission.student_ai_feedback|lower %}
@@ -173,8 +223,9 @@
                                     <span>{% if submission.is_ai_allowed %}У роботі зафіксовано використання штучного інтелекту (ШІ) (дозволено вчителем){% else %}У роботі виявлено ознаки використання штучного інтелекту (ШІ){% endif %}</span>
                                 </span>
                             </div>
-                            {% if submission.ai_generated_details %}
-                            <div style="font-size:12px;color:var(--color-text-secondary);line-height:1.4;margin:4px 0;">
+                            {% if is_teacher and submission.ai_generated_details %}
+                            <div style="font-size:12px;color:var(--color-text-secondary);line-height:1.4;margin:4px 0;padding:6px 10px;background:rgba(0,0,0,0.04);border-radius:4px;">
+                                <strong>🔒 Деталі аналізу (видно тільки вчителю):</strong><br>
                                 {{ submission.ai_generated_details }}
                             </div>
                             {% endif %}
@@ -259,6 +310,7 @@
                     </div>
                     <div style="padding:10px 16px;background:rgba(16,185,129,0.05);border-top:1px solid var(--color-border);font-size:11.5px;color:var(--color-text-muted);">ℹ️ Попередня оцінка від ШІ. Остаточну оцінку виставляє вчитель.</div>
                 </div>
+                {% endwith %}
                 {% endif %}
 
                 <!-- Здані файли або посилання (Тільки інфо) -->
@@ -355,8 +407,9 @@
                         <span>🤖</span>
                         <span>{% if submission.is_ai_allowed %}У роботі зафіксовано використання штучного інтелекту (ШІ) (дозволено вчителем){% else %}У роботі виявлено ознаки використання штучного інтелекту (ШІ){% endif %}</span>
                     </div>
-                    {% if submission.ai_generated_details %}
-                    <div style="font-size:12.5px;color:var(--color-text-secondary);line-height:1.4;margin-bottom:6px;">
+                    {% if is_teacher and submission.ai_generated_details %}
+                    <div style="font-size:12.5px;color:var(--color-text-secondary);line-height:1.4;margin-bottom:6px;padding:8px 12px;background:rgba(0,0,0,0.04);border-radius:var(--radius-sm);">
+                        <strong>🔒 Деталі аналізу (видно тільки вчителю):</strong><br>
                         {{ submission.ai_generated_details }}
                     </div>
                     {% endif %}
@@ -468,7 +521,7 @@ function runStudentAICheck(subId) {
             var alertTitle = isAllowed ? 'У роботі зафіксовано використання штучного інтелекту (ШІ) (дозволено вчителем)' : 'У роботі виявлено ознаки використання штучного інтелекту (ШІ)';
             var alertNote = isAllowed ? '💡 Вчитель дозволив використання ШІ для виконання цього завдання.' : '⚠️ Для цього завдання вчитель вимагав повністю самостійного виконання учнем!';
 
-            var detailsText = data.ai_generated_details ? '<div style="margin:4px 0;font-size:12px;color:var(--color-text-secondary);line-height:1.4;">' + data.ai_generated_details + '</div>' : '';
+            var detailsText = '';
 
             aiDetectionHtml = '<div style="margin-bottom:12px;padding:12px 16px;background:' + alertBg + ';border:1.5px solid ' + alertBorder + ';border-radius:var(--radius-sm);">' +
                 '<div style="font-weight:800;font-size:13px;color:' + alertColor + ';display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;margin-bottom:4px;">' +
@@ -557,17 +610,86 @@ function runStudentAICheck(subId) {
             '</div>';
         }
 
-        var html = '<div style="background:var(--color-surface);border:1.5px solid rgba(99,102,241,0.3);border-radius:var(--radius-md);overflow:hidden;margin-bottom:18px;">' +
-            '<div style="padding:12px 16px;background:linear-gradient(135deg,rgba(99,102,241,0.06),rgba(139,92,246,0.06));border-bottom:1px solid var(--color-border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">' +
-            '<div style="font-weight:800;font-size:14px;color:var(--color-text-primary);display:flex;align-items:center;gap:6px;">' +
-            '<span>🤖</span> <span>Результат перевірки ШІ</span>' +
+        var gg = data.grade_group || null;
+        if (!gg && data.grade) {
+            var raw = String(data.grade).trim();
+            var val = parseFloat(raw.replace(',', '.'));
+            var isRework = raw.toLowerCase().indexOf('доопрацю') !== -1;
+            if (isRework) {
+                gg = {
+                    group_name: 'Потребує доопрацювання',
+                    range_str: 'Роботу не зараховано',
+                    level_code: 'rework',
+                    color: '#d97706',
+                    bg_color: 'rgba(245, 158, 11, 0.12)',
+                    border_color: '#f59e0b',
+                    icon: '⚠️',
+                    description: 'Робота виконана частково або має суттєві неточності. Ознайомтеся з зауваженнями нижче та надішліть виправлену версію.',
+                    raw_grade: raw
+                };
+            } else if (!isNaN(val)) {
+                if (val >= 10) {
+                    gg = { group_name: 'Високий рівень', range_str: '10–12 балів', level_code: 'high', color: '#059669', bg_color: 'rgba(16, 185, 129, 0.12)', border_color: '#10b981', icon: '🏆', description: 'Глибокі знання та бездоганне володіння матеріалом.', raw_grade: String(val) };
+                } else if (val >= 7) {
+                    gg = { group_name: 'Достатній рівень', range_str: '7–9 балів', level_code: 'good', color: '#2563eb', bg_color: 'rgba(37, 99, 235, 0.1)', border_color: '#3b82f6', icon: '📘', description: 'Впевнене володіння матеріалом, незначні неточності.', raw_grade: String(val) };
+                } else if (val >= 4) {
+                    gg = { group_name: 'Середній рівень', range_str: '4–6 балів', level_code: 'avg', color: '#d97706', bg_color: 'rgba(245, 158, 11, 0.12)', border_color: '#f59e0b', icon: '📙', description: 'Базове розуміння матеріалу, є прогалини або помилки.', raw_grade: String(val) };
+                } else {
+                    gg = { group_name: 'Початковий рівень', range_str: '1–3 бали', level_code: 'low', color: '#dc2626', bg_color: 'rgba(239, 68, 68, 0.1)', border_color: '#ef4444', icon: '📕', description: 'Завдання виконано частково або з грубими помилками.', raw_grade: String(val) };
+                }
+            }
+        }
+
+        var heroGradeHtml = '';
+        if (gg) {
+            var sLow = (gg.level_code === 'low') ? 'background:rgba(239,68,68,0.18);border:2px solid #ef4444;font-weight:900;color:#b91c1c;box-shadow:0 2px 8px rgba(239,68,68,0.2);' : 'background:var(--color-bg-secondary);border:1px solid var(--color-border);color:var(--color-text-muted);opacity:0.65;';
+            var sAvg = (gg.level_code === 'avg') ? 'background:rgba(245,158,11,0.18);border:2px solid #f59e0b;font-weight:900;color:#b45309;box-shadow:0 2px 8px rgba(245,158,11,0.2);' : 'background:var(--color-bg-secondary);border:1px solid var(--color-border);color:var(--color-text-muted);opacity:0.65;';
+            var sGood = (gg.level_code === 'good') ? 'background:rgba(37,99,235,0.18);border:2px solid #3b82f6;font-weight:900;color:#1d4ed8;box-shadow:0 2px 8px rgba(37,99,235,0.2);' : 'background:var(--color-bg-secondary);border:1px solid var(--color-border);color:var(--color-text-muted);opacity:0.65;';
+            var sHigh = (gg.level_code === 'high') ? 'background:rgba(16,185,129,0.18);border:2px solid #10b981;font-weight:900;color:#047857;box-shadow:0 2px 8px rgba(16,185,129,0.2);' : 'background:var(--color-bg-secondary);border:1px solid var(--color-border);color:var(--color-text-muted);opacity:0.65;';
+
+            heroGradeHtml = '<div style="padding:18px 20px;background:var(--color-surface);border-bottom:1px solid var(--color-border);">' +
+                '<div style="display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap;">' +
+                    '<div style="display:flex;align-items:center;gap:18px;">' +
+                        '<div style="min-width:80px;height:80px;border-radius:20px;background:' + gg.bg_color + ';border:2.5px solid ' + gg.border_color + ';display:flex;flex-direction:column;align-items:center;justify-content:center;box-shadow:0 4px 14px ' + gg.bg_color + ';">' +
+                            '<span style="font-size:36px;font-weight:950;line-height:1;color:' + gg.color + ';">' + gg.raw_grade + '</span>' +
+                            (gg.level_code !== 'rework' ? '<span style="font-size:11px;font-weight:800;color:' + gg.color + ';opacity:0.85;margin-top:2px;">з 12 балів</span>' : '') +
+                        '</div>' +
+                        '<div>' +
+                            '<div style="font-size:11.5px;font-weight:750;color:var(--color-text-muted);text-transform:uppercase;letter-spacing:0.5px;">Група успішності / Рівень:</div>' +
+                            '<div style="font-size:20px;font-weight:900;color:var(--color-text-primary);margin:2px 0 6px;">' + gg.icon + ' ' + gg.group_name + '</div>' +
+                            '<div style="display:inline-flex;align-items:center;gap:6px;background:' + gg.bg_color + ';border:1.5px solid ' + gg.border_color + ';border-radius:20px;padding:4px 12px;font-size:13px;font-weight:850;color:' + gg.color + ';">' +
+                                '<span>🎯</span> <span>Діапазон оцінок групи: <strong>' + gg.range_str + '</strong></span>' +
+                            '</div>' +
+                        '</div>' +
+                    '</div>' +
+                    '<div style="max-width:320px;font-size:12.5px;color:var(--color-text-secondary);line-height:1.45;background:var(--color-bg-secondary);padding:10px 14px;border-radius:var(--radius-md);border:1px solid var(--color-border);">' +
+                        '<strong style="color:var(--color-text-primary);display:block;margin-bottom:2px;">Характеристика відповіді:</strong>' + gg.description +
+                    '</div>' +
+                '</div>' +
+                '<div style="margin-top:16px;padding-top:14px;border-top:1px dashed var(--color-border);">' +
+                    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-size:12px;">' +
+                        '<span style="font-weight:750;color:var(--color-text-secondary);">Шкала рівнів навчальних досягнень:</span>' +
+                        '<span style="font-weight:850;color:' + gg.color + ';">Ваша оцінка <strong>' + gg.raw_grade + '</strong> належить до групи «' + gg.group_name + '»</span>' +
+                    '</div>' +
+                    '<div style="display:grid;grid-template-columns:repeat(4, 1fr);gap:6px;">' +
+                        '<div style="padding:7px 8px;border-radius:var(--radius-sm);text-align:center;font-size:11.5px;' + sLow + '"><div>1–3 бали</div><div style="font-size:10.5px;margin-top:1px;">Початковий</div>' + (gg.level_code === 'low' ? '<div style="font-size:9.5px;margin-top:2px;">⭐ Ваша оцінка</div>' : '') + '</div>' +
+                        '<div style="padding:7px 8px;border-radius:var(--radius-sm);text-align:center;font-size:11.5px;' + sAvg + '"><div>4–6 балів</div><div style="font-size:10.5px;margin-top:1px;">Середній</div>' + (gg.level_code === 'avg' ? '<div style="font-size:9.5px;margin-top:2px;">⭐ Ваша оцінка</div>' : '') + '</div>' +
+                        '<div style="padding:7px 8px;border-radius:var(--radius-sm);text-align:center;font-size:11.5px;' + sGood + '"><div>7–9 балів</div><div style="font-size:10.5px;margin-top:1px;">Достатній</div>' + (gg.level_code === 'good' ? '<div style="font-size:9.5px;margin-top:2px;">⭐ Ваша оцінка</div>' : '') + '</div>' +
+                        '<div style="padding:7px 8px;border-radius:var(--radius-sm);text-align:center;font-size:11.5px;' + sHigh + '"><div>10–12 балів</div><div style="font-size:10.5px;margin-top:1px;">Високий</div>' + (gg.level_code === 'high' ? '<div style="font-size:9.5px;margin-top:2px;">⭐ Ваша оцінка</div>' : '') + '</div>' +
+                    '</div>' +
+                '</div>' +
+            '</div>';
+        }
+
+        var html = '<div style="background:var(--color-surface);border:2px solid ' + (gg ? gg.border_color : 'rgba(99,102,241,0.3)') + ';border-radius:var(--radius-lg);overflow:hidden;box-shadow:0 4px 18px rgba(0,0,0,0.06);margin-bottom:18px;">' +
+            '<div style="padding:14px 20px;background:linear-gradient(135deg,rgba(99,102,241,0.08),rgba(139,92,246,0.08));border-bottom:1.5px solid var(--color-border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">' +
+            '<div style="font-weight:800;font-size:15px;color:var(--color-text-primary);display:flex;align-items:center;gap:6px;">' +
+            '<span>🤖</span> <span>Попередня оцінка ШІ (за критеріями НУШ)</span>' +
             '</div>' +
-            '<div style="display:flex;align-items:center;gap:8px;">' +
-            '<span style="font-size:12px;font-weight:700;color:var(--color-text-secondary);">Попередня оцінка:</span>' +
-            '<span style="font-size:13px;font-weight:900;padding:2px 10px;border-radius:12px;' + gradeBadgeStyle + '">' + (data.grade || '—') + (data.level ? ' (' + data.level + ')' : '') + '</span>' +
+            '<span style="font-size:12px;color:var(--color-text-muted);font-weight:600;">12-бальна шкала</span>' +
             '</div>' +
-            '</div>' +
-            '<div style="padding:14px 16px;">' +
+            heroGradeHtml +
+            '<div style="padding:16px 20px;">' +
             unclearTaskHtml +
             duplicateHtml +
             aiDetectionHtml +
@@ -576,7 +698,7 @@ function runStudentAICheck(subId) {
             strengthsHtml +
             feedbackCommentHtml +
             '</div>' +
-            '<div style="padding:8px 16px;background:rgba(16,185,129,0.05);border-top:1px solid var(--color-border);font-size:11px;color:var(--color-text-muted);">ℹ️ Попередня оцінка від ШІ. Остаточну оцінку виставляє вчитель.</div>' +
+            '<div style="padding:10px 20px;background:rgba(16,185,129,0.05);border-top:1px solid var(--color-border);font-size:11.5px;color:var(--color-text-muted);">ℹ️ Попередня оцінка від ШІ. Остаточну оцінку виставляє вчитель.</div>' +
             '</div>';
 
         if (resultBox) {

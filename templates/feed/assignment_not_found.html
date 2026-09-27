@@ -1,0 +1,32 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Завдання не знайдено | Шкільні Завдання{% endblock %}
+{% block meta_description %}Завдання не знайдено або було заархівовано чи вилучено{% endblock %}
+
+{% block content %}
+<div class="page-wrapper" style="max-width: 680px; margin: 40px auto; padding: 20px;">
+
+    <div class="sidebar-card" style="padding: 40px 30px; text-align: center; border-radius: var(--radius-lg); box-shadow: var(--shadow-md);">
+        <div style="font-size: 64px; line-height: 1; margin-bottom: 16px;">📦</div>
+        <div class="page-hero-kicker" style="color: var(--color-warning, #d97706); margin-bottom: 6px;">Архів або вилучення</div>
+        <h1 style="font-size: 1.5rem; font-weight: 800; color: var(--color-text-primary); margin: 0 0 12px;">
+            Завдання не знайдено або заархівовано
+        </h1>
+        <p style="color: var(--color-text-secondary); font-size: 14px; line-height: 1.6; margin: 0 0 24px;">
+            Завдання, яке ви шукаєте, було переміщено до архіву (минуло понад 14 днів) або вилучено вчителем.<br>
+            Якщо ви раніше здавали роботу по цьому завданню — <strong>ваші здані файли та оцінки збережені</strong> та доступні для перегляду у розділі «Мої здані роботи».
+        </p>
+
+        <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
+            <a href="{% url 'student_submissions_portal' %}" class="btn btn-primary" style="padding: 10px 20px; font-weight: 750;">
+                📂 Переглянути мої здані роботи
+            </a>
+            <a href="{% url 'index' %}" class="btn btn-secondary" style="padding: 10px 20px; font-weight: 750;">
+                🏠 На головну стрічку завдань
+            </a>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

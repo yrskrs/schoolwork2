@@ -145,6 +145,17 @@
                                     🔄 Спроба #{{ sub.resubmission_attempt }} (Актуальна)
                                 </span>
                                 {% endif %}
+                                {% if sub.ai_generated_detected %}
+                                    {% if sub.is_ai_allowed %}
+                                    <span class="badge" style="background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0;font-size:11px;font-weight:700;padding:2px 7px;border-radius:12px;" title="У роботі зафіксовано використання ШІ (дозволено вчителем)">
+                                        🤖 ШІ (дозволено)
+                                    </span>
+                                    {% else %}
+                                    <span class="badge" style="background:#fef2f2;color:#991b1b;border:1px solid #fecaca;font-size:11px;font-weight:700;padding:2px 7px;border-radius:12px;" title="У роботі виявлено ознаки використання ШІ (самостійна робота)">
+                                        🤖 Виявлено ШІ (самостійна робота)
+                                    </span>
+                                    {% endif %}
+                                {% endif %}
                                 <span style="font-size:12px;color:var(--color-text-muted);">
                                     · 📅 {{ sub.submitted_at|date:"d.m.Y H:i" }}
                                 </span>
@@ -156,8 +167,15 @@
                                 <a href="{% url 'assignment_detail' sub.assignment.pk %}" style="color:var(--color-text-primary);text-decoration:none;">
                                     {{ sub.assignment.title }}
                                 </a>
+                                {% if sub.assignment.status == 'archived' %}
+                                <span class="badge" style="background:rgba(100,116,139,0.12);color:#475569;border:1px solid rgba(100,116,139,0.25);font-size:10.5px;font-weight:700;padding:2px 6px;border-radius:10px;vertical-align:middle;margin-left:4px;" title="Завдання знаходиться в архіві (минуло понад 14 днів)">
+                                    📦 В архіві (понад 2 тижні)
+                                </span>
+                                {% endif %}
                                 {% else %}
-                                <span>Самостійна робота</span>
+                                <span style="color:var(--color-text-muted);" title="Завдання було вилучено або переміщено вчителем, але ваші здані матеріали збережені">
+                                    🗑️ Завдання вилучено (Самостійна робота)
+                                </span>
                                 {% endif %}
                             </h3>
 
@@ -233,6 +251,28 @@
                     </div>
                     {% endif %}
 
+                    <!-- Інформація про використання ШІ для учня (загальна інформація без деталей) -->
+                    {% if sub.ai_generated_detected %}
+                    <div style="padding:10px 14px;background:{% if sub.is_ai_allowed %}rgba(16,185,129,0.08){% else %}rgba(239,68,68,0.08){% endif %};border:1px solid {% if sub.is_ai_allowed %}#10b981{% else %}#ef4444{% endif %};border-radius:var(--radius-md);margin-bottom:12px;font-size:12.5px;display:flex;align-items:flex-start;gap:8px;">
+                        <span style="font-size:18px;line-height:1;flex-shrink:0;">🤖</span>
+                        <div>
+                            <div style="font-weight:800;color:{% if sub.is_ai_allowed %}#065f46{% else %}#b91c1c{% endif %};">
+                                {% if sub.is_ai_allowed %}
+                                У роботі зафіксовано використання штучного інтелекту (ШІ) — дозволено вчителем
+                                {% else %}
+                                У роботі виявлено ознаки використання штучного інтелекту (ШІ)
+                                {% endif %}
+                            </div>
+                            <div style="font-size:11.5px;color:var(--color-text-secondary);margin-top:2px;line-height:1.4;">
+                                {% if sub.is_ai_allowed %}
+                                💡 Вчитель дозволив використання інструментів ШІ для цього навчального завдання.
+                                {% else %}
+                                ⚠️ Для цього завдання вчитель вимагав повністю самостійного виконання без застосування генеративного ШІ.
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
 
                     {% if sub.comment_student %}
                     <div style="font-size:13px;color:var(--color-text-secondary);margin-bottom:12px;padding-left:4px;">

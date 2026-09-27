@@ -651,6 +651,11 @@ class Assignment(models.Model):
         return False
 
     @property
+    def is_archived(self):
+        """Чи переведено завдання в архів."""
+        return self.status == self.STATUS_ARCHIVED
+
+    @property
     def youtube_video_id(self):
         """Витягує чистий 11-значний ID відео YouTube з будь-якого формату посилання."""
         if not self.youtube_url:
@@ -2434,6 +2439,98 @@ class Submission(models.Model):
             return text
         return ""
 
+    def get_ai_grade_group_info(self):
+        """
+        Повертає структуровану інформацію про групу та діапазон оцінки ШІ:
+        - group_name: 'Високий рівень', 'Достатній рівень', 'Середній рівень', 'Початковий рівень' або 'Потребує доопрацювання'
+        - range_str: '10–12 балів', '7–9 балів', '4–6 балів', '1–3 бали'
+        - level_code: 'high', 'good', 'avg', 'low', 'rework'
+        - color: '#059669', '#2563eb', '#d97706', '#dc2626'
+        - icon: '🏆', '📘', '📙', '📕', '⚠️'
+        - raw_grade: значення оцінки
+        """
+        raw_grade = str(self.student_ai_grade or self.ai_suggested_grade or '').strip()
+        if not raw_grade:
+            return None
+
+        if 'доопрацю' in raw_grade.lower() or (self.student_ai_level and 'доопрацю' in str(self.student_ai_level).lower()):
+            return {
+                'group_name': 'Потребує доопрацювання',
+                'range_str': 'Роботу не зараховано',
+                'level_code': 'rework',
+                'color': '#d97706',
+                'bg_color': 'rgba(245, 158, 11, 0.12)',
+                'border_color': '#f59e0b',
+                'icon': '⚠️',
+                'description': 'Робота виконана частково або має суттєві неточності. Ознайомтеся з зауваженнями нижче та надішліть виправлену версію.',
+                'raw_grade': raw_grade
+            }
+
+        try:
+            val = float(raw_grade.replace(',', '.').strip())
+        except ValueError:
+            return {
+                'group_name': self.student_ai_level or 'Оцінено',
+                'range_str': 'Залік',
+                'level_code': 'good',
+                'color': '#2563eb',
+                'bg_color': 'rgba(37, 99, 235, 0.1)',
+                'border_color': '#3b82f6',
+                'icon': '✅',
+                'description': 'Завдання успішно зараховане за критеріями оцінювання.',
+                'raw_grade': raw_grade
+            }
+
+        grade_int_str = str(int(val) if val.is_integer() else val)
+        if val >= 10:
+            return {
+                'group_name': 'Високий рівень',
+                'range_str': '10–12 балів',
+                'level_code': 'high',
+                'color': '#059669',
+                'bg_color': 'rgba(16, 185, 129, 0.12)',
+                'border_color': '#10b981',
+                'icon': '🏆',
+                'description': 'Глибокі знання та бездоганне володіння матеріалом.',
+                'raw_grade': grade_int_str
+            }
+        elif val >= 7:
+            return {
+                'group_name': 'Достатній рівень',
+                'range_str': '7–9 балів',
+                'level_code': 'good',
+                'color': '#2563eb',
+                'bg_color': 'rgba(37, 99, 235, 0.1)',
+                'border_color': '#3b82f6',
+                'icon': '📘',
+                'description': 'Впевнене володіння матеріалом, незначні неточності.',
+                'raw_grade': grade_int_str
+            }
+        elif val >= 4:
+            return {
+                'group_name': 'Середній рівень',
+                'range_str': '4–6 балів',
+                'level_code': 'avg',
+                'color': '#d97706',
+                'bg_color': 'rgba(245, 158, 11, 0.12)',
+                'border_color': '#f59e0b',
+                'icon': '📙',
+                'description': 'Базове розуміння матеріалу, є прогалини або помилки.',
+                'raw_grade': grade_int_str
+            }
+        else:
+            return {
+                'group_name': 'Початковий рівень',
+                'range_str': '1–3 бали',
+                'level_code': 'low',
+                'color': '#dc2626',
+                'bg_color': 'rgba(239, 68, 68, 0.1)',
+                'border_color': '#ef4444',
+                'icon': '📕',
+                'description': 'Завдання виконано частково або з грубими помилками.',
+                'raw_grade': grade_int_str
+            }
+
     @property
     def effective_grade_date(self):
         """
@@ -3661,9 +3758,14 @@ class AICriteriaPreset(models.Model):
             prompt += f"ОБОВ'ЯЗКОВО суворо враховуй наведені вище критерії та інструкції з документу при виставленні оцінок за ГР, загальної оцінки та формулюванні відгуку!\n"
         return prompt
 
+    _default_presets_initialized = False
+
     @classmethod
     def ensure_default_presets(cls, force_recreate=False):
         """Гарантує наявність базових системних шаблонів за стандартами НУШ, групами результатів (ГР) та МОН."""
+        if not force_recreate and cls._default_presets_initialized:
+            return
+
         # Якщо вже є хоча б один шаблон і не вимагається примусове відновлення -
         # НЕ перестворюємо видалені вчителем шаблони
         if not force_recreate and cls.objects.exists():
@@ -3672,6 +3774,7 @@ class AICriteriaPreset(models.Model):
                 if first_p:
                     first_p.is_default = True
                     first_p.save(update_fields=['is_default'])
+            cls._default_presets_initialized = True
             return
 
         # 1. Головний базовий шаблон за групами результатів (ГР 1-4)
@@ -3784,6 +3887,8 @@ class AICriteriaPreset(models.Model):
             if first_p:
                 first_p.is_default = True
                 first_p.save(update_fields=['is_default'])
+
+        cls._default_presets_initialized = True
 
 
 

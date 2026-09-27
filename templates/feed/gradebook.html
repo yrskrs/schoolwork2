@@ -22,6 +22,9 @@
                     <h1>Електронний журнал</h1>
                 </div>
                 <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                    <a href="{% url 'teacher_reports' %}{% if selected_class %}?class_id={{ selected_class.id }}{% endif %}" class="btn btn-secondary btn-sm" style="display:inline-flex;align-items:center;gap:4px;" title="Сформувати PDF-відомість оцінок за датами та класами або для передачі на заміні">
+                        <span>📑</span> <span>Звіти та заміна</span>
+                    </a>
                     {% if selected_class %}
                     <a href="{% url 'teacher_students' %}?class_group={{ selected_class.id }}" class="btn btn-secondary btn-sm" title="Керувати учнями класу та редагувати імена">👥 Учні класу {{ selected_class.name }}</a>
                     {% else %}

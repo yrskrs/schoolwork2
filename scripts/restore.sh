@@ -42,7 +42,8 @@ echo " УВАГА: Всі поточні дані бази та медіа-фа�
 echo "=================================================================="
 
 if [ "$AUTO_CONFIRM" -ne 1 ]; then
-    read -p "Ви дійсно бажаєте продовжити відновлення? (y/N): " -r
+    REPLY=""
+    read -p "Ви дійсно бажаєте продовжити відновлення? (y/N): " -r REPLY || REPLY="n"
     echo ""
     if [[ ! $REPLY =~ ^[Yy]$ ]]; then
         echo "Операцію відновлення скасовано користувачем."
@@ -95,8 +96,13 @@ if [ -f "$TARGET_BACKUP/database.dump" ]; then
       "DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public; GRANT ALL ON SCHEMA public TO \"$DB_USER\"; GRANT ALL ON SCHEMA public TO public;"
     
     echo "   -> Завантаження структури та даних з database.dump..."
-    cat "$TARGET_BACKUP/database.dump" | docker compose exec -T postgres pg_restore -U "$DB_USER" -d "$DB_NAME" --no-owner --no-privileges || true
-    echo "   -> Базу даних успішно відновлено."
+    RESTORE_STATUS=0
+    docker compose exec -T postgres pg_restore -U "$DB_USER" -d "$DB_NAME" --no-owner --no-privileges < "$TARGET_BACKUP/database.dump" 2>&1 || RESTORE_STATUS=$?
+    if [ "$RESTORE_STATUS" -eq 0 ] || [ "$RESTORE_STATUS" -eq 1 ]; then
+        echo "   -> Базу даних успішно відновлено."
+    else
+        echo "⚠️ [УВАГА] pg_restore завершився з кодом $RESTORE_STATUS. Перевірте цілісність даних."
+    fi
 else
     echo "⚠️ [2/4] Файл database.dump не знайдено, пропуск відновлення БД."
 fi
@@ -105,9 +111,6 @@ fi
 if [ -f "$TARGET_BACKUP/media.tar.gz" ]; then
     echo "📂 [3/4] Відновлення медіа файлів..."
     MEDIA_VOLUME=$(docker inspect schoolnet_app --format '{{range .Mounts}}{{if eq .Destination "/app/media"}}{{.Name}}{{end}}{{end}}' 2>/dev/null || true)
-    if [ -z "$MEDIA_VOLUME" ]; then
-        MEDIA_VOLUME=$(docker volume ls -q --filter "name=app_media" 2>/dev/null | head -n 1 || true)
-    fi
     if [ -z "$MEDIA_VOLUME" ]; then
         PROJ_NAME=$(basename "$PROJECT_ROOT" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9_-')
         MEDIA_VOLUME="${COMPOSE_PROJECT_NAME:-$PROJ_NAME}_app_media"
@@ -132,9 +135,17 @@ fi
 echo "🚀 [4/4] Запуск контейнера застосунку..."
 docker compose up -d app
 
+echo "⏳ Очікування готовності застосунку..."
+for i in {1..30}; do
+    APP_STATE=$(docker compose ps --status running --services 2>/dev/null || true)
+    if echo "$APP_STATE" | grep -q "app"; then
+        break
+    fi
+    sleep 1
+done
+
 echo "⏳ Застосування міграцій (якщо потрібні)..."
-sleep 3
-docker compose exec -T app python manage.py migrate --noinput 2>/dev/null || true
+docker compose exec -T app python manage.py migrate --noinput 2>&1 || true
 
 echo "=================================================================="
 echo "✅ Відновлення успішно завершено!"

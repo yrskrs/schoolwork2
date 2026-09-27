@@ -465,20 +465,37 @@ def assignment_detail(request, pk):
     Детальний перегляд завдання.
     Якщо AJAX — повертає JSON для модального вікна.
     Інакше — повна сторінка.
+    Підтримує перегляд заархівованих завдань (> 14 днів) зі спеціальним інфо-банером.
     """
-    assignment = get_object_or_404(
-        Assignment.objects.select_related('teacher', 'subject').prefetch_related('classes', 'files', 'additional_links', 'youtube_links'),
-        pk=pk,
-        status=Assignment.STATUS_PUBLISHED
-    )
+    assignment = Assignment.objects.select_related(
+        'teacher', 'subject'
+    ).prefetch_related(
+        'classes', 'files', 'additional_links', 'youtube_links'
+    ).filter(pk=pk).first()
 
-    # Фіксація перегляду завдання (1 раз на годину з 1 комп'ютера, перегляди вчителя не рахуються)
-    assignment.record_view(request)
+    if not assignment:
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({'error': 'Завдання вилучено або не існує'}, status=404)
+        return render(request, 'feed/assignment_not_found.html', {
+            'message': 'Дане завдання було вилучено або переміщено вчителем.'
+        }, status=404)
 
     is_teacher = bool(
         request.user.is_authenticated and
         (hasattr(request.user, 'teacher_profile') or request.user.is_superuser)
     )
+
+    # Якщо чернетка або заплановане у майбутньому — доступ тільки для вчителя/адміністратора
+    if assignment.status == Assignment.STATUS_DRAFT and not is_teacher:
+        raise Http404("Завдання знаходиться у режимі чернетки")
+    if assignment.status == Assignment.STATUS_SCHEDULED and not is_teacher:
+        raise Http404("Завдання ще не опубліковане")
+
+    is_archived = (assignment.status == Assignment.STATUS_ARCHIVED)
+
+    # Фіксація перегляду завдання (1 раз на годину з 1 комп'ютера, перегляди вчителя не рахуються)
+    assignment.record_view(request)
+
     can_edit = bool(
         is_teacher and
         (request.user.is_superuser or (hasattr(request.user, 'teacher_profile') and request.user.teacher_profile == assignment.teacher))
@@ -541,6 +558,8 @@ def assignment_detail(request, pk):
             'youtube_videos': assignment.all_youtube_videos,
             'extra_links': extra_links,
             'files': files_data,
+            'is_archived': is_archived,
+            'status': assignment.status,
             'can_edit': bool(
                 is_teacher and
                 (request.user.is_superuser or (hasattr(request.user, 'teacher_profile') and request.user.teacher_profile == assignment.teacher))
@@ -658,6 +677,7 @@ def assignment_detail(request, pk):
 
     context = {
         'assignment': assignment,
+        'is_archived': is_archived,
         'is_teacher': is_teacher,
         'can_edit': can_edit,
         'related_assignments': related_assignments,
@@ -2735,11 +2755,21 @@ def submit_assignment(request, pk):
     Публічна сторінка для здачі роботи учнем.
     Відображає завдання та форму здачі.
     """
-    assignment = get_object_or_404(
-        Assignment.objects.select_related('teacher', 'subject').prefetch_related('classes', 'files'),
-        pk=pk,
-        status=Assignment.STATUS_PUBLISHED
-    )
+    assignment = Assignment.objects.select_related('teacher', 'subject').prefetch_related('classes', 'files').filter(pk=pk).first()
+
+    if not assignment:
+        return render(request, 'feed/assignment_not_found.html', {
+            'message': 'Дане завдання було вилучено або не існує.'
+        }, status=404)
+
+    if assignment.is_archived or assignment.status == Assignment.STATUS_ARCHIVED:
+        messages.warning(request, "🔒 Прийом робіт до цього завдання закрито, оскільки воно перебуває в архіві.")
+        return redirect('assignment_detail', pk=assignment.pk)
+
+    if assignment.status != Assignment.STATUS_PUBLISHED:
+        return render(request, 'feed/assignment_not_found.html', {
+            'message': 'Дане завдання ще не опубліковане або недоступне для здачі.'
+        }, status=404)
 
     if assignment.no_submission_required:
         messages.info(request, "Це завдання не вимагає здачі робіт на сайті (призначене для усного або самостійного опрацювання).")
@@ -2800,7 +2830,7 @@ def submit_assignment(request, pk):
 
 def submit_success(request, pk):
     """Сторінка підтвердження успішної здачі роботи."""
-    assignment = get_object_or_404(Assignment, pk=pk, status=Assignment.STATUS_PUBLISHED)
+    assignment = get_object_or_404(Assignment, pk=pk, status__in=[Assignment.STATUS_PUBLISHED, Assignment.STATUS_ARCHIVED])
     # Відображаємо тільки актуальні (останні) здачі учнів без дублювання записів
     submissions = Submission.objects.filter(assignment=assignment, is_latest_attempt=True).order_by('-submitted_at').select_related('class_group')
     
@@ -3003,6 +3033,7 @@ def student_ai_self_check(request, submission_id):
         'ok': True,
         'grade': submission.student_ai_grade,
         'level': submission.student_ai_level,
+        'grade_group': submission.get_ai_grade_group_info(),
         'summary': submission.student_ai_summary,
         'feedback': feedback_text,
         'strengths': strengths,
@@ -3014,7 +3045,7 @@ def student_ai_self_check(request, submission_id):
         'ai_generated_detected': bool(result.get('ai_generated_detected', submission.ai_generated_detected)),
         'ai_generated_percent': None,
         'ai_generated_confidence': '',
-        'ai_generated_details': result.get('ai_generated_details', submission.ai_generated_details),
+        'ai_generated_details': '',  # Деталі аналізу ШІ тільки для вчителя
         'allow_ai_usage': bool(assignment.allow_ai_usage),
         'duplicate_info': {
             'is_duplicate': bool(dup_info.get('is_duplicate')),
@@ -3102,12 +3133,18 @@ def submission_detail(request, submission_id):
 
     dup_info = check_submission_duplicates(submission)
 
+    is_teacher = bool(
+        request.user.is_authenticated and
+        (hasattr(request.user, 'teacher_profile') or request.user.is_superuser)
+    )
+
     return render(request, 'feed/submission_detail.html', {
         'submission': submission,
         'comments': comments,
         'can_student_ai_check': can_student_ai_check,
         'ai_check_already_used': ai_check_already_used,
         'dup_info': dup_info,
+        'is_teacher': is_teacher,
     })
 
 
@@ -3345,37 +3382,29 @@ def view_file(request, submission_id):
     prev_assignment_first_sub = None
 
     if not is_filtered:
-        if not next_submission:
-            all_teacher_subs = list(
-                (Submission.objects.all() if request.user.is_superuser else Submission.objects.filter(Q(assignment__teacher=teacher) | Q(teacher=teacher)))
-                .order_by('-submitted_at')
-            )
-            try:
-                all_cur_idx = [s.id for s in all_teacher_subs].index(submission.id)
-                if all_cur_idx < len(all_teacher_subs) - 1:
-                    next_submission_fallback = all_teacher_subs[all_cur_idx + 1]
-                if all_cur_idx > 0:
-                    prev_submission_fallback = all_teacher_subs[all_cur_idx - 1]
-            except ValueError:
-                pass
+        fallback_base = (
+            Submission.objects.all() if request.user.is_superuser
+            else Submission.objects.filter(Q(assignment__teacher=teacher) | Q(teacher=teacher))
+        )
+        if not next_submission and submission.submitted_at:
+            next_submission_fallback = fallback_base.filter(
+                submitted_at__lt=submission.submitted_at
+            ).order_by('-submitted_at').select_related('assignment', 'class_group', 'teacher').first()
+        if not prev_submission and submission.submitted_at:
+            prev_submission_fallback = fallback_base.filter(
+                submitted_at__gt=submission.submitted_at
+            ).order_by('submitted_at').select_related('assignment', 'class_group', 'teacher').first()
 
         # Навігація між завданнями (Попереднє / Наступне завдання)
-        if submission.assignment:
-            if request.user.is_superuser:
-                asgn_qs = Assignment.objects.all().order_by('-created_at')
-            else:
-                asgn_qs = Assignment.objects.filter(teacher=teacher).order_by('-created_at')
-            asgn_list = list(asgn_qs)
-            try:
-                cur_asgn_idx = [a.id for a in asgn_list].index(submission.assignment.id)
-                if cur_asgn_idx < len(asgn_list) - 1:
-                    next_assignment = asgn_list[cur_asgn_idx + 1]
-                    next_assignment_first_sub = Submission.objects.filter(assignment=next_assignment).order_by('-submitted_at').first()
-                if cur_asgn_idx > 0:
-                    prev_assignment = asgn_list[cur_asgn_idx - 1]
-                    prev_assignment_first_sub = Submission.objects.filter(assignment=prev_assignment).order_by('-submitted_at').first()
-            except ValueError:
-                pass
+        if submission.assignment and submission.assignment.created_at:
+            asgn_base = Assignment.objects.all() if request.user.is_superuser else Assignment.objects.filter(teacher=teacher)
+            next_assignment = asgn_base.filter(created_at__lt=submission.assignment.created_at).order_by('-created_at').first()
+            if next_assignment:
+                next_assignment_first_sub = Submission.objects.filter(assignment=next_assignment).order_by('-submitted_at').first()
+
+            prev_assignment = asgn_base.filter(created_at__gt=submission.assignment.created_at).order_by('created_at').first()
+            if prev_assignment:
+                prev_assignment_first_sub = Submission.objects.filter(assignment=prev_assignment).order_by('-submitted_at').first()
 
     # Отримуємо всі прикріплені файли здачі
     submission_files = list(submission.files.all())
@@ -3835,10 +3864,13 @@ def assignment_submissions(request, pk):
     # Пошук учнів класу, які ще не здали це завдання (боржники)
     from .student_matcher import is_same_student_identity
     submitted_students = list(all_sub.values_list('last_name', 'first_name', 'class_group_id'))
+    submitted_exact_set = {
+        (s_last.strip().lower(), s_first.strip().lower(), s_cls_id)
+        for s_last, s_first, s_cls_id in submitted_students
+    }
     
     classes_to_check = [selected_class_id] if selected_class_id else list(assigned_classes.values_list('id', flat=True))
     all_class_students = Submission.objects.filter(class_group_id__in=classes_to_check).values('last_name', 'first_name', 'class_group__name', 'class_group_id').distinct()
-
 
     unsubmitted_students = []
     seen_unsub = set()
@@ -3851,11 +3883,14 @@ def assignment_submissions(request, pk):
             continue
         seen_unsub.add(key)
 
-        has_submitted = False
-        for s_last, s_first, s_cls_id in submitted_students:
-            if s_cls_id == c_cls_id and is_same_student_identity(c_last, c_first, s_last, s_first):
-                has_submitted = True
-                break
+        if key in submitted_exact_set:
+            has_submitted = True
+        else:
+            has_submitted = False
+            for s_last, s_first, s_cls_id in submitted_students:
+                if s_cls_id == c_cls_id and is_same_student_identity(c_last, c_first, s_last, s_first):
+                    has_submitted = True
+                    break
 
         if not has_submitted:
             unsubmitted_students.append({
@@ -5218,6 +5253,198 @@ def export_grades(request):
             sub.grade
         ])
 
+    return response
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ЗВІТИ ВЧИТЕЛЯ ТА ЖУРНАЛ ЗАМІНИ (REPORTS & PDF EXPORT)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@teacher_required
+def teacher_reports(request):
+    """
+    Панель формування звітів вчителя та відомостей для журналу / замін.
+    Дозволяє обирати учнів, класи, часовий діапазон, переглядати зведену таблицю
+    та експортувати результати у PDF (як лише оцінки, так і з роботами).
+    """
+    teacher = getattr(request.user, 'teacher_profile', None)
+
+    # Отримуємо фільтри з запиту
+    class_id = request.GET.get('class_id', 'all')
+    student_name = request.GET.get('student_name', '').strip()
+    date_from = request.GET.get('date_from', '')
+    date_to = request.GET.get('date_to', '')
+    assignment_id = request.GET.get('assignment_id', 'all')
+    graded_only = request.GET.get('graded_only', '1')
+    scope = request.GET.get('scope', 'mine' if not request.user.is_superuser else 'all')
+    target_teacher = request.GET.get('target_teacher', '').strip()
+    report_title = request.GET.get('report_title', '').strip()
+    report_notes = request.GET.get('report_notes', '').strip()
+
+    from .reports_service import get_report_submissions
+    submissions = get_report_submissions(request.user, {
+        'class_id': class_id,
+        'student_name': student_name,
+        'date_from': date_from,
+        'date_to': date_to,
+        'assignment_id': assignment_id,
+        'graded_only': graded_only,
+        'scope': scope,
+    })
+
+    # Підрахунок статистики
+    grades_nums = []
+    for s in submissions:
+        if s.grade:
+            try:
+                val = float(s.grade.replace(',', '.').strip())
+                grades_nums.append(val)
+            except ValueError:
+                pass
+
+    avg_grade = round(sum(grades_nums) / len(grades_nums), 1) if grades_nums else None
+    high_cnt = sum(1 for g in grades_nums if g >= 10)
+    good_cnt = sum(1 for g in grades_nums if 7 <= g < 10)
+    avg_cnt = sum(1 for g in grades_nums if 4 <= g < 7)
+    low_cnt = sum(1 for g in grades_nums if g < 4)
+
+    # Дані для фільтрів у формі
+    classes = ClassGroup.objects.all().order_by('grade', 'letter')
+
+    assignments_qs = Assignment.objects.all()
+    if scope == 'mine' and teacher and not request.user.is_superuser:
+        assignments_qs = assignments_qs.filter(teacher=teacher)
+    assignments = assignments_qs.order_by('-created_at')[:100]
+
+    other_teachers = Teacher.objects.all()
+    if teacher:
+        other_teachers = other_teachers.exclude(id=teacher.id)
+    other_teachers = other_teachers.order_by('full_name')
+
+    school = School.objects.first()
+
+    context = {
+        'teacher': teacher,
+        'submissions': submissions,
+        'classes': classes,
+        'assignments': assignments,
+        'other_teachers': other_teachers,
+        'school': school,
+        'filters': {
+            'class_id': class_id,
+            'student_name': student_name,
+            'date_from': date_from,
+            'date_to': date_to,
+            'assignment_id': assignment_id,
+            'graded_only': graded_only,
+            'scope': scope,
+            'target_teacher': target_teacher,
+            'report_title': report_title,
+            'report_notes': report_notes,
+        },
+        'stats': {
+            'total_count': len(submissions),
+            'grades_count': len(grades_nums),
+            'avg_grade': avg_grade,
+            'high_cnt': high_cnt,
+            'good_cnt': good_cnt,
+            'avg_cnt': avg_cnt,
+            'low_cnt': low_cnt,
+        }
+    }
+    return render(request, 'feed/teacher_reports.html', context)
+
+
+@teacher_required
+def teacher_reports_pdf(request):
+    """
+    Генерація та завантаження PDF-звіту оцінок.
+    Підтримує вибір режиму: 'grades_only' (тільки зведена таблиця для журналу)
+    або 'detailed' (з роботами, коментарями та перевіркою ШІ).
+    """
+    teacher = getattr(request.user, 'teacher_profile', None)
+    teacher_name = teacher.full_name if teacher else request.user.get_full_name() or request.user.username
+
+    # Параметри запиту
+    class_id = request.GET.get('class_id', 'all')
+    student_name = request.GET.get('student_name', '').strip()
+    date_from = request.GET.get('date_from', '')
+    date_to = request.GET.get('date_to', '')
+    assignment_id = request.GET.get('assignment_id', 'all')
+    graded_only = request.GET.get('graded_only', '1')
+    scope = request.GET.get('scope', 'mine' if not request.user.is_superuser else 'all')
+    mode = request.GET.get('mode', 'grades_only')
+    target_teacher = request.GET.get('target_teacher', '').strip()
+    report_title = request.GET.get('report_title', '').strip()
+    report_notes = request.GET.get('report_notes', '').strip()
+    selected_ids = request.GET.get('selected_ids', '')
+
+    from .reports_service import get_report_submissions, generate_teacher_report_pdf
+
+    submissions = get_report_submissions(request.user, {
+        'class_id': class_id,
+        'student_name': student_name,
+        'date_from': date_from,
+        'date_to': date_to,
+        'assignment_id': assignment_id,
+        'graded_only': graded_only,
+        'scope': scope,
+        'selected_ids': selected_ids,
+    })
+
+    # Отримуємо назви класів
+    classes_str = "Всі класи"
+    if class_id and class_id != 'all':
+        try:
+            cg = ClassGroup.objects.get(id=class_id)
+            classes_str = cg.name
+        except ClassGroup.DoesNotExist:
+            pass
+    elif submissions:
+        unique_classes = sorted(list(set(s.class_group.name for s in submissions if s.class_group)))
+        if unique_classes:
+            classes_str = ", ".join(unique_classes)
+
+    # Отримуємо предмет
+    subject_name = ""
+    if assignment_id and assignment_id != 'all':
+        try:
+            assign = Assignment.objects.select_related('subject').get(id=assignment_id)
+            if assign.subject:
+                subject_name = assign.subject.name
+        except Assignment.DoesNotExist:
+            pass
+
+    date_range_str = "Весь період"
+    if date_from and date_to:
+        date_range_str = f"{date_from} — {date_to}"
+    elif date_from:
+        date_range_str = f"з {date_from}"
+    elif date_to:
+        date_range_str = f"до {date_to}"
+
+    school = School.objects.first()
+    school_name = school.name if school else "Шкільний портал"
+
+    report_meta = {
+        'title': report_title or ("ВІДОМІСТЬ ОЦІНОК / ЖУРНАЛ ЗАМІНИ УРОКІВ" if target_teacher else "ЗВІТ ПРО ОЦІНЮВАННЯ НАВЧАЛЬНИХ ДОСЯГНЕНЬ"),
+        'teacher_name': teacher_name,
+        'target_teacher': target_teacher,
+        'subject_name': subject_name,
+        'date_range_str': date_range_str,
+        'classes_str': classes_str,
+        'notes': report_notes,
+        'school_name': school_name,
+    }
+
+    import io
+    buffer = io.BytesIO()
+    generate_teacher_report_pdf(buffer, report_meta, list(submissions), mode=mode)
+    buffer.seek(0)
+
+    filename = f"zvit_otsinok_{timezone.now().strftime('%Y%m%d_%H%M')}.pdf"
+    response = HttpResponse(buffer.getvalue(), content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
     return response
 
 

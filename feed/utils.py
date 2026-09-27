@@ -130,6 +130,38 @@ def sanitize_html(raw_html: str) -> str:
         return py_html.escape(raw_html)
 
 
+_DOC_HTML_CONVERSION_CACHE = {}
+_MAX_DOC_CACHE = 2000
+
+
+def _cache_doc_conversion(prefix: str):
+    """Декоратор для кешування конвертованого HTML документів (Word, Excel, PPTX, ODF)."""
+    def decorator(func):
+        def wrapper(file_path: str, *args, **kwargs):
+            if not file_path or not os.path.exists(file_path):
+                return "", "Файл не знайдено на сервері"
+            cache_key = None
+            try:
+                stat = os.stat(file_path)
+                cache_key = (prefix, file_path, stat.st_mtime, stat.st_size, str(args), str(kwargs))
+                if cache_key in _DOC_HTML_CONVERSION_CACHE:
+                    return _DOC_HTML_CONVERSION_CACHE[cache_key]
+            except Exception:
+                cache_key = None
+
+            res = func(file_path, *args, **kwargs)
+
+            if cache_key and res and res[0]:
+                if len(_DOC_HTML_CONVERSION_CACHE) >= _MAX_DOC_CACHE:
+                    _DOC_HTML_CONVERSION_CACHE.clear()
+                _DOC_HTML_CONVERSION_CACHE[cache_key] = res
+
+            return res
+        return wrapper
+    return decorator
+
+
+@_cache_doc_conversion('docx')
 def convert_docx_to_html(file_path: str) -> Tuple[str, Optional[str]]:
     """
     Конвертує .docx або .doc файл у HTML для відображення в браузері.
@@ -617,6 +649,7 @@ def _convert_xls_to_html(file_path: str, max_rows: int = 100) -> Tuple[str, Opti
         return "", error_msg
 
 
+@_cache_doc_conversion('xlsx')
 def convert_xlsx_to_html(file_path: str, max_rows: int = 100) -> Tuple[str, Optional[str]]:
     """
     Конвертує .xlsx або .xls файл у HTML таблиці з підтримкою формул та стилів.
@@ -651,6 +684,7 @@ def convert_xlsx_to_html(file_path: str, max_rows: int = 100) -> Tuple[str, Opti
         return "", err
 
 
+@_cache_doc_conversion('pptx')
 def convert_pptx_to_html(file_path: str) -> Tuple[str, Optional[str]]:
     """
     Конвертує .pptx файл у стильні HTML слайди з текстом, зображеннями та таблицями.
@@ -810,6 +844,7 @@ def convert_pptx_to_html(file_path: str) -> Tuple[str, Optional[str]]:
         return "", error_msg
 
 
+@_cache_doc_conversion('odt')
 def convert_odt_to_html(file_path: str) -> Tuple[str, Optional[str]]:
     """Конвертує .odt файл у HTML."""
     try:
@@ -843,6 +878,7 @@ def convert_odt_to_html(file_path: str) -> Tuple[str, Optional[str]]:
         return "", error_msg
 
 
+@_cache_doc_conversion('ods')
 def convert_ods_to_html(file_path: str, max_rows: int = 100) -> Tuple[str, Optional[str]]:
     """Конвертує .ods файл у HTML таблиці."""
     try:
@@ -900,6 +936,7 @@ def convert_ods_to_html(file_path: str, max_rows: int = 100) -> Tuple[str, Optio
         return "", error_msg
 
 
+@_cache_doc_conversion('odp')
 def convert_odp_to_html(file_path: str) -> Tuple[str, Optional[str]]:
     """Конвертує .odp файл у HTML."""
     try:

@@ -18,6 +18,7 @@ pypdf>=5.0.0
 odfpy>=1.4.1
 xlsxwriter>=3.2.0
 lxml>=5.0.0
+reportlab>=5.0.0
 
 # Image Processing (Pillow / WebP optimization / Scratch thumbnails)
 pillow>=10.0.0

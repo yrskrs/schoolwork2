@@ -3,30 +3,46 @@
 1. Порівняння файлу учня з вихідними матеріалами вчителя до завдання.
 2. Порівняння файлу учня з раніше зданими роботами інших учнів до того самого завдання.
 3. Хешування файлів (SHA-256) та нормалізація тексту/коду для виявлення однакового вмісту.
+Оптимізовано з кешуванням хешів та нормалізованого тексту для миттєвої перевірки без затримок.
 """
 
 import os
 import hashlib
 from .document_parsers import extract_text_from_document
 
+# In-memory кеші для запобігання повторному важкому парсингу файлів
+_SHA256_CACHE = {}
+_NORM_TEXT_CACHE = {}
+_MAX_CACHE_SIZE = 5000
+
 
 def get_file_sha256(file_path):
-    """Обчислює SHA-256 хеш двійкового вмісту файлу."""
+    """Обчислює SHA-256 хеш двійкового вмісту файлу з кешуванням за шляхом, mtime та розміром."""
     if not file_path or not os.path.exists(file_path):
         return None
-    hasher = hashlib.sha256()
     try:
+        stat = os.stat(file_path)
+        cache_key = (file_path, stat.st_mtime, stat.st_size)
+        if cache_key in _SHA256_CACHE:
+            return _SHA256_CACHE[cache_key]
+
+        hasher = hashlib.sha256()
         with open(file_path, 'rb') as f:
             for chunk in iter(lambda: f.read(65536), b''):
                 hasher.update(chunk)
-        return hasher.hexdigest()
+        h = hasher.hexdigest()
+
+        if len(_SHA256_CACHE) >= _MAX_CACHE_SIZE:
+            _SHA256_CACHE.clear()
+        _SHA256_CACHE[cache_key] = h
+        return h
     except Exception:
         return None
 
 
 def get_normalized_file_content(file_path, original_filename=None):
     """
-    Витягує та нормалізує текстовий вміст файлу для порівняння:
+    Витягує та нормалізує текстовий вміст файлу для порівняння з кешуванням:
     - Прибирає зайві пробіли на кінцях рядків
     - Уніфікує перенесення рядків (CRLF -> LF)
     - Ігнорує порожні рядки
@@ -34,55 +50,72 @@ def get_normalized_file_content(file_path, original_filename=None):
     if not file_path or not os.path.exists(file_path):
         return ""
 
+    try:
+        stat = os.stat(file_path)
+        cache_key = (file_path, stat.st_mtime, stat.st_size)
+        if cache_key in _NORM_TEXT_CACHE:
+            return _NORM_TEXT_CACHE[cache_key]
+    except Exception:
+        cache_key = None
+
     filename = original_filename or os.path.basename(file_path)
     ext = os.path.splitext(filename)[1].lower()
 
+    res = ""
     # Спеціальна обробка Scratch 3 (.sb3)
     if ext == '.sb3':
         from .scratch_utils import parse_scratch_sb3
         _, text_summary, _ = parse_scratch_sb3(file_path)
         if text_summary:
             lines = [line.strip() for line in text_summary.splitlines() if line.strip()]
-            return "\n".join(lines)
+            res = "\n".join(lines)
 
     # Спеціальна обробка BBC micro:bit (.hex)
-    if ext == '.hex':
+    elif ext == '.hex':
         from .microbit_utils import parse_microbit_hex
         _, text_summary, _ = parse_microbit_hex(file_path)
         if text_summary:
             lines = [line.strip() for line in text_summary.splitlines() if line.strip()]
-            return "\n".join(lines)
+            res = "\n".join(lines)
 
     # Спеціальна обробка Microsoft Access (.mdb, .accdb)
-    if ext in ['.mdb', '.accdb']:
+    elif ext in ['.mdb', '.accdb']:
         try:
             from .access_utils import extract_access_text_for_ai
             access_text = extract_access_text_for_ai(file_path)
             if access_text:
                 lines = [line.strip() for line in access_text.splitlines() if line.strip()]
-                return "\n".join(lines)
+                res = "\n".join(lines)
         except Exception:
             pass
 
-    # Спробуємо розпарсити через універсальний екстрактор документів
-    text, success, _ = extract_text_from_document(file_path, filename)
-    if success and text:
-        # Нормалізація тексту
-        lines = [line.strip() for line in text.splitlines() if line.strip()]
-        return "\n".join(lines)
+    if not res:
+        # Спробуємо розпарсити через універсальний екстрактор документів
+        text, success, _ = extract_text_from_document(file_path, filename)
+        if success and text:
+            # Нормалізація тексту
+            lines = [line.strip() for line in text.splitlines() if line.strip()]
+            res = "\n".join(lines)
 
-    # Якщо це файл з кодом або простий текст
-    encs = ['utf-8-sig', 'utf-8', 'cp1251', 'windows-1251', 'cp866', 'iso-8859-5']
-    for enc in encs:
-        try:
-            with open(file_path, 'r', encoding=enc) as f:
-                content = f.read()
-                lines = [line.strip() for line in content.splitlines() if line.strip()]
-                return "\n".join(lines)
-        except Exception:
-            continue
+    if not res:
+        # Якщо це файл з кодом або простий текст
+        encs = ['utf-8-sig', 'utf-8', 'cp1251', 'windows-1251', 'cp866', 'iso-8859-5']
+        for enc in encs:
+            try:
+                with open(file_path, 'r', encoding=enc) as f:
+                    content = f.read()
+                    lines = [line.strip() for line in content.splitlines() if line.strip()]
+                    res = "\n".join(lines)
+                    break
+            except Exception:
+                continue
 
-    return ""
+    if cache_key:
+        if len(_NORM_TEXT_CACHE) >= _MAX_CACHE_SIZE:
+            _NORM_TEXT_CACHE.clear()
+        _NORM_TEXT_CACHE[cache_key] = res
+
+    return res
 
 
 def check_submission_duplicates(submission):
@@ -116,11 +149,19 @@ def check_submission_duplicates(submission):
         'warning_message': ''
     }
 
-    if not submission or not submission.file or not submission.assignment:
+    if not submission:
+        return result
+
+    if hasattr(submission, '_cached_dup_info'):
+        return submission._cached_dup_info
+
+    if not submission.file or not submission.assignment:
+        submission._cached_dup_info = result
         return result
 
     file_path = submission.file.path if submission.file else None
     if not file_path or not os.path.exists(file_path):
+        submission._cached_dup_info = result
         return result
 
     sub_hash = get_file_sha256(file_path)
@@ -150,6 +191,7 @@ def check_submission_duplicates(submission):
                     f"Схоже, що ви здали вихідний файл завдання замість виконаної роботи!"
                 )
             })
+            submission._cached_dup_info = result
             return result
 
         # Текстовий/нормалізований збіг (якщо текст не порожній і довший 20 символів)
@@ -166,6 +208,7 @@ def check_submission_duplicates(submission):
                         f"Перевірте, чи ви не здали умову завдання без розв'язку!"
                     )
                 })
+                submission._cached_dup_info = result
                 return result
 
     # ── 2. ПЕРЕВІРКА НА ЗБІГ З РОБОТАМИ ІНШИХ УЧНІВ ────────────────────────────
@@ -206,6 +249,7 @@ def check_submission_duplicates(submission):
                     f"Система зафіксувала однаковий вміст файлу як підозру на дублікат або списування!"
                 )
             })
+            submission._cached_dup_info = result
             return result
 
         # Текстовий/нормалізований збіг коду чи тексту
@@ -227,6 +271,8 @@ def check_submission_duplicates(submission):
                         f"Система зафіксувала однаковий вміст як підозру на дублікат або списування!"
                     )
                 })
+                submission._cached_dup_info = result
                 return result
 
+    submission._cached_dup_info = result
     return result

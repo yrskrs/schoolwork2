@@ -272,7 +272,11 @@
                                     📖 Переглянути
                                 </a>
                                 {% if not user.is_authenticated or not user.teacher_profile %}
-                                    {% if not assignment.no_submission_required %}
+                                    {% if assignment.is_archived or assignment.status == 'archived' %}
+                                    <span class="badge" style="background: rgba(245, 158, 11, 0.15); color: #b45309; border: 1px solid rgba(245, 158, 11, 0.3); font-size: 12px; font-weight: 700; padding: 5px 10px; border-radius: var(--radius-sm);" title="Прийом робіт закрито (архів)">
+                                        🔒 Прийом закрито
+                                    </span>
+                                    {% elif not assignment.no_submission_required %}
                                     <a href="{% url 'submit_assignment' assignment.id %}"
                                        class="btn btn-submit-work btn-sm"
                                        onclick="event.stopPropagation();"

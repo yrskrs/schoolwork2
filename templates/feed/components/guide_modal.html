@@ -616,6 +616,51 @@
                     </div>
                 </div>
 
+                <!-- Вчитель 11: ЗВІТИ ТА ЕКСПОРТ У PDF -->
+                <div class="guide-card" id="guide-category-teacher-reports" data-category="teacher_reports" data-keywords="звіти експорт pdf відомість успішності оцінки журнал замін батькам фільтр клас учень дата">
+                    <button type="button" class="guide-card-header" onclick="toggleGuideCategory('teacher_reports')" aria-expanded="false">
+                        <div class="guide-header-title">
+                            <span class="guide-cat-icon">📑</span>
+                            <div class="guide-header-text">
+                                <strong>Звіти оцінювання, відомості успішності та експорт у PDF</strong>
+                                <span class="guide-cat-sub">Формування відомостей для журналу замін, детальних звітів робіт та експорт у PDF/CSV</span>
+                            </div>
+                        </div>
+                        <div class="guide-header-meta">
+                            <span class="guide-active-page-badge" id="badge-guide-teacher-reports" style="display:none;">📍 Ви зараз на цій сторінці</span>
+                            <span class="guide-chevron">▾</span>
+                        </div>
+                    </button>
+                    <div class="guide-card-body" id="body-guide-teacher-reports" style="display:none;">
+                        <div class="guide-content-inner">
+                            <div class="guide-step">
+                                <span class="guide-step-num">1</span>
+                                <div>
+                                    <strong>Перехід до розділу звітів:</strong>
+                                    <p>У лівому меню вчителя або через верхній профіль оберіть пункт <em>«📑 Звіти та експорт»</em> (<code>/teacher/reports/</code>). Розділ дозволяє аналізувати оцінки учнів за будь-який період із гнучкими фільтрами.</p>
+                                </div>
+                            </div>
+
+                            <div class="guide-step">
+                                <span class="guide-step-num">2</span>
+                                <div>
+                                    <strong>Два типи звітів під будь-які потреби:</strong>
+                                    <p>• <strong>Коротка відомість оцінок:</strong> компактна таблиця з ПІБ учнів, класом, датою та фінальними балами. Ідеально підходить для швидкого перенесення в паперовий журнал, журналу замін чи передачі завучу.<br>
+                                    • <strong>Детальний звіт із роботами:</strong> повне портфоліо учнівських робіт, включно з текстом відповідей, прикріпленими файлами, коментарями вчителя та висновками ШІ-перевірки.</p>
+                                </div>
+                            </div>
+
+                            <div class="guide-step">
+                                <span class="guide-step-num">3</span>
+                                <div>
+                                    <strong>Експорт у формат PDF з підтримкою кирилиці:</strong>
+                                    <p>Натисніть кнопку <em>«📄 Експорт PDF»</em> для завантаження охайного документу стандарту A4 із вбудованими шрифтами LiberationSans, готового до друку або збереження на диск.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
             </div>
             {% endif %}
 
@@ -738,6 +783,14 @@
                                     <p>Щоб надіслати виконане завдання, натисніть велику синю кнопку <strong>«Здати роботу»</strong> у правій панелі або знизу сторінки.</p>
                                 </div>
                             </div>
+
+                            <div class="guide-step">
+                                <span class="guide-step-num">5</span>
+                                <div>
+                                    <strong>Архівні уроки (понад 14 днів):</strong>
+                                    <p>Якщо завдання перебуває в архіві (позначка <code>🔒 Прийом закрито</code>), подача робіт припиняється. Усі матеріали уроку, конспекти та додані файли залишаються доступними для повторення та навчання.</p>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -824,8 +877,8 @@
                             <div class="guide-step">
                                 <span class="guide-step-num">1</span>
                                 <div>
-                                    <strong>🤖 Миттєва самоперевірка через ШІ:</strong>
-                                    <p>На цій сторінці ви можете в один клік натиснути кнопку <em>«Перевірити роботу через ШІ»</em>. Штучний інтелект проаналізує прикріплені файли та виведе орієнтовну оцінку та педагогічний аналіз.</p>
+                                    <strong>🤖 Миттєва самоперевірка через ШІ та шкала рівнів знань:</strong>
+                                    <p>Натисніть кнопку <em>«Перевірити роботу через ШІ»</em>. ШІ оцінить виконання за 12-бальною системою та визначить рівень знань: <strong>🏆 Високий (10–12 балів)</strong>, <strong>📘 Достатній (7–9 балів)</strong>, <strong>📙 Середній (4–6 балів)</strong> або <strong>📕 Початковий (1–3 бали)</strong> із розгорнутим педагогічним коментарем.</p>
                                 </div>
                             </div>
 
@@ -948,6 +1001,14 @@
                                     <p>Якщо вчитель призначив доопрацювання, на сторінці буде активне посилання на форму здачі нової спроби: ви зможете завантажити виправлений файл та вказати, що саме було виправлено.</p>
                                 </div>
                             </div>
+
+                            <div class="guide-step">
+                                <span class="guide-step-num">4</span>
+                                <div>
+                                    <strong>Результати ШІ-самоперевірки та доброчесність:</strong>
+                                    <p>Якщо ви перевіряли роботу ШІ перед здачею, на сторінці відобразиться рівень виконання, орієнтовний бал та загальний статус відповідності правилам використання ШІ до цього завдання.</p>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1008,6 +1069,9 @@
         }
         if (path.indexOf('/teacher/rescheduled-calendar/') === 0 || /\/teacher\/assignment\/\d+\/reschedule\/?/.test(path)) {
             return { tab: 'teacher', cat: 'teacher_reschedule', label: 'Перенесення уроків та 30-денний календар' };
+        }
+        if (path.indexOf('/teacher/reports/') === 0 || path.indexOf('/teacher/reports-pdf/') === 0) {
+            return { tab: 'teacher', cat: 'teacher_reports', label: 'Звіти успішності та експорт у PDF' };
         }
         if (path.indexOf('/teacher/activity/') === 0 || path.indexOf('/teacher/database/backup/') === 0) {
             return { tab: 'teacher', cat: 'teacher_activity', label: 'Журнал дій (Аудит) та резервні копії' };
@@ -1118,9 +1182,10 @@
         const allCards = modal.querySelectorAll('.guide-card');
         allCards.forEach(c => c.classList.remove('guide-card-active'));
 
-        const targetBadge = document.getElementById('badge-guide-' + context.cat.replace('_', '-'));
-        const targetCard = document.getElementById('guide-category-' + context.cat.replace('_', '-'));
-        const targetBody = document.getElementById('body-guide-' + context.cat.replace('_', '-'));
+        const idSuffix = context.cat.replace(/_/g, '-');
+        const targetBadge = document.getElementById('badge-guide-' + idSuffix);
+        const targetCard = document.getElementById('guide-category-' + idSuffix);
+        const targetBody = document.getElementById('body-guide-' + idSuffix);
 
         const contextBanner = document.getElementById('guide-current-context-banner');
         const contextLabel = document.getElementById('guide-current-page-label');
@@ -1157,7 +1222,7 @@
     };
 
     window.toggleGuideCategory = function(catKey) {
-        const idSuffix = catKey.replace('_', '-');
+        const idSuffix = catKey.replace(/_/g, '-');
         const body = document.getElementById('body-guide-' + idSuffix);
         const card = document.getElementById('guide-category-' + idSuffix);
         if (!body || !card) return;

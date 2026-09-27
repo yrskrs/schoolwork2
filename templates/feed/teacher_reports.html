@@ -1,0 +1,468 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Звіти оцінювання та журнал заміни | Шкільні Завдання{% endblock %}
+
+{% block content %}
+<div class="page-wrapper">
+
+    <!-- ── Двоколонковий layout ────────────────────────────────────────────── -->
+    <div class="feed-layout">
+
+        <!-- ════ ЛІВИЙ САЙДБАР ВЧИТЕЛЯ ════════════════════════════════════════ -->
+        {% include 'feed/components/teacher_sidebar.html' %}
+
+        <!-- ════ ЦЕНТРАЛЬНА ЧАСТИНА ════════════════════════════════════════════ -->
+        <div class="feed-main-content">
+
+            <!-- ── Шапка звітності ────────────────────────────────────────────── -->
+            <div class="page-hero" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:16px;">
+                <div>
+                    <div class="page-hero-kicker">Звітність та передача оцінок</div>
+                    <h1 style="font-size:1.6rem;font-weight:800;margin:0 0 4px;color:var(--color-text-primary);">
+                        📑 Звіти успішності та журнал заміни
+                    </h1>
+                    <p style="margin:0;font-size:13px;color:var(--color-text-secondary);">
+                        Формування структурованих відомостей оцінок за датами та класами для перенесення в журнал, замін або звіту батькам.
+                    </p>
+                </div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                    <a href="{% url 'gradebook' %}" class="btn btn-secondary btn-sm" style="display:inline-flex;align-items:center;gap:6px;">
+                        <span>📊</span> <span>Електронний журнал</span>
+                    </a>
+                    <a href="{% url 'export_grades' %}" class="btn btn-secondary btn-sm" style="display:inline-flex;align-items:center;gap:6px;">
+                        <span>📥</span> <span>Експорт CSV</span>
+                    </a>
+                    <button type="button" onclick="openGuideModal('teacher_reports')" class="btn btn-secondary btn-sm" style="display:inline-flex;align-items:center;gap:6px;font-weight:700;" title="Як користуватися звітами">
+                        <span>📖</span> <span>Довідка</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- ── Форма фільтрації та налаштування звіту ──────────────────────── -->
+            <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:18px 20px;margin-bottom:20px;box-shadow:0 2px 10px rgba(0,0,0,0.03);">
+                
+                <form method="GET" id="report-filter-form">
+                    
+                    <div style="font-weight:800;font-size:14px;color:var(--color-text-primary);margin-bottom:12px;display:flex;align-items:center;gap:6px;">
+                        <span>🔍</span> <span>Параметри вибірки оцінок:</span>
+                    </div>
+
+                    <!-- 1-й рядок: Клас, Завдання, Учень, Охоплення -->
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:12px;margin-bottom:12px;">
+                        <!-- Клас -->
+                        <div>
+                            <label for="class_id" style="display:block;font-size:12px;font-weight:700;color:var(--color-text-secondary);margin-bottom:4px;">
+                                🏫 Клас:
+                            </label>
+                            <select name="class_id" id="class_id" class="form-input" style="width:100%;font-size:13px;padding:7px 10px;">
+                                <option value="all" {% if filters.class_id == 'all' %}selected{% endif %}>Всі класи</option>
+                                {% for cls in classes %}
+                                <option value="{{ cls.id }}" {% if filters.class_id == cls.id|stringformat:"s" %}selected{% endif %}>
+                                    {{ cls.name }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <!-- Завдання -->
+                        <div>
+                            <label for="assignment_id" style="display:block;font-size:12px;font-weight:700;color:var(--color-text-secondary);margin-bottom:4px;">
+                                📖 Завдання / Тема:
+                            </label>
+                            <select name="assignment_id" id="assignment_id" class="form-input" style="width:100%;font-size:13px;padding:7px 10px;">
+                                <option value="all" {% if filters.assignment_id == 'all' %}selected{% endif %}>Всі завдання</option>
+                                {% for a in assignments %}
+                                <option value="{{ a.id }}" {% if filters.assignment_id == a.id|stringformat:"s" %}selected{% endif %}>
+                                    {% if a.subject %}[{{ a.subject.name }}] {% endif %}{{ a.title|truncatechars:35 }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <!-- Пошук учня -->
+                        <div>
+                            <label for="student_name" style="display:block;font-size:12px;font-weight:700;color:var(--color-text-secondary);margin-bottom:4px;">
+                                👤 Прізвище / ім'я учня:
+                            </label>
+                            <input type="text" name="student_name" id="student_name" value="{{ filters.student_name }}" placeholder="Пошук конкретного учня..." class="form-input" style="width:100%;font-size:13px;padding:7px 10px;">
+                        </div>
+
+                        <!-- Охоплення -->
+                        <div>
+                            <label for="scope" style="display:block;font-size:12px;font-weight:700;color:var(--color-text-secondary);margin-bottom:4px;">
+                                👨‍🏫 Оцінив / перевірив:
+                            </label>
+                            <select name="scope" id="scope" class="form-input" style="width:100%;font-size:13px;padding:7px 10px;">
+                                <option value="mine" {% if filters.scope == 'mine' %}selected{% endif %}>Тільки мої оцінки</option>
+                                <option value="all" {% if filters.scope == 'all' %}selected{% endif %}>Всі оцінки (школа)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- 2-й рядок: Дати (з пресетами для замін) -->
+                    <div style="background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:12px 14px;margin-bottom:14px;">
+                        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px;">
+                            <label style="font-size:12.5px;font-weight:750;color:var(--color-text-primary);display:flex;align-items:center;gap:6px;">
+                                <span>📅</span> <span>Діапазон дат оцінювання / уроків:</span>
+                            </label>
+                            <!-- Швидкі кнопки пресетів для замін -->
+                            <div style="display:flex;gap:5px;flex-wrap:wrap;">
+                                <button type="button" class="btn btn-secondary btn-sm" style="font-size:11px;padding:2px 8px;" onclick="setDatePreset('today')">Сьогодні</button>
+                                <button type="button" class="btn btn-secondary btn-sm" style="font-size:11px;padding:2px 8px;" onclick="setDatePreset('yesterday')">Вчора</button>
+                                <button type="button" class="btn btn-secondary btn-sm" style="font-size:11px;padding:2px 8px;" onclick="setDatePreset('week')">Останні 7 днів</button>
+                                <button type="button" class="btn btn-secondary btn-sm" style="font-size:11px;padding:2px 8px;" onclick="setDatePreset('two_weeks')">Останні 14 днів</button>
+                                <button type="button" class="btn btn-secondary btn-sm" style="font-size:11px;padding:2px 8px;" onclick="setDatePreset('month')">Цей місяць</button>
+                                <button type="button" class="btn btn-secondary btn-sm" style="font-size:11px;padding:2px 8px;" onclick="setDatePreset('clear')">Скинути дати</button>
+                            </div>
+                        </div>
+
+                        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+                            <div style="display:flex;align-items:center;gap:6px;">
+                                <span style="font-size:12px;color:var(--color-text-muted);">З:</span>
+                                <input type="date" name="date_from" id="date_from" value="{{ filters.date_from }}" class="form-input" style="font-size:12.5px;padding:5px 8px;">
+                            </div>
+                            <div style="display:flex;align-items:center;gap:6px;">
+                                <span style="font-size:12px;color:var(--color-text-muted);">По:</span>
+                                <input type="date" name="date_to" id="date_to" value="{{ filters.date_to }}" class="form-input" style="font-size:12.5px;padding:5px 8px;">
+                            </div>
+                            <label style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;color:var(--color-text-primary);cursor:pointer;margin-left:auto;">
+                                <input type="checkbox" name="graded_only" id="graded_only" value="1" {% if filters.graded_only == '1' %}checked{% endif %}>
+                                <span>Лише оцінені роботи</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- 3-й рядок: Блок параметрів заміни (для оформлення звіту іншому вчителю) -->
+                    <div style="border-top:1px dashed var(--color-border);padding-top:12px;margin-bottom:14px;">
+                        <details style="cursor:pointer;" {% if filters.target_teacher or filters.report_notes or filters.report_title %}open{% endif %}>
+                            <summary style="font-size:13px;font-weight:750;color:var(--color-primary);user-select:none;margin-bottom:10px;">
+                                ⚙️ Додаткові реквізити для заміни уроків (ПІБ основного вчителя, примітка для журналу)
+                            </summary>
+                            <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(240px, 1fr));gap:12px;margin-top:10px;background:rgba(99,102,241,0.03);border:1px solid rgba(99,102,241,0.2);border-radius:var(--radius-md);padding:12px;">
+                                <div>
+                                    <label for="target_teacher" style="display:block;font-size:12px;font-weight:700;color:var(--color-text-secondary);margin-bottom:4px;">
+                                        👩‍🏫 Основний вчитель (кого ви замінювали):
+                                    </label>
+                                    <select name="target_teacher" id="target_teacher" class="form-input" style="width:100%;font-size:12.5px;padding:6px 10px;">
+                                        <option value="">-- Оберіть основного вчителя (необов'язково) --</option>
+                                        {% for ot in other_teachers %}
+                                        <option value="{{ ot.full_name }}" {% if filters.target_teacher == ot.full_name %}selected{% endif %}>
+                                            {{ ot.full_name }}
+                                        </option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label for="report_title" style="display:block;font-size:12px;font-weight:700;color:var(--color-text-secondary);margin-bottom:4px;">
+                                        📝 Заголовок звіту в PDF:
+                                    </label>
+                                    <input type="text" name="report_title" id="report_title" value="{{ filters.report_title }}" placeholder="Наприклад: Відомість оцінок за період заміни уроків" class="form-input" style="width:100%;font-size:12.5px;padding:6px 10px;">
+                                </div>
+                                <div style="grid-column:1 / -1;">
+                                    <label for="report_notes" style="display:block;font-size:12px;font-weight:700;color:var(--color-text-secondary);margin-bottom:4px;">
+                                        💬 Примітка для вчителя (теми уроків або вказівки до перенесення в журнал):
+                                    </label>
+                                    <input type="text" name="report_notes" id="report_notes" value="{{ filters.report_notes }}" placeholder="Наприклад: Тема 4. Практична робота №2. Оцінки виставлено за критеріями НУШ." class="form-input" style="width:100%;font-size:12.5px;padding:6px 10px;">
+                                </div>
+                            </div>
+                        </details>
+                    </div>
+
+                    <!-- Кнопки дій форми -->
+                    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+                        <div style="display:flex;gap:8px;">
+                            <button type="submit" class="btn btn-primary" style="font-weight:750;padding:8px 18px;display:inline-flex;align-items:center;gap:6px;">
+                                <span>🔎</span> <span>Показати результати</span>
+                            </button>
+                            <a href="{% url 'teacher_reports' %}" class="btn btn-secondary" style="font-weight:700;padding:8px 14px;">
+                                <span>Скинути</span>
+                            </a>
+                        </div>
+
+                        <!-- Головні кнопки завантаження PDF -->
+                        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                            <button type="button" onclick="downloadReportPdf('grades_only')" class="btn btn-success" style="font-weight:800;padding:8px 16px;background:linear-gradient(135deg,#059669,#047857);border:none;box-shadow:0 3px 10px rgba(5,150,105,0.25);display:inline-flex;align-items:center;gap:6px;cursor:pointer;" title="Завантажити зведену таблицю оцінок з датами та класами для журналу">
+                                <span>📥</span> <span>Завантажити PDF (Тільки оцінки)</span>
+                            </button>
+                            <button type="button" onclick="downloadReportPdf('detailed')" class="btn btn-primary" style="font-weight:800;padding:8px 16px;box-shadow:0 3px 10px rgba(99,102,241,0.25);display:inline-flex;align-items:center;gap:6px;cursor:pointer;" title="Завантажити розширений звіт з текстами робіт учнів, файлами, відгуками та аналізом ШІ">
+                                <span>📑</span> <span>PDF з роботами та звітами</span>
+                            </button>
+                        </div>
+                    </div>
+
+                </form>
+
+            </div>
+
+            <!-- ── Статистика вибірки ─────────────────────────────────────────── -->
+            <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(130px, 1fr));gap:10px;margin-bottom:16px;">
+                <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:12px;text-align:center;">
+                    <div style="font-size:11.5px;color:var(--color-text-muted);font-weight:700;margin-bottom:2px;">Знайдено робіт</div>
+                    <div style="font-size:1.4rem;font-weight:900;color:var(--color-text-primary);" id="stat-total-count">{{ stats.total_count }}</div>
+                </div>
+                <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:12px;text-align:center;">
+                    <div style="font-size:11.5px;color:var(--color-text-muted);font-weight:700;margin-bottom:2px;">З оцінкою</div>
+                    <div style="font-size:1.4rem;font-weight:900;color:var(--color-primary);">{{ stats.grades_count }}</div>
+                </div>
+                <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:12px;text-align:center;">
+                    <div style="font-size:11.5px;color:var(--color-text-muted);font-weight:700;margin-bottom:2px;">Середній бал</div>
+                    <div style="font-size:1.4rem;font-weight:900;color:#10b981;">
+                        {% if stats.avg_grade %}{{ stats.avg_grade }}{% else %}—{% endif %}
+                    </div>
+                </div>
+                <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:12px;text-align:center;">
+                    <div style="font-size:11.5px;color:var(--color-text-muted);font-weight:700;margin-bottom:2px;">Високий (10-12)</div>
+                    <div style="font-size:1.4rem;font-weight:900;color:#059669;">{{ stats.high_cnt }}</div>
+                </div>
+                <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:12px;text-align:center;">
+                    <div style="font-size:11.5px;color:var(--color-text-muted);font-weight:700;margin-bottom:2px;">Достатній (7-9)</div>
+                    <div style="font-size:1.4rem;font-weight:900;color:#3b82f6;">{{ stats.good_cnt }}</div>
+                </div>
+                <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:12px;text-align:center;">
+                    <div style="font-size:11.5px;color:var(--color-text-muted);font-weight:700;margin-bottom:2px;">Середній (4-6)</div>
+                    <div style="font-size:1.4rem;font-weight:900;color:#f59e0b;">{{ stats.avg_cnt }}</div>
+                </div>
+            </div>
+
+            <!-- ── Таблиця робіт для включення у звіт ──────────────────────────── -->
+            <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,0.03);">
+                
+                <div style="padding:14px 18px;border-bottom:1px solid var(--color-border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;background:var(--color-bg-secondary);">
+                    <div style="display:flex;align-items:center;gap:10px;">
+                        <input type="checkbox" id="select-all-checkbox" checked onchange="toggleSelectAll(this)" style="width:17px;height:17px;cursor:pointer;">
+                        <label for="select-all-checkbox" style="font-weight:800;font-size:13.5px;color:var(--color-text-primary);cursor:pointer;">
+                            Обрати всі (<span id="selected-count-label">{{ submissions|length }}</span> із {{ submissions|length }})
+                        </label>
+                    </div>
+                    <div style="font-size:12px;color:var(--color-text-secondary);">
+                        💡 <em>Позначте прапорцями лише тих учнів, чиї оцінки потрібно експортувати у PDF</em>
+                    </div>
+                </div>
+
+                <div style="overflow-x:auto;">
+                    <table style="width:100%;border-collapse:collapse;text-align:left;font-size:13px;">
+                        <thead>
+                            <tr style="background:var(--color-surface);border-bottom:2px solid var(--color-border);">
+                                <th style="padding:10px 12px;width:36px;text-align:center;">✓</th>
+                                <th style="padding:10px 8px;width:32px;text-align:center;">№</th>
+                                <th style="padding:10px 12px;width:95px;">Дата</th>
+                                <th style="padding:10px 10px;width:70px;text-align:center;">Клас</th>
+                                <th style="padding:10px 12px;min-width:160px;">Учень (ПІБ)</th>
+                                <th style="padding:10px 12px;min-width:180px;">Завдання</th>
+                                <th style="padding:10px 12px;width:80px;text-align:center;">Оцінка</th>
+                                <th style="padding:10px 12px;width:120px;">ШІ перевірка</th>
+                                <th style="padding:10px 12px;">Коментар / Відгук</th>
+                                <th style="padding:10px 12px;width:70px;text-align:center;">Дія</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for sub in submissions %}
+                            <tr style="border-bottom:1px solid var(--color-border);transition:background 0.15s;" onmouseover="this.style.background='var(--color-bg-secondary)'" onmouseout="this.style.background='transparent'" id="row-sub-{{ sub.id }}">
+                                <!-- Checkbox -->
+                                <td style="padding:10px 12px;text-align:center;">
+                                    <input type="checkbox" class="sub-checkbox" value="{{ sub.id }}" checked onchange="updateSelectedCount()" style="width:16px;height:16px;cursor:pointer;">
+                                </td>
+                                <!-- № -->
+                                <td style="padding:10px 8px;text-align:center;color:var(--color-text-muted);font-weight:700;">
+                                    {{ forloop.counter }}
+                                </td>
+                                <!-- Дата -->
+                                <td style="padding:10px 12px;white-space:nowrap;">
+                                    <strong style="color:var(--color-text-primary);">
+                                        {% if sub.graded_at %}
+                                        {{ sub.graded_at|date:"d.m.Y" }}
+                                        {% else %}
+                                        {{ sub.submitted_at|date:"d.m.Y" }}
+                                        {% endif %}
+                                    </strong>
+                                    <div style="font-size:11px;color:var(--color-text-muted);">
+                                        {{ sub.submitted_at|date:"H:i" }}
+                                    </div>
+                                </td>
+                                <!-- Клас -->
+                                <td style="padding:10px 10px;text-align:center;">
+                                    <span class="badge" style="background:rgba(99,102,241,0.1);color:var(--color-primary);border:1px solid rgba(99,102,241,0.25);font-weight:800;padding:2px 8px;border-radius:var(--radius-sm);font-size:12px;">
+                                        {{ sub.class_group.name|default:"—" }}
+                                    </span>
+                                </td>
+                                <!-- Учень -->
+                                <td style="padding:10px 12px;">
+                                    <div style="font-weight:750;color:var(--color-text-primary);">
+                                        {{ sub.get_student_full_name }}
+                                        {% if sub.is_collective_work %}
+                                        <span class="badge" style="background:#e0e7ff;color:#3730a3;font-size:10px;padding:1px 5px;margin-left:4px;">Група</span>
+                                        {% endif %}
+                                    </div>
+                                    {% if sub.files.exists or sub.file %}
+                                    <div style="font-size:11px;color:var(--color-text-muted);display:flex;align-items:center;gap:3px;margin-top:2px;">
+                                        <span>📎</span> <span>Файли додано</span>
+                                    </div>
+                                    {% endif %}
+                                </td>
+                                <!-- Завдання -->
+                                <td style="padding:10px 12px;">
+                                    {% if sub.assignment %}
+                                    <div style="font-weight:600;color:var(--color-text-primary);line-height:1.3;">
+                                        {% if sub.assignment.subject %}
+                                        <span style="color:{{ sub.assignment.subject.color|default:'#4f46e5' }};font-weight:700;">
+                                            {{ sub.assignment.subject.name }}:
+                                        </span>
+                                        {% endif %}
+                                        {{ sub.assignment.title }}
+                                    </div>
+                                    {% else %}
+                                    <span style="color:var(--color-text-muted);">—</span>
+                                    {% endif %}
+                                </td>
+                                <!-- Оцінка -->
+                                <td style="padding:10px 12px;text-align:center;">
+                                    {% if sub.grade %}
+                                    <span style="display:inline-block;padding:3px 10px;border-radius:var(--radius-sm);background:rgba(16,185,129,0.12);color:#059669;border:1.5px solid rgba(16,185,129,0.3);font-size:14px;font-weight:850;">
+                                        {{ sub.grade }}
+                                    </span>
+                                    {% else %}
+                                    <span style="color:var(--color-text-muted);font-size:12px;">—</span>
+                                    {% endif %}
+                                </td>
+                                <!-- ШІ статус -->
+                                <td style="padding:10px 12px;font-size:11.5px;">
+                                    {% if sub.ai_generated_detected %}
+                                        {% if sub.assignment and sub.assignment.allow_ai %}
+                                        <span class="badge" style="background:rgba(16,185,129,0.1);color:#059669;border:1px solid rgba(16,185,129,0.25);font-weight:700;padding:2px 6px;">
+                                            🤖 ШІ (дозв.)
+                                        </span>
+                                        {% else %}
+                                        <span class="badge" style="background:rgba(239,68,68,0.1);color:#dc2626;border:1px solid rgba(239,68,68,0.25);font-weight:700;padding:2px 6px;">
+                                            🤖 Виявлено ШІ!
+                                        </span>
+                                        {% endif %}
+                                    {% else %}
+                                        <span style="color:var(--color-text-muted);">—</span>
+                                    {% endif %}
+                                </td>
+                                <!-- Коментар -->
+                                <td style="padding:10px 12px;font-size:12px;color:var(--color-text-secondary);max-width:240px;line-height:1.35;">
+                                    {% if sub.teacher_comment %}
+                                    <div style="color:var(--color-text-primary);"><strong style="color:var(--color-primary);">Відгук:</strong> {{ sub.teacher_comment|truncatechars:70 }}</div>
+                                    {% elif sub.comment_student %}
+                                    <div><strong style="color:var(--color-text-muted);">Учень:</strong> {{ sub.comment_student|truncatechars:60 }}</div>
+                                    {% else %}
+                                    <span style="color:var(--color-text-muted);">—</span>
+                                    {% endif %}
+                                </td>
+                                <!-- Дія -->
+                                <td style="padding:10px 12px;text-align:center;">
+                                    <a href="{% url 'view_file' sub.id %}" target="_blank" class="btn btn-secondary btn-sm" style="padding:3px 8px;font-size:11.5px;font-weight:700;" title="Відкрити та переглянути роботу учня">
+                                        👁️
+                                    </a>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="10" style="padding:36px;text-align:center;color:var(--color-text-muted);">
+                                    <div style="font-size:32px;margin-bottom:8px;">📭</div>
+                                    <div style="font-size:15px;font-weight:700;color:var(--color-text-primary);margin-bottom:4px;">Не знайдено робіт за вказаними фільтрами</div>
+                                    <div style="font-size:13px;">Спробуйте розширити період дат або обрати інший клас.</div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+<script>
+// ── Керування вибором рядків ──────────────────────────────────────────────────
+function toggleSelectAll(masterCheckbox) {
+    const checkboxes = document.querySelectorAll('.sub-checkbox');
+    checkboxes.forEach(cb => {
+        cb.checked = masterCheckbox.checked;
+    });
+    updateSelectedCount();
+}
+
+function updateSelectedCount() {
+    const checkboxes = document.querySelectorAll('.sub-checkbox');
+    const checked = Array.from(checkboxes).filter(cb => cb.checked);
+    const countLabel = document.getElementById('selected-count-label');
+    if (countLabel) {
+        countLabel.textContent = checked.length;
+    }
+    const master = document.getElementById('select-all-checkbox');
+    if (master) {
+        master.checked = (checked.length === checkboxes.length && checkboxes.length > 0);
+    }
+}
+
+// ── Керування швидкими кнопками дат ──────────────────────────────────────────
+function setDatePreset(preset) {
+    const fromInput = document.getElementById('date_from');
+    const toInput = document.getElementById('date_to');
+    const today = new Date();
+
+    function format(d) {
+        return d.toISOString().split('T')[0];
+    }
+
+    if (preset === 'today') {
+        const str = format(today);
+        fromInput.value = str;
+        toInput.value = str;
+    } else if (preset === 'yesterday') {
+        const y = new Date();
+        y.setDate(today.getDate() - 1);
+        const str = format(y);
+        fromInput.value = str;
+        toInput.value = str;
+    } else if (preset === 'week') {
+        const w = new Date();
+        w.setDate(today.getDate() - 7);
+        fromInput.value = format(w);
+        toInput.value = format(today);
+    } else if (preset === 'two_weeks') {
+        const tw = new Date();
+        tw.setDate(today.getDate() - 14);
+        fromInput.value = format(tw);
+        toInput.value = format(today);
+    } else if (preset === 'month') {
+        const m = new Date(today.getFullYear(), today.getMonth(), 1);
+        fromInput.value = format(m);
+        toInput.value = format(today);
+    } else if (preset === 'clear') {
+        fromInput.value = '';
+        toInput.value = '';
+    }
+}
+
+// ── Завантаження PDF ─────────────────────────────────────────────────────────
+function downloadReportPdf(mode) {
+    const form = document.getElementById('report-filter-form');
+    const params = new URLSearchParams(new FormData(form));
+
+    // Перевіряємо вибрані чекбокси
+    const checkboxes = document.querySelectorAll('.sub-checkbox');
+    const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+
+    if (!allChecked) {
+        const selectedIds = Array.from(checkboxes).filter(cb => cb.checked).map(cb => cb.value);
+        if (selectedIds.length === 0) {
+            alert('Будь ласка, оберіть хоча б одного учня / роботу для включення у звіт!');
+            return;
+        }
+        params.set('selected_ids', selectedIds.join(','));
+    }
+
+    params.set('mode', mode);
+    const url = "{% url 'teacher_reports_pdf' %}?" + params.toString();
+    window.location.href = url;
+}
+</script>
+{% endblock %}

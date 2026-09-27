@@ -22,6 +22,7 @@ urlpatterns = [
     path('assignment/<int:pk>/submit/success/', views.submit_success, name='submit_success'),
     path('submission/<int:submission_id>/', views.submission_detail, name='submission_detail'),
     path('my-submissions/', views.student_submissions_portal, name='student_submissions_portal'),
+    path('my-submissions/alias/', views.student_submissions_portal, name='my_submissions'),
 
 
     # ── Майстер першого запуску та авторизація вчителя ───────────────────────
@@ -57,9 +58,11 @@ urlpatterns = [
     path('teacher/submission/<int:sub_id>/delete/', views.delete_submission, name='delete_submission'),
     path('api/teacher/live-status/', views.teacher_live_status, name='teacher_live_status'),
 
-    # ── Електронний журнал оцінок та експорт у CSV ───────────────────────────
+    # ── Електронний журнал оцінок та експорт у CSV / PDF ─────────────────────
     path('teacher/gradebook/', views.gradebook, name='gradebook'),
     path('teacher/export/', views.export_grades, name='export_grades'),
+    path('teacher/reports/', views.teacher_reports, name='teacher_reports'),
+    path('teacher/reports/pdf/', views.teacher_reports_pdf, name='teacher_reports_pdf'),
 
     # ── Історія учня ──────────────────────────────────────────────────────────
     path('teacher/student/<str:student_name>/', views.student_detail, name='student_detail'),

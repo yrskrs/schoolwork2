@@ -1098,7 +1098,9 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
         self.client.login(username='teacher1', password='password123')
 
         # 1. Перевірка базових системних шаблонів (НУШ та Традиційна)
-        AICriteriaPreset.ensure_default_presets()
+        # force_recreate=True гарантує ініціалізацію незалежно від стану класової змінної
+        AICriteriaPreset._default_presets_initialized = False
+        AICriteriaPreset.ensure_default_presets(force_recreate=True)
         self.assertTrue(AICriteriaPreset.objects.filter(evaluation_type='nus', is_system=True).exists())
         self.assertTrue(AICriteriaPreset.objects.filter(evaluation_type='traditional', is_system=True).exists())
 
@@ -1174,7 +1176,9 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
 
         trad_preset = AICriteriaPreset.objects.filter(evaluation_type='traditional').first()
         if not trad_preset:
-            AICriteriaPreset.ensure_default_presets()
+            # Скидаємо класову змінну і примусово ініціалізуємо дефолтні шаблони
+            AICriteriaPreset._default_presets_initialized = False
+            AICriteriaPreset.ensure_default_presets(force_recreate=True)
             trad_preset = AICriteriaPreset.objects.filter(evaluation_type='traditional').first()
 
         mock_http.return_value = (200, {
@@ -2317,12 +2321,14 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
         )
         self.assertTrue(sub.is_ai_allowed())
 
-        # 4. Перевірка картки учня (submission_detail)
+        # 4. Перевірка картки учня (submission_detail) - деталі приховані від учня, лише загальна інформація
         sub_detail_resp = self.client.get(reverse('submission_detail', args=[sub.id]))
         self.assertEqual(sub_detail_resp.status_code, 200)
+        # Учень бачить лише загальне повідомлення (без деталей)
         self.assertContains(sub_detail_resp, 'У роботі зафіксовано використання штучного інтелекту (ШІ)')
         self.assertContains(sub_detail_resp, '(дозволено вчителем)')
-        self.assertContains(sub_detail_resp, 'Виявлено характерні шаблонні формулювання нейромереж')
+        # Деталі аналізу ШІ приховані від учня — видно лише вчителю
+        self.assertNotContains(sub_detail_resp, 'Виявлено характерні шаблонні формулювання нейромереж')
 
         # 5. Перевірка сторінки вчителя (assignment_submissions) та (view_file)
         self.client.login(username='teacher1', password='password123')
@@ -2334,6 +2340,11 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
         self.assertEqual(fv_resp.status_code, 200)
         self.assertContains(fv_resp, 'Виявлено ознаки використання ШІ')
         self.assertContains(fv_resp, 'Дозволено вчителем')
+
+        # Деталі аналізу ШІ видно лише вчителю у view_file
+        sub_detail_teacher_resp = self.client.get(reverse('submission_detail', args=[sub.id]))
+        self.assertEqual(sub_detail_teacher_resp.status_code, 200)
+        self.assertContains(sub_detail_teacher_resp, 'Виявлено характерні шаблонні формулювання нейромереж')
 
     def test_traditional_grading_suppresses_gr_results(self):
         """Тест: якщо обрано традиційну систему оцінювання, групи результатів не враховуються і не показуються."""

@@ -46,9 +46,15 @@
                     <a href="{% url 'download_assignment_submissions_zip' assignment.pk %}{% if selected_class_id %}?class_group={{ selected_class_id }}{% endif %}" class="btn btn-success btn-sm" style="font-weight:700;">
                         📥 Завантажити ZIP
                     </a>
+                    {% if not assignment.is_archived and assignment.status != 'archived' %}
                     <a href="{% url 'submit_assignment' assignment.pk %}" class="btn btn-secondary btn-sm" target="_blank" title="Відкрити форму для учнів">
                         🔗 Лінк для учнів ↗
                     </a>
+                    {% else %}
+                    <span class="badge" style="background:rgba(245,158,11,0.15);color:#b45309;border:1px solid rgba(245,158,11,0.3);font-size:12px;font-weight:700;padding:6px 12px;border-radius:var(--radius-sm);">
+                        🔒 Прийом закрито (Архів)
+                    </span>
+                    {% endif %}
                     {% else %}
                     <span class="badge" style="background:var(--color-bg-secondary);border:1px solid var(--color-border);color:var(--color-primary);font-size:12px;font-weight:700;padding:6px 12px;border-radius:var(--radius-sm);">
                         📖 Без здачі робіт
@@ -427,7 +433,7 @@
                             Учні ще не здали роботу по цьому завданню.
                             {% endif %}
                         </p>
-                        {% if not assignment.no_submission_required %}
+                        {% if not assignment.no_submission_required and not assignment.is_archived and assignment.status != 'archived' %}
                         <a href="{% url 'submit_assignment' assignment.pk %}" class="btn btn-secondary btn-sm" target="_blank">
                             🔗 Посилання для учнів
                         </a>

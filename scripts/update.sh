@@ -23,16 +23,18 @@ APP_PORT="8000"
 DB_USER="schoolnet_user"
 DB_NAME="schoolnet_db"
 
+ENV_USER=""
+ENV_DB=""
 if [ -f "$PROJECT_ROOT/.env" ]; then
     ENV_PORT=$(grep -E '^[[:space:]]*APP_PORT=' "$PROJECT_ROOT/.env" | head -n1 | cut -d '=' -f2- | tr -d '\r\n"' | tr -d "'" | tr -d ' ' || true)
     if [ -n "$ENV_PORT" ]; then APP_PORT="$ENV_PORT"; fi
     
     ENV_USER=$(grep -E '^[[:space:]]*POSTGRES_USER=' "$PROJECT_ROOT/.env" | head -n1 | cut -d '=' -f2- | tr -d '\r\n"' | tr -d "'" | tr -d ' ' || true)
-    if [ -n "$ENV_USER" ]; then DB_USER="$ENV_USER"; fi
-    
     ENV_DB=$(grep -E '^[[:space:]]*POSTGRES_DB=' "$PROJECT_ROOT/.env" | head -n1 | cut -d '=' -f2- | tr -d '\r\n"' | tr -d "'" | tr -d ' ' || true)
-    if [ -n "$ENV_DB" ]; then DB_NAME="$ENV_DB"; fi
 fi
+
+DB_USER="${POSTGRES_USER:-${ENV_USER:-schoolnet_user}}"
+DB_NAME="${POSTGRES_DB:-${ENV_DB:-schoolnet_db}}"
 
 # 1. Автоматичне створення резервної копії перед оновленням
 echo ""
@@ -42,7 +44,8 @@ if [ -f "./scripts/backup.sh" ]; then
         echo "✅ Резервну копію успішно створено."
     else
         echo "⚠️  [УВАГА] Не вдалося створити повний бекап!"
-        read -p "Бажаєте продовжити оновлення БЕЗ бекапу? (y/N): " -r
+        REPLY=""
+        read -p "Бажаєте продовжити оновлення БЕЗ бекапу? (y/N): " -r REPLY || REPLY="n"
         echo ""
         if [[ ! $REPLY =~ ^[Yy]$ ]]; then
             echo "❌ Оновлення скасовано для захисту даних."
@@ -58,6 +61,12 @@ echo ""
 echo "📥 [2/5] Отримання оновлень з репозиторію..."
 if [ -d .git ]; then
     CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "main")
+    if [ "$CURRENT_BRANCH" = "HEAD" ] || [ -z "$CURRENT_BRANCH" ]; then
+        CURRENT_BRANCH="main"
+    fi
+    if [ -n "$(git status --porcelain 2>/dev/null || true)" ]; then
+        echo "⚠️  [УВАГА] У робочій директорії є локальні зміни."
+    fi
     echo "   -> Оновлення гілки [$CURRENT_BRANCH]..."
     git fetch origin "$CURRENT_BRANCH"
     git merge "origin/$CURRENT_BRANCH" || {

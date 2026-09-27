@@ -40,6 +40,9 @@
             <li {% if request.resolver_match.url_name == 'gradebook' or request.resolver_match.url_name == 'gradebook_all' %}class="active"{% endif %}>
                 <a href="{% url 'gradebook' %}"><span>📊</span><span>Журнал</span></a>
             </li>
+            <li {% if request.resolver_match.url_name == 'teacher_reports' %}class="active"{% endif %}>
+                <a href="{% url 'teacher_reports' %}"><span>📑</span><span>Звіти та заміна</span></a>
+            </li>
             <li {% if request.resolver_match.url_name == 'teacher_students' or request.resolver_match.url_name == 'teacher_student_edit' %}class="active"{% endif %}>
                 <a href="{% url 'teacher_students' %}"><span>👥</span><span>Учні та класи</span></a>
             </li>
