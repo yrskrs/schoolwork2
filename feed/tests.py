@@ -5533,5 +5533,219 @@ class QuestionAnswerMappingTests(TestCase):
         self.assertNotIn("а що це таке", result['feedback_comment'].lower())
         self.assertFalse(any("а що це таке" in w.lower() for w in result['weaknesses']))
 
+    @patch('feed.gemini_service.call_ai_api')
+    def test_reject_blank_teacher_practical_template_without_answers(self, mock_call):
+        """Перевірка, що здача бланку/інструкції практичної роботи вчителя без відповідей блокується і отримує 'Доопрацювати', а не 7 балів."""
+        from .gemini_service import evaluate_submission_with_gemini
+
+        settings = AISettings.get_solo()
+        settings.is_enabled = True
+        settings.api_key = 'fake-api-key'
+        settings.save()
+
+        assignment = Assignment.objects.create(
+            teacher=self.teacher,
+            subject=self.subject,
+            title="Практична робота: Створення презентації",
+            description="Виконайте практичну роботу:\n1. Створіть презентацію\n2. Додайте слайди"
+        )
+        assignment.classes.add(self.class_group)
+
+        # Текст бланку вчителя з вказівками та ходом роботи БЕЗ відповідей учня
+        teacher_template_text = (
+            "Практична робота № 4\n"
+            "Тема: Створення презентацій у середовищі PowerPoint\n"
+            "Мета: Навчитися додавати слайди, об'єкти та налаштовувати дизайн.\n"
+            "Обладнання: ПК, програма PowerPoint.\n"
+            "Хід роботи:\n"
+            "1. Відкрийте програму PowerPoint на своєму комп'ютері.\n"
+            "2. Створіть нову порожню презентацію з трьома слайдами.\n"
+            "3. Налаштуйте колірну схему та макет оформлення.\n"
+            "4. Збережіть файл під назвою Робота.pptx.\n"
+        )
+        sub_file = SimpleUploadedFile("pract_blank.txt", teacher_template_text.encode('utf-8'), content_type="text/plain")
+
+        submission = Submission.objects.create(
+            assignment=assignment,
+            first_name='Іван',
+            last_name='Петренко',
+            class_group=self.class_group,
+            file=sub_file,
+            is_latest_attempt=True
+        )
+
+        # Імітуємо відповідь ШІ, де ШІ помилково поставив 7 балів за сам факт прикріплення
+        ai_mock_reply = json.dumps({
+            "suggested_grade": "7",
+            "level": "Достатній (7-9)",
+            "unclear_task": False,
+            "format_warning": None,
+            "summary": "Учень здав бланк практичної роботи вчителя, але відповіді відсутні.",
+            "strengths": ["Прикріплено файл"],
+            "weaknesses": ["Здано текст завдань вчителя замість виконаної учнем роботи (відповіді відсутні)."],
+            "feedback_comment": "Ви прикріпили інструкцію до практичної роботи без власних відповідей.",
+            "gr_results": [{"code": "ГР 1", "name": "Практична частина", "grade": "7", "level": "Достатній", "comment": "Бланк"}]
+        }, ensure_ascii=False)
+        mock_call.return_value = (200, ai_mock_reply, None, {})
+
+        result = evaluate_submission_with_gemini(submission)
+
+        # Переконуємось, що система НЕ дозволила поставити 7 балів і встановила "Доопрацювати"
+        self.assertEqual(result['suggested_grade'], 'Доопрацювати')
+        self.assertIn('Початковий', result['level'])
+        self.assertTrue(result['unclear_task'])
+        self.assertTrue(any("практичн" in w.lower() or "бланк" in w.lower() or "відповід" in w.lower() for w in result['weaknesses']))
+
+    @patch('feed.gemini_service.call_ai_api')
+    def test_reject_mismatched_class_submission(self, mock_call):
+        """Перевірка, що здача роботи для іншого класу (наприклад 9 клас замість 6 класу) отримує 'Доопрацювати', а не позитивний бал."""
+        from .gemini_service import evaluate_submission_with_gemini
+
+        settings = AISettings.get_solo()
+        settings.is_enabled = True
+        settings.api_key = 'fake-api-key'
+        settings.save()
+
+        cg_6 = ClassGroup.objects.create(name='6-А')
+        assignment = Assignment.objects.create(
+            teacher=self.teacher,
+            subject=self.subject,
+            title="Урок інформатики",
+            description="Опрацюйте тему уроку"
+        )
+        assignment.classes.add(cg_6)
+
+        # Учень 6 класу здав документ з матеріалами 9 класу
+        mismatched_text = (
+            "Практична робота для 9 класу\n"
+            "Тема: Бази даних та СУБД Access\n"
+            "Хід роботи:\n"
+            "1. Запустіть MS Access 2019.\n"
+            "2. Створіть таблицю з полями Код, Прізвище, Клас.\n"
+        )
+        sub_file = SimpleUploadedFile("db_9_class.txt", mismatched_text.encode('utf-8'), content_type="text/plain")
+
+        submission = Submission.objects.create(
+            assignment=assignment,
+            first_name='Оксана',
+            last_name='Ковальчук',
+            class_group=cg_6,
+            file=sub_file,
+            is_latest_attempt=True
+        )
+
+        ai_mock_reply = json.dumps({
+            "suggested_grade": "7",
+            "level": "Достатній (7-9)",
+            "unclear_task": False,
+            "format_warning": None,
+            "summary": "Робота містить завдання для 9 класу.",
+            "strengths": ["Файл відкрито"],
+            "weaknesses": ["Робота для іншого класу (9 клас замість 6 класу)."],
+            "feedback_comment": "Здано роботу для 9 класу.",
+            "gr_results": [{"code": "ГР 1", "name": "Результат", "grade": "7", "level": "Достатній", "comment": "9 клас"}]
+        }, ensure_ascii=False)
+        mock_call.return_value = (200, ai_mock_reply, None, {})
+
+        result = evaluate_submission_with_gemini(submission)
+
+        # Перевірка: оцінка скасована, встановилось "Доопрацювати", unclear_task = True
+        self.assertEqual(result['suggested_grade'], 'Доопрацювати')
+        self.assertIn('Початковий', result['level'])
+        self.assertTrue(result['unclear_task'])
+        self.assertTrue(any("клас" in w.lower() for w in result['weaknesses']))
+
+    @patch('feed.gemini_service.call_ai_api')
+    def test_no_points_awarded_for_mere_attachment_with_zero_answers(self, mock_call):
+        """Перевірка, що за просте прикріплення тексту (довжиною > 30 симв.) без відповідей не виставляється 7 балів."""
+        from .gemini_service import evaluate_submission_with_gemini
+
+        settings = AISettings.get_solo()
+        settings.is_enabled = True
+        settings.api_key = 'fake-api-key'
+        settings.save()
+
+        assignment = Assignment.objects.create(
+            teacher=self.teacher,
+            subject=self.subject,
+            title="Контрольні запитання",
+            description="Дайте відповіді на запитання:\n1. Що таке Інтернет?\n2. Що таке браузер?"
+        )
+        assignment.classes.add(self.class_group)
+
+        # Незв'язний сторонній текст понад 30 символів (раніше помилково ставилось 7 балів)
+        raw_text = "Добрий вечір, я не встиг зробити ці запитання, відправляю файл просто так."
+        sub_file = SimpleUploadedFile("note.txt", raw_text.encode('utf-8'), content_type="text/plain")
+
+        submission = Submission.objects.create(
+            assignment=assignment,
+            first_name='Михайло',
+            last_name='Сидоренко',
+            class_group=self.class_group,
+            file=sub_file,
+            is_latest_attempt=True
+        )
+
+        ai_mock_reply = json.dumps({
+            "suggested_grade": "Доопрацювати",
+            "level": "Початковий (1-3)",
+            "unclear_task": True,
+            "format_warning": "Не зрозуміло, яке саме завдання виконане.",
+            "summary": "Жодної відповіді на питання не надано.",
+            "strengths": [],
+            "weaknesses": ["Жодної відповіді не дано", "Не зрозуміло, яке саме завдання виконане"],
+            "feedback_comment": "Будь ласка, виконайте завдання та надайте відповіді на поставлені запитання.",
+        }, ensure_ascii=False)
+        mock_call.return_value = (200, ai_mock_reply, None, {})
+
+        result = evaluate_submission_with_gemini(submission)
+
+        # Перевірка: старий баг (len >= 30 -> 7) НЕ спрацював, оцінка залишилась "Доопрацювати"
+        self.assertEqual(result['suggested_grade'], 'Доопрацювати')
+        self.assertIn('Початковий', result['level'])
+        self.assertTrue(result['unclear_task'])
+
+    def test_reject_teacher_duplicate_across_assignments(self):
+        """Перевірка, що здача файлу вчителя з іншого завдання визначається як дублікат матеріалів вчителя."""
+        from .models import AssignmentFile
+        from .duplicate_detector import check_submission_duplicates
+
+        # Створюємо перше завдання з файлом вчителя
+        assignment1 = Assignment.objects.create(
+            teacher=self.teacher,
+            subject=self.subject,
+            title="Завдання 1 для іншого класу",
+            description="Опис завдання 1"
+        )
+        t_file = SimpleUploadedFile("teacher_pract_8.docx", b"Teacher practical guide for 8th grade content here", content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+        af = AssignmentFile.objects.create(assignment=assignment1, file=t_file, original_name="teacher_pract_8.docx")
+
+        # Створюємо друге завдання (для поточного класу)
+        assignment2 = Assignment.objects.create(
+            teacher=self.teacher,
+            subject=self.subject,
+            title="Завдання 2 для нашого класу",
+            description="Опис завдання 2"
+        )
+        assignment2.classes.add(self.class_group)
+
+        # Учень прикріплює до другого завдання той самий файл вчителя з першого завдання
+        sub_file = SimpleUploadedFile("teacher_pract_8.docx", b"Teacher practical guide for 8th grade content here", content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+        submission = Submission.objects.create(
+            assignment=assignment2,
+            first_name='Петро',
+            last_name='Поліщук',
+            class_group=self.class_group,
+            file=sub_file,
+            is_latest_attempt=True
+        )
+
+        dup_info = check_submission_duplicates(submission)
+        self.assertTrue(dup_info['is_duplicate'])
+        self.assertTrue(dup_info.get('is_duplicate_teacher'))
+        self.assertIn("матеріалами вчителя", dup_info.get('warning_message', ''))
+
+
+
 
 

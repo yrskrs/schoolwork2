@@ -2410,9 +2410,24 @@ def extract_task_questions(text: str) -> list[str]:
     return cleaned[:30]
 
 
+INSTRUCTION_VERBS = {
+    'відкрийте', 'відкрити', 'створіть', 'створити', 'запустіть', 'запустити',
+    'виконайте', 'виконати', 'перейдіть', 'перейти', 'натисніть', 'натиснути',
+    'побудуйте', 'побудувати', 'скопіюйте', 'скопіювати', 'збережіть', 'зберегти',
+    'введіть', 'ввести', 'налаштуйте', 'налаштувати', 'ознайомтеся', 'ознайомитися',
+    'завантажте', 'завантажити', 'розв\'яжіть', 'розв\'язати', 'обчисліть', 'обчислити',
+    'запишіть', 'записати', 'дослідіть', 'дослідити', 'знайдіть', 'знайти',
+    'виберіть', 'вибрати', 'вкажіть', 'вказати', 'додайте', 'додати',
+    'змініть', 'змінити', 'встановіть', 'встановити', 'перевірте', 'перевірити',
+    'перегляньте', 'переглянути', 'прочитайте', 'прочитати', 'порівняйте', 'порівняти',
+    'заповніть', 'заповнити', 'намалюйте', 'намалювати', 'визначте', 'визначити'
+}
+
+
 def extract_student_answers(text: str) -> dict[int, str]:
     """
     Виявляє та видобуває відповіді учня за номерами (1. ..., 2) ..., Відповідь 1: ...).
+    Автоматично ігнорує пункти завдань та інструкцій вчителя (наприклад: «1. Відкрийте програму...»).
     """
     if not text or not text.strip():
         return {}
@@ -2430,12 +2445,125 @@ def extract_student_answers(text: str) -> dict[int, str]:
         end_idx = matches[i + 1].start() if i + 1 < len(matches) else len(text)
         content = text[start_idx:end_idx].strip().rstrip('»"\'')
         if num_str and content:
+            words = content.split()
+            first_word = words[0].lower().rstrip(':,.;«»"\'') if words else ""
+            # Якщо пункт починається з наказового дієслова вказівки вчителя і є коротким описом кроку
+            if first_word in INSTRUCTION_VERBS and len(words) <= 15:
+                continue
             try:
                 num = int(num_str)
                 answers[num] = content
             except ValueError:
                 pass
     return answers
+
+
+def detect_invalid_or_teacher_template_submission(submission, text_parts: list[str]) -> tuple[bool, str, str]:
+    """
+    Автоматично перевіряє роботу учня на критичну невідповідність:
+    1. Збіг з файлами завдань/практичних робіт вчителя (дублікат вихідного файлу).
+    2. Невідповідність класу (наприклад, учень 6-7 класу здав практичну чи завдання 8-9 класу).
+    3. Здача бланку або інструкційної картки практичної роботи вчителя без відповідей та розв'язків учня.
+    
+    Повертає (is_invalid, reason_message, error_code).
+    """
+    if not submission:
+        return False, "", "none"
+
+    student_raw_text = "\n".join(text_parts).strip() if text_parts else ""
+    text_lower = student_raw_text.lower()
+
+    # ── 1. ПЕРЕВІРКА НА ЗБІГ З ФАЙЛАМИ ВЧИТЕЛЯ (ДУБЛІКАТ) ──
+    try:
+        from .duplicate_detector import check_submission_duplicates
+        dup_info = check_submission_duplicates(submission)
+        if dup_info.get('is_duplicate_teacher') and not getattr(submission, 'ignore_plagiarism', False):
+            teacher_f = dup_info.get('teacher_file_name') or 'вчителя'
+            msg = (
+                f"Прикріплений файл повністю збігається з матеріалами/практичною роботою вчителя («{teacher_f}»). "
+                "Здано вихідний файл завдання замість виконаної учнем роботи."
+            )
+            return True, msg, 'teacher_duplicate'
+    except Exception:
+        pass
+
+    # ── 2. ПЕРЕВІРКА КЛАСУ (НЕВІДПОВІДНІСТЬ КЛАСУ) ──
+    class_name = submission.class_group.name if submission.class_group else ""
+    m_class = re.search(r'\b(1[0-2]|[1-9])\b', class_name)
+    student_grade = int(m_class.group(1)) if m_class else None
+
+    asgn_grades = set()
+    if submission.assignment:
+        for c in submission.assignment.classes.all():
+            m_ac = re.search(r'\b(1[0-2]|[1-9])\b', c.name)
+            if m_ac:
+                asgn_grades.add(int(m_ac.group(1)))
+    if student_grade:
+        asgn_grades.add(student_grade)
+
+    if asgn_grades and (student_raw_text or submission.file):
+        sample_to_check = student_raw_text[:2500]
+        if submission.file:
+            sample_to_check += " " + os.path.basename(submission.file.name)
+
+        found_grade_matches = re.findall(
+            r'\b(1[0-2]|[1-9])(?:\s*-\s*[А-Яа-яA-Za-z]|\s*й\s*клас|\s*го\s*класу|\s+клас|\s+класу|\s+кл[\.\s])',
+            sample_to_check,
+            re.IGNORECASE
+        )
+        found_grades = set()
+        for g_str in found_grade_matches:
+            try:
+                found_grades.add(int(g_str))
+            except (ValueError, TypeError):
+                pass
+
+        other_grades = found_grades - asgn_grades
+        # Якщо в документі знайдено згадку іншого класу і немає жодної згадки свого класу
+        if other_grades and not (found_grades & asgn_grades):
+            mismatched_grade = sorted(list(other_grades))[0]
+            expected_grades_str = ", ".join(str(g) for g in sorted(list(asgn_grades)))
+            msg = (
+                f"Прикріплена робота містить завдання/матеріали для {mismatched_grade} класу, тоді як завдання призначене для "
+                f"{expected_grades_str} класу ({class_name}). Здано роботу не з цього класу, оцінку не зараховано."
+            )
+            return True, msg, 'class_mismatch'
+
+    # ── 3. ПЕРЕВІРКА НА ЗДАЧУ БЛАНКУ/ІНСТРУКЦІЇ ПРАКТИЧНОЇ РОБОТИ БЕЗ ВІДПОВІДЕЙ ──
+    has_practical_header = any(h in text_lower for h in [
+        'практична робота', 'лабораторна робота', 'інструкційна картка',
+        'практичне завдання', 'самостійна робота'
+    ])
+    has_practical_structure = any(s in text_lower for s in [
+        'тема:', 'мета:', 'обладнання:', 'хід роботи:', 'порядок виконання',
+        'теоретичні відомості', 'вказівки до роботи', 'завдання до роботи'
+    ])
+
+    if has_practical_header and has_practical_structure:
+        # Шукаємо пронумеровані пункти (1. ..., 2. ...)
+        items = re.findall(r'(?:^|\n)\s*(?:\d+[\.\)]|завдання\s*\d+[\.\:]?)\s*([^\n\r]+)', student_raw_text, re.IGNORECASE)
+        if items:
+            instruction_count = 0
+            for it in items:
+                words = it.strip().split()
+                first_word = words[0].lower().rstrip(':,.;«»"\'') if words else ""
+                if first_word in INSTRUCTION_VERBS:
+                    instruction_count += 1
+            # Якщо більшість пунктів починаються зі слів вказівок вчителя
+            if instruction_count >= max(2, int(len(items) * 0.5)):
+                # Перевіряємо, чи є в кінці роботи блок відповідей або висновків
+                has_student_response = any(kw in text_lower for kw in [
+                    'відповідь:', 'відповіді:', 'висновок:', 'висновки:', 'розв\'язання:',
+                    'мій висновок', 'результат виконання', 'отримані результати', 'мої відповіді'
+                ])
+                if not has_student_response and len(student_raw_text) < 4000:
+                    msg = (
+                        "Прикріплений файл є бланком/інструкцією практичної роботи вчителя (хід роботи та завдання) "
+                        "без власних відповідей, розв'язків чи висновків учня. За просте прикріплення тексту завдань вчителя оцінка не виставляється."
+                    )
+                    return True, msg, 'blank_practical_template'
+
+    return False, "", "none"
 
 
 def check_student_omitted_questions(task_questions: list[str], student_text: str) -> bool:
@@ -2615,6 +2743,43 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
             "- У 'feedback_comment' та 'summary' чітко зістав відповідь учня із цими індивідуальними критеріями вчителя."
         )
         prompt_lines.append("═══════════════════════════════════════════════════════════════════\n")
+
+    # ── ПЕРЕВІРКА ВІДПОВІДНОСТІ ТЕМІ, КЛАСУ ТА СПРАВЖНЬОСТІ РОБОТИ ─────────────
+    pre_is_invalid, pre_reason, pre_code = detect_invalid_or_teacher_template_submission(submission, text_parts)
+    if pre_is_invalid:
+        prompt_lines.append(
+            f"\n🚨🚨 КРИТИЧНЕ ЗАСТЕРЕЖЕННЯ СИСТЕМИ ДЛЯ ШІ: ВИЯВЛЕНО НЕВІДПОВІДНІСТЬ ЗДАНОЇ РОБОТИ!\n"
+            f"ПРИЧИНА: {pre_reason}\n"
+            f"КАТЕГОРИЧНІ ВИМОГИ ДЛЯ ОЦІНЮВАННЯ:\n"
+            f"- КАТЕГОРИЧНО ЗАБОРОНЕНО ставити 4-12 балів (зокрема 7 балів чи інші позитивні оцінки)!\n"
+            f"- Встанови 'suggested_grade': 'Доопрацювати', 'level': 'Початковий (1-3)', 'unclear_task': true!\n"
+            f"- Для ВСІХ груп результатів (ГР) признач оцінку 1 або 2 бали (Початковий рівень)!\n"
+            f"- У 'format_warning', 'summary', 'weaknesses' та 'feedback_comment' чітко роз'ясни учневі: «{pre_reason}»!\n"
+        )
+
+    prompt_lines.append(
+        "🛑 НАЙВИЩИЙ ПРІОРИТЕТ: ПЕРЕВІРКА ВІДПОВІДНОСТІ ТЕМІ, КЛАСУ ТА СПРАВЖНЬОСТІ РОБОТИ (ANTI-EMPTY & IRRELEVANT SUBMISSION CHECK):\n"
+        "ПЕРЕД тим, як ставити будь-які оцінки чи аналізувати групи результатів, ШІ ЗОБОВ'ЯЗАНИЙ перевірити 4 КРИТИЧНІ БАР'ЄРИ:\n"
+        f"1. 🚫 ПЕРЕВІРКА КЛАСУ (ЧИ НЕ ЗДАНО РОБОТУ ДЛЯ ІНШОГО КЛАСУ):\n"
+        f"   - Поточний клас учня: «{class_name}».\n"
+        f"   - Перевір текст та колонтитули зданого файлу/роботи. Якщо у документі чітко зазначено ІНШИЙ КЛАС (наприклад: учень з 6 чи 7 класу здав практичну чи завдання для 8, 9, 10 чи 11 класу, або навпаки) — це ГРУБА НЕВІДПОВІДНІСТЬ!\n"
+        f"   - КАТЕГОРИЧНО ЗАБОРОНЕНО ставити 4-12 балів (зокрема 7 балів) за роботу для іншого класу! Встанови 'suggested_grade': 'Доопрацювати', 'level': 'Початковий (1-3)', оцінки по всіх ГР — 1-2 бали, 'unclear_task': true.\n"
+        f"2. 🚫 ПЕРЕВІРКА ВІДПОВІДНОСТІ ТЕМІ ТА ПРЕДМЕТУ:\n"
+        f"   - Тема уроку: «{assignment_title}», Предмет: «{subject_name}».\n"
+        f"   - Якщо зданий файл чи текст взагалі не стосується цієї теми або цього предмета (здано матеріал з іншого предмета, випадковий сторонній файл, документ з абсолютно іншої теми) — КАТЕГОРИЧНО ЗАБОРОНЕНО ставити оцінку лише за те, що «учень щось прикріпив»!\n"
+        f"   - Оцінка за невідповідність темі — ТІЛЬКИ 'Доопрацювати' (або 1-2 бали), 'level': 'Початковий (1-3)', усі ГР — 1-2 бали, 'unclear_task': true.\n"
+        f"3. 🚫 ПЕРЕВІРКА НА ЗДАЧУ «БЛАНКУ/ШАБЛОНУ ПРАКТИЧНОЇ ВЧИТЕЛЯ БЕЗ ВІДПОВІДЕЙ»:\n"
+        f"   - Перевір, ЧИ Є В ДОКУМЕНТІ ВЛАСНІ ВІДПОВІДІ ТА РОЗВ'ЯЗКИ УЧНЯ!\n"
+        f"   - Якщо учень просто прикріпив файл практичної роботи, інструкційної картки чи роздатки від вчителя (де є лише «Практична робота №...», «Тема», «Мета», «Хід роботи», перелік запитань/вправ вчителя), АЛЕ НЕМАЄ ВЛАСНИХ ВІДПОВІДЕЙ чи виконаного розв'язку:\n"
+        f"     * КАТЕГОРИЧНО ЗАБОРОНЕНО ставити 4-12 балів!\n"
+        f"     * 'suggested_grade': 'Доопрацювати', 'level': 'Початковий (1-3)', 'unclear_task': true.\n"
+        f"     * По всіх ГР — 1-2 бали (Початковий рівень).\n"
+        f"     * У 'format_warning', 'summary' та 'feedback_comment' чітко напиши: «Здано текст/бланк практичної роботи вчителя без власних відповідей та розв'язку. Роботу не зараховано, надішліть виконані відповіді на доопрацювання.»\n"
+        f"     * У 'weaknesses' обов'язково зазнач: «Здано інструкцію/завдання вчителя замість виконаної учнем роботи (відповіді відсутні).»\n"
+        f"4. 🚫 ПРАВИЛО «НЕ СТАВИТИ БАЛИ ЗА ПРОСТЕ ПРИКРІПЛЕННЯ ФАЙЛУ»:\n"
+        f"   - Бали (4-12) та достатній/високий рівень ставляться ВИКЛЮЧНО за реальну змістовну працю учня над темою завдання!\n"
+        f"   - Якщо файл не за темою, з іншого класу чи містить лише бланк завдань — КАТЕГОРИЧНО ЗАБОРОНЕНО виставляти 4-12 балів (зокрема 7 балів)!\n"
+    )
 
     # ── КРИТИЧНО: ОБСЯГ ЗАВДАННЯ ВЧИТЕЛЯ ТА ПРІОРИТЕТ УМОВИ (Scope of Work) ───
     prompt_lines.append(
@@ -3144,6 +3309,16 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
             "  * Оцінюй повноту, достовірність, логічність структури та самостійність викладу (10-12 балів за якісно розкриту тему).\n"
         )
 
+    if "ANTI-EMPTY & IRRELEVANT SUBMISSION CHECK" not in system_instruction:
+        system_instruction += (
+            "\n\nПЕРЕВІРКА ВІДПОВІДНОСТІ ТЕМІ, КЛАСУ ТА СПРАВЖНЬОСТІ РОБОТИ (ANTI-EMPTY & IRRELEVANT SUBMISSION CHECK):\n"
+            "- Перед виставленням будь-якої оцінки перевір відповідність роботи класу та темі завдання:\n"
+            "  * Якщо в роботі зазначено інший клас (наприклад, завдання для 6-7 класу, а здано роботу 8-9 класу): КАТЕГОРИЧНО ЗАБОРОНЕНО ставити 4-12 балів (зокрема 7 балів)! Встанови 'Доопрацювати', 1-2 бали по всіх ГР, 'unclear_task': true.\n"
+            "  * Якщо робота не відповідає темі завдання (сторонній предмет чи тема): оцінка ТІЛЬКИ 'Доопрацювати' (1-2 бали), 'unclear_task': true.\n"
+            "  * Якщо здано бланк/шаблон практичної роботи вчителя (хід роботи, інструкцію) БЕЗ власних відповідей чи розв'язків учня: КАТЕГОРИЧНО ЗАБОРОНЕНО ставити 4-12 балів! Оцінка ТІЛЬКИ 'Доопрацювати' (1-2 бали), 'unclear_task': true.\n"
+            "  * НЕ МОЖНА ставити оцінку за те, що учень просто щось прикріпив. Оцінюються виключно реальні відповіді та праця учня!\n"
+        )
+
     prompt_content = "\n".join(prompt_lines)
 
     # Формуємо ланцюжок спроб: спочатку активний провайдер, потім резервний (failover)
@@ -3250,7 +3425,7 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                 if result_json:
                     suggested_grade = str(result_json.get('suggested_grade', '')).strip()
                     if suggested_grade.lower() in ['none', 'null', '']:
-                        suggested_grade = 'Доопрацювати' if 'доопрацю' in raw_text.lower() else '7'
+                        suggested_grade = 'Доопрацювати'
 
                     level = str(result_json.get('level', '')).strip()
                     format_warning = str(result_json.get('format_warning') or '').strip()
@@ -3320,24 +3495,90 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                         except (ValueError, TypeError):
                             pass
 
-                    # Визначаємо, чи вдалося ШІ зрозуміти, яке завдання виконано
-                    raw_unclear = result_json.get('unclear_task')
-                    unclear_task = bool(raw_unclear and str(raw_unclear).lower() not in ['false', '0', 'none', 'null'])
+                    # ── ПЕРЕВІРКА НА НЕВІДПОВІДНІСТЬ ТЕМІ, КЛАСУ ТА ЗДАЧУ БЛАНКУ ВЧИТЕЛЯ ──
+                    post_is_invalid, post_reason, post_code = detect_invalid_or_teacher_template_submission(submission, text_parts)
 
                     fw_lower = (format_warning or '').lower()
                     sum_lower = (summary or '').lower()
                     fb_lower = (feedback_comment or '').lower()
+                    weaknesses_lower = " ".join(str(w) for w in weaknesses).lower() if weaknesses else ""
+                    all_ai_text = f"{fw_lower} {sum_lower} {fb_lower} {weaknesses_lower}"
 
-                    if not unclear_task:
-                        if ('не зрозуміло' in fw_lower and 'завдан' in fw_lower) or ('незрозуміло' in fw_lower and 'завдан' in fw_lower):
+                    ai_detected_class_mismatch = any(k in all_ai_text for k in [
+                        'інший клас', 'іншого класу', 'не для цього класу', 'матеріал для іншого класу',
+                        'завдання для 8 класу', 'завдання для 9 класу', 'завдання для 10 класу', 'завдання для 11 класу'
+                    ])
+                    ai_detected_topic_mismatch = any(k in all_ai_text for k in [
+                        'не відповідає темі', 'не відповідає завданню', 'не стосується теми', 'інша тема',
+                        'інший предмет', 'сторонній предмет', 'сторонній файл', 'не за темою'
+                    ])
+                    ai_detected_teacher_template = (any(k in all_ai_text for k in [
+                        'практична робота вчителя', 'бланк практичної', 'інструкційна картка', 'шаблон вчителя',
+                        'роздатка вчителя', 'текст завдань вчителя', 'хід роботи без відповідей',
+                        'завдання вчителя замість виконаної', 'без власних відповідей', 'відповіді відсутні',
+                        'не містить відповідей', 'не надав відповідей', 'відповідей немає',
+                        'жодної відповіді на питання', 'жодної відповіді не надано', 'немає жодної відповіді',
+                        'не виконано жодного завдання'
+                    ]) and answered_count == 0)
+
+                    ai_detected_mere_attachment = any(k in all_ai_text for k in [
+                        'просто прикріп', 'лише прикріп', 'нічого не зробив', 'робота не виконана',
+                        'не зараховано', 'не можна ставити оцінку'
+                    ])
+
+                    is_rejected_submission = (
+                        post_is_invalid or
+                        ai_detected_class_mismatch or
+                        ai_detected_topic_mismatch or
+                        ai_detected_teacher_template or
+                        ai_detected_mere_attachment
+                    )
+
+                    # Визначаємо, чи вдалося ШІ зрозуміти, яке завдання виконано
+                    raw_unclear = result_json.get('unclear_task')
+                    unclear_task = bool(raw_unclear and str(raw_unclear).lower() not in ['false', '0', 'none', 'null'])
+
+                    if is_rejected_submission:
+                        suggested_grade = 'Доопрацювати'
+                        level = 'Початковий (1-3)'
+
+                        if post_is_invalid:
+                            rej_reason = post_reason
+                        elif ai_detected_class_mismatch:
+                            rej_reason = "Прикріплена робота містить завдання/матеріали для іншого класу. Здано роботу не з цього класу, оцінку не зараховано."
+                        elif ai_detected_teacher_template:
+                            rej_reason = "Прикріплений файл є бланком/інструкцією практичної роботи вчителя без власних відповідей чи розв'язків учня. За просте прикріплення тексту завдань оцінка не виставляється."
+                        elif ai_detected_topic_mismatch:
+                            rej_reason = "Прикріплена робота не відповідає темі чи предмету завдання. Необхідно надіслати виконане завдання за заданою темою."
+                        else:
+                            rej_reason = "Роботу не зараховано: здані матеріали не містять виконаного учнем завдання (просте прикріплення файлу)."
+
+                        if rej_reason not in weaknesses:
+                            weaknesses.insert(0, rej_reason)
+
+                        # Якщо це невідповідність класу, дублікат роздатки або бланк вчителя — фіксуємо unclear_task
+                        if post_is_invalid or ai_detected_class_mismatch or ai_detected_teacher_template:
                             unclear_task = True
-                        elif ('не зрозуміло' in sum_lower and 'завдан' in sum_lower) or ('незрозуміло' in sum_lower and 'завдан' in sum_lower):
-                            unclear_task = True
-                        elif ('не зрозуміло, яке саме завдання' in fb_lower) or ('не зрозуміло яке завдання' in fb_lower) or ('незрозуміло, яке завдання' in fb_lower):
-                            unclear_task = True
+
+                        if clean_gr_results and not is_traditional:
+                            for gr in clean_gr_results:
+                                gr['grade'] = '1'
+                                gr['level'] = 'Початковий'
+                                gr['comment'] = rej_reason
+                            numeric_gr_grades = [1.0] * len(clean_gr_results)
+                            avg_gr_grade = 1
+                    else:
+                        if not unclear_task:
+                            if ('не зрозуміло' in fw_lower and 'завдан' in fw_lower) or ('незрозуміло' in fw_lower and 'завдан' in fw_lower):
+                                unclear_task = True
+                            elif ('не зрозуміло' in sum_lower and 'завдан' in sum_lower) or ('незрозуміло' in sum_lower and 'завдан' in sum_lower):
+                                unclear_task = True
+                            elif ('не зрозуміло, яке саме завдання' in fb_lower) or ('не зрозуміло яке завдання' in fb_lower) or ('незрозуміло, яке завдання' in fb_lower):
+                                unclear_task = True
 
                     if unclear_task:
                         suggested_grade = 'Доопрацювати'
+                        level = 'Початковий (1-3)'
                         if not format_warning or not (('не зрозуміло' in fw_lower or 'незрозуміло' in fw_lower) and 'завдан' in fw_lower):
                             format_warning = "Не зрозуміло, яке саме завдання виконане. Будь ласка, вкажіть номер завдання (наприклад, «Виконував завдання 2») у коментарі до здачі та надішліть роботу повторно."
                         unclear_weakness = "Не зрозуміло, яке саме завдання виконане з наданого списку завдань в умові вчителя (не вказано в роботі чи коментарі)."
@@ -3370,11 +3611,6 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
 
                     # ── Захист від помилкового твердження «жодної відповіді не дано» та зняття помилкового unclear_task ──
                     student_raw_text = " ".join(text_parts).strip() if text_parts else ""
-                    has_substantive_student_work = bool(
-                        (answered_count > 0) or
-                        (len(student_raw_text) >= 15 and not any(kw in student_raw_text.lower() for kw in ['не можу', 'не зробив', 'не знаю', 'ось моя робота'])) or
-                        (inline_media and len(inline_media) > 0)
-                    )
 
                     # Визначаємо, чи є завдання пошуковим, краєзнавчим або відкритим дослідницьким
                     is_research_or_search_task = any(kw in combined_task_for_qs.lower() for kw in [
@@ -3384,6 +3620,15 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                         'інтернет', 'пошук', 'знайдіть', 'знайти', 'досліджен', 'місто', 'село',
                         'населен', 'краєзнав', 'повідомлен'
                     ])
+
+                    # Змістовна робота є тільки якщо вона не відхилена і містить реальні відповіді або дослідження
+                    has_substantive_student_work = bool(
+                        not is_rejected_submission and (
+                            (answered_count > 0) or
+                            (is_research_or_search_task and len(student_raw_text) >= 50) or
+                            (inline_media and len(inline_media) > 0 and not any(kw in student_raw_text.lower() for kw in ['не можу', 'не зробив', 'не знаю']))
+                        )
+                    )
 
                     no_answer_phrases = [
                         'жодної відповіді не дано',
@@ -3397,38 +3642,37 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                     ]
 
                     has_false_no_answer_claim = False
-                    for phrase in no_answer_phrases:
-                        if phrase in sum_lower or phrase in fb_lower or any(phrase in w.lower() for w in weaknesses):
-                            has_false_no_answer_claim = True
-                            break
+                    if not is_rejected_submission and answered_count > 0:
+                        for phrase in no_answer_phrases:
+                            if phrase in sum_lower or phrase in fb_lower or any(phrase in w.lower() for w in weaknesses):
+                                has_false_no_answer_claim = True
+                                break
 
-                    # Зняття помилкового статусу «не зрозуміло, яке завдання» для змістовних робіт та пошукових завдань
-                    should_clear_unclear = (
+                    # Зняття помилкового статусу «не зрозуміло, яке завдання» ТІЛЬКИ для дійсних робіт з відповідями
+                    should_clear_unclear = bool(
+                        not is_rejected_submission and
                         unclear_task and (
-                            answered_count > 0 or
-                            task_questions or
-                            is_research_or_search_task or
-                            len(student_raw_text) >= 40 or
-                            (inline_media and len(inline_media) > 0)
+                            (answered_count > 0 and total_questions > 0) or
+                            (is_research_or_search_task and len(student_raw_text) >= 50)
                         )
                     )
 
                     if has_substantive_student_work and (has_false_no_answer_claim or should_clear_unclear):
-                        if unclear_task:
+                        if unclear_task and should_clear_unclear:
                             unclear_task = False
                             if format_warning and ('не зрозуміло' in format_warning.lower() or 'незрозуміло' in format_warning.lower()):
                                 format_warning = ''
                             weaknesses = [w for w in weaknesses if 'не зрозуміло, яке саме завдання виконане' not in w.lower()]
 
-                        # Очищаємо або замінюємо твердження про «жодної відповіді»
-                        for phrase in no_answer_phrases:
-                            if phrase in summary.lower():
-                                summary = re.sub(re.escape(phrase), 'надано відповіді на частину поставлених запитань', summary, flags=re.IGNORECASE)
-                            if phrase in feedback_comment.lower():
-                                feedback_comment = re.sub(re.escape(phrase), 'відповіді надано на частину запитань', feedback_comment, flags=re.IGNORECASE)
-                            weaknesses = [w for w in weaknesses if phrase not in w.lower()]
+                        if has_false_no_answer_claim:
+                            for phrase in no_answer_phrases:
+                                if phrase in summary.lower():
+                                    summary = re.sub(re.escape(phrase), 'надано відповіді на частину поставлених запитань', summary, flags=re.IGNORECASE)
+                                if phrase in feedback_comment.lower():
+                                    feedback_comment = re.sub(re.escape(phrase), 'відповіді надано на частину запитань', feedback_comment, flags=re.IGNORECASE)
+                                weaknesses = [w for w in weaknesses if phrase not in w.lower()]
 
-                        if suggested_grade == 'Доопрацювати':
+                        if suggested_grade == 'Доопрацювати' and not is_rejected_submission:
                             if is_research_or_search_task:
                                 if len(student_raw_text) >= 120 or (inline_media and len(inline_media) > 0):
                                     suggested_grade = '10'
@@ -3442,16 +3686,10 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                             elif total_questions > 0 and answered_count > 0:
                                 calc_grade = max(4, min(10, int(round((answered_count / total_questions) * 12))))
                                 suggested_grade = str(calc_grade)
-                                level = 'Середній' if int(suggested_grade) <= 6 else 'Достатній'
-                            elif len(student_raw_text) >= 30:
-                                suggested_grade = '7'
-                                level = 'Достатній (7-9)'
-                            else:
-                                suggested_grade = '6'
-                                level = 'Середній'
+                                level = 'Середній (4-6)' if calc_grade <= 6 else 'Достатній (7-9)'
 
                     # Очищення від некоректних здивованих реплік ШІ («а що це таке», «що це за місто» тощо)
-                    if is_research_or_search_task or len(student_raw_text) >= 40:
+                    if (is_research_or_search_task or len(student_raw_text) >= 40) and not is_rejected_submission:
                         odd_phrases = [
                             r'а що це таке\??',
                             r'а шо це таке\??',
@@ -3473,7 +3711,7 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                             weaknesses = [w for w in weaknesses if not re.search(oph, w, flags=re.IGNORECASE)]
 
                     # Обов'язкова порада щодо оформлення «питання-відповідь», якщо учень здав лише відповіді без запитань
-                    if questions_omitted or (answered_count > 0 and check_student_omitted_questions(task_questions, student_raw_text)):
+                    if not is_rejected_submission and (questions_omitted or (answered_count > 0 and check_student_omitted_questions(task_questions, student_raw_text))):
                         format_advice_phrase = "Порада щодо оформлення: ви надали відповіді без самих запитань. Будь ласка, записуйте самі запитання разом із відповідями (формат «питання-відповідь») або чітко вказуйте номери запитань, щоб робота була структурованою і зрозумілою."
                         has_advice_in_weaknesses = any(kw in w.lower() for w in weaknesses for kw in ['питання-відповідь', 'без запитань', 'запитання разом'])
                         if not has_advice_in_weaknesses:
@@ -3485,14 +3723,14 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
 
                     # ── Захист від помилкового твердження «діаграма відсутня» при наявності діаграм у роботі ──
                     has_charts_in_work = False
-                    if student_raw_text:
+                    if student_raw_text and not is_rejected_submission:
                         has_charts_in_work = bool(
                             ('ВИЯВЛЕНІ ВБУДОВАНІ ДІАГРАМИ ТА ГРАФІКИ' in student_raw_text) or
                             ('Діаграма на слайді' in student_raw_text) or
                             ('вбудованих діаграм/графіків' in student_raw_text)
                         )
 
-                    if has_charts_in_work:
+                    if has_charts_in_work and not is_rejected_submission:
                         no_chart_phrases = [
                             'діаграма відсутня',
                             'діаграми відсутні',
@@ -3513,9 +3751,16 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                                 feedback_comment = re.sub(re.escape(phrase), 'діаграму/графік успішно створено', feedback_comment, flags=re.IGNORECASE)
                             weaknesses = [w for w in weaknesses if phrase not in w.lower()]
 
-                        if suggested_grade == 'Доопрацювати' and not unclear_task:
-                            suggested_grade = '8'
-                            level = 'Достатній'
+                    # Кінцева перевірка: якщо роботу відхилено — гарантуємо "Доопрацювати" та Початковий рівень (1-3)
+                    if is_rejected_submission:
+                        suggested_grade = 'Доопрацювати'
+                        level = 'Початковий (1-3)'
+                        unclear_task = True
+                        if clean_gr_results and not is_traditional:
+                            for gr in clean_gr_results:
+                                gr['grade'] = '1'
+                                gr['level'] = 'Початковий'
+                            avg_gr_grade = 1
 
                     # Гарантуємо, що при оцінці менше 10 балів або "Доопрацювати" обов'язково є узагальнені зауваження (weaknesses)
                     is_sub_ten = False
@@ -3662,22 +3907,51 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                     is_research_or_search_task = any(kw in combined_task_for_qs.lower() for kw in [
                         'інтернет', 'пошук', 'знайдіть', 'знайти', 'досліджен', 'місто', 'село', 'населен'
                     ])
-                    if unclear_task and (len(student_raw_text) >= 40 or is_research_or_search_task):
+
+                    post_is_invalid, post_reason, post_code = detect_invalid_or_teacher_template_submission(submission, text_parts)
+                    fb_lower_fallback = formatted_feedback.lower()
+                    ai_detected_mismatch_fallback = any(k in fb_lower_fallback for k in [
+                        'інший клас', 'іншого класу', 'не для цього класу', 'не відповідає темі', 'не відповідає завданню',
+                        'практична робота вчителя', 'бланк практичної', 'без власних відповідей', 'відповіді відсутні',
+                        'просто прикріп', 'робота не виконана', 'не зараховано'
+                    ])
+
+                    is_rejected_fallback = post_is_invalid or ai_detected_mismatch_fallback
+
+                    if not is_rejected_fallback and unclear_task and ((answered_count > 0 and total_questions > 0) or (is_research_or_search_task and len(student_raw_text) >= 50)):
                         unclear_task = False
 
-                    if unclear_task:
+                    if is_rejected_fallback or unclear_task:
                         suggested_grade = 'Доопрацювати'
-                    elif suggested_grade == 'Доопрацювати' and len(student_raw_text) >= 40:
-                        suggested_grade = '8'
+                        level = 'Початковий (1-3)'
+                        unclear_task = True
+                        if is_rejected_fallback and post_reason:
+                            formatted_feedback = f"⚠️ {post_reason}\n\n{formatted_feedback}"
+                    elif suggested_grade != 'Доопрацювати':
+                        try:
+                            s_int = int(suggested_grade)
+                            if s_int <= 3:
+                                level = 'Початковий (1-3)'
+                            elif s_int <= 6:
+                                level = 'Середній (4-6)'
+                            elif s_int <= 9:
+                                level = 'Достатній (7-9)'
+                            else:
+                                level = 'Високий (10-12)'
+                        except (ValueError, TypeError):
+                            level = 'Початковий'
+                    else:
+                        level = 'Початковий (1-3)'
 
                     submission.ai_suggested_grade = suggested_grade
+                    submission.ai_score_level = level
                     submission.ai_feedback = formatted_feedback
                     submission.ai_model_used = model_name
                     submission.ai_status = 'success'
                     submission.ai_error_reason = ''
                     submission.ai_reviewed_at = timezone.now()
                     submission.save(update_fields=[
-                        'ai_suggested_grade', 'ai_feedback', 'ai_model_used', 'ai_status', 'ai_error_reason', 'ai_reviewed_at'
+                        'ai_suggested_grade', 'ai_score_level', 'ai_feedback', 'ai_model_used', 'ai_status', 'ai_error_reason', 'ai_reviewed_at'
                     ])
                     return {
                         'status': 'success',
@@ -3685,6 +3959,7 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                         'clean_feedback': clean_feedback,
                         'feedback_comment': clean_feedback,
                         'suggested_grade': suggested_grade,
+                        'level': level,
                         'unclear_task': unclear_task,
                         'format_warning': "Не зрозуміло, яке саме завдання виконане. Будь ласка, вкажіть номер завдання у коментарі до здачі та надішліть роботу повторно." if unclear_task else "",
                         'summary': clean_feedback,

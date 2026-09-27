@@ -217,6 +217,42 @@ def check_submission_duplicates(submission):
                     submission._cached_dup_info = result
                     return result
 
+        # Перевірка на збіг із файлами вчителя до інших завдань (іншого класу або іншої теми)
+        try:
+            from .models import AssignmentFile
+            other_af_qs = AssignmentFile.objects.exclude(assignment=assignment).filter(file__isnull=False)
+            if getattr(assignment, 'teacher_id', None):
+                other_af_qs = other_af_qs.filter(assignment__teacher_id=assignment.teacher_id)
+            for o_af in other_af_qs[:100]:
+                if not o_af.file or not os.path.exists(o_af.file.path):
+                    continue
+                o_path = o_af.file.path
+                o_hash = get_file_sha256(o_path)
+                o_name = o_af.original_name or os.path.basename(o_af.file.name)
+                is_match = False
+                if sub_hash and o_hash and sub_hash == o_hash:
+                    is_match = True
+                elif sub_text_len >= 20:
+                    o_norm_text = get_normalized_file_content(o_path, o_af.file.name)
+                    if o_norm_text and sub_norm_text == o_norm_text:
+                        is_match = True
+                if is_match:
+                    other_title = o_af.assignment.title if o_af.assignment else "іншого завдання"
+                    result.update({
+                        'is_duplicate': True,
+                        'is_duplicate_teacher': True,
+                        'teacher_file_name': o_name,
+                        'type': 'teacher_duplicate',
+                        'warning_message': (
+                            f"⚠️ Увага: вміст прикріпленого файлу повністю збігається з матеріалами вчителя «{o_name}» із завдання «{other_title}» (іншого класу або теми). "
+                            f"Ви здали практичну роботу/завдання вчителя замість виконаної учнем роботи!"
+                        )
+                    })
+                    submission._cached_dup_info = result
+                    return result
+        except Exception:
+            pass
+
     # ── 2. ПЕРЕВІРКА НА ЗБІГ З РОБОТАМИ ІНШИХ УЧНІВ ────────────────────────────
     other_submissions = assignment.submissions.filter(file__isnull=False)
     if submission.id:
