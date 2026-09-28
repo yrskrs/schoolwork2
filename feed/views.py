@@ -145,10 +145,10 @@ def auto_archive_expired_assignments():
     return expired_count
 
 
-def _async_trigger_ai_task_understanding(assignment_id):
+def _async_trigger_ai_task_understanding(assignment_id, force_refresh=False):
     """
-    Фоновий потік для автоматичного аналізу завдання ШІ після публікації.
-    ШІ автоматично ознайомлюється із завданням, враховує вік і клас учнів та формує роз'яснення.
+    Фоновий потік для автоматичного аналізу завдання ШІ після публікації або редагування.
+    ШІ ознайомлюється із завданням, враховує вік і клас учнів та формує роз'яснення.
     """
     import threading
     def _worker():
@@ -158,7 +158,7 @@ def _async_trigger_ai_task_understanding(assignment_id):
             from .gemini_service import analyze_assignment_task_understanding
             asg = Assignment.objects.prefetch_related('classes', 'files').filter(pk=assignment_id).first()
             if asg and asg.status == Assignment.STATUS_PUBLISHED and asg.allow_student_ai_understanding:
-                analyze_assignment_task_understanding(asg, force_refresh=True)
+                analyze_assignment_task_understanding(asg, force_refresh=force_refresh)
         except Exception as err:
             logger.warning(f"Error in background AI task understanding for assignment {assignment_id}: {err}")
         finally:
@@ -1666,7 +1666,7 @@ def assignment_edit(request, pk):
 
             messages.success(request, f'Завдання "{assignment.title}" оновлено! ✅')
             if assignment.status == Assignment.STATUS_PUBLISHED and assignment.allow_student_ai_understanding:
-                _async_trigger_ai_task_understanding(assignment.pk)
+                _async_trigger_ai_task_understanding(assignment.pk, force_refresh=True)
             return redirect('teacher_dashboard')
 
     AICriteriaPreset.ensure_default_presets()
@@ -3878,7 +3878,6 @@ def delete_comment(request, comment_id):
 # ПЕРЕГЛЯД ЗДАЧ ПО ЗАВДАННЮ ТА ЗАГАЛЬНИЙ ДАШБОРД
 # ═══════════════════════════════════════════════════════════════════════════════
 
-@login_required
 def assignment_ai_understanding(request, pk):
     """
     AJAX endpoint для перегляду та генерації звіту розуміння завдання штучним інтелектом.
@@ -3890,8 +3889,12 @@ def assignment_ai_understanding(request, pk):
         pk=pk
     )
 
-    is_owner = hasattr(request.user, 'teacher_profile') and assignment.teacher == request.user.teacher_profile
-    is_admin = request.user.is_superuser
+    is_owner = bool(
+        request.user.is_authenticated and
+        hasattr(request.user, 'teacher_profile') and
+        assignment.teacher == request.user.teacher_profile
+    )
+    is_admin = bool(request.user.is_authenticated and request.user.is_superuser)
     can_view_as_student = bool(
         assignment.allow_student_ai_understanding and
         assignment.status in [Assignment.STATUS_PUBLISHED, Assignment.STATUS_ARCHIVED]

@@ -6282,10 +6282,17 @@ class QuestionAnswerMappingTests(TestCase):
         self.assertIn('target_audience', data['data'])
         self.assertEqual(data['data']['tasks_total_count'], 1)  # Тільки вправа 2!
 
-        # Учень не може примусово оновити аналіз через POST (force_refresh блокується)
-        resp_post = self.client.post(url)
-        self.assertEqual(resp_post.status_code, 200)
-        self.assertFalse(resp_post.json()['is_teacher'])
+        # 3. Перевірка для неавторизованого учня (гість/анонімний доступ)
+        self.client.logout()
+        resp_anon = self.client.get(url)
+        self.assertEqual(resp_anon.status_code, 200)
+        self.assertFalse(resp_anon.json()['is_teacher'])
+
+        # Якщо опцію вимкнено — анонімний учень отримує 403
+        self.assignment.allow_student_ai_understanding = False
+        self.assignment.save()
+        resp_anon_denied = self.client.get(url)
+        self.assertEqual(resp_anon_denied.status_code, 403)
 
     def test_student_comment_conclusion_guardrail_sanitization(self):
         """Тест захисту від галюцинацій: висновок у коментарі учня зараховується, а хибні скарги на відсутність висновку прибираються."""
