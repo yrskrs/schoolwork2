@@ -6167,6 +6167,49 @@ class QuestionAnswerMappingTests(TestCase):
         resp_forbidden = self.client.get(url)
         self.assertEqual(resp_forbidden.status_code, 403)
 
+    def test_ai_apply_suggested_grade_updates_existing_comment(self):
+        """Тест оновлення існуючого коментаря з висновком ШІ при повторному прийнятті/публікації оцінки."""
+        self.client.login(username=self.user.username, password='password123')
+        sub = Submission.objects.create(
+            assignment=self.assignment,
+            class_group=self.class_group,
+            first_name='Іван',
+            last_name='Петренко',
+            ai_suggested_grade='10',
+            ai_feedback='📌 **Висновок:** Початковий висновок ШІ.\n\n✅ **Сильні сторони:**\n• Пункт 1\n\n💬 **Рекомендація учню:** Добре.',
+            ai_status='success'
+        )
+
+        # 1. Перша публікація оцінки та відгуку ШІ
+        resp1 = self.client.post(reverse('ai_apply_suggested_grade', args=[sub.id]), follow=True)
+        self.assertEqual(resp1.status_code, 200)
+
+        sub.refresh_from_db()
+        self.assertEqual(sub.grade, '10')
+        self.assertEqual(sub.comments.count(), 1)
+        first_comment = sub.comments.first()
+        self.assertIn('Початковий висновок ШІ', first_comment.text)
+
+        # 2. Зміна аналізу ШІ (наприклад після повторної перевірки)
+        sub.ai_suggested_grade = '11'
+        sub.ai_feedback = '📌 **Висновок:** Оновлений виправлений висновок ШІ після перевірки.\n\n✅ **Сильні сторони:**\n• Доопрацьовано завдання\n\n💬 **Рекомендація учню:** Відмінно.'
+        sub.save()
+
+        # 3. Повторна публікація оцінки та відгуку ШІ
+        resp2 = self.client.post(reverse('ai_apply_suggested_grade', args=[sub.id]), follow=True)
+        self.assertEqual(resp2.status_code, 200)
+
+        sub.refresh_from_db()
+        self.assertEqual(sub.grade, '11')
+        # Коментар не дублюється, а оновлюється на новий висновок
+        self.assertEqual(sub.comments.count(), 1)
+        updated_comment = sub.comments.first()
+        self.assertEqual(updated_comment.id, first_comment.id)
+        self.assertIn('Оновлений виправлений висновок ШІ після перевірки', updated_comment.text)
+        self.assertNotIn('Початковий висновок ШІ', updated_comment.text)
+        self.assertEqual(sub.teacher_comment, sub.get_clean_ai_feedback_for_student())
+
+
 
 
 

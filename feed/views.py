@@ -7166,19 +7166,52 @@ def ai_apply_suggested_grade(request, submission_id):
     submission.graded_at = timezone.now()
     if hasattr(request.user, 'teacher_profile'):
         submission.teacher = request.user.teacher_profile
-    submission.save(update_fields=['grade', 'graded_by', 'graded_at', 'teacher'])
 
-    # Додаємо коментар ШІ у відгуки вчителя якщо його ще немає (використовуючи очищений від оцінок ГР відгук)
+    # Додаємо або оновлюємо коментар ШІ у відгуках вчителя (використовуючи очищений від оцінок ГР відгук)
     clean_feedback = submission.get_clean_ai_feedback_for_student()
     if clean_feedback:
+        submission.teacher_comment = clean_feedback
         ai_tag = "🤖 [Рекомендації та відгук ШІ]:"
-        already_exists = submission.comments.filter(text__startswith="🤖 [").exists()
-        if not already_exists:
+        new_text = f"{ai_tag}\n{clean_feedback}"
+        ai_comment_filter = (
+            Q(text__startswith="🤖 [")
+            | Q(text__contains="🤖 [Рекомендації")
+            | Q(text__startswith="📌 **Висновок:**")
+            | Q(text__startswith="**Висновок:**")
+        )
+        existing_comment = submission.comments.filter(ai_comment_filter).order_by('created_at').first()
+        if existing_comment:
+            if existing_comment.text != new_text:
+                existing_comment.text = new_text
+                existing_comment.save(update_fields=['text'])
+            # Видаляємо дублікати старих AI-коментарів, якщо такі випадково існували
+            submission.comments.filter(ai_comment_filter).exclude(id=existing_comment.id).delete()
+        else:
             SubmissionComment.objects.create(
                 submission=submission,
                 author=request.user,
-                text=f"{ai_tag}\n{clean_feedback}"
+                text=new_text
             )
+
+        # Синхронізуємо оновлений коментар зі співавторами колективної роботи
+        if submission.is_group_work or submission.primary_submission_id or submission.coauthor_submissions.exists():
+            for m in submission.get_all_group_submissions():
+                if m.id == submission.id:
+                    continue
+                m_existing = m.comments.filter(ai_comment_filter).order_by('created_at').first()
+                if m_existing:
+                    if m_existing.text != new_text:
+                        m_existing.text = new_text
+                        m_existing.save(update_fields=['text'])
+                    m.comments.filter(ai_comment_filter).exclude(id=m_existing.id).delete()
+                else:
+                    SubmissionComment.objects.create(
+                        submission=m,
+                        author=request.user,
+                        text=new_text
+                    )
+
+    submission.save(update_fields=['grade', 'graded_by', 'graded_at', 'teacher', 'teacher_comment'])
 
     # Синхронізуємо оцінку зі співавторами
     coauthors_graded = sync_grades_to_coauthors(submission, submission.grade, request.user)
