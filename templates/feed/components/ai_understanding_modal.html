@@ -66,6 +66,20 @@
                     <div id="ai-und-source-info" style="font-size:12px;color:var(--color-text-muted);margin-top:6px;display:flex;align-items:center;gap:5px;"></div>
                 </div>
 
+                <!-- 1.1 РОЗ'ЯСНЕННЯ ДЛЯ УЧНІВ (ВРАХУВАННЯ ВІКУ ТА КЛАСУ) -->
+                <div id="ai-und-student-guide-card" style="display:none;background:linear-gradient(135deg, rgba(16,185,129,0.08), rgba(59,130,246,0.08));border:1.5px solid rgba(16,185,129,0.3);border-radius:var(--radius-md);padding:14px 16px;">
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            <span style="font-size:18px;">💡</span>
+                            <span style="font-weight:800;font-size:13px;color:#059669;text-transform:uppercase;letter-spacing:0.04em;">
+                                Що вимагається від учнів (простими словами)
+                            </span>
+                        </div>
+                        <span id="ai-und-target-audience-badge" class="badge" style="background:rgba(16,185,129,0.15);color:#047857;border:1px solid rgba(16,185,129,0.3);font-size:11.5px;font-weight:750;padding:2px 8px;border-radius:6px;"></span>
+                    </div>
+                    <div id="ai-und-student-explanation" style="font-size:13.5px;line-height:1.6;color:var(--color-text-primary);white-space:pre-line;"></div>
+                </div>
+
                 <!-- 2. ПЕРЕЛІК ВИЯВЛЕНИХ ЗАВДАНЬ -->
                 <div style="background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:16px;">
                     <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
@@ -227,7 +241,7 @@ function fetchAiUnderstanding(assignmentId, forceRefresh) {
 
     try {
         const token = getAiUndCsrfToken();
-        const url = `/teacher/assignment/${assignmentId}/ai-understanding/${forceRefresh ? '?refresh=1' : ''}`;
+        const url = `/assignment/${assignmentId}/ai-understanding/${forceRefresh ? '?refresh=1' : ''}`;
         const headers = {
             'X-Requested-With': 'XMLHttpRequest'
         };
@@ -261,7 +275,7 @@ function fetchAiUnderstanding(assignmentId, forceRefresh) {
                 if (refreshBtn) refreshBtn.disabled = false;
 
                 if (res.status === 'success' && res.data) {
-                    renderAiUnderstandingData(res.data, res.updated_at, res.cached);
+                    renderAiUnderstandingData(res.data, res.updated_at, res.cached, res.is_teacher);
                     if (contentEl) contentEl.style.display = 'flex';
                 } else {
                     showAiUnderstandingError(res.message || 'Не вдалося завантажити аналіз завдання.');
@@ -279,12 +293,43 @@ function fetchAiUnderstanding(assignmentId, forceRefresh) {
     }
 }
 
-function renderAiUnderstandingData(data, updatedAt, isCached) {
+function renderAiUnderstandingData(data, updatedAt, isCached, isTeacher) {
     // Дата та статус
     const badge = document.getElementById('ai-und-status-badge');
     const updatedEl = document.getElementById('ai-und-updated-at');
+    const refreshBtn = document.getElementById('btn-ai-und-refresh');
+    const tipsCard = document.getElementById('ai-und-tips-card');
+    const modalTitle = document.querySelector('#ai-understanding-modal h3');
+
+    if (isTeacher === false) {
+        if (refreshBtn) refreshBtn.style.display = 'none';
+        if (tipsCard) tipsCard.style.display = 'none';
+        if (modalTitle) modalTitle.textContent = 'Як ШІ розуміє це завдання (підказка до виконання)';
+    } else {
+        if (refreshBtn) refreshBtn.style.display = 'inline-flex';
+        if (modalTitle) modalTitle.textContent = 'Як ШІ розуміє це завдання';
+    }
+
     if (updatedAt) {
-        updatedEl.textContent = `Останній аналіз: ${updatedAt}${isCached ? ' (зі збереженої копії)' : ' (щойно оновлено)'}`;
+        updatedEl.textContent = `Аналіз ШІ: ${updatedAt}${isCached ? ' (зі збереженої копії)' : ' (щойно сформовано)'}`;
+    }
+
+    // 0. Пояснення для учнів за віком та класом
+    const studentGuideCard = document.getElementById('ai-und-student-guide-card');
+    const studentExplEl = document.getElementById('ai-und-student-explanation');
+    const targetAudEl = document.getElementById('ai-und-target-audience-badge');
+
+    if (data.student_explanation) {
+        studentExplEl.textContent = data.student_explanation;
+        if (data.target_audience) {
+            targetAudEl.textContent = data.target_audience;
+            targetAudEl.style.display = 'inline-block';
+        } else {
+            targetAudEl.style.display = 'none';
+        }
+        studentGuideCard.style.display = 'block';
+    } else {
+        studentGuideCard.style.display = 'none';
     }
 
     // 1. Тема та мета
@@ -357,7 +402,7 @@ function renderAiUnderstandingData(data, updatedAt, isCached) {
     const tipsListEl = document.getElementById('ai-und-tips-list');
     tipsListEl.innerHTML = '';
     const tips = data.teacher_recommendations || [];
-    if (tips.length > 0) {
+    if (isTeacher !== false && tips.length > 0) {
         document.getElementById('ai-und-tips-card').style.display = 'block';
         tips.forEach(tp => {
             const li = document.createElement('li');

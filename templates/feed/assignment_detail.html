@@ -54,6 +54,12 @@
                     <span>📋</span>
                     <span>Критерії оцінювання</span>
                 </button>
+                {% if assignment.allow_student_ai_understanding %}
+                <button type="button" class="btn btn-secondary btn-block" onclick="openAiUnderstandingModal({{ assignment.pk }})" style="padding:9px 12px;font-weight:750;display:flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;border:1.5px solid var(--color-primary);background:rgba(var(--color-primary-rgb, 79, 70, 229), 0.06);color:var(--color-primary);margin-top:6px;" title="Дізнатися, як ШІ розуміє це завдання та що вимагається">
+                    <span>🤖</span>
+                    <span>Як ШІ розуміє завдання</span>
+                </button>
+                {% endif %}
                 {% elif is_archived or assignment.status == 'archived' or assignment.is_archived %}
                 <div class="page-hero-kicker" style="margin-bottom:6px;color:#d97706;">📦 Архівне завдання</div>
                 <h3 style="font-size:1.05rem;font-weight:750;margin:0 0 8px;color:var(--color-text-primary);">Прийом закрито</h3>
@@ -75,6 +81,12 @@
                         <span>📋</span>
                         <span>Критерії оцінювання</span>
                     </button>
+                    {% if assignment.allow_student_ai_understanding %}
+                    <button type="button" class="btn btn-secondary btn-block" onclick="openAiUnderstandingModal({{ assignment.pk }})" style="padding:9px 12px;font-weight:750;display:flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;border:1.5px solid var(--color-primary);background:rgba(var(--color-primary-rgb, 79, 70, 229), 0.06);color:var(--color-primary);" title="Дізнатися, як ШІ розуміє це завдання та що вимагається">
+                        <span>🤖</span>
+                        <span>Як ШІ розуміє завдання</span>
+                    </button>
+                    {% endif %}
                 </div>
                 {% endif %}
             </div>
@@ -455,6 +467,12 @@
                                 <span>📋</span>
                                 <span>Критерії оцінювання</span>
                             </button>
+                            {% if assignment.allow_student_ai_understanding %}
+                            <button type="button" onclick="openAiUnderstandingModal({{ assignment.pk }})" class="btn btn-secondary btn-sm" style="font-weight:750;padding:8px 14px;display:inline-flex;align-items:center;gap:6px;cursor:pointer;border:1.5px solid var(--color-primary);color:var(--color-primary);background:rgba(var(--color-primary-rgb, 79, 70, 229), 0.06);" title="Переглянути пояснення ШІ до завдання">
+                                <span>🤖</span>
+                                <span>Як ШІ розуміє завдання</span>
+                            </button>
+                            {% endif %}
                             {% if not assignment.no_submission_required %}
                                 {% if is_archived or assignment.status == 'archived' or assignment.is_archived %}
                                 <span class="badge" style="background: rgba(245, 158, 11, 0.15); color: #b45309; border: 1px solid rgba(245, 158, 11, 0.3); font-weight: 700; padding: 7px 14px; border-radius: var(--radius-sm); font-size: 13px;">
@@ -485,10 +503,10 @@
                                 <span class="assignment-desc-badge">Вказівки вчителя</span>
                             </div>
                             <div class="assignment-desc-actions" style="display:flex;align-items:center;gap:6px;">
-                                {% if can_edit %}
+                                {% if can_edit or assignment.allow_student_ai_understanding %}
                                 <button type="button" class="btn btn-outline-primary btn-sm" onclick="openAiUnderstandingModal({{ assignment.pk }})" style="display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:750;padding:4px 10px;border-radius:var(--radius-sm);cursor:pointer;border:1.5px solid var(--color-primary);color:var(--color-primary);background:rgba(var(--color-primary-rgb, 79, 70, 229), 0.06);" title="Перевірити, як штучний інтелект сприймає завдання та презентації">
                                     <span>🤖</span>
-                                    <span>Розуміння ШІ</span>
+                                    <span>{% if can_edit %}Розуміння ШІ{% else %}Як ШІ розуміє завдання{% endif %}</span>
                                 </button>
                                 {% endif %}
                                 <button type="button" class="btn btn-secondary btn-sm" onclick="openCriteriaModal()" style="display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:750;padding:4px 10px;border-radius:var(--radius-sm);cursor:pointer;" title="Переглянути критерії оцінювання">
@@ -511,10 +529,10 @@
                                 <span class="assignment-description-title">Вказівки до виконання:</span>
                             </div>
                             <div class="assignment-desc-actions">
-                                {% if can_edit %}
+                                {% if can_edit or assignment.allow_student_ai_understanding %}
                                 <button type="button" class="btn btn-outline-primary btn-sm" onclick="openAiUnderstandingModal({{ assignment.pk }})" style="display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:750;padding:4px 10px;border-radius:var(--radius-sm);cursor:pointer;border:1.5px solid var(--color-primary);color:var(--color-primary);background:rgba(var(--color-primary-rgb, 79, 70, 229), 0.06);" title="Перевірити, як штучний інтелект сприймає завдання та презентації">
                                     <span>🤖</span>
-                                    <span>Розуміння ШІ</span>
+                                    <span>{% if can_edit %}Розуміння ШІ{% else %}Як ШІ розуміє завдання{% endif %}</span>
                                 </button>
                                 {% endif %}
                                 <button type="button" class="btn btn-secondary btn-sm" onclick="openCriteriaModal()" style="display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:750;padding:4px 10px;border-radius:var(--radius-sm);cursor:pointer;" title="Переглянути критерії оцінювання">
@@ -547,6 +565,19 @@
                             </div>
                         </div>
                         <button type="button" class="btn btn-primary btn-sm" onclick="openAiUnderstandingModal({{ assignment.pk }})" style="font-size:12.5px;font-weight:750;padding:7px 15px;display:inline-flex;align-items:center;gap:6px;box-shadow:0 2px 6px rgba(var(--color-primary-rgb, 79, 70, 229), 0.25);">
+                            <span>🔍 Як ШІ розуміє завдання</span>
+                        </button>
+                    </div>
+                    {% elif assignment.allow_student_ai_understanding %}
+                    <div class="assignment-ai-understanding-teaser" style="margin-top:14px;padding:12px 16px;background:rgba(16,185,129,0.06);border:1.5px solid rgba(16,185,129,0.3);border-radius:var(--radius-md);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+                        <div style="display:flex;align-items:center;gap:10px;">
+                            <span style="font-size:24px;">💡</span>
+                            <div>
+                                <div style="font-size:13.5px;font-weight:750;color:var(--color-text-primary);">Підказка від ШІ-помічника до цього завдання</div>
+                                <div style="font-size:12px;color:var(--color-text-muted);">Вчитель увімкнув роз'яснення від ШІ: дізнайтеся, що вимагається виконати та як підготувати відповідь</div>
+                            </div>
+                        </div>
+                        <button type="button" class="btn btn-primary btn-sm" onclick="openAiUnderstandingModal({{ assignment.pk }})" style="font-size:12.5px;font-weight:750;padding:7px 15px;display:inline-flex;align-items:center;gap:6px;box-shadow:0 2px 6px rgba(16,185,129,0.25);background:#059669;border-color:#059669;">
                             <span>🔍 Як ШІ розуміє завдання</span>
                         </button>
                     </div>

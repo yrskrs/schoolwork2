@@ -631,6 +631,11 @@ class Assignment(models.Model):
         null=True,
         blank=True
     )
+    allow_student_ai_understanding = models.BooleanField(
+        'Дозволити учням бачити аналіз ШІ («Як ШІ розуміє завдання»)',
+        default=False,
+        help_text='Якщо увімкнено — учні зможуть переглядати звіт «Як ШІ розуміє завдання» з поясненнями, адаптованими під їхній вік і клас'
+    )
 
     def get_ai_task_understanding_data(self):
         """Повертає розпарсений словник аналізу розуміння завдання ШІ."""

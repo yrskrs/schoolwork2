@@ -2414,9 +2414,20 @@ def parse_teacher_specific_task_numbers(description: str) -> list[int]:
     text = description.strip()
     found_nums: set[int] = set()
 
-    # Ключові слова-якорі
+    # Спершу обробляємо діапазони «завдання 1-3», «вправа 2-4», «№ 1-2»
+    range_pat = re.compile(
+        r'(?:\b(?:практичн[а-яіїє]*|лабораторн[а-яіїє]*)\s+)?(?:\b(?:завдан[а-яіїє]*|вправ[а-яіїє]*|пункт[а-яіїє]*|номер[а-яіїє]*)\b|(?:завд|впр|ном)\b\.?|\bп\.\s*|№)\s*(?:№\s*)?(\d+)\s*[-–—]\s*(\d+)',
+        re.IGNORECASE
+    )
+    for m in range_pat.finditer(text):
+        start, end = int(m.group(1)), int(m.group(2))
+        if start < end <= start + 15:
+            for n in range(start, end + 1):
+                found_nums.add(n)
+
+    # Ключові слова-якорі: завдання, вправа, номер, пункт, № (у всіх відмінках та скороченнях)
     KEYWORD_PAT = re.compile(
-        r'\b(?:практичн[еа]\s+)?(?:завдання|вправ[уиі]|пункт)\b',
+        r'(?:\b(?:практичн[а-яіїє]*|лабораторн[а-яіїє]*)\s+)?(?:\b(?:завдан[а-яіїє]*|вправ[а-яіїє]*|пункт[а-яіїє]*|номер[а-яіїє]*)\b|(?:завд|впр|ном)\b\.?|\bп\.\s*|№)',
         re.IGNORECASE
     )
 
@@ -2425,26 +2436,11 @@ def parse_teacher_specific_task_numbers(description: str) -> list[int]:
     SEP_PAT = re.compile(r'(?:\s*(?:,|та|і|й|and)\s*|\s+)(?:№\s*)?', re.IGNORECASE)
     NUM_PAT = re.compile(r'\d+')
 
-    # Спочатку обробляємо діапазони «завдання 1-3» → [1, 2, 3]
-    range_pat = re.compile(
-        r'\b(?:практичн[еа]\s+)?(?:завдання|вправ[уиі]|пункт)\s*(?:№\s*)?(\d+)\s*[-–—]\s*(\d+)',
-        re.IGNORECASE
-    )
-    for m in range_pat.finditer(text):
-        start, end = int(m.group(1)), int(m.group(2))
-        if start < end <= start + 9:
-            for n in range(start, end + 1):
-                found_nums.add(n)
-
-    # Якщо діапазони вже знайдено — повертаємо їх (діапазон завжди конкретний)
-    # (але продовжуємо шукати й окремі числа якщо діапазонів немає)
-
     # Потім шукаємо всі входження ключового слова та числа після нього
     for kw_match in KEYWORD_PAT.finditer(text):
         pos = kw_match.end()
         # Після ключового слова зчитуємо числа, розділені сепараторами
         while pos < len(text):
-            # Пробуємо підібрати сепаратор (або просто пробіл) + число
             sep_m = SEP_PAT.match(text, pos)
             if sep_m:
                 after_sep = sep_m.end()
@@ -2455,7 +2451,7 @@ def parse_teacher_specific_task_numbers(description: str) -> list[int]:
             if not num_m:
                 break
             n = int(num_m.group(0))
-            if 1 <= n <= 30:
+            if 1 <= n <= 50:
                 found_nums.add(n)
             pos = num_m.end()
 
@@ -2466,14 +2462,6 @@ def parse_teacher_specific_task_numbers(description: str) -> list[int]:
     )
     if all_N_pattern.search(text) and not found_nums:
         return []
-
-    # Якщо знайдена лише «загальна кількість» через «всі 3 завдання»,
-    # але вчитель окремо не вказав конкретні номери — повертаємо []
-    # (detect_expected_task_count уже обробить загальну кількість окремо)
-    if found_nums:
-        # Перевіряємо: чи немає «всі N завдань» без конкретних номерів,
-        # де N = кількість знайдених чисел (це просто збіг «всі 3 завдання» + «завдання 1 2 3»)
-        pass  # знайдені номери — конкретні, повертаємо
 
     return sorted(found_nums)
 
@@ -2948,6 +2936,19 @@ def apply_multi_task_evaluation_guardrail(
             else:
                 total_tasks = min(qs_count, 10) if qs_count else 0
 
+    # Якщо вчитель задав конкретні номери завдань (наприклад «виконати вправа 2»),
+    # будь-які інші номери з файлів/матеріалів є незаданими — видаляємо скарги на них!
+    if teacher_scoped_task_nums:
+        non_scoped_nums = [n for n in range(1, 30) if n not in teacher_scoped_task_nums]
+        for n in non_scoped_nums:
+            pat = re.compile(rf'(?:завдання|вправ[а-яіїє]*|номер[а-яіїє]*|№)\s*{n}\s*(?:не\s*виконано|пропущено|відсутнє|не\s*зроблено|не\s*надано|залишилось\s*без\s*відповіді)', re.IGNORECASE)
+            pat_rev = re.compile(rf'(?:не\s*виконано|пропущено|відсутнє|пропущено\s*виконання|відсутня\s*відповідь\s*на|не\s*відповів\s*на)\s*(?:завдання|вправ[а-яіїє]*|номер[а-яіїє]*|№)\s*{n}\b', re.IGNORECASE)
+            weaknesses = [w for w in weaknesses if not pat.search(w) and not pat_rev.search(w)]
+            summary = pat.sub('', summary)
+            summary = pat_rev.sub('', summary)
+            feedback_comment = pat.sub('', feedback_comment)
+            feedback_comment = pat_rev.sub('', feedback_comment)
+
     if total_tasks < 2:
         return suggested_grade, level, clean_gr_results, numeric_gr_grades, avg_gr_grade, summary, strengths, weaknesses, feedback_comment
 
@@ -2991,6 +2992,9 @@ def apply_multi_task_evaluation_guardrail(
                 detected_missing_nums.add(int(m.group(1)))
             except (ValueError, TypeError):
                 pass
+
+    if teacher_scoped_task_nums:
+        detected_missing_nums = {n for n in detected_missing_nums if n in teacher_scoped_task_nums}
 
     # 4. Перевірка структури зданої роботи учня (абзаци та зміст)
     raw_text = student_raw_text or ""
@@ -3727,11 +3731,22 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
             "Оцінюй виконання як командний проєкт, враховуючи спільний внесок без зниження оцінки за дублювання."
         )
 
-    # ── ВРАХУВАННЯ КОМЕНТАРЯ УЧНЯ ─────────────────────────────────────────────
+    # ── ВРАХУВАННЯ КОМЕНТАРЯ ТА ВИСНОВКІВ УЧНЯ («Висновки по роботі або коментар») ──
     if submission.comment_student and submission.comment_student.strip():
+        student_comment_txt = submission.comment_student.strip()
         prompt_lines.append(
-            f"💬 ВАЖЛИВИЙ КОМЕНТАР / ПОЯСНЕННЯ УЧНЯ:\n«{submission.comment_student.strip()}»\n"
-            "⚠️ ШІ ЗОБОВ'ЯЗАНИЙ УВАЖНО ПРОЧИТАТИ ЦЕЙ КОМЕНТАР: учень міг написати тут важливі пояснення ходу виконання, текстову відповідь до завдання чи інші суттєві деталі."
+            f"═══════════════════════════════════════════════════════════════════\n"
+            f"💬 ПОЛЕ «Висновки по роботі або коментар для оцінювання роботи» (УЧЕНЬ):\n"
+            f"«{student_comment_txt}»\n\n"
+            f"⚠️ КРИТИЧНЕ ПРАВИЛО ДЛЯ ШІ ЩОДО ВИСНОВКУ ТА КОМЕНТАРЯ УЧНЯ:\n"
+            f"1. ШІ ЗОБОВ'ЯЗАНИЙ УВАЖНО ПРОЧИТАТИ ЦЕЙ КОМЕНТАР!\n"
+            f"2. Якщо учень написав у цьому полі висновок до практичної чи лабораторної роботи, підсумок, "
+            f"відповідь на завдання або пояснення ходу розв'язання — ВВАЖАТИ ЦЕЙ ВИСНОВОК ПОВНОЦІННИМ ВИСНОВКОМ ДО РОБОТИ!\n"
+            f"3. 🚫 КАТЕГОРИЧНО ЗАБОРОНЕНО стверджувати у 'weaknesses', 'feedback_comment' чи 'summary', "
+            f"що «висновок відсутній» або «робота не містить висновків», якщо учень надав висновок або коментар у цьому полі!\n"
+            f"4. 🚫 КАТЕГОРИЧНО ЗАБОРОНЕНО знижувати оцінку за відсутність висновку у файлі, якщо висновок сформульовано тут!\n"
+            f"5. Обов'язково відзнач наявність висновку в 'strengths' та 'feedback_comment'.\n"
+            f"═══════════════════════════════════════════════════════════════════"
         )
 
     prompt_lines.append(f"\nДАНІ УЧНЯ: {submission.get_student_full_name()} ({class_name})")
@@ -3749,7 +3764,7 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                 combined_task_for_qs += "\n" + "\n".join(teacher_files_content)
 
     # ── КЛЮЧОВА ЛОГІКА: КОНКРЕТНІ НОМЕРИ ЗАВДАНЬ З ІНСТРУКЦІЇ ВЧИТЕЛЯ ──────────
-    # Якщо вчитель вказав конкретні номери (напр. «виконати завдання 1» або
+    # Якщо вчитель вказав конкретні номери (напр. «виконати завдання 1», «виконати вправа 2» або
     # «завдання 2 і 3»), фільтруємо task_questions лише до цих завдань.
     # Решта завдань з файлу вважаються незаданими.
     teacher_specific_task_nums = parse_teacher_specific_task_numbers(assignment_desc or "")
@@ -3768,7 +3783,7 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
             else:
                 # Якщо за індексом не знайшли — шукаємо за номером у тексті завдання
                 for q in all_task_questions:
-                    if re.search(rf'\b(?:завдання|вправ[уи]|пункт)\s*(?:№\s*)?{num}\b', q, re.IGNORECASE):
+                    if re.search(rf'(?:\b(?:завдан[а-яіїє]*|вправ[а-яіїє]*|пункт[а-яіїє]*|номер[а-яіїє]*)\b|(?:завд|впр|ном)\b\.?|\bп\.\s*|№)\s*(?:№\s*)?{num}\b', q, re.IGNORECASE):
                         if q not in filtered_task_questions:
                             filtered_task_questions.append(q)
                         break
@@ -4365,6 +4380,46 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                                 feedback_comment = re.sub(re.escape(phrase), 'діаграму/графік успішно створено', feedback_comment, flags=re.IGNORECASE)
                             weaknesses = [w for w in weaknesses if phrase not in w.lower()]
 
+                    # ── Захист від галюцинацій: висновок або коментар учня до роботи ──
+                    student_comment_text = (submission.comment_student or "").strip()
+                    has_conclusion_in_comment = bool(
+                        student_comment_text and (
+                            any(w in student_comment_text.lower() for w in [
+                                'висновок', 'висновки', 'підсумок', 'підсумки', 'робота показала',
+                                'я зробив висновок', 'я зробила висновок', 'я дізнався', 'я дізналася',
+                                'ми дізналися', 'отже,', 'отже ', 'в результаті', 'ході роботи'
+                            ]) or
+                            len(student_comment_text) >= 20
+                        )
+                    )
+                    if has_conclusion_in_comment and not is_rejected_submission:
+                        no_conclusion_phrases = [
+                            'відсутній висновок',
+                            'відсутні висновки',
+                            'немає висновку',
+                            'немає висновків',
+                            'висновок відсутній',
+                            'висновки відсутні',
+                            'не сформульовано висновок',
+                            'не сформульовано висновків',
+                            'не сформульовано власного висновку',
+                            'робота не містить висновку',
+                            'робота не містить висновків',
+                            'забув написати висновок',
+                            'забула написати висновок',
+                            'забули написати висновок',
+                            'не містить власного висновку',
+                            'немає підсумку',
+                            'відсутній підсумок',
+                            'підсумок відсутній',
+                        ]
+                        for phrase in no_conclusion_phrases:
+                            if phrase in summary.lower():
+                                summary = re.sub(re.escape(phrase), 'висновок до роботи надано у коментарі до здачі', summary, flags=re.IGNORECASE)
+                            if phrase in feedback_comment.lower():
+                                feedback_comment = re.sub(re.escape(phrase), 'висновок до роботи сформульовано у коментарі', feedback_comment, flags=re.IGNORECASE)
+                            weaknesses = [w for w in weaknesses if phrase not in w.lower()]
+
                     # ── Педагогічний захист від завищення балів у багатозадачних роботах (Multi-task ceiling) ──
                     if not is_rejected_submission:
                         suggested_grade, level, clean_gr_results, numeric_gr_grades, avg_gr_grade, summary, strengths, weaknesses, feedback_comment = apply_multi_task_evaluation_guardrail(
@@ -4799,12 +4854,45 @@ def generate_criteria_with_gemini(teacher_notes, assignment_title='', assignment
     }
 
 
+def get_assignment_target_grades_and_ages(assignment) -> tuple[str, str]:
+    """
+    Визначає цільовий клас та орієнтовний вік учнів для завдання.
+    Наприклад:
+      5-й клас -> 10–11 років
+      9-й клас -> 14–15 років
+      11-й клас -> 16–17 років
+    """
+    grades = []
+    try:
+        classes = assignment.classes.all()
+        for c in classes:
+            m = re.search(r'(\d+)', c.name)
+            if m:
+                grades.append(int(m.group(1)))
+    except Exception:
+        pass
+
+    if grades:
+        min_g, max_g = min(grades), max(grades)
+        if min_g == max_g:
+            grade_str = f"{min_g}-й клас"
+            age_str = f"{min_g + 5}–{min_g + 6} років"
+        else:
+            grade_str = f"{min_g}–{max_g} класи"
+            age_str = f"{min_g + 5}–{max_g + 6} років"
+    else:
+        grade_str = "Шкільний клас"
+        age_str = "Шкільний вік"
+    return grade_str, age_str
+
+
 def analyze_assignment_task_understanding(assignment, force_refresh=False) -> dict:
     """
-    Аналізує навчальне завдання за допомогою ШІ та формує звіт для вчителя:
+    Аналізує навчальне завдання за допомогою ШІ та формує звіт для вчителя та учнів:
     - Тема, мета уроку та змістовий контекст
+    - Адаптація роз'яснення під вік та клас учнів (target_audience, student_explanation)
     - Чіткий перелік та точна кількість виявлених обов'язкових практичних завдань
-      (зокрема на фінальних слайдах презентацій чи сторінках PDF)
+      (якщо вчитель вказав конкретний номер на кшталт «виконати вправа 2», аналізується ВИКЛЮЧНО це завдання)
     - Очікуваний результат та формат здачі від учнів
     - Шкала та правила оцінювання (НУШ: 100% = 10-12 б., 2 з 3 = 7-8 б., 1 з 3 = 4-5 б.,
       заборона зарахування однієї фрази за два різні завдання)
@@ -4828,6 +4916,8 @@ def analyze_assignment_task_understanding(assignment, force_refresh=False) -> di
     subject_name = assignment.subject.name if assignment.subject else "Навчальний предмет"
     classes_str = ", ".join(c.name for c in assignment.classes.all()) or "Всі класи"
     custom_criteria = assignment.custom_criteria or ""
+
+    grade_str, age_str = get_assignment_target_grades_and_ages(assignment)
 
     files_content_parts = []
     inline_media = []
@@ -4881,12 +4971,32 @@ def analyze_assignment_task_understanding(assignment, force_refresh=False) -> di
                         pass
 
     combined_text = assignment_desc + "\n" + "\n".join(files_content_parts)
+    teacher_specific_task_nums = parse_teacher_specific_task_numbers(assignment_desc)
     explicit_count = detect_expected_task_count(assignment_desc)
-    extracted_qs = extract_task_questions(combined_text, explicit_count=explicit_count)
+    all_extracted_qs = extract_task_questions(combined_text, explicit_count=explicit_count)
+
+    # Якщо вчитель задав конкретні номери завдань (напр. «виконати вправа 2»),
+    # фільтруємо видобуті запитання лише до цих номерів
+    if teacher_specific_task_nums and all_extracted_qs:
+        scoped_qs = []
+        for num in teacher_specific_task_nums:
+            idx_0b = num - 1
+            if 0 <= idx_0b < len(all_extracted_qs):
+                scoped_qs.append(all_extracted_qs[idx_0b])
+            else:
+                for q in all_extracted_qs:
+                    if re.search(rf'(?:\b(?:завдан[а-яіїє]*|вправ[а-яіїє]*|пункт[а-яіїє]*|номер[а-яіїє]*)\b|(?:завд|впр|ном)\b\.?|\bп\.\s*|№)\s*(?:№\s*)?{num}\b', q, re.IGNORECASE):
+                        if q not in scoped_qs:
+                            scoped_qs.append(q)
+                        break
+        extracted_qs = scoped_qs if scoped_qs else all_extracted_qs
+        explicit_count = len(teacher_specific_task_nums)
+    else:
+        extracted_qs = all_extracted_qs
 
     prompt_lines = [
         f"ПРЕДМЕТ: {subject_name}",
-        f"КЛАС: {classes_str}",
+        f"КЛАС: {classes_str} (орієнтовний вік учнів: {age_str}, {grade_str})",
         f"ТЕМА ЗАВДАННЯ: {assignment_title}",
         f"\nОПИС / ВКАЗІВКИ ВЧИТЕЛЯ:\n{assignment_desc}"
     ]
@@ -4896,38 +5006,61 @@ def analyze_assignment_task_understanding(assignment, force_refresh=False) -> di
         prompt_lines.append("\nПРИКРІПЛЕНІ НАВЧАЛЬНІ МАТЕРІАЛИ (ПРЕЗЕНТАЦІЇ, PDF, ДОКУМЕНТИ):")
         prompt_lines.extend(files_content_parts)
 
-    if explicit_count > 0:
+    if teacher_specific_task_nums:
+        nums_str = ", ".join(str(n) for n in teacher_specific_task_nums)
+        prompt_lines.append(
+            f"\n🎯 НАЙВИЩИЙ ПРІОРИТЕТ — ТОЧНИЙ ОБСЯГ ВІД ВЧИТЕЛЯ (TEACHER SCOPE):\n"
+            f"Вчитель у полі «Що потрібно зробити» ЯВНО вказав виконати КОНКРЕТНЕ ЗАВДАННЯ: № {nums_str}.\n"
+            f"Прикріплені презентації чи файли можуть містити інші вправи чи завдання, але вони є ЛИШЕ матеріалом уроку / теоретичною основою.\n"
+            f"Учні зобов'язані виконати ВИКЛЮЧНО вказані вчителем завдання (№ {nums_str})!\n"
+            f"У полі 'tasks_total_count' вкажи {len(teacher_specific_task_nums)}.\n"
+            f"У масиві 'tasks' опиши САМЕ це обов'язкове завдання № {nums_str} (збережи формулювання та контекст із прикріплених матеріалів)."
+        )
+    elif explicit_count > 0:
         prompt_lines.append(f"\n⚠️ ВКАЗІВКА ВЧИТЕЛЯ ЩОДО ОБСЯГУ: Вчитель чітко зазначив обов'язкову кількість завдань: {explicit_count}.")
+
+    prompt_lines.append(
+        f"\n👶 ВРАХУВАННЯ ВІКУ ТА КЛАСУ УЧНІВ ({grade_str}, вік: {age_str}):\n"
+        f"1. Завдання призначене для учнів {grade_str} ({age_str}).\n"
+        f"2. Обов'язково заповни поле 'student_explanation': сформулюй покроковий, доступний і доброзичливий опис того, "
+        f"що саме вимагається від учня, мовою, зрозумілою для дітей цього віку ({age_str}, {grade_str}).\n"
+        f"   - Уникай складної сухої академічної термінології.\n"
+        f"   - Поясни крок за кроком (Крок 1, Крок 2...): яку дію виконати, який результат отримати, "
+        f"і що надіслати вчителю на перевірку."
+    )
 
     prompt_lines.append(
         "\nЗАВДАННЯ ДЛЯ ТЕБЕ (ЕКСПЕРТНИЙ АНАЛІЗ ЗАВДАННЯ):\n"
         "1. Уважно прочитай опис та проаналізуй усі прикріплені матеріали (слайди презентацій чи сторінки PDF).\n"
-        "2. Відрізняй теоретичні слайди (поняття, вступні тези, списки означень) від РЕАЛЬНИХ практичних завдань для учнів (наприклад, Завдання 1..3 на фінальних слайдах).\n"
-        "3. Визнач кількість обов'язкових завдань та деталізуй кожне з них.\n"
-        "4. Опиши вимоги до зданої роботи та шкалу оцінювання за критеріями НУШ (100% обсягу = 10-12 б., ~66% = 7-8 б., ~33% = 4-5 б.).\n"
-        "5. Зазнач суворе правило: одна фраза не може зараховуватися одночасно за два різні завдання (наприклад, тлумачення в українському словнику та англійський переклад — це два окремі пункти).\n"
+        "2. Відрізняй теоретичні слайди (поняття, вступні тези, списки означень) від РЕАЛЬНИХ практичних завдань для учнів.\n"
+        "3. Визнач кількість обов'язкових завдань та деталізуй кожне з них (враховуючи вказівку вчителя).\n"
+        "4. Сформулюй роз'яснення для учнів відповідно до їхнього віку та класу.\n"
+        "5. Опиши вимоги до зданої роботи та шкалу оцінювання за критеріями НУШ.\n"
         "6. Поверни виключно валідний JSON згідно зі схемою."
     )
 
     system_instruction = (
         "Ти — провідний експерт-методист та педагогічний ШІ шкільної платформи (НУШ).\n"
-        "Твоя мета — проаналізувати опубліковане вчителем завдання та пояснити вчителю, ЯК ШІ РОЗУМІЄ ЦЕ ЗАВДАННЯ:\n"
-        "- чітко вказати тему, мету уроку;\n"
-        "- скільки конкретних завдань виявлено (якщо вчитель вказав «виконати всі 3 завдання», їх РІВНО 3, а не 18 за кількістю слайдів чи пунктів лекції);\n"
+        "Твоя мета — проаналізувати опубліковане вчителем завдання та сформувати звіт:\n"
+        "- чітко вказати тему, мету уроку та цільову аудиторію (клас, вік учнів);\n"
+        "- скласти зрозуміле покрокове роз'яснення для учнів з урахуванням їхнього віку та класу (student_explanation);\n"
+        "- якщо вчитель вказав конкретний номер завдання/вправи (наприклад «виконати вправа 2»), у звіті зафіксувати ЛИШЕ це завдання (tasks_total_count = 1), не вимагаючи виконання інших завдань з файлу;\n"
         "- перелічити кожне виявлене завдання з джерелом (наприклад, «Слайд 18 презентації»);\n"
-        "- роз'яснити вимоги до оформлення та шкалу оцінювання (заборона подвійного зарахування однієї фрази за два завдання);\n"
+        "- роз'яснити вимоги до оформлення та шкалу оцінювання;\n"
         "- надати корисні поради вчителю.\n"
         "Обов'язково повертай JSON за вказаною схемою:\n"
         "{\n"
         '  "topic_and_goal": "Короткий опис теми та мети роботи",\n'
+        f'  "target_audience": "{grade_str} ({age_str})",\n'
+        '  "student_explanation": "Зрозуміле для учнів цього віку покрокове пояснення того, що вимагається виконати і здати (Крок 1, Крок 2...)",\n'
         '  "tasks_source_info": "Звідки витягнуто завдання (наприклад: Слайд 18 презентації)",\n'
-        '  "tasks_total_count": 3,\n'
+        '  "tasks_total_count": 1,\n'
         '  "is_choice_based": false,\n'
         '  "tasks": [\n'
         '    {\n'
         '      "num": 1,\n'
         '      "title": "Назва завдання",\n'
-        '      "source": "Слайд 18",\n'
+        '      "source": "Матеріали уроку",\n'
         '      "expected_actions": "Що учень має зробити",\n'
         '      "expected_submission": "Що має бути у відповіді"\n'
         '    }\n'
@@ -4966,34 +5099,72 @@ def analyze_assignment_task_understanding(assignment, force_refresh=False) -> di
                 parsed = extract_json_from_text(raw_text)
                 if isinstance(parsed, dict) and 'tasks_total_count' in parsed:
                     result_data = parsed
+                    # Гарантуємо наявність target_audience та student_explanation
+                    result_data.setdefault('target_audience', f"{grade_str} ({age_str})")
+                    if not result_data.get('student_explanation'):
+                        result_data['student_explanation'] = (
+                            f"Пояснення для учнів ({grade_str}, {age_str}):\n"
+                            f"Ознайомтеся з матеріалами та виконайте завдання згідно з інструкцією вчителя. "
+                            f"Звертайте увагу на повноту та охайність відповідей."
+                        )
+                    # Суворий пріоритет обсягу завдань від вчителя
+                    if teacher_specific_task_nums:
+                        result_data['tasks_total_count'] = len(teacher_specific_task_nums)
         except Exception:
             pass
 
     # Якщо ШІ API недоступне або повернуло некоректну відповідь — генеруємо якісний структурний звіт на основі видобутих даних
     if not result_data or not isinstance(result_data, dict):
-        total_cnt = explicit_count if explicit_count > 0 else (len(extracted_qs) if extracted_qs else 1)
-        tasks_list = []
-        if extracted_qs:
-            for idx, q in enumerate(extracted_qs, 1):
-                clean_q = re.sub(r'^(?:[•\-\*]?\s*(?:(?:\d+|[IVXLCDM]+)[\.\)\–\—\-]|(?:питання|завдання|вправа|відповідь|№)\s*\d+[\.\:\)\–\—\-]?))\s*', '', q).strip()
+        if teacher_specific_task_nums:
+            total_cnt = len(teacher_specific_task_nums)
+            tasks_list = []
+            for num in teacher_specific_task_nums:
+                found_q = None
+                for q in extracted_qs:
+                    if re.search(rf'(?:\b(?:завдан[а-яіїє]*|вправ[а-яіїє]*|пункт[а-яіїє]*|номер[а-яіїє]*)\b|(?:завд|впр|ном)\b\.?|\bп\.\s*|№)\s*(?:№\s*)?{num}\b', q, re.IGNORECASE):
+                        found_q = q
+                        break
+                clean_q = re.sub(r'^(?:[•\-\*]?\s*(?:(?:\d+|[IVXLCDM]+)[\.\)\–\—\-]|(?:питання|завдання|вправа|відповідь|№)\s*\d+[\.\:\)\–\—\-]?))\s*', '', found_q or "").strip()
                 tasks_list.append({
-                    "num": idx,
-                    "title": f"Завдання {idx}",
-                    "source": "Матеріали уроку / презентація",
-                    "expected_actions": clean_q or q,
-                    "expected_submission": "Відповідь або виконаний файл відповідно до умови"
+                    "num": num,
+                    "title": f"Вправа {num}" if "вправ" in assignment_desc.lower() else f"Завдання {num}",
+                    "source": "Вказівка вчителя та прикріплені матеріали",
+                    "expected_actions": clean_q or f"Виконати вправу {num} відповідно до інструкцій вчителя",
+                    "expected_submission": "Виконана робота або відповідь у зошиті/документі"
                 })
         else:
-            tasks_list.append({
-                "num": 1,
-                "title": assignment_title or "Навчальне завдання",
-                "source": "Опис завдання",
-                "expected_actions": assignment_desc[:300] if assignment_desc else "Виконати завдання згідно з інструкцією",
-                "expected_submission": "Здана робота у відповідному форматі"
-            })
+            total_cnt = explicit_count if explicit_count > 0 else (len(extracted_qs) if extracted_qs else 1)
+            tasks_list = []
+            if extracted_qs:
+                for idx, q in enumerate(extracted_qs, 1):
+                    clean_q = re.sub(r'^(?:[•\-\*]?\s*(?:(?:\d+|[IVXLCDM]+)[\.\)\–\—\-]|(?:питання|завдання|вправа|відповідь|№)\s*\d+[\.\:\)\–\—\-]?))\s*', '', q).strip()
+                    tasks_list.append({
+                        "num": idx,
+                        "title": f"Завдання {idx}",
+                        "source": "Матеріали уроку / презентація",
+                        "expected_actions": clean_q or q,
+                        "expected_submission": "Відповідь або виконаний файл відповідно до умови"
+                    })
+            else:
+                tasks_list.append({
+                    "num": 1,
+                    "title": assignment_title or "Навчальне завдання",
+                    "source": "Опис завдання",
+                    "expected_actions": assignment_desc[:300] if assignment_desc else "Виконати завдання згідно з інструкцією",
+                    "expected_submission": "Здана робота у відповідному форматі"
+                })
+
+        student_guide_text = (
+            f"Пояснення для учнів ({grade_str}, {age_str}):\n"
+            f"1. Уважно прочитайте тему «{assignment_title}» та перегляньте матеріали, додані вчителем.\n"
+            f"2. Виконайте завдання відповідно до вказівок. Пишіть розбірливо, нумеруйте кожну відповідь.\n"
+            f"3. Обов'язково перевірте свою роботу та додайте власні висновки, перш ніж здавати на перевірку."
+        )
 
         result_data = {
             "topic_and_goal": f"{assignment_title}. {subject_name}, {classes_str}.",
+            "target_audience": f"{grade_str} ({age_str})",
+            "student_explanation": student_guide_text,
             "tasks_source_info": "Умова та прикріплені матеріали завдання",
             "tasks_total_count": total_cnt,
             "is_choice_based": False,

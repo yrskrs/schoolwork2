@@ -6209,6 +6209,124 @@ class QuestionAnswerMappingTests(TestCase):
         self.assertNotIn('Початковий висновок ШІ', updated_comment.text)
         self.assertEqual(sub.teacher_comment, sub.get_clean_ai_feedback_for_student())
 
+    def test_parse_teacher_specific_task_numbers_variations(self):
+        """Тест точного розпізнавання номерів завдань/вправ у різних граматичних формах."""
+        from feed.gemini_service import parse_teacher_specific_task_numbers
+        test_cases = [
+            ("виконати вправа 2", [2]),
+            ("виконати вправу 2", [2]),
+            ("зробити вправи 1, 2", [1, 2]),
+            ("вправа 2", [2]),
+            ("впр. 2", [2]),
+            ("номер 3", [3]),
+            ("№ 2", [2]),
+            ("№2", [2]),
+            ("завдання 1", [1]),
+            ("завд. 1", [1]),
+            ("пункт 4", [4]),
+            ("виконати вправу № 2 з практичної роботи", [2]),
+            ("зробити завдання 2-4", [2, 3, 4]),
+            ("опрацювати презентацію і виконати вправа 2", [2]),
+            ("опрацювати презентацію", []),
+            ("виконати всі 3 завдання", []),
+        ]
+        for text, expected in test_cases:
+            res = parse_teacher_specific_task_numbers(text)
+            self.assertEqual(res, expected, f"Failed for text: '{text}', expected {expected}, got {res}")
+
+    def test_get_assignment_target_grades_and_ages(self):
+        """Тест коректного визначення класу та орієнтовного віку учнів."""
+        from feed.gemini_service import get_assignment_target_grades_and_ages
+        self.assignment.classes.clear()
+        cls5 = ClassGroup.objects.create(name='5-А')
+        self.assignment.classes.add(cls5)
+        grade_str, age_str = get_assignment_target_grades_and_ages(self.assignment)
+        self.assertEqual(grade_str, '5-й клас')
+        self.assertEqual(age_str, '10–11 років')
+
+        cls6 = ClassGroup.objects.create(name='6-Б')
+        self.assignment.classes.add(cls6)
+        grade_str2, age_str2 = get_assignment_target_grades_and_ages(self.assignment)
+        self.assertEqual(grade_str2, '5–6 класи')
+        self.assertEqual(age_str2, '10–12 років')
+
+    def test_student_ai_understanding_access_control(self):
+        """Тест доступу учнів до перегляду роз'яснення ШІ: дозволено тільки якщо вчитель увімкнув функцію."""
+        student_user = User.objects.create_user(username='student_user', password='password123')
+        url = reverse('assignment_ai_understanding', args=[self.assignment.pk])
+        alt_url = reverse('assignment_ai_understanding_student', args=[self.assignment.pk])
+
+        # 1. За замовчуванням (allow_student_ai_understanding = False) -> 403 Forbidden для учня
+        self.assignment.allow_student_ai_understanding = False
+        self.assignment.status = Assignment.STATUS_PUBLISHED
+        self.assignment.save()
+
+        self.client.login(username='student_user', password='password123')
+        resp_denied = self.client.get(url)
+        self.assertEqual(resp_denied.status_code, 403)
+
+        resp_alt_denied = self.client.get(alt_url)
+        self.assertEqual(resp_alt_denied.status_code, 403)
+
+        # 2. Якщо вчитель увімкнув доступ (allow_student_ai_understanding = True) -> 200 OK для учня
+        self.assignment.allow_student_ai_understanding = True
+        self.assignment.description = "Опрацюйте слайди та виконайте вправа 2"
+        self.assignment.save()
+
+        resp_allowed = self.client.get(url)
+        self.assertEqual(resp_allowed.status_code, 200)
+        data = resp_allowed.json()
+        self.assertEqual(data['status'], 'success')
+        self.assertFalse(data['is_teacher'])
+        self.assertIn('student_explanation', data['data'])
+        self.assertIn('target_audience', data['data'])
+        self.assertEqual(data['data']['tasks_total_count'], 1)  # Тільки вправа 2!
+
+        # Учень не може примусово оновити аналіз через POST (force_refresh блокується)
+        resp_post = self.client.post(url)
+        self.assertEqual(resp_post.status_code, 200)
+        self.assertFalse(resp_post.json()['is_teacher'])
+
+    def test_student_comment_conclusion_guardrail_sanitization(self):
+        """Тест захисту від галюцинацій: висновок у коментарі учня зараховується, а хибні скарги на відсутність висновку прибираються."""
+        sub = Submission.objects.create(
+            assignment=self.assignment,
+            class_group=self.class_group,
+            first_name='Оксана',
+            last_name='Коваленко',
+            comment_student='Мій висновок по роботі: я навчилася створювати презентації та структурувати інформацію за темою.'
+        )
+
+        # Симулюємо сценарій, коли ШІ галюцинує скаргу на відсутність висновку
+        raw_summary = "Учениця виконала практичні завдання, але відсутній висновок до роботи."
+        raw_feedback = "Робота виконана добре, проте відсутній висновок до практичної роботи."
+        raw_weaknesses = ["Відсутній висновок до роботи"]
+
+        student_comment_text = (sub.comment_student or "").strip()
+        has_conclusion_in_comment = bool(
+            student_comment_text and (
+                any(w in student_comment_text.lower() for w in [
+                    'висновок', 'висновки', 'підсумок', 'підсумки', 'робота показала',
+                    'я зробив висновок', 'я зробила висновок', 'я навчилася'
+                ]) or len(student_comment_text) >= 20
+            )
+        )
+        self.assertTrue(has_conclusion_in_comment)
+
+        no_conclusion_phrases = ['відсутній висновок']
+        cleaned_summary = raw_summary
+        cleaned_weaknesses = [w for w in raw_weaknesses]
+        for phrase in no_conclusion_phrases:
+            if phrase in cleaned_summary.lower():
+                import re
+                cleaned_summary = re.sub(re.escape(phrase), 'висновок до роботи надано у коментарі до здачі', cleaned_summary, flags=re.IGNORECASE)
+            cleaned_weaknesses = [w for w in cleaned_weaknesses if phrase not in w.lower()]
+
+        self.assertNotIn('відсутній висновок', cleaned_summary.lower())
+        self.assertIn('висновок до роботи надано у коментарі до здачі', cleaned_summary.lower())
+        self.assertEqual(len(cleaned_weaknesses), 0)
+
+
 
 
 

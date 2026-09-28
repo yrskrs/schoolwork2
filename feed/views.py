@@ -145,6 +145,29 @@ def auto_archive_expired_assignments():
     return expired_count
 
 
+def _async_trigger_ai_task_understanding(assignment_id):
+    """
+    Фоновий потік для автоматичного аналізу завдання ШІ після публікації.
+    ШІ автоматично ознайомлюється із завданням, враховує вік і клас учнів та формує роз'яснення.
+    """
+    import threading
+    def _worker():
+        from django.db import connection
+        try:
+            from .models import Assignment
+            from .gemini_service import analyze_assignment_task_understanding
+            asg = Assignment.objects.prefetch_related('classes', 'files').filter(pk=assignment_id).first()
+            if asg and asg.status == Assignment.STATUS_PUBLISHED and asg.allow_student_ai_understanding:
+                analyze_assignment_task_understanding(asg, force_refresh=True)
+        except Exception as err:
+            logger.warning(f"Error in background AI task understanding for assignment {assignment_id}: {err}")
+        finally:
+            connection.close()
+
+    t = threading.Thread(target=_worker, daemon=True)
+    t.start()
+
+
 def get_visible_assignments(class_group_id=None):
     """
     Повертає QuerySet опублікованих завдань.
@@ -155,13 +178,21 @@ def get_visible_assignments(class_group_id=None):
     auto_archive_expired_assignments()
 
     # Оновлюємо відкладені публікації
-    Assignment.objects.filter(
+    scheduled_to_publish = list(Assignment.objects.filter(
         status=Assignment.STATUS_SCHEDULED,
         scheduled_at__lte=timezone.now()
-    ).update(
-        status=Assignment.STATUS_PUBLISHED,
-        published_at=timezone.now()
-    )
+    ).values_list('id', 'allow_student_ai_understanding'))
+
+    if scheduled_to_publish:
+        Assignment.objects.filter(
+            id__in=[item[0] for item in scheduled_to_publish]
+        ).update(
+            status=Assignment.STATUS_PUBLISHED,
+            published_at=timezone.now()
+        )
+        for asg_id, allow_ai in scheduled_to_publish:
+            if allow_ai:
+                _async_trigger_ai_task_understanding(asg_id)
 
     qs = Assignment.objects.filter(
         status=Assignment.STATUS_PUBLISHED
@@ -1450,6 +1481,8 @@ def assignment_create(request):
             }
             label = status_labels.get(assignment.status, 'збережено')
             messages.success(request, f'Завдання "{assignment.title}" — {label}! ✅')
+            if assignment.status == Assignment.STATUS_PUBLISHED and assignment.allow_student_ai_understanding:
+                _async_trigger_ai_task_understanding(assignment.pk)
             return redirect('teacher_dashboard')
 
     from .models import AICriteriaPreset
@@ -1632,6 +1665,8 @@ def assignment_edit(request, pk):
                     )
 
             messages.success(request, f'Завдання "{assignment.title}" оновлено! ✅')
+            if assignment.status == Assignment.STATUS_PUBLISHED and assignment.allow_student_ai_understanding:
+                _async_trigger_ai_task_understanding(assignment.pk)
             return redirect('teacher_dashboard')
 
     AICriteriaPreset.ensure_default_presets()
@@ -1764,6 +1799,7 @@ def assignment_duplicate(request, pk):
         default_ai_preset=original.default_ai_preset,
         default_ai_grs=original.default_ai_grs,
         allow_student_ai_check=original.allow_student_ai_check,
+        allow_student_ai_understanding=original.allow_student_ai_understanding,
         allow_ai_usage=original.allow_ai_usage,
         custom_criteria=original.custom_criteria,
         no_submission_required=original.no_submission_required,
@@ -1856,6 +1892,9 @@ def assignment_duplicate(request, pk):
                 bell_slot_id=slot_id,
                 target_date=target_date
             )
+
+    if publish_now and duplicate.allow_student_ai_understanding:
+        _async_trigger_ai_task_understanding(duplicate.pk)
 
     is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.GET.get('format') == 'json'
     if is_ajax:
@@ -3842,8 +3881,9 @@ def delete_comment(request, comment_id):
 @login_required
 def assignment_ai_understanding(request, pk):
     """
-    AJAX endpoint для перегляду та генерації звіту розуміння завдання штучним інтелектом (для вчителя).
-    Вчитель може перевірити, скільки завдань виявив ШІ (зокрема зі слайдів), які вимоги очікуються та як ШІ планує оцінювати роботи учнів.
+    AJAX endpoint для перегляду та генерації звіту розуміння завдання штучним інтелектом.
+    - Вчитель/автор може перевірити виявлені завдання, вимоги та оновити аналіз.
+    - Учні мають доступ до перегляду роз'яснення, якщо вчитель увімкнув функцію (allow_student_ai_understanding).
     """
     assignment = get_object_or_404(
         Assignment.objects.prefetch_related('classes', 'files'),
@@ -3851,14 +3891,26 @@ def assignment_ai_understanding(request, pk):
     )
 
     is_owner = hasattr(request.user, 'teacher_profile') and assignment.teacher == request.user.teacher_profile
-    if not (request.user.is_superuser or is_owner):
-        return JsonResponse({'status': 'error', 'message': 'Доступ заборонено. Переглядати аналіз ШІ може тільки автор завдання або адміністратор.'}, status=403)
+    is_admin = request.user.is_superuser
+    can_view_as_student = bool(
+        assignment.allow_student_ai_understanding and
+        assignment.status in [Assignment.STATUS_PUBLISHED, Assignment.STATUS_ARCHIVED]
+    )
 
-    force_refresh = (request.method == 'POST') or (request.GET.get('refresh') in ['1', 'true'])
+    if not (is_admin or is_owner or can_view_as_student):
+        return JsonResponse({
+            'status': 'error',
+            'message': 'Доступ заборонено. Переглядати аналіз ШІ може тільки автор завдання або учні (якщо вчитель увімкнув цю опцію під час створення завдання).'
+        }, status=403)
+
+    is_teacher = bool(is_admin or is_owner)
+    # Учні можуть лише переглядати збережений аналіз (force_refresh вимкнено для учнів)
+    force_refresh = is_teacher and ((request.method == 'POST') or (request.GET.get('refresh') in ['1', 'true']))
 
     try:
         from .gemini_service import analyze_assignment_task_understanding
         result = analyze_assignment_task_understanding(assignment, force_refresh=force_refresh)
+        result['is_teacher'] = is_teacher
         return JsonResponse(result)
     except Exception as e:
         return JsonResponse({

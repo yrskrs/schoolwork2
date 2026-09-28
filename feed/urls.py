@@ -44,6 +44,7 @@ urlpatterns = [
     path('teacher/assignment/<int:pk>/unarchive/', views.assignment_unarchive, name='assignment_unarchive'),
     path('teacher/assignment/<int:pk>/publish/', views.assignment_publish, name='assignment_publish'),
     path('teacher/assignment/<int:pk>/ai-understanding/', views.assignment_ai_understanding, name='assignment_ai_understanding'),
+    path('assignment/<int:pk>/ai-understanding/', views.assignment_ai_understanding, name='assignment_ai_understanding_student'),
 
     # ── Перегляд та перевірка робіт (File Viewer & Dashboard) ─────────────────
     path('teacher/assignment/<int:pk>/submissions/', views.assignment_submissions, name='assignment_submissions'),

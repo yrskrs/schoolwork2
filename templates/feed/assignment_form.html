@@ -101,16 +101,16 @@
 
                                 <!-- Панель інструментів форматування (WYSIWYG Toolbar) -->
                                 <div class="wysiwyg-toolbar" id="wysiwyg-toolbar" style="display:flex;flex-wrap:wrap;gap:4px;background:var(--color-bg-secondary);border:1px solid var(--color-border);border-bottom:none;border-top-left-radius:var(--radius-md);border-top-right-radius:var(--radius-md);padding:6px 10px;align-items:center;">
-                                    <button type="button" class="editor-btn" onclick="execEditorCommand('bold')" title="Жирний (Ctrl+B)" style="font-weight:900;padding:4px 8px;font-size:13px;border:1px solid var(--color-border);border-radius:4px;background:var(--color-surface);cursor:pointer;color:var(--color-text-primary);">
+                                    <button type="button" class="editor-btn" data-cmd="bold" onclick="execEditorCommand('bold')" title="Жирний (Ctrl+B)" style="font-weight:900;padding:4px 8px;font-size:13px;border:1px solid var(--color-border);border-radius:4px;background:var(--color-surface);cursor:pointer;color:var(--color-text-primary);">
                                         <strong>Ж</strong>
                                     </button>
-                                    <button type="button" class="editor-btn" onclick="execEditorCommand('italic')" title="Курсив (Ctrl+I)" style="font-style:italic;padding:4px 8px;font-size:13px;border:1px solid var(--color-border);border-radius:4px;background:var(--color-surface);cursor:pointer;color:var(--color-text-primary);">
+                                    <button type="button" class="editor-btn" data-cmd="italic" onclick="execEditorCommand('italic')" title="Курсив (Ctrl+I)" style="font-style:italic;padding:4px 8px;font-size:13px;border:1px solid var(--color-border);border-radius:4px;background:var(--color-surface);cursor:pointer;color:var(--color-text-primary);">
                                         <em>К</em>
                                     </button>
-                                    <button type="button" class="editor-btn" onclick="execEditorCommand('underline')" title="Підкреслений (Ctrl+U)" style="text-decoration:underline;padding:4px 8px;font-size:13px;border:1px solid var(--color-border);border-radius:4px;background:var(--color-surface);cursor:pointer;color:var(--color-text-primary);">
+                                    <button type="button" class="editor-btn" data-cmd="underline" onclick="execEditorCommand('underline')" title="Підкреслений (Ctrl+U)" style="text-decoration:underline;padding:4px 8px;font-size:13px;border:1px solid var(--color-border);border-radius:4px;background:var(--color-surface);cursor:pointer;color:var(--color-text-primary);">
                                         <u>Ч</u>
                                     </button>
-                                    <button type="button" class="editor-btn" onclick="execEditorCommand('strikeThrough')" title="Закреслений" style="text-decoration:line-through;padding:4px 8px;font-size:13px;border:1px solid var(--color-border);border-radius:4px;background:var(--color-surface);cursor:pointer;color:var(--color-text-primary);">
+                                    <button type="button" class="editor-btn" data-cmd="strikeThrough" onclick="execEditorCommand('strikeThrough')" title="Закреслений" style="text-decoration:line-through;padding:4px 8px;font-size:13px;border:1px solid var(--color-border);border-radius:4px;background:var(--color-surface);cursor:pointer;color:var(--color-text-primary);">
                                         S
                                     </button>
                                     <span style="width:1px;height:20px;background:var(--color-border);margin:0 4px;"></span>
@@ -121,22 +121,22 @@
                                     </button>
 
                                     <!-- Заголовки та абзаци -->
-                                    <button type="button" class="editor-btn" onclick="execEditorFormatBlock('h2')" title="Великий заголовок (H2)" style="padding:4px 8px;font-size:12px;font-weight:800;border:1px solid var(--color-border);border-radius:4px;background:var(--color-surface);cursor:pointer;color:var(--color-text-primary);">
+                                    <button type="button" class="editor-btn" data-block="h2" onclick="execEditorFormatBlock('h2')" title="Великий заголовок (H2)" style="padding:4px 8px;font-size:12px;font-weight:800;border:1px solid var(--color-border);border-radius:4px;background:var(--color-surface);cursor:pointer;color:var(--color-text-primary);">
                                         H2
                                     </button>
-                                    <button type="button" class="editor-btn" onclick="execEditorFormatBlock('h3')" title="Середній заголовок (H3)" style="padding:4px 8px;font-size:12px;font-weight:700;border:1px solid var(--color-border);border-radius:4px;background:var(--color-surface);cursor:pointer;color:var(--color-text-primary);">
+                                    <button type="button" class="editor-btn" data-block="h3" onclick="execEditorFormatBlock('h3')" title="Середній заголовок (H3)" style="padding:4px 8px;font-size:12px;font-weight:700;border:1px solid var(--color-border);border-radius:4px;background:var(--color-surface);cursor:pointer;color:var(--color-text-primary);">
                                         H3
                                     </button>
-                                    <button type="button" class="editor-btn" onclick="execEditorFormatBlock('p')" title="Звичайний абзац" style="padding:4px 8px;font-size:12px;font-weight:600;border:1px solid var(--color-border);border-radius:4px;background:var(--color-surface);cursor:pointer;color:var(--color-text-primary);">
+                                    <button type="button" class="editor-btn" data-block="p" onclick="execEditorFormatBlock('p')" title="Звичайний абзац" style="padding:4px 8px;font-size:12px;font-weight:600;border:1px solid var(--color-border);border-radius:4px;background:var(--color-surface);cursor:pointer;color:var(--color-text-primary);">
                                         ¶ Абзац
                                     </button>
                                     <span style="width:1px;height:20px;background:var(--color-border);margin:0 4px;"></span>
 
                                     <!-- Списки -->
-                                    <button type="button" class="editor-btn" onclick="execEditorCommand('insertUnorderedList')" title="Маркований список" style="padding:4px 8px;font-size:13px;border:1px solid var(--color-border);border-radius:4px;background:var(--color-surface);cursor:pointer;color:var(--color-text-primary);">
+                                    <button type="button" class="editor-btn" data-cmd="insertUnorderedList" onclick="execEditorCommand('insertUnorderedList')" title="Маркований список" style="padding:4px 8px;font-size:13px;border:1px solid var(--color-border);border-radius:4px;background:var(--color-surface);cursor:pointer;color:var(--color-text-primary);">
                                         • Список
                                     </button>
-                                    <button type="button" class="editor-btn" onclick="execEditorCommand('insertOrderedList')" title="Нумерований список" style="padding:4px 8px;font-size:13px;border:1px solid var(--color-border);border-radius:4px;background:var(--color-surface);cursor:pointer;color:var(--color-text-primary);">
+                                    <button type="button" class="editor-btn" data-cmd="insertOrderedList" onclick="execEditorCommand('insertOrderedList')" title="Нумерований список" style="padding:4px 8px;font-size:13px;border:1px solid var(--color-border);border-radius:4px;background:var(--color-surface);cursor:pointer;color:var(--color-text-primary);">
                                         1. Список
                                     </button>
                                     <span style="width:1px;height:20px;background:var(--color-border);margin:0 4px;"></span>
@@ -564,7 +564,7 @@
                             </div>
 
                             <!-- Дозволити використання ШІ учнями -->
-                            <div class="form-group" style="margin-bottom:0;">
+                            <div class="form-group" style="margin-bottom:12px;">
                                 <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:14px 16px;background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:var(--radius-md);width:fit-content;max-width:100%;">
                                     <input type="checkbox" name="allow_ai_usage" id="id_allow_ai_usage"
                                            value="1"
@@ -573,6 +573,20 @@
                                     <div>
                                         <div style="font-weight:700;font-size:14px;color:var(--color-text-primary);">💡 Дозволити використання ШІ учнями при виконанні</div>
                                         <div style="font-size:12px;color:var(--color-text-muted);margin-top:2px;">Дозволяє учням застосовувати ШІ для виконання цього завдання. Роботи всерівно аналізуватимуться на ознаки ШІ, щоб ви завжди знали про це.</div>
+                                    </div>
+                                </label>
+                            </div>
+
+                            <!-- Дозволити учням бачити аналіз ШІ («Як ШІ розуміє завдання») -->
+                            <div class="form-group" style="margin-bottom:0;">
+                                <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:14px 16px;background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:var(--radius-md);width:fit-content;max-width:100%;">
+                                    <input type="checkbox" name="allow_student_ai_understanding" id="id_allow_student_ai_understanding"
+                                           value="1"
+                                           {% if assignment and assignment.allow_student_ai_understanding %}checked{% endif %}
+                                           style="width:18px;height:18px;accent-color:var(--color-primary);flex-shrink:0;">
+                                    <div>
+                                        <div style="font-weight:700;font-size:14px;color:var(--color-text-primary);">🔍 Дозволити учням переглядати аналіз ШІ («Як ШІ розуміє завдання»)</div>
+                                        <div style="font-size:12px;color:var(--color-text-muted);margin-top:2px;">ШІ автоматично проаналізує умову та файли і сформує для учнів доступний опис вимог з урахуванням їхнього класу та віку (за замовчуванням вимкнено).</div>
                                     </div>
                                 </label>
                             </div>
@@ -1112,10 +1126,62 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             });
         }
+
+        // Відстеження активного форматування (жирний, курсив тощо) для підсвічування кнопок панелі
+        richEditor.addEventListener('keyup', updateEditorToolbarState);
+        richEditor.addEventListener('mouseup', updateEditorToolbarState);
+        richEditor.addEventListener('click', updateEditorToolbarState);
+        richEditor.addEventListener('focus', updateEditorToolbarState);
+        document.addEventListener('selectionchange', function() {
+            var el = document.getElementById('rich-editor');
+            if (!el) return;
+            var sel = window.getSelection();
+            if (sel && sel.anchorNode && el.contains(sel.anchorNode)) {
+                updateEditorToolbarState();
+            }
+        });
     }
 });
 
 window.isHtmlSourceMode = false;
+
+function updateEditorToolbarState() {
+    if (window.isHtmlSourceMode) return;
+    var richEditor = document.getElementById('rich-editor');
+    if (!richEditor) return;
+
+    var cmdBtns = document.querySelectorAll('#wysiwyg-toolbar .editor-btn[data-cmd]');
+    cmdBtns.forEach(function(btn) {
+        var cmd = btn.getAttribute('data-cmd');
+        try {
+            var active = document.queryCommandState(cmd);
+            if (active) {
+                btn.classList.add('active');
+                btn.setAttribute('aria-pressed', 'true');
+            } else {
+                btn.classList.remove('active');
+                btn.setAttribute('aria-pressed', 'false');
+            }
+        } catch(e) {}
+    });
+
+    var blockBtns = document.querySelectorAll('#wysiwyg-toolbar .editor-btn[data-block]');
+    if (blockBtns.length > 0) {
+        try {
+            var currentBlock = (document.queryCommandValue('formatBlock') || '').toLowerCase().replace(/[<>]/g, '');
+            blockBtns.forEach(function(btn) {
+                var blk = btn.getAttribute('data-block').toLowerCase();
+                if (currentBlock === blk) {
+                    btn.classList.add('active');
+                    btn.setAttribute('aria-pressed', 'true');
+                } else {
+                    btn.classList.remove('active');
+                    btn.setAttribute('aria-pressed', 'false');
+                }
+            });
+        } catch(e) {}
+    }
+}
 
 function execEditorCommand(cmd, val) {
     var richEditor = document.getElementById('rich-editor');
@@ -1124,6 +1190,7 @@ function execEditorCommand(cmd, val) {
     richEditor.focus();
     document.execCommand(cmd, false, val || null);
     if (descTextarea) descTextarea.value = richEditor.innerHTML;
+    updateEditorToolbarState();
 }
 
 function execEditorFormatBlock(tag) {
@@ -1133,6 +1200,7 @@ function execEditorFormatBlock(tag) {
     richEditor.focus();
     document.execCommand('formatBlock', false, '<' + tag + '>');
     if (descTextarea) descTextarea.value = richEditor.innerHTML;
+    updateEditorToolbarState();
 }
 
 function highlightSelectedText() {
@@ -1390,6 +1458,28 @@ function toggleEditorSourceMode() {
 @keyframes criteriaSpin {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
+}
+
+.editor-btn {
+    transition: all 0.15s ease-in-out;
+}
+.editor-btn:hover {
+    background: var(--color-bg-secondary, #f1f5f9) !important;
+    border-color: var(--color-primary, #4f46e5) !important;
+}
+.editor-btn.active, .editor-btn[aria-pressed="true"] {
+    background: var(--color-primary, #4f46e5) !important;
+    color: #ffffff !important;
+    border-color: var(--color-primary, #4f46e5) !important;
+    box-shadow: 0 1px 4px rgba(79, 70, 229, 0.4);
+}
+.editor-btn.active strong,
+.editor-btn.active em,
+.editor-btn.active u,
+.editor-btn[aria-pressed="true"] strong,
+.editor-btn[aria-pressed="true"] em,
+.editor-btn[aria-pressed="true"] u {
+    color: #ffffff !important;
 }
 </style>
 {% endblock %}

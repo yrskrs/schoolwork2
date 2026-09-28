@@ -408,6 +408,7 @@ class AssignmentForm(forms.ModelForm):
             'due_date', 'scheduled_at',
             'no_submission_required',
             'allow_student_ai_check', 'allow_ai_usage',
+            'allow_student_ai_understanding',
             'custom_criteria',
         ]
         labels = {
@@ -423,6 +424,7 @@ class AssignmentForm(forms.ModelForm):
             'no_submission_required': 'Не вимагає здачі робіт (усне / для опрацювання)',
             'allow_student_ai_check': 'Дозволити учням 1 самоперевірку через ШІ',
             'allow_ai_usage': 'Дозволити учням використання ШІ при виконанні завдання',
+            'allow_student_ai_understanding': 'Дозволити учням бачити аналіз ШІ («Як ШІ розуміє завдання»)',
             'custom_criteria': 'Індивідуальні критерії оцінювання для цього завдання',
         }
         widgets = {
@@ -460,6 +462,7 @@ class AssignmentForm(forms.ModelForm):
             'no_submission_required': forms.CheckboxInput(attrs={'class': 'form-checkbox'}),
             'allow_student_ai_check': forms.CheckboxInput(attrs={'class': 'form-checkbox'}),
             'allow_ai_usage': forms.CheckboxInput(attrs={'class': 'form-checkbox'}),
+            'allow_student_ai_understanding': forms.CheckboxInput(attrs={'class': 'form-checkbox'}),
             'custom_criteria': forms.Textarea(attrs={
                 'class': 'form-textarea',
                 'rows': 4,
