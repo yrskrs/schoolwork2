@@ -2642,9 +2642,16 @@ def extract_task_questions(text: str, explicit_count: int = 0) -> list[str]:
         re.IGNORECASE
     )
 
+    rubric_or_step_ignore = re.compile(
+        r'(?:\b\d+\s+бал\w*[\:\-]|критерії\s+оцінювання|^(?:крок|етап)\s*\d+|^(?:таблиця\s*\d+|назва\s+поля|тип\s+даних|первинний\s+ключ|зовнішній\s+ключ)|^[•\-\*·]?\s*(?:за\s+множинністю|за\s+обов\'язковістю|pk:|fk:))',
+        re.IGNORECASE
+    )
+
     questions = []
     current_q = []
     for line in target_lines:
+        if rubric_or_step_ignore.search(line):
+            continue
         m = num_pattern.match(line)
         if m:
             if current_q:
@@ -2700,12 +2707,14 @@ SINGLE_TASK_KEYWORDS = [
     'проєкт', 'проект',
     'створити презентацію', 'підготувати презентацію', 'розробити презентацію', 'презентація на тему',
     'створити програму', 'написати програму', 'розробити програму', 'написання коду',
-    'виконати практичну роботу', 'практична робота', 'лабораторна робота',
+    'виконати практичну роботу', 'практична робота', 'лабораторна робота', 'дослідницька робота',
     'опрацювати тему', 'опрацювання теми', 'вивчення теми',
     'підготувати повідомлення', 'підготувати доповідь', 'підготувати реферат',
-    'написати твір', 'написати есе', 'творча робота', 'дослідницька робота',
+    'написати твір', 'написати есе', 'творча робота',
     'створити буклет', 'створити веб-сторінку', 'створити сайт',
-    'створити базу даних', 'створити таблицю', 'індивідуальне завдання'
+    'створити базу даних', 'створити таблицю', 'база даних', 'бази даних', 'баз даних', 'базою даних',
+    'реляційн', 'сутність', 'сутност', 'атрибут', 'первинний ключ', 'зовнішній ключ',
+    'ер-схем', 'er-схем', 'ms access', 'access', 'індивідуальне завдання'
 ]
 
 
@@ -3198,6 +3207,49 @@ def resolve_assignment_scope(
             'points_distribution': eval_plan['points_distribution'],
             'teacher_specific_task_nums': teacher_specific_task_nums,
             'task_questions': scoped_questions,
+            'clean_instruction_text': desc
+        }
+
+    # ── СЦЕНАРІЙ В-0: Одне комплексне завдання / практична / лабораторна робота / проєкт ──
+    # Якщо завдання за своєю суттю є одним цілісним процесом (створення БД, проєкт,
+    # практична робота з покроковою інструкцією «Крок 1..N» або рубрикою «Критерії оцінювання»),
+    # і вчитель НЕ задав перелік окремих вправ (як «Вправа 1, 2, 3» чи «Завдання 1, 2»)
+    # та не зазначив явну кількість завдань (explicit_count > 1),
+    # це завдання розглядається як ОДНЕ цілісне комплексне завдання.
+    has_single_task_kw = any(kw in combined_desc_title for kw in SINGLE_TASK_KEYWORDS)
+    has_workflow_steps = bool(re.search(r'\b(?:крок|етап)\s*\d+\b', desc, re.IGNORECASE))
+    has_rubrics = bool(re.search(r'\bкритерії\s+оцінювання\b|\b\d+\s+бал\w*[\:\-]', desc, re.IGNORECASE))
+    has_explicit_exercises = bool(re.search(r'\b(?:вправи|вправ|завдань)\s*(?:№\s*)?[:\d]', desc, re.IGNORECASE))
+
+    if (has_single_task_kw or has_workflow_steps or has_rubrics) and not has_explicit_exercises and not teacher_specific_task_nums and explicit_count <= 1:
+        task_label = desc or title or "Навчальне комплексне завдання"
+        ignored = []
+        for q in raw_found_questions:
+            ignored.append({
+                'description': q,
+                'reason': 'Матеріал або вправа з навчального файлу не була явно задана вчителем як окреме обов\'язкове завдання'
+            })
+        assigned_tasks = [{
+            'task_id': 'task_1',
+            'task_num': None,
+            'description': task_label,
+            'requirements': custom_criteria_rules
+        }]
+        eval_plan = _build_evaluation_plan(assigned_tasks, ignored, 'teacher_description', assignment_type='single_complex_task')
+
+        return {
+            'scope_source': 'teacher_description',
+            'is_single_complex_task': True,
+            'assigned_task_count': 1,
+            'assigned_tasks': assigned_tasks,
+            'ignored_found_tasks': ignored,
+            'custom_criteria_rules': custom_criteria_rules,
+            'file_criteria_rules': compiled_criteria,
+            'evaluation_plan': eval_plan,
+            'format_requirements': eval_plan['format_requirements'],
+            'points_distribution': eval_plan['points_distribution'],
+            'teacher_specific_task_nums': [],
+            'task_questions': [],
             'clean_instruction_text': desc
         }
 
@@ -6337,11 +6389,13 @@ def analyze_assignment_task_understanding(assignment, force_refresh=False) -> di
                         found_q = q
                         break
                 clean_q = re.sub(r'^(?:[•\-\*]?\s*(?:(?:\d+|[IVXLCDM]+)[\.\)\–\—\-]|(?:питання|завдання|вправа|відповідь|№)\s*\d+[\.\:\)\–\—\-]?))\s*', '', found_q or "").strip()
+                is_ex = "вправ" in (assignment_desc or "").lower()
+                task_term = f"вправу {num}" if is_ex else f"завдання {num}"
                 tasks_list.append({
                     "num": num,
-                    "title": f"Вправа {num}" if "вправ" in assignment_desc.lower() else f"Завдання {num}",
+                    "title": f"Вправа {num}" if is_ex else f"Завдання {num}",
                     "source": "Вказівка вчителя та прикріплені матеріали",
-                    "expected_actions": clean_q or f"Виконати вправу {num} відповідно до інструкцій вчителя",
+                    "expected_actions": clean_q or f"Виконати {task_term} відповідно до інструкцій вчителя",
                     "expected_submission": "Виконана робота або відповідь у зошиті/документі"
                 })
         else:

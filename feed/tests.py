@@ -7178,6 +7178,63 @@ class IntelligentStudentEvaluationRequirementsTests(TestCase):
         self.assertIn("граничн", result['revision_advice'][1].lower())
         self.assertEqual(result['suggested_grade'], '8')
 
+    def test_database_assignment_resolved_as_single_holistic_task(self):
+        """
+        Тест: Практичне завдання з проектування реляційної бази даних MS Access
+        (таблиці, сутності, атрибути, первинні/зовнішні ключі, зв'язки 1:M, кроки 3..4 та критерії оцінювання)
+        має розпізнаватися як ОДНЕ комплексне практичне завдання, а не 14 окремих вправ.
+        """
+        from .gemini_service import resolve_assignment_scope, analyze_assignment_task_understanding
+
+        title = "Поняття сутності, атрибута, ключа, зв’язку"
+        desc = (
+            "Ознайомтеся зі структурою реляційної бази даних для сервісу «Online Cinema».\n"
+            "Вона складається з 3 сутностей (таблиць).\n"
+            "Запишіть або перенесіть у документ структури таблиць з відповідними типами даних і ключами:\n"
+            "Таблиця 1: Users (Користувачі)\n"
+            "user_id: Числовий (INT, AutoIncrement) Primary Key (PK)\n"
+            "full_name: Текстовий (VARCHAR)\n"
+            "Таблиця 2: Movies (Фільми)\n"
+            "movie_id: Числовий (INT, AutoIncrement) Primary Key (PK)\n"
+            "Таблиця 3: Reviews (Рецензії)\n"
+            "review_id: Числовий (INT, AutoIncrement) Primary Key (PK)\n"
+            "КРОК 3. Класифікація та побудова зв'язків (10 хв)\n"
+            "1. Зв'язок: Users ➔ Reviews (1 : M)\n"
+            "2. Зв'язок: Movies ➔ Reviews (1 : M)\n"
+            "3. Побудова ER-схеми\n"
+            "КРОК 4. Експрес-контроль (5 хв)\n"
+            "1. Чому поля user_id та movie_id є Зовнішніми ключами?\n"
+            "2. Чим відрізняється PK від звичайного поля?\n"
+            "3. Який тип даних обрати для поля rating?\n"
+            "КРИТЕРІЇ ОЦІНЮВАННЯ:\n"
+            "· 3 бали: Дотримано правил БЖД + Крок 2.\n"
+            "· 3 бали: Визначено PK та FK.\n"
+            "· 3 бали: Класифіковано зв'язки (1:M).\n"
+            "· 3 бали: Відповіді на експрес-контроль."
+        )
+
+        scope = resolve_assignment_scope(title, desc)
+        self.assertTrue(scope['is_single_complex_task'])
+        self.assertEqual(scope['assigned_task_count'], 1)
+        self.assertEqual(scope['teacher_specific_task_nums'], [])
+
+        # Перевірка розуміння завдання для учня (вікно «Як ШІ розуміє завдання»)
+        assignment = Assignment.objects.create(
+            teacher=self.teacher,
+            subject=self.subject,
+            title=title,
+            description=desc
+        )
+        assignment.classes.add(self.class_group)
+
+        understanding = analyze_assignment_task_understanding(assignment)
+        self.assertEqual(understanding['status'], 'success')
+        data = understanding['data']
+        self.assertEqual(data['tasks_total_count'], 1)
+        self.assertEqual(len(data['tasks']), 1)
+        self.assertNotIn("вправу 13", str(data).lower())
+
+
 
 
 
