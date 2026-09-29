@@ -23,10 +23,13 @@ import subprocess
 import tempfile
 import glob
 import shutil
+import logging
 from django.utils import timezone
 from .models import AISettings, Submission, DEFAULT_NUS_SYSTEM_PROMPT, AICriteriaPreset
 from .duplicate_detector import check_submission_duplicates, get_normalized_file_content
 from .document_parsers import parse_drawingml_chart_xml, format_python_pptx_chart_info
+
+logger = logging.getLogger(__name__)
 
 GEMINI_API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 OPENAI_API_BASE_URL = "https://api.openai.com/v1"
@@ -2007,6 +2010,7 @@ def extract_submission_content(submission):
     """
     text_parts = []
     inline_media = []
+    inaccessible_materials = []
 
     # 1. Текстовий коментар учня (обов'язково читається ШІ)
     if submission.comment_student:
@@ -2018,6 +2022,14 @@ def extract_submission_content(submission):
             u_title, u_content, u_err = fetch_url_content(u)
             if u_content:
                 text_parts.append(f"Вміст веб-сторінки за посиланням з коментаря:\n{u_content}")
+            elif u_err:
+                inaccessible_materials.append({
+                    'type': 'url',
+                    'target': u,
+                    'error': str(u_err),
+                    'reason': f"Не вдалося завантажити вміст сторінки за посиланням: {u_err}"
+                })
+                text_parts.append(f"[Примітка щодо посилання {u} з коментаря: не вдалося завантажити вміст сторінки ({u_err})]")
 
     # 2. Посилання на роботу (якщо є)
     if submission.link:
@@ -2028,6 +2040,12 @@ def extract_submission_content(submission):
             text_parts.append(f"Автоматично завантажений вміст сторінки ({link_url}):\n{u_content}")
         elif u_err:
             text_parts.append(f"[Примітка щодо посилання {link_url}: не вдалося завантажити вміст сторінки ({u_err})]")
+            inaccessible_materials.append({
+                'type': 'url',
+                'target': link_url,
+                'error': str(u_err),
+                'reason': f"Не вдалося завантажити вміст сторінки за посиланням: {u_err}"
+            })
 
     # 3. Прикріплені файли (один або декілька)
     submission_files = list(submission.files.all()) if hasattr(submission, 'files') and submission.files.exists() else ([submission] if submission.file else [])
@@ -2308,6 +2326,8 @@ def extract_submission_content(submission):
             else:
                 text_parts.append(f"[Прикріплено файл формату {ext} ({filename}, {file_size_kb:.1f} КБ)]")
 
+    setattr(submission, '_inaccessible_materials', inaccessible_materials)
+
     if not text_parts and not inline_media:
         return text_parts, inline_media, "Учень не додав жодного тексту, посилання чи придатного файлу для перевірки."
 
@@ -2549,12 +2569,12 @@ def extract_task_questions(text: str, explicit_count: int = 0) -> list[str]:
 
     # Патерн явної назви завдання («Завдання 1», «Практичне завдання 2», «Вправа 3»)
     task_named_pattern = re.compile(
-        r'^(?:[•\-\*]?\s*(?:(?:практичн[еа]\s+)?(?:завдання|вправа|пункт)\s*(\d+)[\.\:\)\–\—\-]?))\s*(.*)',
+        r'^(?:(?:📽️\s*)?(?:\[?\s*слайд\s*\d+\b[^\]\n\r]*\]?[\s\:\-]*)?)?(?:[•\-\*]?\s*(?:(?:практичн[еа]\s+)?(?:завдання|вправа|пункт)\s*(\d+)[\.\:\)\–\—\-]?))\s*(.*)',
         re.IGNORECASE
     )
 
     slide_header_pattern = re.compile(
-        r'^(?:\[?слайд\s*\d+\]?|практичн[еа]\s+завдання|практична\s+робота|домашнє\s+завдання|самостійна\s+робота|інструкційна\s+картка|тема\s*:|мета\s*:|обладнання\s*:|хід\s+роботи\s*:|[-=_]{3,})',
+        r'^(?:(?:📽️\s*)?\[?\s*слайд\s*\d+\b|практичн[еа]\s+завдання|практична\s+робота|домашнє\s+завдання|самостійна\s+робота|інструкційна\s+картка|тема\s*:|мета\s*:|обладнання\s*:|хід\s+роботи\s*:|[-=_]{3,})',
         re.IGNORECASE
     )
 
@@ -2567,19 +2587,21 @@ def extract_task_questions(text: str, explicit_count: int = 0) -> list[str]:
     explicit_named_tasks = []
     current_named = []
     for line in lines:
-        if slide_header_pattern.match(line):
-            if current_named:
-                explicit_named_tasks.append(' '.join(current_named).strip())
-                current_named = []
-            continue
-
         m = task_named_pattern.match(line)
         if m:
             if current_named:
                 explicit_named_tasks.append(' '.join(current_named).strip())
                 current_named = []
             current_named.append(line)
-        elif current_named and not line.startswith(('http://', 'https://')):
+            continue
+
+        if slide_header_pattern.match(line):
+            if current_named:
+                explicit_named_tasks.append(' '.join(current_named).strip())
+                current_named = []
+            continue
+
+        if current_named and not line.startswith(('http://', 'https://')):
             if len(current_named) < 4 and len(line) < 250:
                 current_named.append(line)
             else:
@@ -2616,26 +2638,28 @@ def extract_task_questions(text: str, explicit_count: int = 0) -> list[str]:
     target_lines = practical_lines if practical_lines else lines
 
     num_pattern = re.compile(
-        r'^(?:[•\-\*]?\s*(?:(?:\d+|[IVXLCDM]+)[\.\)\–\—\-]|(?:питання|завдання|вправа|відповідь|№)\s*\d+[\.\:\)\–\—\-]?))\s*(.*)',
+        r'^(?:(?:📽️\s*)?(?:\[?\s*слайд\s*\d+\b[^\]\n\r]*\]?[\s\:\-]*)?)?(?:[•\-\*]?\s*(?:(?:\d+|[IVXLCDM]+)[\.\)\–\—\-]|(?:питання|завдання|вправа|відповідь|№)\s*\d+[\.\:\)\–\—\-]?))\s*(.*)',
         re.IGNORECASE
     )
 
     questions = []
     current_q = []
     for line in target_lines:
-        if slide_header_pattern.match(line):
-            if current_q:
-                questions.append(' '.join(current_q).strip())
-                current_q = []
-            continue
-
         m = num_pattern.match(line)
         if m:
             if current_q:
                 questions.append(' '.join(current_q).strip())
                 current_q = []
             current_q.append(line)
-        elif current_q and not line.startswith(('http://', 'https://')):
+            continue
+
+        if slide_header_pattern.match(line):
+            if current_q:
+                questions.append(' '.join(current_q).strip())
+                current_q = []
+            continue
+
+        if current_q and not line.startswith(('http://', 'https://')):
             if len(current_q) < 4 and len(line) < 250:
                 current_q.append(line)
             else:
@@ -2666,6 +2690,669 @@ def extract_task_questions(text: str, explicit_count: int = 0) -> list[str]:
         return cleaned[:explicit_count]
 
     return cleaned[:30]
+
+
+SINGLE_TASK_KEYWORDS = [
+    'робота над проєктом', 'робота над проектом', 'робота з проєктом', 'робота з проектом',
+    'зробити проєкт', 'зробити проект', 'створити проєкт', 'створити проект',
+    'проєктна робота', 'проектна робота', 'виконання проєкту', 'виконання проекту',
+    'розробка проєкту', 'розробка проекту', 'написати проєкт', 'написати проект',
+    'проєкт', 'проект',
+    'створити презентацію', 'підготувати презентацію', 'розробити презентацію', 'презентація на тему',
+    'створити програму', 'написати програму', 'розробити програму', 'написання коду',
+    'виконати практичну роботу', 'практична робота', 'лабораторна робота',
+    'опрацювати тему', 'опрацювання теми', 'вивчення теми',
+    'підготувати повідомлення', 'підготувати доповідь', 'підготувати реферат',
+    'написати твір', 'написати есе', 'творча робота', 'дослідницька робота',
+    'створити буклет', 'створити веб-сторінку', 'створити сайт',
+    'створити базу даних', 'створити таблицю', 'індивідуальне завдання'
+]
+
+
+def sanitize_unassigned_task_mentions(
+    summary: str,
+    weaknesses: list[str],
+    feedback_comment: str,
+    allowed_task_nums: set[int] = None,
+    is_single_task: bool = False
+) -> tuple[str, list[str], str]:
+    """
+    Видаляє з відгуку ШІ (summary, weaknesses, feedback_comment) будь-які неправомірні
+    претензії щодо невиконання завдань, які не входили до Scope of Work.
+    """
+    clean_summary = summary or ""
+    clean_weaknesses = list(weaknesses) if weaknesses else []
+    clean_feedback = feedback_comment or ""
+
+    if is_single_task:
+        # Для одного комплексного завдання заборонені будь-які «виконано X з Y» та «не виконано завдання/вправу N»
+        ratio_pat = re.compile(
+            r'(?:\b(?:виконано|опрацьовано|зараховано|здано|надано)\s+(?:лише\s+)?(?:\d+|одне|два|три|чотири)\s+(?:з|із)\s+(?:\d+|двох|трьох|чотирьох|п\'яти)\s*(?:практичн\w*|завдан\w*|вправ\w*)?[\.\,\;]?|'
+            r'\b(?:\d+|одне|два|три|чотири)\s+(?:з|із)\s+(?:\d+|двох|трьох|чотирьох|п\'яти)\s+(?:завдан\w*|практичн\w*|вправ\w*)\b)',
+            re.IGNORECASE
+        )
+        task_fail_pat = re.compile(
+            r'(?:(?:не\s*виконано|пропущено|відсутнє|відсутня|відсутній|не\s*зроблено|не\s*надано|відсутня\s*відповідь\s*на|не\s*відповів\s*на)\s+(?:завдання|вправ[а-яіїє]*|питання|номер[а-яіїє]*|№|пункт[а-яіїє]*)\s*\d+[\.\,\;]?|'
+            r'(?:завдання|вправ[а-яіїє]*|питання|номер[а-яіїє]*|№|пункт[а-яіїє]*)\s*\d+\s*(?:не\s*виконано|пропущено|відсутнє|відсутня|не\s*зроблено|не\s*надано|залишилось\s*без\s*відповіді)[\.\,\;]?|'
+            r'(?:не\s*виконано|пропущено)\s*(?:всі|інші|решту)\s*(?:вправи|завдання|пункти)[\.\,\;]?)',
+            re.IGNORECASE
+        )
+
+        clean_weaknesses = [w for w in clean_weaknesses if not ratio_pat.search(str(w)) and not task_fail_pat.search(str(w))]
+        clean_summary = ratio_pat.sub('', clean_summary)
+        clean_summary = task_fail_pat.sub('', clean_summary)
+        clean_feedback = ratio_pat.sub('', clean_feedback)
+        clean_feedback = task_fail_pat.sub('', clean_feedback)
+
+    elif allowed_task_nums is not None:
+        # Дозволені лише завдання з allowed_task_nums
+        non_scoped_nums = [n for n in range(1, 51) if n not in allowed_task_nums]
+        for n in non_scoped_nums:
+            pat1 = re.compile(rf'(?:завдання|вправ[а-яіїє]*|номер[а-яіїє]*|№)\s*{n}\s*(?:не\s*виконано|пропущено|відсутнє|відсутня|не\s*зроблено|не\s*надано|залишилось\s*без\s*відповіді)', re.IGNORECASE)
+            pat2 = re.compile(rf'(?:не\s*виконано|пропущено|відсутнє|відсутня|пропущено\s*виконання|відсутня\s*відповідь\s*на|не\s*відповів\s*на)\s*(?:завдання|вправ[а-яіїє]*|номер[а-яіїє]*|№)\s*{n}\b', re.IGNORECASE)
+            clean_weaknesses = [w for w in clean_weaknesses if not pat1.search(str(w)) and not pat2.search(str(w))]
+            clean_summary = pat1.sub('', clean_summary)
+            clean_summary = pat2.sub('', clean_summary)
+            clean_feedback = pat1.sub('', clean_feedback)
+            clean_feedback = pat2.sub('', clean_feedback)
+
+        # Якщо загальна кількість у співвідношенні «X з Y» відрізняється від len(allowed_task_nums)
+        if len(allowed_task_nums) > 0:
+            wrong_total_pat = re.compile(
+                rf'\b(?:виконано|опрацьовано|зараховано)\s+\d+\s+(?:з|із)\s+(?!{len(allowed_task_nums)}\b)\d+\s*(?:завдан\w*|практичн\w*|вправ\w*)?',
+                re.IGNORECASE
+            )
+            clean_weaknesses = [w for w in clean_weaknesses if not wrong_total_pat.search(str(w))]
+            clean_summary = wrong_total_pat.sub('', clean_summary)
+            clean_feedback = wrong_total_pat.sub('', clean_feedback)
+
+    # Очищення від подвійних пробілів та некоректної пунктуації після видалення
+    clean_summary = re.sub(r'\s{2,}', ' ', clean_summary).strip(' ,;')
+    clean_feedback = re.sub(r'\s{2,}', ' ', clean_feedback).strip(' ,;')
+
+    return clean_summary, clean_weaknesses, clean_feedback
+
+
+def find_question_by_task_num(questions: list[str], target_num: int) -> str | None:
+    """
+    Знаходить конкретне формулювання завдання за його номером (наприклад, номер 2).
+    Шукає насамперед семантичні мітки («Вправа 2», «Завдання 2», «№ 2», «2.») у списку знайдених питань.
+    Запобігає хибному співставленню за позицією списку (num - 1), коли перший елемент
+    є заголовком розділу, темою або вступним теоретичним запитанням.
+    """
+    if not questions or target_num is None:
+        return None
+
+    t_str = str(target_num)
+
+    # 1. Пошук явних назв («Вправа 2», «Завдання 2», «Пункт 2», «Номер 2», «№ 2», «№2»)
+    named_pattern = re.compile(
+        rf'(?:\b(?:завдан[а-яіїє]*|вправ[а-яіїє]*|пункт[а-яіїє]*|номер[а-яіїє]*|exercise|task)\b|(?:завд|впр|ном)\b\.?|\bп\.\s*|№)\s*(?:№\s*)?{t_str}\b',
+        re.IGNORECASE
+    )
+    for q in questions:
+        if named_pattern.search(q):
+            return q
+
+    # 2. Пошук номера на початку рядка/питання (наприклад: «2.», «2)», «[Слайд X] 2.»)
+    start_num_pattern = re.compile(
+        rf'^(?:(?:📽️\s*)?(?:\[?\s*слайд\s*\d+\b[^\]\n\r]*\]?[\s\:\-]*)?)?(?:[•\-\*]\s*)?{t_str}[\.\)\:\–\—\-]\s+',
+        re.IGNORECASE
+    )
+    for q in questions:
+        if start_num_pattern.search(q):
+            return q
+
+    # 3. Пошук номера як окремого пункту всередині тексту
+    body_num_pattern = re.compile(rf'(?:^|\n|\b)\s*{t_str}[\.\)]\s+[А-Яа-яA-Za-z]', re.IGNORECASE)
+    for q in questions:
+        if body_num_pattern.search(q):
+            return q
+
+    # 4. Якщо жодне питання не має явного збігу з target_num, перевіряємо чи є елементи взагалі без номерів
+    # І перевіряємо індекс target_num - 1 ТІЛЬКИ ЯКЩО він не містить іншого явного номера!
+    idx_0b = target_num - 1
+    if 0 <= idx_0b < len(questions):
+        cand = questions[idx_0b]
+        has_other_named = re.search(r'(?:\b(?:завдан[а-яіїє]*|вправ[а-яіїє]*|пункт[а-яіїє]*|номер[а-яіїє]*)\b|(?:завд|впр|ном)\b\.?|\bп\.\s*|№)\s*(?:№\s*)?(\d+)\b', cand, re.IGNORECASE)
+        has_other_start = re.search(r'^(?:(?:📽️\s*)?(?:\[?\s*слайд\s*\d+\b[^\]\n\r]*\]?[\s\:\-]*)?)?(?:[•\-\*]\s*)?(\d+)[\.\)\:\–\—\-]\s+', cand, re.IGNORECASE)
+        other_val = None
+        if has_other_named:
+            other_val = int(has_other_named.group(1))
+        elif has_other_start:
+            other_val = int(has_other_start.group(1))
+
+        if other_val is None or other_val == target_num:
+            return cand
+
+    return None
+
+
+def extract_criteria_and_requirements_from_text(text: str) -> dict:
+    """
+    Виявляє та видобуває із тексту вчительських матеріалів (презентацій, PDF, документів) або опису:
+    - Критерії оцінювання (criteria: list[dict])
+    - Вимоги до оформлення та формату (format_requirements: list[str])
+    - Розподіл балів / шкалу (rubric_points: list[dict])
+    - Обов'язкові складові роботи (mandatory_components: list[str])
+    """
+    if not text or not text.strip():
+        return {
+            'criteria': [],
+            'format_requirements': [],
+            'rubric_points': [],
+            'mandatory_components': []
+        }
+
+    criteria = []
+    format_requirements = []
+    rubric_points = []
+    mandatory_components = []
+
+    lines = [l.strip() for l in text.strip().splitlines() if l.strip()]
+
+    criteria_header_pattern = re.compile(
+        r'^(?:[•\-\*#]*\s*)?(?:критерії(?:\s+оцінювання)?|вимоги(?:\s+до\s+(?:оформлення|роботи|результату|презентації|проєкту|виконання))?|шкала(?:\s+оцінювання)?|розподіл\s+балів|правила\s+оформлення|обов\'?язкові\s+складові)\s*[:\-\—]?',
+        re.IGNORECASE
+    )
+    stop_header_pattern = re.compile(
+        r'^(?:[•\-\*#]*\s*)?(?:теорія|приклад|хід\s+роботи|питання|література|джерела|додаткові\s+вправи|слайд\s*\d+|тема\s*:|мета\s*:)\b',
+        re.IGNORECASE
+    )
+
+    in_criteria_section = False
+    for line in lines:
+        if criteria_header_pattern.match(line):
+            in_criteria_section = True
+            after_col = line.split(':', 1)[-1].strip() if ':' in line else ""
+            if len(after_col) > 3 and not criteria_header_pattern.match(after_col):
+                line = after_col
+            else:
+                continue
+        elif stop_header_pattern.match(line):
+            in_criteria_section = False
+            continue
+
+        clean_item = line.strip(' \t•-*#–—;.,')
+        if not clean_item or len(clean_item) < 3:
+            continue
+
+        pts_match = re.search(r'\(?\s*(\d+(?:[.,]\d+)?)\s*(?:бал\w*|б\.)\s*\)?', clean_item, re.IGNORECASE)
+        pts = float(pts_match.group(1).replace(',', '.')) if pts_match else None
+
+        is_format = bool(re.search(r'\b(?:слайд\w*|шрифт\w*|формат\w*|сторінк\w*|титульн\w*|розмір\w*|pdf|docx|презентац\w*)\b', clean_item, re.IGNORECASE))
+        is_conclusion = bool(re.search(r'\b(?:висновок\w*|підсумок\w*)\b', clean_item, re.IGNORECASE))
+        is_sources = bool(re.search(r'\b(?:джерел\w*|літератур\w*)\b', clean_item, re.IGNORECASE))
+        is_illustration = bool(re.search(r'\b(?:ілюстрац\w*|малюнк\w*|зображен\w*|фото)\b', clean_item, re.IGNORECASE))
+
+        if in_criteria_section or pts is not None or (is_format and any(k in clean_item.lower() for k in ['не менше', 'мінімум', 'наявність', 'обов', 'титульний'])):
+            rule_entry = {
+                'name': clean_item,
+                'points': pts,
+                'is_format': is_format,
+                'is_conclusion': is_conclusion,
+                'is_sources': is_sources,
+                'is_illustration': is_illustration
+            }
+            if rule_entry not in criteria:
+                criteria.append(rule_entry)
+
+            if pts is not None:
+                rubric_points.append({'item': clean_item, 'points': pts})
+            if is_format:
+                format_requirements.append(clean_item)
+            if is_conclusion or is_sources or is_illustration or 'титульний' in clean_item.lower():
+                mandatory_components.append(clean_item)
+
+    return {
+        'criteria': criteria,
+        'format_requirements': format_requirements,
+        'rubric_points': rubric_points,
+        'mandatory_components': mandatory_components
+    }
+
+
+def analyze_student_comment_nuance(
+    comment_student: str,
+    desc: str = "",
+    custom_criteria: str = "",
+    format_requirements: list[str] = None
+) -> dict:
+    """
+    Аналізує коментар учня на наявність:
+    1. Змістовного наповнення (висновки, підсумки, пояснення, розв'язки).
+    2. Порожніх непідтверджених декларацій («Я все зробив», «Я виконав усі вимоги»).
+    3. Суворих обмежень вчителя щодо розміщення (наприклад, вимога мати висновок САМЕ НА СЛАЙДІ презентації).
+    """
+    comment = (comment_student or "").strip()
+    if not comment:
+        return {
+            'has_comment': False,
+            'has_substance': False,
+            'is_unsubstantiated_declaration': False,
+            'substance_type': None,
+            'conclusion_text': None,
+            'format_strictly_requires_file': False,
+            'guidance': ''
+        }
+
+    combined_instr = f"{desc} {custom_criteria} {' '.join(format_requirements or [])}".lower()
+
+    # 1. Перевірка на непідтверджену декларацію (без реального змісту роботи)
+    empty_claims = [
+        'я все зробив', 'я все виконав', 'я виконав усі вимоги', 'я зробив усі завдання',
+        'все правильно', 'робота готова', 'ось моя робота', 'все зроблено',
+        'я все написав', 'завдання виконано', 'я постарався', 'поставте 12'
+    ]
+    cleaned_lower = re.sub(r'[^\w\s]', '', comment.lower()).strip()
+    is_empty_declaration = (
+        len(comment) < 120 and
+        any(claim in cleaned_lower for claim in empty_claims) and
+        not any(kw in cleaned_lower for kw in ['отже', 'тому що', 'в результаті', 'дослідивши', 'висновок', 'вважаю'])
+    )
+
+    # 2. Перевірка наявності висновку
+    has_conclusion = bool(re.search(
+        r'\b(?:висновок\w*|підсумок\w*|підсумовуючи|отже|в результаті|дійшов висновку|зробив висновок)\b',
+        comment,
+        re.IGNORECASE
+    )) or (len(comment) > 40 and not is_empty_declaration and any(w in comment.lower() for w in ['оскільки', 'тому що', 'показав, що', 'дозволяє зробити висновок']))
+
+    # 3. Перевірка, чи вчитель прямо вимагав наявність висновку САМЕ В ПРЕЗЕНТАЦІЇ / НА СЛАЙДІ
+    format_strictly_requires_file = bool(re.search(
+        r'(?:висновок[^\n\r]{0,40}(?:слайд[іау]|презентаці[їі])|(?:слайд[іау]|презентаці[їі])[^\n\r]{0,40}висновок|висновок\s+у\s+документі)',
+        combined_instr,
+        re.IGNORECASE
+    ))
+
+    substance_type = 'conclusion' if has_conclusion else ('explanation' if len(comment) > 20 and not is_empty_declaration else 'empty_declaration')
+
+    guidance = ""
+    if has_conclusion:
+        if format_strictly_requires_file:
+            guidance = (
+                "Учень надав змістовний висновок у коментарі до здачі. Проте за прямою вимогою вчителя висновок "
+                "має міститися безпосередньо на слайді презентації. Зміст зарахувати, вимогу оформлення позначити як частково "
+                "виконану, дати рекомендацію перенести висновок на слайд презентації. НЕ заявляти, що висновок повністю відсутній!"
+            )
+        else:
+            guidance = (
+                "Учень надав змістовний висновок у коментарі до здачі. Спосіб подання дозволений, тому змістовий критерій "
+                "наявності висновку вважається повністю виконаним. НЕ знижувати оцінку за відсутність висновку у файлі!"
+            )
+    elif is_empty_declaration:
+        guidance = (
+            "Коментар учня є загальною непідтвердженою заявою («все виконав»). Не зараховувати як доказ виконання критеріїв "
+            "без наявності фактичного підтвердження у зданих матеріалах."
+        )
+
+    return {
+        'has_comment': True,
+        'has_substance': (not is_empty_declaration and len(comment) >= 15),
+        'is_unsubstantiated_declaration': is_empty_declaration,
+        'substance_type': substance_type,
+        'conclusion_text': comment if has_conclusion else None,
+        'format_strictly_requires_file': format_strictly_requires_file,
+        'guidance': guidance
+    }
+
+
+def resolve_assignment_scope(
+    assignment_title: str = "",
+    assignment_desc: str = "",
+    custom_criteria: str = "",
+    primary_task_content: list[str] = None,
+    teacher_files_content: list[str] = None,
+) -> dict:
+    """
+    Визначає точний Scope of Work за принципом суворого пріоритету:
+    ПРІОРИТЕТ 1 — явна інструкція вчителя для конкретного Assignment (опис/назва).
+    ПРІОРИТЕТ 2 — індивідуальні критерії оцінювання (custom_criteria).
+    ПРІОРИТЕТ 3 — основний файл із умовою (primary_task_content).
+    ПРІОРИТЕТ 4 — прикріплені файли вчителя (teacher_files_content), ТІЛЬКИ якщо є джерелом умови.
+    ПРІОРИТЕТ 5 — загальні критерії НУШ (лише для якості, ніколи не створюють завдань).
+    """
+    title = (assignment_title or "").strip()
+    desc = (assignment_desc or "").strip()
+    combined_desc_title = f"{title} {desc}".strip().lower()
+    desc_lower = desc.lower()
+
+    # 1. Індивідуальні критерії вчителя (Пріоритет 2)
+    custom_criteria_rules = []
+    if custom_criteria and custom_criteria.strip():
+        for line in custom_criteria.strip().splitlines():
+            line_s = line.strip(' \t\n\r-*•;')
+            if len(line_s) > 2:
+                custom_criteria_rules.append(line_s)
+
+    # 2. Критерії з файлів учителя та основного файлу (Пріоритет 3 та 4)
+    all_files_text = "\n".join(teacher_files_content) if teacher_files_content else ""
+    file_criteria_extracted = extract_criteria_and_requirements_from_text(all_files_text)
+    primary_task_text = "\n".join(primary_task_content) if primary_task_content else ""
+    primary_criteria_extracted = extract_criteria_and_requirements_from_text(primary_task_text)
+
+    compiled_criteria = []
+    for cr in custom_criteria_rules:
+        compiled_criteria.append({
+            'name': cr,
+            'source': 'custom_criteria',
+            'weight': None,
+            'evaluation_method': 'individual_check'
+        })
+    for fc in (primary_criteria_extracted.get('criteria', []) + file_criteria_extracted.get('criteria', [])):
+        c_name = fc['name'] if isinstance(fc, dict) else str(fc)
+        if not any(c_name.lower() in existing['name'].lower() or existing['name'].lower() in c_name.lower() for existing in compiled_criteria):
+            compiled_criteria.append({
+                'name': c_name,
+                'source': 'teacher_file',
+                'weight': fc.get('points') if isinstance(fc, dict) else None,
+                'evaluation_method': 'file_criteria_check'
+            })
+
+    # Виявлення явних вимог з опису вчителя (Пріоритет 1, наприклад: «Зробити висновок», «Висновок є обов'язковим»)
+    if desc:
+        desc_sentences = re.split(r'[\.\;\!\?]\s+|\n+', desc)
+        for s in desc_sentences:
+            s_clean = s.strip(' \t\n\r-*•;')
+            if re.search(r'\b(?:висновок|підсумок)\b', s_clean, re.IGNORECASE) and len(s_clean) >= 5:
+                if not any(s_clean.lower() in existing['name'].lower() or existing['name'].lower() in s_clean.lower() for existing in compiled_criteria):
+                    compiled_criteria.append({
+                        'name': s_clean,
+                        'source': 'teacher_instruction',
+                        'weight': None,
+                        'evaluation_method': 'individual_check'
+                    })
+
+    # 3. Перевірка конкретних номерів завдань (Пріоритет 1)
+    teacher_specific_task_nums = parse_teacher_specific_task_numbers(desc)
+    explicit_count = detect_expected_task_count(desc)
+
+    def _build_evaluation_plan(assigned_list, ignored_list, scope_src, assignment_type="standard", specific_nums=None, ambiguities=None):
+        reqs = list(set(file_criteria_extracted.get('format_requirements', []) + primary_criteria_extracted.get('format_requirements', [])))
+        return {
+            'assignment_type': assignment_type,
+            'assignment_description': desc or title or "Навчальне завдання",
+            'task_summary': desc or title or "Навчальне завдання",
+            'scope_source': scope_src,
+            'assigned_tasks': assigned_list,
+            'assigned_task_count': len(assigned_list),
+            'specific_task_numbers': specific_nums if specific_nums is not None else (teacher_specific_task_nums or []),
+            'requirements': reqs,
+            'custom_criteria': custom_criteria_rules,
+            'file_based_criteria': file_criteria_extracted.get('criteria', []) + primary_criteria_extracted.get('criteria', []),
+            'general_criteria': [],
+            'criteria': compiled_criteria,
+            'format_requirements': reqs,
+            'points_distribution': file_criteria_extracted.get('rubric_points', []) + primary_criteria_extracted.get('rubric_points', []),
+            'ignored_found_tasks': [item['description'] for item in ignored_list],
+            'unassigned_materials_ignored': [item['description'] for item in ignored_list],
+            'evidence_sources': ['student_file', 'student_comment', 'student_link'],
+            'ambiguities_or_conflicts': ambiguities or []
+        }
+
+    # 4. Перевірка конкретного слайду або сторінки (наприклад: «зі слайду 15», «на слайді 15»)
+    target_slide_num = None
+    slide_m = re.search(r'(?:зі?\s+|на\s+)?(?:слайд[уаі]|стор(?:інц[іях]|\.)?)\s*(\d+)', desc_lower)
+    if slide_m:
+        try:
+            target_slide_num = int(slide_m.group(1))
+        except (ValueError, TypeError):
+            pass
+
+    # 5. Виявлення матеріалів уроку для пошуку завдань
+    raw_found_questions = []
+    if teacher_files_content:
+        raw_found_questions = extract_task_questions(all_files_text)
+
+    # 6. Перевірка, чи в описі прямо міститься список завдань («1. ... 2. ...»)
+    desc_questions = extract_task_questions(desc, explicit_count=explicit_count)
+
+    # ── СЦЕНАРІЙ А: Вчитель вказав конкретний слайд (наприклад: Слайд 15) ──
+    if target_slide_num and not teacher_specific_task_nums:
+        slide_task_text = ""
+        if all_files_text:
+            slide_pattern = re.compile(
+                rf'(?:📽️\s*)?(?:\[?\s*слайд\s*{target_slide_num}\b[^\]\n\r]*\]?[\s\:\-]*)(.*?)(?=(?:📽️\s*)?\[?\s*слайд\s*\d+\b|\Z)',
+                re.IGNORECASE | re.DOTALL
+            )
+            sm = slide_pattern.search(all_files_text)
+            if sm:
+                slide_task_text = sm.group(1).strip()
+
+        clean_slide_task = slide_task_text or f"Домашнє завдання зі слайду {target_slide_num}"
+        ignored = []
+        for q in raw_found_questions:
+            if str(target_slide_num) not in q:
+                ignored.append({
+                    'description': q,
+                    'reason': f"Завдання не належить до зазначеного вчителем слайду {target_slide_num}"
+                })
+
+        assigned_tasks = [{
+            'task_id': 'task_1',
+            'task_num': None,
+            'description': f"Завдання зі слайду {target_slide_num}: {clean_slide_task[:200]}",
+            'requirements': custom_criteria_rules
+        }]
+        eval_plan = _build_evaluation_plan(assigned_tasks, ignored, 'teacher_description_and_slide', assignment_type='slide_specific')
+
+        return {
+            'scope_source': 'teacher_description_and_slide',
+            'is_single_complex_task': True,
+            'assigned_task_count': 1,
+            'assigned_tasks': assigned_tasks,
+            'ignored_found_tasks': ignored,
+            'custom_criteria_rules': custom_criteria_rules,
+            'file_criteria_rules': compiled_criteria,
+            'evaluation_plan': eval_plan,
+            'format_requirements': eval_plan['format_requirements'],
+            'points_distribution': eval_plan['points_distribution'],
+            'teacher_specific_task_nums': [],
+            'task_questions': [clean_slide_task[:300]],
+            'clean_instruction_text': desc or f"Завдання зі слайду {target_slide_num}"
+        }
+
+    # ── СЦЕНАРІЙ Б: Вчитель вказав конкретні номери («Виконати вправу 2» або «Завдання 1, 2 та 3») ──
+    if teacher_specific_task_nums:
+        scoped_questions = []
+        if raw_found_questions:
+            for num in teacher_specific_task_nums:
+                matched_q = find_question_by_task_num(raw_found_questions, num)
+                if matched_q:
+                    scoped_questions.append(matched_q)
+                else:
+                    scoped_questions.append(f"Завдання {num}")
+        else:
+            scoped_questions = [f"Завдання {num}" for num in teacher_specific_task_nums]
+
+        ignored = []
+        for q in raw_found_questions:
+            if q not in scoped_questions:
+                ignored.append({
+                    'description': q,
+                    'reason': f"Не входить до списку конкретно заданих вчителем номерів ({teacher_specific_task_nums})"
+                })
+
+        assigned_tasks = []
+        for idx, num in enumerate(teacher_specific_task_nums, 1):
+            q_desc = scoped_questions[idx - 1] if idx - 1 < len(scoped_questions) else f"Завдання {num}"
+            assigned_tasks.append({
+                'task_id': f"task_{idx}",
+                'task_num': num,
+                'description': q_desc,
+                'requirements': custom_criteria_rules if len(teacher_specific_task_nums) == 1 else []
+            })
+
+        eval_plan = _build_evaluation_plan(assigned_tasks, ignored, 'teacher_description', assignment_type='specific_task_numbers', specific_nums=teacher_specific_task_nums)
+
+        return {
+            'scope_source': 'teacher_description',
+            'is_single_complex_task': (len(teacher_specific_task_nums) == 1),
+            'assigned_task_count': len(teacher_specific_task_nums),
+            'assigned_tasks': assigned_tasks,
+            'ignored_found_tasks': ignored,
+            'custom_criteria_rules': custom_criteria_rules,
+            'file_criteria_rules': compiled_criteria,
+            'evaluation_plan': eval_plan,
+            'format_requirements': eval_plan['format_requirements'],
+            'points_distribution': eval_plan['points_distribution'],
+            'teacher_specific_task_nums': teacher_specific_task_nums,
+            'task_questions': scoped_questions,
+            'clean_instruction_text': desc
+        }
+
+    # ── СЦЕНАРІЙ В: Вчитель вказав конкретний перелік завдань безпосередньо в описі ──
+    if desc_questions and len(desc_questions) >= 2:
+        assigned_tasks = []
+        for idx, q in enumerate(desc_questions, 1):
+            assigned_tasks.append({
+                'task_id': f"task_{idx}",
+                'task_num': idx,
+                'description': q,
+                'requirements': []
+            })
+        ignored = []
+        for q in raw_found_questions:
+            if q not in desc_questions:
+                ignored.append({
+                    'description': q,
+                    'reason': 'Вправа з додаткових матеріалів не була вказана у переліку завдань вчителя'
+                })
+        eval_plan = _build_evaluation_plan(assigned_tasks, ignored, 'teacher_description', assignment_type='explicit_list_in_description')
+
+        return {
+            'scope_source': 'teacher_description',
+            'is_single_complex_task': False,
+            'assigned_task_count': len(desc_questions),
+            'assigned_tasks': assigned_tasks,
+            'ignored_found_tasks': ignored,
+            'custom_criteria_rules': custom_criteria_rules,
+            'file_criteria_rules': compiled_criteria,
+            'evaluation_plan': eval_plan,
+            'format_requirements': eval_plan['format_requirements'],
+            'points_distribution': eval_plan['points_distribution'],
+            'teacher_specific_task_nums': list(range(1, len(desc_questions) + 1)),
+            'task_questions': desc_questions,
+            'clean_instruction_text': desc
+        }
+
+    # ── СЦЕНАРІЙ Г: Вчитель явно зазначив кількість завдань (наприклад: «виконати всі 3 завдання») ──
+    if explicit_count > 1:
+        source_qs = []
+        ambiguities = []
+        questions_pool = raw_found_questions or (extract_task_questions(primary_task_text) if primary_task_content else [])
+        if questions_pool:
+            for num in range(1, explicit_count + 1):
+                matched = find_question_by_task_num(questions_pool, num)
+                if matched and matched not in source_qs:
+                    source_qs.append(matched)
+                elif len(questions_pool) >= num and questions_pool[num - 1] not in source_qs:
+                    source_qs.append(questions_pool[num - 1])
+                else:
+                    source_qs.append(f"Завдання {num}")
+                    ambiguities.append(f"Завдання {num} не має точного збігу у файлах")
+        while len(source_qs) < explicit_count:
+            source_qs.append(f"Завдання {len(source_qs) + 1}")
+
+        ignored = []
+        for q in raw_found_questions:
+            if q not in source_qs:
+                ignored.append({
+                    'description': q,
+                    'reason': f"Кількість завдань обмежена прямою вказівкою вчителя ({explicit_count} завд.)"
+                })
+
+        assigned_tasks = []
+        for idx, q in enumerate(source_qs, 1):
+            assigned_tasks.append({
+                'task_id': f"task_{idx}",
+                'task_num': idx,
+                'description': q,
+                'requirements': []
+            })
+
+        eval_plan = _build_evaluation_plan(assigned_tasks, ignored, 'teacher_description', assignment_type='explicit_count', ambiguities=ambiguities)
+
+        return {
+            'scope_source': 'teacher_description',
+            'is_single_complex_task': False,
+            'assigned_task_count': explicit_count,
+            'assigned_tasks': assigned_tasks,
+            'ignored_found_tasks': ignored,
+            'custom_criteria_rules': custom_criteria_rules,
+            'file_criteria_rules': compiled_criteria,
+            'evaluation_plan': eval_plan,
+            'format_requirements': eval_plan['format_requirements'],
+            'points_distribution': eval_plan['points_distribution'],
+            'teacher_specific_task_nums': list(range(1, explicit_count + 1)),
+            'task_questions': source_qs,
+            'clean_instruction_text': desc
+        }
+
+    # ── СЦЕНАРІЙ Ґ: Основний файл завдання (Пріоритет 3) з явною вказівкою ──
+    primary_questions = []
+    if primary_task_content:
+        primary_questions = extract_task_questions(primary_task_text)
+
+    if primary_questions and len(primary_questions) >= 2 and any(kw in desc_lower for kw in ['у файлі', 'в файлі', 'завдання з файлу', 'згідно з файлом']):
+        assigned_tasks = []
+        for idx, q in enumerate(primary_questions, 1):
+            assigned_tasks.append({
+                'task_id': f"task_{idx}",
+                'task_num': idx,
+                'description': q,
+                'requirements': []
+            })
+        eval_plan = _build_evaluation_plan(assigned_tasks, [], 'primary_task_file', assignment_type='primary_task_file')
+
+        return {
+            'scope_source': 'primary_task_file',
+            'is_single_complex_task': False,
+            'assigned_task_count': len(primary_questions),
+            'assigned_tasks': assigned_tasks,
+            'ignored_found_tasks': [],
+            'custom_criteria_rules': custom_criteria_rules,
+            'file_criteria_rules': compiled_criteria,
+            'evaluation_plan': eval_plan,
+            'format_requirements': eval_plan['format_requirements'],
+            'points_distribution': eval_plan['points_distribution'],
+            'teacher_specific_task_nums': list(range(1, len(primary_questions) + 1)),
+            'task_questions': primary_questions,
+            'clean_instruction_text': desc or "Завдання з основного файлу"
+        }
+
+    # ── СЦЕНАРІЙ Д: Одне комплексне завдання або ПРАВИЛО НЕВИЗНАЧЕНОСТІ ──
+    task_label = desc or title or "Навчальне комплексне завдання"
+    ignored = []
+    for q in raw_found_questions:
+        ignored.append({
+            'description': q,
+            'reason': 'Матеріал або вправа з навчального файлу не була явно задана вчителем як обов\'язкове завдання (Правило невизначеності)'
+        })
+
+    assigned_tasks = [{
+        'task_id': 'task_1',
+        'task_num': None,
+        'description': task_label,
+        'requirements': custom_criteria_rules
+    }]
+    eval_plan = _build_evaluation_plan(assigned_tasks, ignored, 'teacher_description', assignment_type='single_complex_task')
+
+    return {
+        'scope_source': 'teacher_description',
+        'is_single_complex_task': True,
+        'assigned_task_count': 1,
+        'assigned_tasks': assigned_tasks,
+        'ignored_found_tasks': ignored,
+        'custom_criteria_rules': custom_criteria_rules,
+        'file_criteria_rules': compiled_criteria,
+        'evaluation_plan': eval_plan,
+        'format_requirements': eval_plan['format_requirements'],
+        'points_distribution': eval_plan['points_distribution'],
+        'teacher_specific_task_nums': [],
+        'task_questions': [],
+        'clean_instruction_text': task_label
+    }
 
 
 
@@ -2937,81 +3624,83 @@ def apply_multi_task_evaluation_guardrail(
     feedback_comment: str,
     answered_count: int = 0,
     teacher_scoped_task_nums: list[int] | None = None,
+    scope: dict | None = None,
 ) -> tuple[str, str, list[dict], list[float], int | None, str, list[str], list[str], str]:
     """
     Педагогічний захист від галюцинацій ШІ при оцінюванні багатозадачних робіт:
-    1. Перевіряє кількість завдань в умові/матеріалах вчителя.
-    2. Якщо учень здав лише частину завдань (наприклад, 2 із 3), КАТЕГОРИЧНО блокує
-       оцінки Високого рівня (10-12 балів).
-    3. Встановлює сувору стелю балів НУШ:
+    1. Перевіряє кількість завдань в умові вчителя (Scope of Work).
+    2. Якщо це одне комплексне завдання (наприклад, «Робота над проєктом», «Створити презентацію»):
+       multi-task ceiling НЕ застосовується, очищаються будь-які галюцинації про «1 з 4» чи пропущені вправи з матеріалів.
+    3. Якщо учень здав лише частину дійсно заданих вчителем завдань (наприклад, 2 із 3 заданих):
+       встановлює сувору стелю балів НУШ:
        - 2 із 3 завдань (~66%) -> максимум 8 балів (Достатній рівень).
        - 1 із 3 завдань (~33%) -> максимум 5 балів (Середній рівень).
        - 50% обсягу -> максимум 7 балів.
-    4. Запобігає подвійному зарахуванню одного фрагмента тексту за два різні завдання
-       (наприклад, коли одне англійське речення ШІ зарахував і як тлумачення зі словника,
-       і як переклад).
+    4. Запобігає подвійному зарахуванню одного фрагмента тексту за два різні завдання.
     5. Виправляє висновок (summary), сильні сторони (strengths) та відгук (feedback_comment),
-       гарантуючи зазначення пропущених завдань у зауваженнях (weaknesses).
+       гарантуючи зазначення дійсно пропущених завдань у зауваженнях (weaknesses).
     """
     if suggested_grade == 'Доопрацювати':
+        if scope and scope.get('is_single_complex_task'):
+            summary, weaknesses, feedback_comment = sanitize_unassigned_task_mentions(summary, weaknesses, feedback_comment, is_single_task=True)
+        elif teacher_scoped_task_nums:
+            summary, weaknesses, feedback_comment = sanitize_unassigned_task_mentions(summary, weaknesses, feedback_comment, allowed_task_nums=set(teacher_scoped_task_nums))
         return suggested_grade, level, clean_gr_results, numeric_gr_grades, avg_gr_grade, summary, strengths, weaknesses, feedback_comment
 
-    # 1. Перевірка, чи це завдання на вибір (учень мав обрати 1 завдання)
+    # 1. Перевірка, чи це одне комплексне завдання (Пріоритет Scope of Work)
+    if scope and scope.get('is_single_complex_task'):
+        summary, weaknesses, feedback_comment = sanitize_unassigned_task_mentions(
+            summary, weaknesses, feedback_comment, is_single_task=True
+        )
+        return suggested_grade, level, clean_gr_results, numeric_gr_grades, avg_gr_grade, summary, strengths, weaknesses, feedback_comment
+
+    # 2. Перевірка, чи це завдання на вибір (учень мав обрати 1 завдання)
     instr_lower = (teacher_instructions_text or "").lower()
     is_choice = any(kw in instr_lower for kw in [
         'на вибір', 'одне завдання на вибір', 'будь-яке завдання на вибір',
         'одне з наведених', 'одне із наведених', 'виберіть одне', 'обери одне'
     ])
     if is_choice:
+        summary, weaknesses, feedback_comment = sanitize_unassigned_task_mentions(
+            summary, weaknesses, feedback_comment, is_single_task=True
+        )
         return suggested_grade, level, clean_gr_results, numeric_gr_grades, avg_gr_grade, summary, strengths, weaknesses, feedback_comment
 
-    # 2. Визначаємо очікувану кількість завдань (N)
-    # НАЙВИЩИЙ ПРІОРИТЕТ: якщо вчитель явно задав конкретні номери завдань —
-    # total_tasks = кількість заданих, незалежно від вмісту файлів.
+    # 3. Визначаємо очікувану кількість завдань (N)
+    # НАЙВИЩИЙ ПРІОРИТЕТ: явна вказівка вчителя
     ai_eval_list = result_json.get('tasks_evaluated') or []
     ai_eval_len = len(ai_eval_list) if isinstance(ai_eval_list, list) else 0
 
     if teacher_scoped_task_nums:
         total_tasks = len(teacher_scoped_task_nums)
+    elif scope and scope.get('teacher_specific_task_nums'):
+        teacher_scoped_task_nums = scope['teacher_specific_task_nums']
+        total_tasks = len(teacher_scoped_task_nums)
+    elif scope and scope.get('assigned_task_count'):
+        total_tasks = scope['assigned_task_count']
+        if not teacher_scoped_task_nums:
+            teacher_scoped_task_nums = list(range(1, total_tasks + 1))
     else:
         explicit_count = detect_expected_task_count(teacher_instructions_text or "")
-        qs_count = len(task_questions) if task_questions else 0
-
-        ai_total = 0
-        try:
-            ai_total = int(result_json.get('tasks_total_count') or 0)
-        except (ValueError, TypeError):
-            pass
-
         if explicit_count > 0:
             total_tasks = explicit_count
         else:
             named_tasks = [q for q in task_questions if re.search(r'^(?:практичне\s+)?(?:завдання|вправа)\s*\d+', q, re.IGNORECASE)]
-            if len(named_tasks) >= 2:
+            if len(named_tasks) >= 2 and any(kw in (teacher_instructions_text or "").lower() for kw in ['завдання', 'вправи', 'виконайте', 'роботи']):
                 total_tasks = len(named_tasks)
-            elif 0 < ai_total <= 12:
-                total_tasks = ai_total
-            elif 0 < ai_eval_len <= 12:
-                total_tasks = ai_eval_len
-            elif 0 < qs_count <= 12:
-                total_tasks = qs_count
             else:
-                total_tasks = min(qs_count, 10) if qs_count else 0
+                total_tasks = 1
 
-    # Якщо вчитель задав конкретні номери завдань (наприклад «виконати вправа 2»),
-    # будь-які інші номери з файлів/матеріалів є незаданими — видаляємо скарги на них!
+    # Санація зауважень щодо незаданих номерів завдань
     if teacher_scoped_task_nums:
-        non_scoped_nums = [n for n in range(1, 30) if n not in teacher_scoped_task_nums]
-        for n in non_scoped_nums:
-            pat = re.compile(rf'(?:завдання|вправ[а-яіїє]*|номер[а-яіїє]*|№)\s*{n}\s*(?:не\s*виконано|пропущено|відсутнє|не\s*зроблено|не\s*надано|залишилось\s*без\s*відповіді)', re.IGNORECASE)
-            pat_rev = re.compile(rf'(?:не\s*виконано|пропущено|відсутнє|пропущено\s*виконання|відсутня\s*відповідь\s*на|не\s*відповів\s*на)\s*(?:завдання|вправ[а-яіїє]*|номер[а-яіїє]*|№)\s*{n}\b', re.IGNORECASE)
-            weaknesses = [w for w in weaknesses if not pat.search(w) and not pat_rev.search(w)]
-            summary = pat.sub('', summary)
-            summary = pat_rev.sub('', summary)
-            feedback_comment = pat.sub('', feedback_comment)
-            feedback_comment = pat_rev.sub('', feedback_comment)
+        summary, weaknesses, feedback_comment = sanitize_unassigned_task_mentions(
+            summary, weaknesses, feedback_comment, allowed_task_nums=set(teacher_scoped_task_nums)
+        )
 
     if total_tasks < 2:
+        summary, weaknesses, feedback_comment = sanitize_unassigned_task_mentions(
+            summary, weaknesses, feedback_comment, is_single_task=True
+        )
         return suggested_grade, level, clean_gr_results, numeric_gr_grades, avg_gr_grade, summary, strengths, weaknesses, feedback_comment
 
     # 3. Аналіз виконаних завдань (K)
@@ -3062,8 +3751,8 @@ def apply_multi_task_evaluation_guardrail(
             except (ValueError, TypeError):
                 pass
 
-    if teacher_scoped_task_nums:
-        detected_missing_nums = {n for n in detected_missing_nums if n in teacher_scoped_task_nums}
+    allowed_nums = set(teacher_scoped_task_nums) if teacher_scoped_task_nums else set(range(1, total_tasks + 1))
+    detected_missing_nums = {n for n in detected_missing_nums if n in allowed_nums}
 
     # 4. Перевірка структури зданої роботи учня (абзаци та зміст)
     raw_text = student_raw_text or ""
@@ -3363,6 +4052,7 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
     class_name = submission.class_group.name if submission.class_group else "Шкільний клас"
     assignment_title = assignment.title if assignment else "Самостійна робота"
     assignment_desc = assignment.description if assignment else "Вимоги до виконання роботи."
+    custom_criteria = (assignment.custom_criteria or "") if assignment else ""
     preset_name_display = selected_preset.name if selected_preset else "Критерії НУШ"
 
     # Збираємо запит
@@ -3652,17 +4342,13 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
             prompt_lines.append("МАТЕРІАЛИ ДО УРОКУ / ДОВІДКОВІ ФАЙЛИ ВЧИТЕЛЯ (ПРЕЗЕНТАЦІЇ, PDF, ЗОБРАЖЕННЯ, ДОКУМЕНТИ):")
             if not primary_task_content:
                 prompt_lines.append(
-                    "⚠️ КРИТИЧНО ДЛЯ ШІ: ПОШУК ЗАВДАННЯ В ЦИХ МАТЕРІАЛАХ:\n"
-                    "1. Вчитель прикріпив матеріали (презентацію .pptx/.pdf, документ або зображення). Якщо текстовий опис містить коротку чи загальну вказівку (наприклад: «Опрацювати презентацію», «Виконати завдання», «Домашнє завдання на слайді» або просто тему уроку) — САМЕ В ЦИХ ФАЙЛАХ РОЗТАШОВАНО ЗАВДАННЯ ДЛЯ УЧНЯ!\n"
-                    "2. ДЕ ШУКАТИ ЗАВДАННЯ:\n"
-                    "   * У презентаціях (.pptx, .ppt, .odp, PDF): уважно перевір ФІНАЛЬНІ/ОСТАННІ СЛАЙДИ під заголовками «Домашнє завдання», «Практична робота», «Завдання до уроку», «Вправи для закріплення», «Питання для самоперевірки», або практичні завдання на окремих слайдах;\n"
-                    "   * У PDF та документах: знайди блок вправ, практичних робіт або запитань;\n"
-                    "   * На зображеннях: розглянь завдання з фото підручника чи схеми.\n"
-                    "3. КОНТЕКСТ УРОКУ: слайди та сторінки містять теорію, терміни, правила та приклади уроку. Враховуй цей навчальний контекст при оцінці правильності та повноти відповіді учня.\n"
+                    "⚠️ ПОШУК ЗАВДАННЯ В ЦИХ МАТЕРІАЛАХ ВЧИТЕЛЯ ТА РОЗМЕЖУВАННЯ SCOPE OF WORK:\n"
+                    "1. КОНТЕКСТ УРОКУ: матеріали містять теоретичну інформацію, правила, зразки, ілюстрації та навчальні вправи для роботи в класі. Вони є контекстом теми, а НЕ автоматичним переліком обов'язкових завдань.\n"
+                    "2. ГОЛОВНЕ ПРАВИЛО: Кількість знайдених у презентації/файлі вправ НЕ Є кількістю обов'язкових завдань учня! Якщо вчитель задав проєкт або комплексне завдання («Робота над проєктом», «Створити презентацію», «Створити програму», «Виконати практичну роботу») — оцінюй саме проєкт за темою, а не вимагай виконання всіх вправ зі слайдів!\n"
+                    "3. Тільки якщо вчитель прямо дав вказівку виконати вправи чи домашнє завдання з файлу (наприклад, перевірити ФІНАЛЬНІ/ОСТАННІ СЛАЙДИ або виконати завдання зі слайду 15), вони входять до Scope of Work.\n"
                     "4. ЗАБОРОНА ПОМИЛКОВОГО «ДОПРАЦЮВАННЯ»:\n"
-                    "   * Якщо відповідь учня відповідає завданням, запитанням або вправам зі слайдів презентації, PDF чи зображення вчителя — завдання ПОВНІСТЮ ЗРОЗУМІЛЕ ТА ВИЗНАЧЕНЕ!\n"
-                    "   * СУВОРО ЗАБОРОНЕНО ставити 'unclear_task: true' або повертати роботу на 'Доопрацювати' через «незрозумілість завдання», якщо воно виконане за цими матеріалами вчителя!\n"
-                    "5. Якщо у файлі міститься кілька завдань, а вчитель вимагав виконати лише конкретне — оцінюй виключно задане, а решта завдань з файлу вважаються незаданими."
+                    "   * Якщо відповідь учня відповідає темі або завданням із матеріалів вчителя — завдання ПОВНІСТЮ ЗРОЗУМІЛЕ! Заборонено ставити 'unclear_task: true' або повертати роботу на 'Доопрацювати' через «незрозумілість завдання».\n"
+                    "5. Якщо у файлі міститься кілька вправ, а вчитель задав конкретну чи одне комплексне завдання — оцінюй ВИКЛЮЧНО задане. Решта матеріалів вважаються незаданими!"
                 )
             else:
                 prompt_lines.append("⚠️ УВАГА ДЛЯ ШІ: Нижче наведено додаткові матеріали уроку (презентація, роздатковий матеріал, підручник). Враховуй їхній зміст та контекст при оцінюванні роботи учня. Якщо вчитель задав конкретне завдання, решта завдань з файлу вважаються незаданими.")
@@ -3851,77 +4537,108 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
 
     prompt_lines.append(f"\nДАНІ УЧНЯ: {submission.get_student_full_name()} ({class_name})")
 
-    # ── СИСТЕМНЕ РОЗПІЗНАВАННЯ ТА ЗІСТАВЛЕННЯ ЗАПИТАНЬ ВЧИТЕЛЯ І ВІДПОВІДЕЙ УЧНЯ ──
-    combined_task_for_qs = assignment_desc or ""
-    if 'primary_task_content' in locals() and primary_task_content:
-        combined_task_for_qs += "\n" + "\n".join(primary_task_content)
-    if 'teacher_files_content' in locals() and teacher_files_content:
-        if not extract_task_questions(combined_task_for_qs):
-            combined_task_for_qs += "\n" + "\n".join(teacher_files_content)
-        else:
-            extra_qs = extract_task_questions("\n".join(teacher_files_content))
-            if extra_qs and len(extra_qs) > len(extract_task_questions(combined_task_for_qs)):
-                combined_task_for_qs += "\n" + "\n".join(teacher_files_content)
+    # ── ВИЗНАЧЕННЯ ТОЧНОГО ОБСЯГУ ЗАВДАННЯ (SCOPE OF WORK — TASK RESOLUTION) ──
+    scope = resolve_assignment_scope(
+        assignment_title=assignment_title,
+        assignment_desc=assignment_desc,
+        custom_criteria=custom_criteria,
+        primary_task_content=primary_task_content if 'primary_task_content' in locals() else None,
+        teacher_files_content=teacher_files_content if 'teacher_files_content' in locals() else None,
+    )
+    teacher_specific_task_nums = scope.get('teacher_specific_task_nums') or []
+    task_questions = scope.get('task_questions') or []
+    combined_task_for_qs = scope.get('clean_instruction_text') or assignment_desc or ""
+    is_single_complex_task = scope.get('is_single_complex_task', False)
+    assigned_task_count = scope.get('assigned_task_count', 1)
+    assigned_tasks_list = scope.get('assigned_tasks', [])
 
-    # ── КЛЮЧОВА ЛОГІКА: КОНКРЕТНІ НОМЕРИ ЗАВДАНЬ З ІНСТРУКЦІЇ ВЧИТЕЛЯ ──────────
-    # Якщо вчитель вказав конкретні номери (напр. «виконати завдання 1», «виконати вправа 2» або
-    # «завдання 2 і 3»), фільтруємо task_questions лише до цих завдань.
-    # Решта завдань з файлу вважаються незаданими.
-    teacher_specific_task_nums = parse_teacher_specific_task_numbers(assignment_desc or "")
-
-    all_task_questions = extract_task_questions(combined_task_for_qs)
     student_combined_text = "\n".join(text_parts) if text_parts else ""
 
-    # Якщо вчитель задав конкретні номери — залишаємо тільки їх
-    if teacher_specific_task_nums and all_task_questions:
-        filtered_task_questions = []
-        for num in teacher_specific_task_nums:
-            # Шукаємо завдання з відповідним номером у списку
-            idx_0based = num - 1  # 0-based index
-            if 0 <= idx_0based < len(all_task_questions):
-                filtered_task_questions.append(all_task_questions[idx_0based])
-            else:
-                # Якщо за індексом не знайшли — шукаємо за номером у тексті завдання
-                for q in all_task_questions:
-                    if re.search(rf'(?:\b(?:завдан[а-яіїє]*|вправ[а-яіїє]*|пункт[а-яіїє]*|номер[а-яіїє]*)\b|(?:завд|впр|ном)\b\.?|\bп\.\s*|№)\s*(?:№\s*)?{num}\b', q, re.IGNORECASE):
-                        if q not in filtered_task_questions:
-                            filtered_task_questions.append(q)
-                        break
-        task_questions = filtered_task_questions if filtered_task_questions else all_task_questions
-    else:
-        task_questions = all_task_questions
-
-    # ── ПРОМПТ: SCOPE BLOCK — повідомляємо ШІ про конкретний обсяг завдання ────
-    if teacher_specific_task_nums:
+    # ── ПРОМПТ: SCOPE OF WORK BLOCK (НАЙВИЩИЙ ПРІОРИТЕТ) ───────────────────────
+    scope_block_lines = [
+        "═══════════════════════════════════════════════════════════════════",
+        "🎯 ТОЧНИЙ ОБСЯГ ЗАВДАННЯ ВІД ВЧИТЕЛЯ (SCOPE OF WORK — НАЙВИЩИЙ ПРІОРИТЕТ):",
+    ]
+    if is_single_complex_task:
+        task_desc_str = assigned_tasks_list[0]['description'] if assigned_tasks_list else (assignment_desc or assignment_title or "Комплексне завдання")
+        scope_block_lines.extend([
+            f"Вчитель визначив завдання як ОДНЕ комплексне завдання/проєкт: «{task_desc_str}».",
+            f"Кількість обов'язкових завдань: assigned_task_count = 1.",
+            "",
+            "⚠️ КАТЕГОРИЧНІ ВИМОГИ ДО ОЦІНЮВАННЯ:",
+            f"1. ✅ Об'єктом перевірки є ВИКЛЮЧНО це єдине завдання («{task_desc_str}»).",
+            "2. 🚫 КАТЕГОРИЧНО ЗАБОРОНЕНО шукати у прикріпленій презентації, PDF чи додаткових матеріалах вчителя окремі вправи, приклади, тестові питання чи домашні завдання і вимагати їх обов'язкового виконання!",
+            "3. 🚫 КАТЕГОРИЧНО ЗАБОРОНЕНО писати у feedback_comment, summary чи weaknesses:",
+            "   - «виконано 1 з 4 завдань» (або будь-які інші пропорції знайдених у презентації вправ);",
+            "   - «не виконано завдання 2 / вправу 3 / питання 5»;",
+            "   - знижувати оцінку за невиконання матеріалів або вправ зі слайдів, які вчитель не задавав окремо.",
+            "4. ✅ Оцінюй відповідність та якість наданого учнем результату саме цьому завданню (тема, зміст, самостійність, критерії).",
+            "5. ⚙️ У JSON ОБОВ'ЯЗКОВО поверни: 'tasks_total_count': 1, 'tasks_completed_count': 1 (якщо роботу надано і виконано), та заповни об'єкт 'task_resolution'.",
+        ])
+    elif teacher_specific_task_nums:
         nums_str = ', '.join(str(n) for n in teacher_specific_task_nums)
-        all_nums_in_file = list(range(1, len(all_task_questions) + 1)) if all_task_questions else []
-        extra_nums = [n for n in all_nums_in_file if n not in teacher_specific_task_nums]
-
-        scope_block_lines = [
-            "═══════════════════════════════════════════════════════════════════",
-            f"🎯 ТОЧНИЙ ОБСЯГ ЗАВДАННЯ ВІД ВЧИТЕЛЯ (TEACHER SCOPE — НАЙВИЩИЙ ПРІОРИТЕТ):",
+        scope_block_lines.extend([
             f"Вчитель у полі «Що потрібно зробити» ЯВНО вказав виконати КОНКРЕТНЕ ЗАВДАННЯ: № {nums_str}.",
-            f"",
-            f"КАТЕГОРИЧНІ ВИМОГИ ДО ОЦІНЮВАННЯ:",
+            f"Кількість обов'язкових завдань: assigned_task_count = {len(teacher_specific_task_nums)}.",
+            "",
+            "⚠️ КАТЕГОРИЧНІ ВИМОГИ ДО ОЦІНЮВАННЯ:",
             f"1. ✅ ОЦІНЮЙ ВИКЛЮЧНО завдання № {nums_str} — саме воно задане вчителем.",
-            f"2. 🚫 КАТЕГОРИЧНО ЗАБОРОНЕНО знижувати оцінку або писати у 'weaknesses' чи 'feedback_comment', "
-            f"що учень 'не виконав інші завдання' {'(№ ' + ', '.join(str(n) for n in extra_nums) + ')' if extra_nums else ''}. "
-            f"Ці завдання є НЕЗАДАНИМИ і не враховуються при оцінюванні!",
+            "2. 🚫 КАТЕГОРИЧНО ЗАБОРОНЕНО знижувати оцінку або писати у 'weaknesses' чи 'feedback_comment', що учень 'не виконав інші завдання'. Будь-які інші номери завдань з файлів є НЕЗАДАНИМИ і не враховуються при оцінюванні!",
             f"3. ✅ Якщо учень якісно виконав завдання № {nums_str} — робота вважається виконаною на 100% і заслуговує на найвищий бал відповідно до якості!",
-        ]
+            f"4. ⚙️ У полі 'tasks_total_count' повертай {len(teacher_specific_task_nums)} (кількість ЗАДАНИХ завдань), у 'tasks_completed_count' — скільки з них виконав учень, та заповни 'task_resolution'.",
+        ])
+    else:
+        scope_block_lines.extend([
+            f"Кількість визначених обов'язкових завдань: assigned_task_count = {assigned_task_count}.",
+            "Оцінюй тільки ті завдання, які прямо задав учитель. Не створюй нових завдань із випадкових прикладів чи вправ у файлах!",
+            f"У полі 'tasks_total_count' повертай {assigned_task_count}, та заповни 'task_resolution'.",
+        ])
 
-        # Якщо учень зробив більше ніж вчитель задав — це БОНУС
-        scope_block_lines += [
-            f"4. 🌟 БОНУС ЗА ІНІЦІАТИВУ: Якщо учень, крім заданого завдання № {nums_str}, самостійно виконав "
-            f"додаткові завдання {'(№ ' + ', '.join(str(n) for n in extra_nums) + ')' if extra_nums else 'з файлу'} — "
-            f"це вияв ініціативи та старанності. ШІ ЗОБОВ'ЯЗАНИЙ відзначити це у 'strengths' та 'feedback_comment' "
-            f"як позитивну якість (наприклад: «Учень виявив ініціативу та виконав додаткові завдання понад вимогу вчителя»). "
-            f"Це може позитивно вплинути на оцінку!",
-            f"5. ⚙️ У полі 'tasks_total_count' повертай {len(teacher_specific_task_nums)} (кількість ЗАДАНИХ завдань), "
-            f"у 'tasks_completed_count' — скільки з них виконав учень.",
-            "═══════════════════════════════════════════════════════════════════",
-        ]
-        prompt_lines.append("\n".join(scope_block_lines))
+    if custom_criteria:
+        scope_block_lines.extend([
+            "",
+            "📋 ІНДИВІДУАЛЬНІ КРИТЕРІЇ ВЧИТЕЛЯ (ПРІОРИТЕТ 2):",
+            "Вчитель встановив індивідуальні критерії оцінювання для цього завдання:",
+            custom_criteria.strip(),
+            "⚠️ Оцінюй виконання саме цих індивідуальних критеріїв. Вони мають вищий пріоритет над загальними критеріями!",
+        ])
+
+    eval_plan_dict = scope.get('evaluation_plan') or {}
+    comment_nuance = analyze_student_comment_nuance(
+        comment_student=submission.comment_student,
+        desc=assignment_desc,
+        custom_criteria=custom_criteria,
+        format_requirements=eval_plan_dict.get('format_requirements', [])
+    )
+
+    if eval_plan_dict.get('criteria'):
+        scope_block_lines.extend([
+            "",
+            "📋 ЄДИНИЙ ПЛАН ОЦІНЮВАННЯ ТА КРИТЕРІЇ (EVALUATION PLAN):",
+        ])
+        for idx, cr in enumerate(eval_plan_dict['criteria'], 1):
+            weight_str = f" [вага: {cr['weight']} б.]" if cr.get('weight') else ""
+            scope_block_lines.append(f"  {idx}. {cr['name']} (джерело: {cr['source']}){weight_str}")
+        scope_block_lines.append("⚠️ ШІ ЗОБОВ'ЯЗАНИЙ перевірити кожен зазначений критерій окремо у полі 'criteria_results'!")
+
+    if comment_nuance.get('guidance'):
+        scope_block_lines.extend([
+            "",
+            f"💬 ВКАЗІВКА ЩОДО КОМЕНТАРЯ УЧНЯ: {comment_nuance['guidance']}"
+        ])
+
+    inaccessible_list = getattr(submission, '_inaccessible_materials', [])
+    if inaccessible_list:
+        scope_block_lines.extend([
+            "",
+            "⚠️ ТЕХНІЧНЕ ОБМЕЖЕННЯ ДОСТУПУ ДО МАТЕРІАЛІВ УЧНЯ:",
+        ])
+        for im in inaccessible_list:
+            scope_block_lines.append(f"  • {im.get('reason', im.get('target', 'Невідомий матеріал'))}")
+        scope_block_lines.append("🚫 КАТЕГОРИЧНО ЗАБОРОНЕНО маскувати технічну недоступність матеріалу під доведену помилку учня в коді або стверджувати, що матеріал перевірений! Зафіксуй технічну причину у 'submission_evidence'.")
+
+    scope_block_lines.append("═══════════════════════════════════════════════════════════════════")
+    prompt_lines.append("\n".join(scope_block_lines))
 
     is_file_project = False
     if hasattr(submission, 'files') and submission.files.exists():
@@ -3964,9 +4681,9 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
         )
     prompt_lines.extend(text_parts)
     if is_traditional:
-        prompt_lines.append(f"\nПроаналізуй роботу за класичною (традиційною) 12-бальною системою ({preset_name_display}) та обов'язково поверни JSON з полями: suggested_grade (тільки ціле число 1-12 або 'Доопрацювати'), level, format_warning (рядок із зауваженням або null), unclear_task (true/false), summary, strengths (масив), weaknesses (масив), feedback_comment, tasks_evaluated (масив об'єктів з task_num, task_title, status ['completed'/'partial'/'missing'], comment), tasks_completed_count (число), tasks_total_count (число), ai_generated_percent (число 0-100), ai_generated_detected (true/false), ai_generated_confidence ('none'/'low'/'medium'/'high'), ai_generated_details (рядок або null). Поле 'gr_results' поверни порожнім масивом [] або null, оскільки групи результатів НЕ використовуються в класичній системі.")
+        prompt_lines.append(f"\nПроаналізуй роботу за класичною (традиційною) 12-бальною системою ({preset_name_display}) та обов'язково поверни JSON з полями: suggested_grade (тільки ціле число 1-12 або 'Доопрацювати'), level, format_warning (рядок із зауваженням або null), unclear_task (true/false), summary, strengths (масив), weaknesses (масив), feedback_comment, task_resolution (об'єкт з scope_source, assigned_task_count, assigned_tasks, ignored_found_tasks), evaluation_plan (об'єкт з task_summary, assigned_tasks, criteria, format_requirements), submission_evidence (об'єкт з submitted_files, has_link, has_comment, inaccessible_materials), criteria_results (масив об'єктів з criterion, status ['completed'/'partial'/'missing'/'unverifiable'], evidence, recommendation), revision_advice (масив рядків конкретних порад для перездачі), tasks_evaluated (масив об'єктів з task_num, task_title, status ['completed'/'partial'/'missing'], comment), tasks_completed_count (число), tasks_total_count (число — УВАГА: tasks_total_count обов'язково має дорівнювати assigned_task_count з task_resolution, а не кількості вправ у презентації), ai_generated_percent (число 0-100), ai_generated_detected (true/false), ai_generated_confidence ('none'/'low'/'medium'/'high'), ai_generated_details (рядок або null). Поле 'gr_results' поверни порожнім масивом [] або null, оскільки групи результатів НЕ використовуються в класичній системі.")
     else:
-        prompt_lines.append(f"\nПроаналізуй роботу згідно з обраними критеріями ({preset_name_display}) та обов'язково поверни JSON з полями: suggested_grade (тільки ціле число 1-12 або 'Доопрацювати'), level, format_warning (рядок із зауваженням або null), unclear_task (true/false), summary, strengths (масив), weaknesses (масив), feedback_comment, gr_results (масив об'єктів з code, name, grade, level, comment), tasks_evaluated (масив об'єктів з task_num, task_title, status ['completed'/'partial'/'missing'], comment), tasks_completed_count (число), tasks_total_count (число), ai_generated_percent (число 0-100), ai_generated_detected (true/false), ai_generated_confidence ('none'/'low'/'medium'/'high'), ai_generated_details (рядок або null). Усі оцінки обов'язково мають бути цілими числами (без десятих часток), заокругленими на користь учня.")
+        prompt_lines.append(f"\nПроаналізуй роботу згідно з обраними критеріями ({preset_name_display}) та обов'язково поверни JSON з полями: suggested_grade (тільки ціле число 1-12 або 'Доопрацювати'), level, format_warning (рядок із зауваженням або null), unclear_task (true/false), summary, strengths (масив), weaknesses (масив), feedback_comment, task_resolution (об'єкт з scope_source, assigned_task_count, assigned_tasks, ignored_found_tasks), evaluation_plan (об'єкт з task_summary, assigned_tasks, criteria, format_requirements), submission_evidence (об'єкт з submitted_files, has_link, has_comment, inaccessible_materials), criteria_results (масив об'єктів з criterion, status ['completed'/'partial'/'missing'/'unverifiable'], evidence, recommendation), revision_advice (масив рядків конкретних порад для перездачі), gr_results (масив об'єктів з code, name, grade, level, comment), tasks_evaluated (масив об'єктів з task_num, task_title, status ['completed'/'partial'/'missing'], comment), tasks_completed_count (число), tasks_total_count (число — УВАГА: tasks_total_count обов'язково має дорівнювати assigned_task_count з task_resolution, а не кількості вправ у презентації), ai_generated_percent (число 0-100), ai_generated_detected (true/false), ai_generated_confidence ('none'/'low'/'medium'/'high'), ai_generated_details (рядок або null). Усі оцінки обов'язково мають бути цілими числами (без десятих часток), заокругленими на користь учня.")
 
     if custom_prompt:
         system_instruction = custom_prompt.strip()
@@ -4006,20 +4723,20 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
     if "SCOPE OF WORK" not in system_instruction:
         system_instruction += (
             "\n\nПРІОРИТЕТ ВИМОГ ВЧИТЕЛЯ ТА ОБСЯГ ЗАВДАННЯ (SCOPE OF WORK):\n"
-            "- Текст у полі «ЗАВДАННЯ ДО ВИКОНАННЯ» від вчителя задає мету, тему та вказівки до уроку.\n"
-            "- Прикріплені файли вчителя (презентації .pptx/.pdf, документи, зображення) є повноцінним першоджерелом завдання та навчального контексту уроку.\n"
-            "- Якщо вчитель дав короткий або загальний опис («Опрацювати презентацію», «Виконати завдання», «Домашнє завдання у файлі» чи вказав тему), САМЕ У ФАЙЛАХ ВЧИТЕЛЯ (на слайдах чи сторінках) міститься конкретне завдання для учня!\n"
-            "- Якщо вчитель вказав виконати тільки одне конкретне завдання (наприклад, завдання 3): оцінюй ВИКЛЮЧНО вказане завдання. КАТЕГОРИЧНО ЗАБОРОНЕНО занижувати бал за «невиконання решти завдань» — вони вважаються незаданими!\n"
+            "- ВЧИТЕЛЬ ВИЗНАЧАЄ, ЩО ТРЕБА ВИКОНАТИ. ШІ ВИЗНАЧАЄ, НАСКІЛЬКИ ДОБРЕ ЦЕ ВИКОНАНО.\n"
+            "- ШІ НЕ ВИЗНАЧАЄ САМ, ЩО УЧЕНЬ МАВ ВИКОНУВАТИ, НА ОСНОВІ ВИПАДКОВО ЗНАЙДЕНИХ У МАТЕРІАЛАХ ВПРАВ!\n"
+            "- Якщо вчитель дав короткий або узагальнений опис («Робота над проєктом», «Створити презентацію», «Створити програму», «Виконати практичну роботу», «Опрацювати тему»), це є ОДНИМ комплексним завданням (assigned_task_count = 1).\n"
+            "- КАТЕГОРИЧНО ЗАБОРОНЕНО вишукувати у презентаціях чи PDF вчителя теоретичні приклади, вправи або домашні завдання і перетворювати їх на окремі обов'язкові завдання для учня!\n"
+            "- Якщо вчитель вказав конкретний номер (наприклад, «Виконати вправу 2»): оцінюй ВИКЛЮЧНО це завдання. Решта завдань з файлу вважаються незаданими і НЕ можуть бути підставою для зауважень чи зниження оцінки!\n"
             "- Робота вважається виконаною у повному обсязі (100%), якщо якісно виконано саме задане вчителем завдання.\n"
         )
 
     if "ПРЕЗЕНТАЦІЇ ТА PDF ВЧИТЕЛЯ ЯК ДЖЕРЕЛО ЗАВДАННЯ" not in system_instruction:
         system_instruction += (
             "\n\nПРЕЗЕНТАЦІЇ, PDF, ЗОБРАЖЕННЯ ТА МАТЕРІАЛИ ВЧИТЕЛЯ ЯК ДЖЕРЕЛО ЗАВДАННЯ:\n"
-            "- Вчителі часто дають завдання не в тексті опису, а безпосередньо на слайдах презентацій (.pptx/.ppt/.odp/PDF) або в прикріплених файлах/зображеннях (зокрема на фінальних слайдах під заголовками «Домашнє завдання», «Практична робота», «Завдання для закріплення», «Питання для самоперевірки», вправи, завдання 1-3 тощо).\n"
-            "- ШІ ЗОБОВ'ЯЗАНИЙ перевірити всі слайди презентації, сторінки PDF та зображення вчителя, щоб знайти формулювання завдання і правильно зрозуміти контекст уроку.\n"
+            "- Матеріали вчителя слугують теоретичним та навчальним контекстом уроку.\n"
             "- Якщо учень виконав завдання, знайдене на слайдах презентації чи у PDF/файлах вчителя, це завдання є ЧІТКИМ І ЗРОЗУМІЛИМ. КАТЕГОРИЧНО ЗАБОРОНЕНО ставити 'unclear_task': true або повертати на 'Доопрацювати' через «незрозумілість завдання»!\n"
-            "- Оцінюй роботу учня (1-12 балів) за повнотою розкриття теми та правильністю розв'язання завдань зі слайдів/матеріалів уроку.\n"
+            "- Оцінюй роботу учня (1-12 балів) за повнотою розкриття теми та якістю виконання відповідно до Scope of Work.\n"
         )
 
     if "БАГАТОЗАДАЧНІ УМОВИ ТА ПРАВИЛА ВИБОРУ" not in system_instruction:
@@ -4053,19 +4770,13 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
     if "РОЗДІЛЬНИЙ АНАЛІЗ КОЖНОГО ЗАВДАННЯ" not in system_instruction:
         system_instruction += (
             "\n\nРОЗДІЛЬНИЙ АНАЛІЗ КОЖНОГО ЗАВДАННЯ ТА СУВОРЕ ОБМЕЖЕННЯ БАЛІВ ЗА НЕПОВНИЙ ОБСЯГ (MULTI-TASK COMPLETION & STRICT CEILING):\n"
-            "- Коли вчитель задав кілька конкретних завдань (наприклад: «виконати всі 3 завдання», або у презентації/файлі містяться Завдання 1, Завдання 2, Завдання 3):\n"
-            "  * ШІ зобов'язаний оцінити кожне завдання окремо!\n"
-            "  * 🚫 СУВОРА ЗАБОРОНА ДУБЛЮВАННЯ ТА ПОДВІЙНОГО ЗАРАХУВАННЯ ВІДПОВІДЕЙ: одна відповідь, фраза чи речення учня КАТЕГОРИЧНО НЕ МОЖЕ одночасно зараховуватися як виконання двох або більше різних завдань! Кожне окреме завдання повинно мати власну окрему відповідь або розв'язок у роботі учня.\n"
-            "  * Кожна вимога або частина завдання вимагає окремого розв'язку/відповіді: один фрагмент тексту чи дії не може зараховуватися за декілька різних завдань одночасно.\n"
-            "- СУВОРІ ОБМЕЖЕННЯ БАЛІВ ЗА НЕПОВНИЙ ОБСЯГ (КРИТЕРІЇ НУШ):\n"
-            "  * 10-12 балів (Високий рівень) призначаються ВИКЛЮЧНО за повне виконання 100% усіх завдань, визначених умовою чи матеріалами вчителя.\n"
-            "  * Якщо задано 3 завдання, а учень здав лише 2 (66% обсягу): максимальна можлива оцінка — 7-8 балів (Достатній рівень). Ставити 9-12 балів (зокрема 10 чи 11 балів) КАТЕГОРИЧНО ЗАБОРОНЕНО!\n"
-            "  * Якщо задано 3 завдання, а учень здав лише 1 (33% обсягу): максимальна можлива оцінка — 4-5 балів (Середній рівень).\n"
-            "  * Якщо задано 4 завдання, а виконано 2 (50% обсягу): максимальна оцінка — 6-7 балів.\n"
-            "- ЗВОРОТНИЙ ЗВ'ЯЗОК ТА СУВОРА ЗАБОРОНА ПОМИЛКОВИХ ПОХВАЛ:\n"
-            "  * Якщо хоча б одне завдання не виконано або пропущено:\n"
-            "    - КАТЕГОРИЧНО ЗАБОРОНЕНО писати у 'summary', 'strengths' чи 'feedback_comment', що «учень виконав усі завдання», «робота містить правильні відповіді на всі 3 завдання» тощо.\n"
-            "    - ОБОВ'ЯЗКОВО зазнач у 'weaknesses' та 'feedback_comment', яке саме завдання пропущено (наприклад: «Завдання 2 не виконано / пропущено»).\n"
+            "- Тільки коли вчитель ЯВНО задав кілька конкретних завдань (наприклад: «виконати завдання 1, 2 та 3», або «виконати вправи 1–3»):\n"
+            "  * ШІ зобов'язаний оцінити кожне дійсно задане завдання окремо!\n"
+            "  * 🚫 СУВОРА ЗАБОРОНА ДУБЛЮВАННЯ: один фрагмент тексту чи дії не може зараховуватися за декілька різних завдань одночасно.\n"
+            "  * Якщо задано 3 завдання, а виконано 2 (66% обсягу): максимальна можлива оцінка — 7-8 балів (Достатній рівень).\n"
+            "  * Якщо задано 3 завдання, а виконано 1 (33% обсягу): максимальна оцінка — 4-5 балів (Середній рівень).\n"
+            "  * ⚠️ ЯКЩО ВЧИТЕЛЬ ЗАДАВ ОДНЕ ЗАВДАННЯ («Робота над проєктом», «Створити презентацію», «Виконати вправу 2»): multi-task ceiling НЕ ЗАСТОСОВУЄТЬСЯ, а оцінка визначається якістю виконаної роботи!\n"
+            "  * 🚫 КАТЕГОРИЧНО ЗАБОРОНЕНО писати «виконано 1 з 4 завдань» або вказувати у 'weaknesses' невиконання вправ зі слайдів, яких учитель не задавав!\n"
         )
 
     if "ДОСЛІДНИЦЬКІ, ПОШУКОВІ ЗАВДАННЯ" not in system_instruction:
@@ -4245,6 +4956,251 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                         weaknesses = [str(weaknesses)] if weaknesses else []
                     if not isinstance(strengths, list):
                         strengths = [str(strengths)] if strengths else []
+
+                    # ── СИНХРОНІЗАЦІЯ РЕЗУЛЬТАТІВ ШІ ЗІ SCOPE OF WORK (TASK RESOLUTION) ──
+                    expected_scope_count = scope.get('assigned_task_count', 1)
+
+                    # Завжди фіксуємо tasks_total_count на підставі SCOPE від вчителя!
+                    result_json['tasks_total_count'] = expected_scope_count
+
+                    # Нормалізуємо та гарантуємо наявність об'єкта task_resolution
+                    task_res = result_json.get('task_resolution')
+                    if not isinstance(task_res, dict):
+                        task_res = {}
+                    task_res.setdefault('scope_source', scope.get('scope_source', 'teacher_description'))
+                    task_res['assigned_task_count'] = expected_scope_count
+                    task_res.setdefault('assigned_tasks', scope.get('assigned_tasks', []))
+                    task_res.setdefault('ignored_found_tasks', scope.get('ignored_found_tasks', []))
+                    result_json['task_resolution'] = task_res
+
+                    if is_single_complex_task:
+                        result_json['tasks_total_count'] = 1
+                        result_json['tasks_completed_count'] = 1 if suggested_grade != 'Доопрацювати' else 0
+                        raw_evals = result_json.get('tasks_evaluated') or []
+                        if isinstance(raw_evals, list) and (len(raw_evals) > 1 or not raw_evals):
+                            main_task_title = assigned_tasks_list[0]['description'] if assigned_tasks_list else (assignment_title or "Комплексне завдання")
+                            result_json['tasks_evaluated'] = [{
+                                'task_num': 1,
+                                'task_title': main_task_title,
+                                'status': 'completed' if suggested_grade != 'Доопрацювати' else 'missing',
+                                'comment': summary or 'Оцінено якість виконання проєкту/завдання'
+                            }]
+                        summary, weaknesses, feedback_comment = sanitize_unassigned_task_mentions(
+                            summary, weaknesses, feedback_comment, is_single_task=True
+                        )
+                    elif teacher_specific_task_nums:
+                        result_json['tasks_total_count'] = len(teacher_specific_task_nums)
+                        raw_evals = result_json.get('tasks_evaluated') or []
+                        if isinstance(raw_evals, list):
+                            filtered_evals = [
+                                t for t in raw_evals
+                                if isinstance(t, dict) and (t.get('task_num') in teacher_specific_task_nums or len(teacher_specific_task_nums) == 1)
+                            ]
+                            if filtered_evals:
+                                result_json['tasks_evaluated'] = filtered_evals
+                        summary, weaknesses, feedback_comment = sanitize_unassigned_task_mentions(
+                            summary, weaknesses, feedback_comment, allowed_task_nums=set(teacher_specific_task_nums)
+                        )
+                    else:
+                        allowed_nums = set(range(1, expected_scope_count + 1))
+                        summary, weaknesses, feedback_comment = sanitize_unassigned_task_mentions(
+                            summary, weaknesses, feedback_comment, allowed_task_nums=allowed_nums
+                        )
+
+                    # Нормалізуємо evaluation_plan
+                    eval_plan = result_json.get('evaluation_plan')
+                    if not isinstance(eval_plan, dict) or not eval_plan.get('criteria'):
+                        eval_plan = scope.get('evaluation_plan', {})
+                    result_json['evaluation_plan'] = eval_plan
+
+                    # Нормалізуємо submission_evidence
+                    sub_evidence = result_json.get('submission_evidence')
+                    if not isinstance(sub_evidence, dict):
+                        sub_evidence = {}
+                    inaccessible_list = getattr(submission, '_inaccessible_materials', [])
+                    if inaccessible_list:
+                        sub_evidence['inaccessible_materials'] = inaccessible_list
+                    sub_evidence.setdefault('has_link', bool(submission.link))
+                    sub_evidence.setdefault('has_comment', bool(submission.comment_student and submission.comment_student.strip()))
+                    submitted_files_list = []
+                    if hasattr(submission, 'files') and submission.files.exists():
+                        submitted_files_list = [getattr(sf, 'original_name', '') or os.path.basename(sf.file.name) for sf in submission.files.all() if sf.file]
+                    elif submission.file:
+                        submitted_files_list = [getattr(submission, 'original_name', '') or os.path.basename(submission.file.name)]
+                    sub_evidence.setdefault('submitted_files', submitted_files_list)
+                    result_json['submission_evidence'] = sub_evidence
+
+                    # Нормалізуємо criteria_results
+                    plan_criteria = eval_plan.get('criteria') or []
+                    raw_crit_results = result_json.get('criteria_results')
+                    synced_crit_results = []
+                    matched_raw_indices = set()
+
+                    for cr in plan_criteria:
+                        c_name = cr['name'] if isinstance(cr, dict) else str(cr)
+                        found_res = None
+                        if isinstance(raw_crit_results, list):
+                            for idx, r in enumerate(raw_crit_results):
+                                if isinstance(r, dict):
+                                    r_crit = str(r.get('criterion', '')).lower()
+                                    if c_name.lower() in r_crit or r_crit in c_name.lower():
+                                        found_res = dict(r)
+                                        matched_raw_indices.add(idx)
+                                        break
+                        if not found_res:
+                            is_completed = (suggested_grade not in ['Доопрацювати', '1', '2', '3'])
+                            found_res = {
+                                'criterion': c_name,
+                                'status': 'completed' if is_completed else 'missing',
+                                'evidence': 'Підтверджено у зданій роботі' if is_completed else 'Не виявлено достатніх доказів виконання',
+                                'recommendation': '' if is_completed else f'Виконати вимогу: {c_name}'
+                            }
+                        synced_crit_results.append(found_res)
+
+                    # Додаємо критерії з відповіді моделі, які не були згадані в плані
+                    if isinstance(raw_crit_results, list):
+                        for idx, r in enumerate(raw_crit_results):
+                            if idx not in matched_raw_indices and isinstance(r, dict) and r.get('criterion'):
+                                synced_crit_results.append(dict(r))
+
+                    # Спеціальна перевірка для висновку з урахуванням коментаря учня та збагачення критеріїв
+                    for found_res in synced_crit_results:
+                        c_name = str(found_res.get('criterion', ''))
+                        if any(kw in c_name.lower() for kw in ['висновок', 'підсумок']):
+                            if comment_nuance.get('has_substance') and comment_nuance.get('substance_type') == 'conclusion':
+                                if comment_nuance.get('format_strictly_requires_file'):
+                                    found_res['status'] = 'partial'
+                                    found_res['evidence'] = 'Зміст висновку наведено учнем у коментарі до здачі, проте він відсутній на слайді презентації'
+                                    found_res['evidence_source'] = 'student_comment'
+                                    found_res['recommendation'] = 'Перенесіть сформульований висновок на окремий слайд презентації'
+                                else:
+                                    found_res['status'] = 'completed'
+                                    found_res['evidence'] = 'Змістовний висновок наведено у коментарі до здачі'
+                                    found_res['evidence_source'] = 'student_comment'
+                                    found_res['recommendation'] = ''
+
+                        # Визначаємо джерела критерію та доказу
+                        if not found_res.get('source'):
+                            if found_res.get('criterion') in (scope.get('custom_criteria_rules') or []):
+                                found_res['source'] = 'teacher_custom_criteria'
+                            elif assignment_desc:
+                                found_res['source'] = 'teacher_description'
+                            else:
+                                found_res['source'] = 'teacher_materials'
+                        found_res['criterion_source'] = found_res['source']
+
+                        if not found_res.get('evidence_source'):
+                            ev_text = str(found_res.get('evidence', '')).lower()
+                            if 'коментар' in ev_text:
+                                found_res['evidence_source'] = 'student_comment'
+                            elif submitted_files_list:
+                                found_res['evidence_source'] = 'student_file'
+                            elif getattr(submission, 'link', None):
+                                found_res['evidence_source'] = 'student_link'
+                            else:
+                                found_res['evidence_source'] = 'none'
+
+                        # Якщо учень зробив непідтверджену заяву без матеріалів (Тест 8)
+                        if comment_nuance.get('is_unsubstantiated_declaration') and not submitted_files_list and not getattr(submission, 'link', None):
+                            found_res['status'] = 'unverified'
+                            found_res['evidence'] = 'Заява учня у коментарі не підтверджена фактичними матеріалами'
+                            found_res['evidence_source'] = 'none'
+
+                        if not found_res.get('impact'):
+                            found_res['impact'] = 'Враховано при підсумковому оцінюванні' if found_res.get('status') in ['completed', 'partial'] else 'Знижує підсумкову оцінку'
+                        found_res['impact_on_grade'] = found_res['impact']
+
+                    # Якщо в плані оцінювання не було критеріїв, але вони з'явилися після перевірки
+                    if not eval_plan.get('criteria') and synced_crit_results:
+                        eval_plan['criteria'] = [
+                            {
+                                'name': sc.get('criterion', ''),
+                                'source': 'submission_evaluation',
+                                'weight': None,
+                                'evaluation_method': 'individual_check'
+                            }
+                            for sc in synced_crit_results
+                        ]
+
+                    result_json['criteria_results'] = synced_crit_results
+
+                    # Нормалізуємо revision_advice, improvement_steps, resubmission_recommendations
+                    rev_advice = result_json.get('revision_advice')
+                    if not isinstance(rev_advice, list) or not rev_advice:
+                        rev_advice = []
+                        for cr in synced_crit_results:
+                            if cr.get('status') in ['missing', 'partial'] and cr.get('recommendation'):
+                                if cr['recommendation'] not in rev_advice:
+                                    rev_advice.append(cr['recommendation'])
+                        if not rev_advice and weaknesses:
+                            for w in weaknesses:
+                                w_clean = str(w).strip()
+                                if w_clean and not any(w_clean.lower() in ra.lower() for ra in rev_advice):
+                                    rev_advice.append(f"Виправити: {w_clean}")
+                    result_json['revision_advice'] = rev_advice
+                    result_json['improvement_steps'] = rev_advice
+                    result_json['resubmission_recommendations'] = rev_advice
+
+                    # ── Діагностичне логування оцінювання (Section 20) ──────────
+                    try:
+                        assigned_tasks_log = "\n".join(f" - {t.get('description', '')}" for t in (scope.get('assigned_tasks') or [])) or " - (Не вказано)"
+                        ignored_tasks_log = "\n".join(f" - {t.get('description', '')}" for t in (scope.get('ignored_found_tasks') or [])) or " - (Немає)"
+                        crit_log = "\n".join(f" - {c.get('name', '') if isinstance(c, dict) else str(c)}" for c in (eval_plan.get('criteria') or [])) or " - (Загальні критерії)"
+                        stud_comm = (submission.comment_student or "").strip()
+                        evidence_log = f" - student_files: {submitted_files_list}\n - student_comment: {stud_comm[:120] if stud_comm else '(порожньо)'}"
+                        crit_res_log = "\n".join(f" - {cr.get('criterion', '')}: {cr.get('status', '')} (evidence: {cr.get('evidence_source', '')})" for cr in synced_crit_results)
+
+                        logger.info(
+                            "\n═══════════════════════════════════════════════════════════════════\n"
+                            "ASSIGNMENT SCOPE\n"
+                            "Assigned task count: %s\n"
+                            "Assigned tasks:\n%s\n\n"
+                            "Ignored found tasks:\n%s\n\n"
+                            "CRITERIA\n%s\n\n"
+                            "STUDENT EVIDENCE\n%s\n\n"
+                            "CRITERIA RESULTS\n%s\n"
+                            "═══════════════════════════════════════════════════════════════════",
+                            scope.get('assigned_task_count', 1),
+                            assigned_tasks_log,
+                            ignored_tasks_log,
+                            crit_log,
+                            evidence_log,
+                            crit_res_log
+                        )
+                    except Exception as log_err:
+                        logger.debug("Помилка формування діагностичного логу: %s", log_err)
+
+                    # Санація коментаря учня та вимог формату у тексті зворотного зв'язку
+                    if comment_nuance.get('has_substance') and comment_nuance.get('substance_type') == 'conclusion':
+                        if comment_nuance.get('format_strictly_requires_file'):
+                            no_concl_pat = re.compile(r'(?:висновок\s+(?:відсутній|не\s+надано|немає|не\s+сформульовано)|відсутні\s+висновки|не\s+містить\s+висновк\w*)', re.IGNORECASE)
+                            weaknesses = [w for w in weaknesses if not no_concl_pat.search(str(w))]
+                            format_concl_msg = "Висновок наведено в коментарі, але за вимогою оформлення його слід розмістити безпосередньо на окремому слайді презентації."
+                            if not any('слайд' in str(w).lower() and 'висновок' in str(w).lower() for w in weaknesses):
+                                weaknesses.append(format_concl_msg)
+                            summary = no_concl_pat.sub('висновок наведено в коментарі (потрібно перенести на слайд)', summary)
+                            feedback_comment = no_concl_pat.sub('висновок наведено в коментарі, проте за правилами оформлення перенесіть його на слайд', feedback_comment)
+                        else:
+                            no_concl_pat = re.compile(r'(?:висновок\s+(?:відсутній|не\s+надано|немає|не\s+сформульовано)|відсутні\s+висновки|не\s+містить\s+висновк\w*)', re.IGNORECASE)
+                            weaknesses = [w for w in weaknesses if not no_concl_pat.search(str(w))]
+                            summary = no_concl_pat.sub('', summary).strip(' ,;')
+                            feedback_comment = no_concl_pat.sub('', feedback_comment).strip(' ,;')
+                            concl_strength = "Сформульовано змістовний висновок до роботи (у коментарі до здачі)."
+                            if not any('висновок' in str(s).lower() for s in strengths):
+                                strengths.append(concl_strength)
+
+                    # Санація при технічній недоступності матеріалу (Section 8)
+                    if inaccessible_list and not submitted_files_list:
+                        code_err_pat = re.compile(r'(?:помилк\w*\s+в\s+код\w*|код\s+не\s+працює|неправильн\w*\s+програм\w*|не\s+виконано\s+жодного|учень\s+не\s+виконав|синтаксичн\w*\s+помилк\w*)', re.IGNORECASE)
+                        had_code_complaint = any(code_err_pat.search(str(w)) for w in weaknesses)
+                        if had_code_complaint or str(suggested_grade).strip() in ['Доопрацювати', '1', '2', '3']:
+                            weaknesses = [w for w in weaknesses if not code_err_pat.search(str(w))]
+                            for im in inaccessible_list:
+                                tech_msg = f"Технічна недоступність матеріалу: {im.get('reason', im.get('target'))}. Роботу не перевірено через помилку доступу."
+                                if not any('технічн' in str(w).lower() or 'недоступн' in str(w).lower() for w in weaknesses):
+                                    weaknesses.insert(0, tech_msg)
+                            suggested_grade = 'Доопрацювати'
+                            level = 'Початковий (1-3)'
 
                     # Обробка та валідація результатів за групами результатів (ГР НУШ)
                     clean_gr_results = []
@@ -4625,6 +5581,7 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                             feedback_comment=feedback_comment,
                             answered_count=answered_count,
                             teacher_scoped_task_nums=teacher_specific_task_nums if 'teacher_specific_task_nums' in locals() else None,
+                            scope=scope if 'scope' in locals() else None,
                         )
 
                     # Кінцева перевірка: якщо роботу відхилено — гарантуємо "Доопрацювати" та Початковий рівень (1-3)
@@ -4769,6 +5726,16 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                         'status': 'success',
                         'suggested_grade': suggested_grade,
                         'level': level,
+                        'tasks_total_count': result_json.get('tasks_total_count'),
+                        'tasks_completed_count': result_json.get('tasks_completed_count'),
+                        'task_resolution': result_json.get('task_resolution'),
+                        'evaluation_plan': result_json.get('evaluation_plan'),
+                        'submission_evidence': result_json.get('submission_evidence'),
+                        'criteria_results': result_json.get('criteria_results'),
+                        'revision_advice': result_json.get('revision_advice'),
+                        'improvement_steps': result_json.get('improvement_steps') or result_json.get('revision_advice') or [],
+                        'resubmission_recommendations': result_json.get('resubmission_recommendations') or result_json.get('revision_advice') or [],
+                        'tasks_evaluated': result_json.get('tasks_evaluated'),
                         'format_warning': format_warning,
                         'unclear_task': unclear_task,
                         'summary': summary,
@@ -4856,6 +5823,25 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                         'feedback_comment': clean_feedback,
                         'suggested_grade': suggested_grade,
                         'level': level,
+                        'tasks_total_count': expected_scope_count,
+                        'tasks_completed_count': 1 if suggested_grade != 'Доопрацювати' else 0,
+                        'task_resolution': scope.get('task_resolution') or {
+                            'scope_source': scope.get('scope_source', 'teacher_description'),
+                            'assigned_task_count': expected_scope_count,
+                            'assigned_tasks': scope.get('assigned_tasks', []),
+                            'ignored_found_tasks': scope.get('ignored_found_tasks', [])
+                        },
+                        'evaluation_plan': scope.get('evaluation_plan', {}),
+                        'submission_evidence': {
+                            'submitted_files': [getattr(sf, 'original_name', '') or os.path.basename(sf.file.name) for sf in submission.files.all() if sf.file] if hasattr(submission, 'files') and submission.files.exists() else ([submission.file.name] if submission.file else []),
+                            'has_link': bool(submission.link),
+                            'has_comment': bool(submission.comment_student and submission.comment_student.strip()),
+                            'inaccessible_materials': getattr(submission, '_inaccessible_materials', [])
+                        },
+                        'criteria_results': [],
+                        'revision_advice': [],
+                        'improvement_steps': [],
+                        'resubmission_recommendations': [],
                         'unclear_task': unclear_task,
                         'format_warning': "Не зрозуміло, яке саме завдання виконане. Будь ласка, вкажіть номер завдання у коментарі до здачі та надішліть роботу повторно." if unclear_task else "",
                         'summary': clean_feedback,
@@ -5176,29 +6162,17 @@ def analyze_assignment_task_understanding(assignment, force_refresh=False) -> di
                     except Exception:
                         pass
 
-    combined_text = assignment_desc + "\n" + "\n".join(files_content_parts)
-    teacher_specific_task_nums = parse_teacher_specific_task_numbers(assignment_desc)
-    explicit_count = detect_expected_task_count(assignment_desc)
-    all_extracted_qs = extract_task_questions(combined_text, explicit_count=explicit_count)
-
-    # Якщо вчитель задав конкретні номери завдань (напр. «виконати вправа 2»),
-    # фільтруємо видобуті запитання лише до цих номерів
-    if teacher_specific_task_nums and all_extracted_qs:
-        scoped_qs = []
-        for num in teacher_specific_task_nums:
-            idx_0b = num - 1
-            if 0 <= idx_0b < len(all_extracted_qs):
-                scoped_qs.append(all_extracted_qs[idx_0b])
-            else:
-                for q in all_extracted_qs:
-                    if re.search(rf'(?:\b(?:завдан[а-яіїє]*|вправ[а-яіїє]*|пункт[а-яіїє]*|номер[а-яіїє]*)\b|(?:завд|впр|ном)\b\.?|\bп\.\s*|№)\s*(?:№\s*)?{num}\b', q, re.IGNORECASE):
-                        if q not in scoped_qs:
-                            scoped_qs.append(q)
-                        break
-        extracted_qs = scoped_qs if scoped_qs else all_extracted_qs
-        explicit_count = len(teacher_specific_task_nums)
-    else:
-        extracted_qs = all_extracted_qs
+    scope = resolve_assignment_scope(
+        assignment_title=assignment_title,
+        assignment_desc=assignment_desc,
+        custom_criteria=custom_criteria,
+        teacher_files_content=files_content_parts,
+    )
+    is_single_task = scope.get('is_single_complex_task', False)
+    teacher_specific_task_nums = scope.get('teacher_specific_task_nums') or []
+    extracted_qs = scope.get('task_questions') or []
+    explicit_count = scope.get('assigned_task_count') or 1
+    assigned_tasks_list = scope.get('assigned_tasks', [])
 
     prompt_lines = [
         f"ПРЕДМЕТ: {subject_name}",
@@ -5212,7 +6186,16 @@ def analyze_assignment_task_understanding(assignment, force_refresh=False) -> di
         prompt_lines.append("\nПРИКРІПЛЕНІ НАВЧАЛЬНІ МАТЕРІАЛИ (ПРЕЗЕНТАЦІЇ, PDF, ДОКУМЕНТИ):")
         prompt_lines.extend(files_content_parts)
 
-    if teacher_specific_task_nums:
+    if is_single_task:
+        task_desc_str = assigned_tasks_list[0]['description'] if assigned_tasks_list else (assignment_desc or assignment_title or "Комплексне завдання")
+        prompt_lines.append(
+            f"\n🎯 НАЙВИЩИЙ ПРІОРИТЕТ — ТОЧНИЙ ОБСЯГ ВІД ВЧИТЕЛЯ (SCOPE OF WORK):\n"
+            f"Вчитель визначив завдання як ОДНЕ комплексне завдання/проєкт: «{task_desc_str}».\n"
+            f"Прикріплені презентації чи файли є контекстом уроку. Окремі вправи зі слайдів НЕ є обов'язковими завданнями!\n"
+            f"У полі 'tasks_total_count' обов'язково вкажи 1.\n"
+            f"У масиві 'tasks' опиши САМЕ це обов'язкове комплексне завдання (num: 1, title: «{task_desc_str[:80]}»)."
+        )
+    elif teacher_specific_task_nums:
         nums_str = ", ".join(str(n) for n in teacher_specific_task_nums)
         prompt_lines.append(
             f"\n🎯 НАЙВИЩИЙ ПРІОРИТЕТ — ТОЧНИЙ ОБСЯГ ВІД ВЧИТЕЛЯ (TEACHER SCOPE):\n"
@@ -5316,14 +6299,35 @@ def analyze_assignment_task_understanding(assignment, force_refresh=False) -> di
                             f"Звертайте увагу на повноту та охайність відповідей."
                         )
                     # Суворий пріоритет обсягу завдань від вчителя
-                    if teacher_specific_task_nums:
+                    if is_single_task:
+                        result_data['tasks_total_count'] = 1
+                        if isinstance(result_data.get('tasks'), list) and len(result_data['tasks']) > 1:
+                            result_data['tasks'] = [{
+                                'num': 1,
+                                'title': assignment_title or 'Комплексне завдання',
+                                'source': 'Опис завдання вчителя',
+                                'expected_actions': assignment_desc or 'Виконати роботу над завданням/проєктом',
+                                'expected_submission': 'Готова робота у відповідному форматі'
+                            }]
+                    elif teacher_specific_task_nums:
                         result_data['tasks_total_count'] = len(teacher_specific_task_nums)
+                    elif explicit_count > 1:
+                        result_data['tasks_total_count'] = explicit_count
         except Exception:
             pass
 
     # Якщо ШІ API недоступне або повернуло некоректну відповідь — генеруємо якісний структурний звіт на основі видобутих даних
     if not result_data or not isinstance(result_data, dict):
-        if teacher_specific_task_nums:
+        if is_single_task:
+            total_cnt = 1
+            tasks_list = [{
+                "num": 1,
+                "title": assignment_title or "Комплексне завдання",
+                "source": "Опис завдання вчителя",
+                "expected_actions": assignment_desc[:300] if assignment_desc else "Виконати завдання/проєкт згідно з інструкцією",
+                "expected_submission": "Здана робота у відповідному форматі"
+            }]
+        elif teacher_specific_task_nums:
             total_cnt = len(teacher_specific_task_nums)
             tasks_list = []
             for num in teacher_specific_task_nums:

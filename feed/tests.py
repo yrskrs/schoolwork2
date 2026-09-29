@@ -5277,6 +5277,13 @@ class QuestionAnswerMappingTests(TestCase):
         )
         self.assignment.classes.add(self.class_group)
 
+        settings = AISettings.get_solo()
+        settings.is_enabled = True
+        settings.api_key = 'fake-api-key'
+        settings.ai_provider = 'gemini'
+        settings.model_name = 'gemini-2.5-flash'
+        settings.save()
+
     def test_extract_task_questions(self):
         from feed.gemini_service import extract_task_questions
 
@@ -6335,6 +6342,843 @@ class QuestionAnswerMappingTests(TestCase):
         self.assertNotIn('відсутній висновок', cleaned_summary.lower())
         self.assertIn('висновок до роботи надано у коментарі до здачі', cleaned_summary.lower())
         self.assertEqual(len(cleaned_weaknesses), 0)
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # ДЕДИКОВАНІ ТЕСТИ ДЛЯ SCOPE OF WORK (ТЕСТОВІ СЦЕНАРІЇ 1-6)
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    @patch('feed.gemini_service.call_ai_api')
+    def test_scope_scenario_1_project_work_no_exercise_hallucination(self, mock_call):
+        """
+        ТЕСТ 1: Вчитель: «Робота над проєктом.». Файл презентації містить 4 вправи.
+        Учень надав готовий проєкт.
+        Очікування: assigned_task_count = 1, tasks_total_count = 1, відсутні фрази «1 з 4» чи скарги на вправи.
+        """
+        assignment = Assignment.objects.create(
+            teacher=self.teacher,
+            subject=self.subject,
+            title="Робота над проєктом",
+            description="Робота над проєктом."
+        )
+        assignment.classes.add(self.class_group)
+
+        pres_text = (
+            "[Слайд 1] Теорія проєкту\n"
+            "[Слайд 2] Вправа 1. Створити схему\n"
+            "[Слайд 3] Вправа 2. Заповнити таблицю\n"
+            "[Слайд 4] Вправа 3. Відповісти на питання\n"
+            "[Слайд 5] Вправа 4. Дослідити явище\n"
+        )
+        t_file = SimpleUploadedFile("slides.txt", pres_text.encode('utf-8'), content_type="text/plain")
+        AssignmentFile.objects.create(assignment=assignment, file=t_file, original_name="slides.txt")
+
+        # Перевірка Scope
+        from .gemini_service import resolve_assignment_scope
+        scope = resolve_assignment_scope(
+            assignment_title=assignment.title,
+            assignment_desc=assignment.description,
+            teacher_files_content=[pres_text]
+        )
+        self.assertEqual(scope['assigned_task_count'], 1)
+        self.assertTrue(scope['is_single_complex_task'])
+        self.assertEqual(len(scope['ignored_found_tasks']), 4)
+
+        # Створення здачі учня
+        sub_file = SimpleUploadedFile("project.txt", "Готовий проєкт учня з повним описом та дослідженням.".encode('utf-8'), content_type="text/plain")
+        submission = Submission.objects.create(
+            assignment=assignment,
+            class_group=self.class_group,
+            first_name='Максим',
+            last_name='Шевченко',
+            file=sub_file,
+            is_latest_attempt=True
+        )
+
+        # ШІ галюцинує «1 з 4 завдань» та скарги на вправи 1, 2, 3
+        hallucinated_ai_reply = json.dumps({
+            "suggested_grade": "10",
+            "level": "Високий (10-12)",
+            "unclear_task": False,
+            "format_warning": None,
+            "summary": "Учень виконав 1 з 4 завдань. Здано проєкт.",
+            "strengths": ["Гарно виконаний проєкт."],
+            "weaknesses": [
+                "Виконано 1 з 4 завдань",
+                "Не виконано завдання 2",
+                "Не виконано вправу 3",
+                "Відсутня відповідь на питання 4"
+            ],
+            "feedback_comment": "Виконано 1 з 4 завдань з презентації. Не виконано завдання 2.",
+            "task_resolution": {
+                "scope_source": "teacher_files",
+                "assigned_task_count": 4
+            },
+            "tasks_total_count": 4,
+            "tasks_completed_count": 1,
+            "tasks_evaluated": [
+                {"task_num": 1, "task_title": "Проєкт", "status": "completed"},
+                {"task_num": 2, "task_title": "Вправа 2", "status": "missing"},
+                {"task_num": 3, "task_title": "Вправа 3", "status": "missing"},
+                {"task_num": 4, "task_title": "Вправа 4", "status": "missing"}
+            ]
+        }, ensure_ascii=False)
+        mock_call.return_value = (200, hallucinated_ai_reply, None, {})
+
+        result = evaluate_submission_with_gemini(submission)
+
+        # Перевірки
+        self.assertEqual(result['tasks_total_count'], 1)
+        self.assertEqual(result['tasks_completed_count'], 1)
+        self.assertEqual(len(result['tasks_evaluated']), 1)
+        self.assertNotIn("1 з 4", result['summary'])
+        self.assertNotIn("1 з 4", result['feedback_comment'])
+        self.assertFalse(any("1 з 4" in w for w in result['weaknesses']))
+        self.assertFalse(any("не виконано" in w.lower() for w in result['weaknesses']))
+        self.assertEqual(result['suggested_grade'], '10')
+
+    @patch('feed.gemini_service.call_ai_api')
+    def test_scope_scenario_2_specific_exercise_2_only(self, mock_call):
+        """
+        ТЕСТ 2: Вчитель: «Виконати вправу 2.». Файл містить вправи 1–5. Учень виконав вправу 2.
+        Очікування: assigned_task_count = 1, оцінюється ТІЛЬКИ вправа 2, решта незадані.
+        """
+        assignment = Assignment.objects.create(
+            teacher=self.teacher,
+            subject=self.subject,
+            title="Домашня робота",
+            description="Виконати вправу 2."
+        )
+        assignment.classes.add(self.class_group)
+
+        pres_text = (
+            "[Слайд 1] Вправа 1. Розв'язати рівняння\n"
+            "[Слайд 2] Вправа 2. Побудувати графік функції y = 2x + 1\n"
+            "[Слайд 3] Вправа 3. Скласти таблицю значень\n"
+            "[Слайд 4] Вправа 4. Знайти нулі функції\n"
+            "[Слайд 5] Вправа 5. Дослідити на монотонність\n"
+        )
+        t_file = SimpleUploadedFile("tasks.txt", pres_text.encode('utf-8'), content_type="text/plain")
+        AssignmentFile.objects.create(assignment=assignment, file=t_file, original_name="tasks.txt")
+
+        from .gemini_service import resolve_assignment_scope
+        scope = resolve_assignment_scope(
+            assignment_title=assignment.title,
+            assignment_desc=assignment.description,
+            teacher_files_content=[pres_text]
+        )
+        self.assertEqual(scope['assigned_task_count'], 1)
+        self.assertEqual(scope['teacher_specific_task_nums'], [2])
+        self.assertTrue(scope['is_single_complex_task'])
+        self.assertEqual(len(scope['ignored_found_tasks']), 4)
+
+        sub_file = SimpleUploadedFile("work.txt", "Вправа 2. Графік побудовано за точками (0, 1), (1, 3).".encode('utf-8'), content_type="text/plain")
+        submission = Submission.objects.create(
+            assignment=assignment,
+            class_group=self.class_group,
+            first_name='Софія',
+            last_name='Бондар',
+            file=sub_file,
+            is_latest_attempt=True
+        )
+
+        mock_call.return_value = (200, json.dumps({
+            "suggested_grade": "11",
+            "level": "Високий (10-12)",
+            "unclear_task": False,
+            "format_warning": None,
+            "summary": "Учениця чудово виконала вправу 2, побудувавши графік функції.",
+            "strengths": ["Правильно розраховані координати точок."],
+            "weaknesses": ["Не виконано вправу 1", "Не виконано вправу 3"],
+            "feedback_comment": "Гарна робота! Не виконано вправу 1.",
+            "tasks_total_count": 1,
+            "tasks_completed_count": 1
+        }, ensure_ascii=False), None, {})
+
+        result = evaluate_submission_with_gemini(submission)
+        self.assertEqual(result['tasks_total_count'], 1)
+        self.assertEqual(result['suggested_grade'], '11')
+        self.assertFalse(any('вправу 1' in w.lower() for w in result['weaknesses']))
+        self.assertFalse(any('вправу 3' in w.lower() for w in result['weaknesses']))
+        self.assertNotIn('вправу 1', result['feedback_comment'].lower())
+
+    @patch('feed.gemini_service.call_ai_api')
+    def test_scope_scenario_3_specific_exercises_1_2_3_partial(self, mock_call):
+        """
+        ТЕСТ 3: Вчитель: «Виконати вправи 1, 2 та 3.». Учень виконав 1 і 2.
+        Очікування: assigned_task_count = 3, вправа 3 може бути позначена як невиконана (стеля 8 балів).
+        """
+        assignment = Assignment.objects.create(
+            teacher=self.teacher,
+            subject=self.subject,
+            title="Практичні вправи",
+            description="Виконати вправи 1, 2 та 3."
+        )
+        assignment.classes.add(self.class_group)
+
+        from .gemini_service import resolve_assignment_scope
+        scope = resolve_assignment_scope(
+            assignment_title=assignment.title,
+            assignment_desc=assignment.description,
+        )
+        self.assertEqual(scope['assigned_task_count'], 3)
+        self.assertEqual(scope['teacher_specific_task_nums'], [1, 2, 3])
+        self.assertFalse(scope['is_single_complex_task'])
+
+        sub_file = SimpleUploadedFile("work.txt", "Вправа 1: виконано.\nВправа 2: виконано.".encode('utf-8'), content_type="text/plain")
+        submission = Submission.objects.create(
+            assignment=assignment,
+            class_group=self.class_group,
+            first_name='Іван',
+            last_name='Франко',
+            file=sub_file,
+            is_latest_attempt=True
+        )
+
+        mock_call.return_value = (200, json.dumps({
+            "suggested_grade": "11",
+            "level": "Високий (10-12)",
+            "unclear_task": False,
+            "format_warning": None,
+            "summary": "Учень виконав завдання 1 та 2, але пропущено завдання 3.",
+            "strengths": ["Вправи 1 і 2 виконано точно."],
+            "weaknesses": ["Не виконано завдання 3", "Не виконано завдання 4"],
+            "feedback_comment": "Робота добра, але завдання 3 не виконано.",
+            "tasks_total_count": 3,
+            "tasks_completed_count": 2,
+            "tasks_evaluated": [
+                {"task_num": 1, "task_title": "Вправа 1", "status": "completed"},
+                {"task_num": 2, "task_title": "Вправа 2", "status": "completed"},
+                {"task_num": 3, "task_title": "Вправа 3", "status": "missing"}
+            ]
+        }, ensure_ascii=False), None, {})
+
+        result = evaluate_submission_with_gemini(submission)
+        self.assertEqual(result['tasks_total_count'], 3)
+        # 2 із 3 завдань -> стеля максимум 8 балів
+        self.assertEqual(result['suggested_grade'], '8')
+        # Завдання 3 залишається у зауваженнях (оскільки задане)
+        self.assertTrue(any('завдання 3' in w.lower() for w in result['weaknesses']))
+        # Завдання 4 видалено (оскільки НЕ задане)
+        self.assertFalse(any('завдання 4' in w.lower() for w in result['weaknesses']))
+
+    @patch('feed.gemini_service.call_ai_api')
+    def test_scope_scenario_4_presentation_with_custom_criteria(self, mock_call):
+        """
+        ТЕСТ 4: Вчитель: «Створити презентацію.». custom_criteria: 8 слайдів; титульний слайд; висновок; джерела.
+        Очікування: assigned_task_count = 1, оцінюється презентація за критеріями, критерії мають пріоритет.
+        """
+        assignment = Assignment.objects.create(
+            teacher=self.teacher,
+            subject=self.subject,
+            title="Створити презентацію",
+            description="Створити презентацію.",
+            custom_criteria="• 8 слайдів\n• титульний слайд\n• висновок\n• джерела"
+        )
+        assignment.classes.add(self.class_group)
+
+        from .gemini_service import resolve_assignment_scope
+        scope = resolve_assignment_scope(
+            assignment_title=assignment.title,
+            assignment_desc=assignment.description,
+            custom_criteria=assignment.custom_criteria
+        )
+        self.assertEqual(scope['assigned_task_count'], 1)
+        self.assertTrue(scope['is_single_complex_task'])
+        self.assertEqual(len(scope['custom_criteria_rules']), 4)
+        self.assertIn('8 слайдів', scope['custom_criteria_rules'])
+
+        sub_file = SimpleUploadedFile("pres.txt", "Презентація на 8 слайдів з висновками та джерелами.".encode('utf-8'), content_type="text/plain")
+        submission = Submission.objects.create(
+            assignment=assignment,
+            class_group=self.class_group,
+            first_name='Дарина',
+            last_name='Мельник',
+            file=sub_file,
+            is_latest_attempt=True
+        )
+
+        mock_call.return_value = (200, json.dumps({
+            "suggested_grade": "11",
+            "level": "Високий (10-12)",
+            "unclear_task": False,
+            "format_warning": None,
+            "summary": "Презентація повністю відповідає критеріям: 8 слайдів, титульний, висновки, джерела.",
+            "strengths": ["Дотримано всіх індивідуальних критеріїв."],
+            "weaknesses": [],
+            "feedback_comment": "Чудова презентація!",
+            "tasks_total_count": 1,
+            "tasks_completed_count": 1
+        }, ensure_ascii=False), None, {})
+
+        result = evaluate_submission_with_gemini(submission)
+        self.assertEqual(result['tasks_total_count'], 1)
+        self.assertEqual(result['suggested_grade'], '11')
+
+    def test_scope_scenario_5_project_mixed_content_presentation(self):
+        """
+        ТЕСТ 5: Вчитель: «Робота над проєктом.». У презентації: теорія, приклад, 3 вправи,
+        питання для самоперевірки, домашнє завдання.
+        Очікування: жоден із цих елементів не стає обов'язковим окремим завданням, assigned_task_count = 1.
+        """
+        from .gemini_service import resolve_assignment_scope
+        mixed_presentation = (
+            "[Слайд 1] Теорія: поняття штучного інтелекту\n"
+            "[Слайд 2] Приклад: робота експертної системи\n"
+            "[Слайд 3] Вправа 1. Навести приклади ШІ\n"
+            "[Слайд 4] Вправа 2. Порівняти підходи\n"
+            "[Слайд 5] Вправа 3. Скласти блок-схему\n"
+            "[Слайд 6] Питання для самоперевірки: Що таке машинне навчання?\n"
+            "[Слайд 7] Домашнє завдання: повторити параграф 12\n"
+        )
+        scope = resolve_assignment_scope(
+            assignment_title="Проєкт з інформатики",
+            assignment_desc="Робота над проєктом.",
+            teacher_files_content=[mixed_presentation]
+        )
+        self.assertEqual(scope['assigned_task_count'], 1)
+        self.assertTrue(scope['is_single_complex_task'])
+        self.assertEqual(scope['task_questions'], [])
+        # Усі знайдені вправи/питання з презентації ігноруються
+        self.assertGreaterEqual(len(scope['ignored_found_tasks']), 3)
+
+    def test_scope_scenario_6_homework_slide_15_specific(self):
+        """
+        ТЕСТ 6: Вчитель: «Опрацювати матеріал і виконати домашнє завдання зі слайду 15.».
+        Очікування: Scope включає конкретне завдання зі слайду 15, але не вправи з інших слайдів.
+        """
+        from .gemini_service import resolve_assignment_scope
+        presentation_text = (
+            "[Слайд 2] Вправа 1. Класна робота\n"
+            "[Слайд 5] Вправа 2. Тренувальна вправа\n"
+            "[Слайд 15] Домашнє завдання: скласти таблицю порівняння алгоритмів пошуку\n"
+            "[Слайд 16] Джерела та література\n"
+        )
+        scope = resolve_assignment_scope(
+            assignment_title="Алгоритми пошуку",
+            assignment_desc="Опрацювати матеріал і виконати домашнє завдання зі слайду 15.",
+            teacher_files_content=[presentation_text]
+        )
+        self.assertEqual(scope['assigned_task_count'], 1)
+        self.assertTrue(scope['is_single_complex_task'])
+        self.assertIn("15", scope['assigned_tasks'][0]['description'])
+        self.assertIn("порівняння алгоритмів", scope['task_questions'][0])
+        # Вправи зі слайдів 2 та 5 ігноруються
+        ignored_descriptions = [item['description'] for item in scope['ignored_found_tasks']]
+        self.assertTrue(any("Вправа 1" in d for d in ignored_descriptions))
+        self.assertTrue(any("Вправа 2" in d for d in ignored_descriptions))
+
+
+class IntelligentStudentEvaluationRequirementsTests(TestCase):
+    """
+    10 обов'язкових автоматизованих тестів інтелектуальної перевірки учнівських робіт:
+    1. Комплексне завдання та сторонні вправи
+    2. Конкретний номер вправи (надійне непозиційне зіставлення)
+    3. Явно заданий перелік
+    4. Критерії в окремому полі
+    5. Критерії в окремому файлі
+    6. Коментар учня містить висновок
+    7. Вимога до формату (висновок у презентації)
+    8. Непідтверджена заява учня
+    9. Недоступний файл або посилання
+    10. Зворотний зв'язок і перездача
+    """
+    def setUp(self):
+        self.user = User.objects.create_user(username='teacher_eval', password='password123', is_staff=True)
+        self.teacher = Teacher.objects.create(user=self.user, full_name='Оксана Василівна')
+        self.class_group = ClassGroup.objects.create(grade=9, letter='А', name='9-А')
+        self.teacher.classes.add(self.class_group)
+        self.subject = Subject.objects.create(name='Інформатика', icon='💻', color='#3b82f6')
+        self.teacher.subjects.add(self.subject)
+        self.client = Client()
+        self.client.login(username='teacher_eval', password='password123')
+
+        self.ai_settings = AISettings.get_solo()
+        self.ai_settings.is_enabled = True
+        self.ai_settings.api_key = "AIzaSyFakeKeyForEvaluationTesting"
+        self.ai_settings.ai_provider = 'gemini'
+        self.ai_settings.model_name = 'gemini-2.5-flash'
+        self.ai_settings.save()
+
+    @patch('feed.gemini_service.call_ai_api')
+    def test_1_complex_task_and_extraneous_exercises(self, mock_ai):
+        """
+        Тест 1. Комплексне завдання та сторонні вправи:
+        Умова вчителя: «Робота над проєктом».
+        Файл учителя містить теорію, приклад і 4 вправи.
+        Учень подав готовий проєкт.
+        Очікування: призначено 1 комплексне завдання, сторонні вправи не стають обов'язковими,
+        немає твердження «виконано 1 із 4».
+        """
+        from .gemini_service import resolve_assignment_scope, evaluate_submission_with_gemini
+
+        teacher_file_text = (
+            "Теорія: Основи реляційних баз даних.\n"
+            "Приклад: Створення таблиці Клієнти.\n"
+            "Вправа 1. Створити поле ID.\n"
+            "Вправа 2. Налаштувати первинний ключ.\n"
+            "Вправа 3. Додати 5 записів.\n"
+            "Вправа 4. Створити запит на вибірку."
+        )
+
+        scope = resolve_assignment_scope(
+            assignment_title="Бази даних",
+            assignment_desc="Робота над проєктом.",
+            teacher_files_content=[teacher_file_text]
+        )
+        self.assertEqual(scope['assigned_task_count'], 1)
+        self.assertTrue(scope['is_single_complex_task'])
+        self.assertGreaterEqual(len(scope['ignored_found_tasks']), 4)
+
+        assignment = Assignment.objects.create(
+            teacher=self.teacher,
+            subject=self.subject,
+            title="Бази даних",
+            description="Робота над проєктом.",
+            status=Assignment.STATUS_PUBLISHED
+        )
+        file = SimpleUploadedFile("project.accdb", b"Mock database content", content_type="application/msaccess")
+        submission = Submission.objects.create(
+            assignment=assignment,
+            first_name='Михайло',
+            last_name='Коваленко',
+            class_group=self.class_group,
+            teacher=self.teacher,
+            file=file
+        )
+
+        # Моделюємо відповідь моделі, яка спробувала написати «виконано 1 з 4»
+        mock_ai.return_value = (200, json.dumps({
+            "suggested_grade": "11",
+            "level": "Високий (10-12)",
+            "tasks_total_count": 4,
+            "tasks_completed_count": 1,
+            "summary": "Проєкт виконано успішно, проте виконано лише 1 з 4 завдань із файлу.",
+            "weaknesses": ["Не виконано вправу 2 з презентації", "Виконано 1 з 4 завдань"],
+            "strengths": ["Чудова реалізація проєкту бази даних"],
+            "feedback_comment": "Гарна робота над проєктом, але виконано 1 з 4 завдань."
+        }, ensure_ascii=False), None, {})
+
+        result = evaluate_submission_with_gemini(submission)
+        self.assertEqual(result['tasks_total_count'], 1)
+        self.assertEqual(result['tasks_completed_count'], 1)
+        self.assertFalse(any("1 з 4" in w for w in result['weaknesses']))
+        self.assertNotIn("1 з 4", result['summary'])
+
+    def test_2_specific_exercise_number_non_positional(self):
+        """
+        Тест 2. Конкретний номер вправи:
+        Умова: «Виконати вправу 2».
+        Файл містить вправи 1–5, а також заголовки й теоретичні запитання.
+        Очікування: визначено саме вправу 2 за її номером/міткою, а не за індексом 1.
+        Інші вправи не впливають на оцінку.
+        """
+        from .gemini_service import resolve_assignment_scope, find_question_by_task_num
+
+        questions_list = [
+            "Тема: Основи алгоритмів. Що таке алгоритм?",
+            "Вправа 1. Складіть лінійний алгоритм приготування чаю.",
+            "Вправа 2. Складіть розгалужений алгоритм обчислення функції з умовою if.",
+            "Вправа 3. Складіть циклічний алгоритм підрахунку суми.",
+            "Вправа 4. Намалюйте блок-схему алгоритму.",
+            "Вправа 5. Протестуйте програму у середовищі IDLE."
+        ]
+
+        # Перевіряємо семантичний пошукач номера
+        matched = find_question_by_task_num(questions_list, 2)
+        self.assertIsNotNone(matched)
+        self.assertIn("розгалужений алгоритм", matched)
+        self.assertNotIn("лінійний алгоритм", matched)
+
+        scope = resolve_assignment_scope(
+            assignment_title="Алгоритми",
+            assignment_desc="Виконати вправу 2",
+            teacher_files_content=["\n".join(questions_list)]
+        )
+        self.assertEqual(scope['assigned_task_count'], 1)
+        self.assertEqual(scope['teacher_specific_task_nums'], [2])
+        self.assertIn("розгалужений", scope['assigned_tasks'][0]['description'])
+        self.assertNotIn("лінійний", scope['assigned_tasks'][0]['description'])
+
+        ignored_descs = [item['description'] for item in scope['ignored_found_tasks']]
+        self.assertTrue(any("Вправа 1" in d for d in ignored_descs))
+        self.assertTrue(any("Вправа 3" in d for d in ignored_descs))
+        self.assertTrue(any("Вправа 4" in d for d in ignored_descs))
+
+    def test_3_explicit_list_of_exercises(self):
+        """
+        Тест 3. Явно заданий перелік:
+        Умова: «Виконати вправи 1, 2 і 3».
+        Файл учителя містить вправи 1–5.
+        Очікування: перевіряються саме 3 призначені вправи, вправи 4 і 5 ігноруються.
+        """
+        from .gemini_service import resolve_assignment_scope
+
+        files_content = (
+            "Вправа 1. Оголосити змінні.\n"
+            "Вправа 2. Ввести дані з клавіатури.\n"
+            "Вправа 3. Вивести результат.\n"
+            "Вправа 4. Додати графічний інтерфейс.\n"
+            "Вправа 5. Скомпілювати у виконуваний файл."
+        )
+        scope = resolve_assignment_scope(
+            assignment_title="Програмування Python",
+            assignment_desc="Виконати вправи 1, 2 і 3",
+            teacher_files_content=[files_content]
+        )
+        self.assertEqual(scope['assigned_task_count'], 3)
+        self.assertEqual(scope['teacher_specific_task_nums'], [1, 2, 3])
+        self.assertEqual(len(scope['assigned_tasks']), 3)
+
+        ignored_descs = [item['description'] for item in scope['ignored_found_tasks']]
+        self.assertTrue(any("Вправа 4" in d for d in ignored_descs))
+        self.assertTrue(any("Вправа 5" in d for d in ignored_descs))
+
+    def test_4_custom_criteria_separate_field(self):
+        """
+        Тест 4. Критерії в окремому полі:
+        Умова: «Створити презентацію».
+        Спеціальні критерії: 8 слайдів, титульний слайд, висновок, джерела.
+        Очікування: усі 4 вимоги перевіряються окремо і входять до плану оцінювання.
+        """
+        from .gemini_service import resolve_assignment_scope
+
+        custom_criteria = (
+            "- не менше 8 слайдів\n"
+            "- титульний слайд\n"
+            "- висновок\n"
+            "- список використаних джерел\n"
+            "- щонайменше 3 ілюстрації"
+        )
+        scope = resolve_assignment_scope(
+            assignment_title="Комп'ютерні презентації",
+            assignment_desc="Створити презентацію",
+            custom_criteria=custom_criteria
+        )
+        self.assertEqual(len(scope['custom_criteria_rules']), 5)
+        eval_plan = scope['evaluation_plan']
+        self.assertEqual(len(eval_plan['criteria']), 5)
+        criterion_names = [c['name'] for c in eval_plan['criteria']]
+        self.assertTrue(any("8 слайдів" in n for n in criterion_names))
+        self.assertTrue(any("титульний" in n for n in criterion_names))
+        self.assertTrue(any("висновок" in n for n in criterion_names))
+        self.assertTrue(any("джерел" in n for n in criterion_names))
+        self.assertTrue(any("ілюстраці" in n for n in criterion_names))
+
+    def test_5_criteria_in_attached_file(self):
+        """
+        Тест 5. Критерії в окремому файлі:
+        Умова: «Виконайте завдання за прикріпленим документом».
+        Документ містить умову, критерії оцінювання, теорію та додаткові вправи.
+        Очікування: критерії оцінювання виявлені та враховані, додаткові вправи не стають обов'язковими.
+        """
+        from .gemini_service import resolve_assignment_scope
+
+        document_text = (
+            "Практична робота: Дослідження функцій.\n"
+            "Теоретичні відомості: Поняття функції...\n\n"
+            "Критерії оцінювання:\n"
+            "- Побудова графіка функції (4 бали)\n"
+            "- Знаходження нулів функції (3 бали)\n"
+            "- Дослідження монотонності (3 бали)\n"
+            "- Загальні висновки (2 бали)\n\n"
+            "Вимоги до оформлення:\n"
+            "- Акуратне оформлення графіка\n\n"
+            "Додаткові вправи для самостійного опрацювання:\n"
+            "Вправа 1. Дослідити складну функцію.\n"
+            "Вправа 2. Побудувати дотичну."
+        )
+
+        scope = resolve_assignment_scope(
+            assignment_title="Дослідження функцій",
+            assignment_desc="Виконайте завдання за прикріпленим документом",
+            teacher_files_content=[document_text]
+        )
+        self.assertEqual(scope['assigned_task_count'], 1)
+        eval_plan = scope['evaluation_plan']
+        self.assertGreaterEqual(len(eval_plan['criteria']), 3)
+
+        crit_names = [c['name'] for c in eval_plan['criteria']]
+        self.assertTrue(any("Побудова графіка" in n for n in crit_names))
+        self.assertTrue(any("нулів функції" in n for n in crit_names))
+
+        # Додаткові вправи 1 та 2 не є обов'язковими завданнями
+        ignored_descs = [item['description'] for item in scope['ignored_found_tasks']]
+        self.assertTrue(any("Вправа 1" in d for d in ignored_descs))
+        self.assertTrue(any("Вправа 2" in d for d in ignored_descs))
+
+    @patch('feed.gemini_service.call_ai_api')
+    def test_6_student_comment_contains_conclusion(self, mock_ai):
+        """
+        Тест 6. Коментар учня містить висновок:
+        Умова вимагає зробити висновок.
+        Учень прикріпив файл без висновку, але в полі коментаря навів змістовний висновок.
+        Очікування: коментар аналізується, критерій висновку зараховується, немає заперечення про відсутність.
+        """
+        from .gemini_service import analyze_student_comment_nuance, evaluate_submission_with_gemini
+
+        assignment = Assignment.objects.create(
+            teacher=self.teacher,
+            subject=self.subject,
+            title="Лабораторна робота №3",
+            description="Дослідити швидкість сортування. Зробити висновок.",
+            status=Assignment.STATUS_PUBLISHED
+        )
+        file = SimpleUploadedFile("sort.py", b"def sort(): pass", content_type="text/x-python")
+        student_comment = "Висновок: експеримент показав, що швидке сортування QuickSort працює в рази швидше за BubbleSort."
+
+        nuance = analyze_student_comment_nuance(
+            comment_student=student_comment,
+            desc=assignment.description
+        )
+        self.assertTrue(nuance['has_substance'])
+        self.assertEqual(nuance['substance_type'], 'conclusion')
+        self.assertFalse(nuance['format_strictly_requires_file'])
+
+        submission = Submission.objects.create(
+            assignment=assignment,
+            first_name='Анна',
+            last_name='Бойко',
+            class_group=self.class_group,
+            teacher=self.teacher,
+            file=file,
+            comment_student=student_comment
+        )
+
+        mock_ai.return_value = (200, json.dumps({
+            "suggested_grade": "11",
+            "level": "Високий (10-12)",
+            "summary": "Роботу виконано успішно.",
+            "weaknesses": ["Висновок відсутній у коді файлу"],
+            "strengths": ["Правильний алгоритм"],
+            "feedback_comment": "Добре виконано.",
+            "criteria_results": [
+                {"criterion": "Зробити висновок", "status": "missing", "evidence": "", "recommendation": "Надати висновок"}
+            ]
+        }, ensure_ascii=False), None, {})
+
+        result = evaluate_submission_with_gemini(submission)
+        self.assertFalse(any("висновок відсутній" in str(w).lower() for w in result['weaknesses']))
+        # Критерій висновку зараховано
+        crit_res = {c['criterion']: c['status'] for c in result['criteria_results']}
+        self.assertEqual(crit_res.get("Зробити висновок"), "completed")
+
+    @patch('feed.gemini_service.call_ai_api')
+    def test_7_format_requirement_conclusion_on_slide(self, mock_ai):
+        """
+        Тест 7. Вимога до формату:
+        Умова вимагає, щоб висновок був безпосередньо в презентації на слайді.
+        Учень подав висновок лише в коментарі.
+        Очікування: зміст висновку враховано, вимога формату перевіряється окремо,
+        пояснюється перенесення на слайд без твердження про повну відсутність.
+        """
+        from .gemini_service import analyze_student_comment_nuance, evaluate_submission_with_gemini
+
+        assignment = Assignment.objects.create(
+            teacher=self.teacher,
+            subject=self.subject,
+            title="Презентація",
+            description="Створити презентацію. Висновок на окремому слайді презентації є обов'язковим.",
+            status=Assignment.STATUS_PUBLISHED
+        )
+        file = SimpleUploadedFile("presentation.pptx", b"Mock presentation bytes", content_type="application/vnd.openxmlformats-officedocument.presentationml.presentation")
+        student_comment = "Висновок: розроблені слайди демонструють перспективи квантових комп'ютерів."
+
+        nuance = analyze_student_comment_nuance(
+            comment_student=student_comment,
+            desc=assignment.description
+        )
+        self.assertTrue(nuance['has_substance'])
+        self.assertTrue(nuance['format_strictly_requires_file'])
+
+        submission = Submission.objects.create(
+            assignment=assignment,
+            first_name='Денис',
+            last_name='Ткаченко',
+            class_group=self.class_group,
+            teacher=self.teacher,
+            file=file,
+            comment_student=student_comment
+        )
+
+        mock_ai.return_value = (200, json.dumps({
+            "suggested_grade": "9",
+            "level": "Достатній (7-9)",
+            "summary": "Гарна презентація, але висновок відсутній у роботі.",
+            "weaknesses": ["Висновок відсутній"],
+            "strengths": ["Якісні ілюстрації"],
+            "feedback_comment": "Додайте висновок.",
+            "criteria_results": [
+                {"criterion": "Висновок", "status": "missing", "evidence": "", "recommendation": "Додати висновок"}
+            ]
+        }, ensure_ascii=False), None, {})
+
+        result = evaluate_submission_with_gemini(submission)
+        # Немає неправдивого твердження про повну відсутність висновку
+        self.assertFalse(any(w == "Висновок відсутній" for w in result['weaknesses']))
+        # Присутнє зауваження про перенесення на слайд
+        self.assertTrue(any("слайд" in str(w).lower() and "висновок" in str(w).lower() for w in result['weaknesses']))
+        # Статус критерію частковий (зміст є, формат потребує розміщення на слайді)
+        concl_entry = [c for c in result['criteria_results'] if "висновок" in c['criterion'].lower()][0]
+        self.assertEqual(concl_entry['status'], 'partial')
+
+    def test_8_unsubstantiated_student_claim(self):
+        """
+        Тест 8. Непідтверджена заява учня:
+        Учень пише в коментарі, що виконав усі вимоги («Я все зробив ідеально, поставте 12»),
+        але змістовних доказів немає.
+        Очікування: заява розпізнається як порожня декларація, не зараховується автоматично.
+        """
+        from .gemini_service import analyze_student_comment_nuance
+
+        empty_comment = "Я все зробив! Усі вимоги виконав на 100%, поставте 12 балів."
+        nuance = analyze_student_comment_nuance(empty_comment)
+        self.assertTrue(nuance['is_unsubstantiated_declaration'])
+        self.assertFalse(nuance['has_substance'])
+
+    @patch('feed.gemini_service.fetch_url_content')
+    @patch('feed.gemini_service.call_ai_api')
+    def test_9_inaccessible_url_or_file(self, mock_ai, mock_fetch):
+        """
+        Тест 9. Недоступний файл або посилання:
+        Учень подав посилання, вміст якого неможливо отримати.
+        Очікування: технічне обмеження зафіксоване, не маскується під доведену помилку учня.
+        """
+        from .gemini_service import extract_submission_content, evaluate_submission_with_gemini
+
+        mock_fetch.return_value = (None, None, "404 Not Found: сервер недоступний")
+
+        assignment = Assignment.objects.create(
+            teacher=self.teacher,
+            subject=self.subject,
+            title="Веб-розробка",
+            description="Опублікувати сайт та надати посилання.",
+            status=Assignment.STATUS_PUBLISHED
+        )
+        submission = Submission.objects.create(
+            assignment=assignment,
+            first_name='Василь',
+            last_name='Поліщук',
+            class_group=self.class_group,
+            teacher=self.teacher,
+            link="https://inaccessible-student-site.ua/project"
+        )
+
+        text_parts, media, err = extract_submission_content(submission)
+        inacc = getattr(submission, '_inaccessible_materials', [])
+        self.assertEqual(len(inacc), 1)
+        self.assertIn("404 Not Found", inacc[0]['error'])
+
+        # Моделюємо AI, що помилково стверджує про помилку в коді
+        mock_ai.return_value = (200, json.dumps({
+            "suggested_grade": "2",
+            "level": "Початковий (1-3)",
+            "summary": "Учень написав код з помилками.",
+            "weaknesses": ["Помилка в коді програми", "Не працює веб-сайт"],
+            "strengths": [],
+            "feedback_comment": "Виправте помилки в коді."
+        }, ensure_ascii=False), None, {})
+
+        result = evaluate_submission_with_gemini(submission)
+        self.assertEqual(result['suggested_grade'], 'Доопрацювати')
+        self.assertIn('inaccessible_materials', result['submission_evidence'])
+        self.assertEqual(len(result['submission_evidence']['inaccessible_materials']), 1)
+        # Помилка в коді видалена, зафіксовано технічну причину
+        self.assertFalse(any("помилка в коді" in str(w).lower() for w in result['weaknesses']))
+        self.assertTrue(any("технічна недоступність" in str(w).lower() or "недоступн" in str(w).lower() for w in result['weaknesses']))
+
+    @patch('feed.gemini_service.call_ai_api')
+    def test_10_ai_total_and_qs_cannot_alter_tasks_total_count(self, mock_ai):
+        """
+        Тест 10. Перевірити, що ai_total, len(tasks_evaluated), len(raw_found_questions),
+        len(qs_count) не можуть змінити tasks_total_count, якщо evaluation_plan уже сформований.
+        """
+        from .gemini_service import evaluate_submission_with_gemini
+
+        assignment = Assignment.objects.create(
+            teacher=self.teacher,
+            subject=self.subject,
+            title="Створити презентацію",
+            description="Створити презентацію про штучний інтелект.",
+            status=Assignment.STATUS_PUBLISHED
+        )
+        file = SimpleUploadedFile("presentation.pptx", b"Mock presentation bytes", content_type="application/vnd.openxmlformats-officedocument.presentationml.presentation")
+        submission = Submission.objects.create(
+            assignment=assignment,
+            first_name='Олег',
+            last_name='Сидоренко',
+            class_group=self.class_group,
+            teacher=self.teacher,
+            file=file
+        )
+
+        # AI намагається повернути tasks_total_count = 6 та 6 оцінених завдань
+        mock_ai.return_value = (200, json.dumps({
+            "suggested_grade": "10",
+            "level": "Високий (10-12)",
+            "tasks_total_count": 6,
+            "tasks_completed_count": 5,
+            "tasks_evaluated": [{"task_num": i, "status": "completed"} for i in range(1, 7)],
+            "summary": "Виконано 5 із 6 завдань.",
+            "weaknesses": ["Не виконано завдання 6"],
+            "strengths": ["Гарна робота"],
+            "feedback_comment": "Добре."
+        }, ensure_ascii=False), None, {})
+
+        result = evaluate_submission_with_gemini(submission)
+        # tasks_total_count береться суворо з evaluation_plan/teacher scope (1), а не з відповіді AI (6)
+        self.assertEqual(result['tasks_total_count'], 1)
+        self.assertEqual(result['tasks_completed_count'], 1)
+        self.assertFalse(any("5 із 6" in w for w in result['weaknesses']))
+        self.assertNotIn("5 із 6", result['summary'])
+
+    @patch('feed.gemini_service.call_ai_api')
+    def test_11_feedback_and_revision_advice_consistency(self, mock_ai):
+        """
+        Тест 10. Зворотний зв'язок і перездача:
+        У роботі є сильні сторони та 2 підтверджені недоліки.
+        Очікування: сильні сторони, недоліки та рекомендації для перездачі взаємоузгоджені.
+        """
+        from .gemini_service import evaluate_submission_with_gemini
+
+        assignment = Assignment.objects.create(
+            teacher=self.teacher,
+            subject=self.subject,
+            title="Аналіз даних",
+            description="Виконати аналіз даних за інструкцією.",
+            status=Assignment.STATUS_PUBLISHED
+        )
+        file = SimpleUploadedFile("analysis.docx", b"Mock docx data", content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+        submission = Submission.objects.create(
+            assignment=assignment,
+            first_name='Софія',
+            last_name='Мороз',
+            class_group=self.class_group,
+            teacher=self.teacher,
+            file=file
+        )
+
+        mock_ai.return_value = (200, json.dumps({
+            "suggested_grade": "8",
+            "level": "Достатній (7-9)",
+            "summary": "Роботу виконано на достатньому рівні.",
+            "strengths": ["Правильно розраховано статистичні показники", "Наведено інформативні графіки"],
+            "weaknesses": ["Відсутній список використаних джерел", "Не проведено аналіз граничних значень"],
+            "revision_advice": [
+                "Додати список використаних джерел та посилань на літературу",
+                "Виконати аналіз поведінки моделі на граничних значеннях вибірки"
+            ],
+            "feedback_comment": "Добре пораховано статистику, але обов'язково додайте джерела та аналіз граничних значень."
+        }, ensure_ascii=False), None, {})
+
+        result = evaluate_submission_with_gemini(submission)
+        self.assertEqual(len(result['strengths']), 2)
+        self.assertEqual(len(result['weaknesses']), 2)
+        self.assertGreaterEqual(len(result['revision_advice']), 2)
+        self.assertIn("джерел", result['revision_advice'][0].lower())
+        self.assertIn("граничн", result['revision_advice'][1].lower())
+        self.assertEqual(result['suggested_grade'], '8')
+
+
 
 
 
