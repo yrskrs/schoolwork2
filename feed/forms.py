@@ -13,6 +13,7 @@ from django import forms
 from django.core.exceptions import ValidationError
 from django.contrib.auth.models import User
 from django.utils import timezone
+from django.db.models import Q
 from .models import Assignment, Teacher, ClassGroup, Subject, Student
 
 
@@ -408,6 +409,7 @@ class AssignmentForm(forms.ModelForm):
             'due_date', 'scheduled_at',
             'no_submission_required',
             'allow_student_ai_check', 'allow_ai_usage',
+            'ai_thinking_mode',
             'allow_student_ai_understanding',
             'custom_criteria',
         ]
@@ -424,6 +426,7 @@ class AssignmentForm(forms.ModelForm):
             'no_submission_required': 'Не вимагає здачі робіт (усне / для опрацювання)',
             'allow_student_ai_check': 'Дозволити учням 1 самоперевірку через ШІ',
             'allow_ai_usage': 'Дозволити учням використання ШІ при виконанні завдання',
+            'ai_thinking_mode': 'Режим глибокого мислення ШІ (Thinking mode)',
             'allow_student_ai_understanding': 'Дозволити учням бачити аналіз ШІ («Як ШІ розуміє завдання»)',
             'custom_criteria': 'Індивідуальні критерії оцінювання для цього завдання',
         }
@@ -808,6 +811,11 @@ class SubmissionForm(forms.Form):
                     co_st = s
                     break
             if not co_st:
+                other_class_exists = Student.objects.filter(
+                    Q(last_name__iexact=co_ln) & Q(first_name__iexact=co_fn)
+                ).exclude(class_group=class_grp).exists()
+                if other_class_exists:
+                    continue
                 co_st = Student.objects.create(
                     last_name=co_ln or "Учень",
                     first_name=co_fn,
@@ -826,7 +834,6 @@ class SubmissionForm(forms.Form):
         group_authors_str = ", ".join(all_authors_display) if is_group else ""
 
         # Визначаємо, чи учень здає роботу повторно (перездача / робота над помилками)
-        from django.db.models import Q
         q_prev = Q(assignment=assignment, class_group=class_grp)
         if student_obj:
             q_prev &= (Q(student=student_obj) | (Q(last_name__iexact=last_name) & Q(first_name__iexact=first_name)))

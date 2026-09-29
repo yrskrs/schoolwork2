@@ -67,7 +67,7 @@ UKRAINIAN_NAME_VARIANTS: Dict[str, Set[str]] = {
     'наталія': {'наталія', 'наталя', 'наташа', 'наталочка'},
     'світлана': {'світлана', 'свєта', 'світланка'},
     'юрій': {'юрій', 'юра', 'юрчик', 'юрко'},
-    'кирило': {'кирило', 'кирил', 'кирюша'},
+    'кирило': {'кирило', 'кирил', 'кіріл', 'кирюша'},
     'захар': {'захар', 'захарко', 'захарчик'},
     'святослав': {'святослав', 'святик', 'святославчик'},
     'арсен': {'арсен', 'арсеній', 'сеня'},
@@ -375,7 +375,16 @@ def normalize_ukrainian_name_declension(w: str) -> str:
         ('ею', 'я'), ('єю', 'я'),
         ('тром', 'тро'), ('йлом', 'йло'), ('дром', 'др'), ('асом', 'ас'),
         ('аном', 'ан'), ('ієм', 'ій'), ('рієм', 'рій'), ('лем', 'ль'), ('зом', 'з'),
-        ('сом', 'с'), ('мом', 'м'), ('ром', 'р'), ('ком', 'к')
+        ('сом', 'с'), ('мом', 'м'), ('ром', 'р'),
+        # Прізвища з випадною голосною -ок (Цапок→Цапком, Денисок→Денисоком):
+        # Конкретні поширені суфікси ДО загального 'ком'→'к'
+        ('пком', 'пок'), ('дком', 'dok'), ('тком', 'ток'), ('вком', 'вок'),
+        ('зком', 'зок'), ('рком', 'рок'), ('нком', 'нок'), ('лком', 'лок'),
+        ('ком', 'к'),
+        ('илом', 'ило'), ('лом', 'ло'), ('славом', 'слав'), ('егом', 'ег'),
+        ('ібом', 'іб'), ('єном', 'єн'), ('орем', 'ор'), ('ллем', 'лля'), ('ллею', 'лля'),
+        # Орудний відмінок м'яких: Бондарем -> Бондар
+        ('арем', 'ар'), ('ярем', 'яр'), ('ерем', 'ер'),
     ]
     for suf, repl in subst:
         if lower.endswith(suf) and len(lower) >= len(suf) + 2:
@@ -429,13 +438,39 @@ def extract_coauthors_from_comment(
                 if st_key in seen_identities:
                     continue
 
-                ln = st.last_name.lower()
-                fn = st.first_name.lower()
+                ln = st.last_name.lower().strip()
+                fn = st.first_name.lower().strip()
 
-                ln_stem = ln[:-1] if len(ln) >= 5 else ln
-                first_name_forms = _FIRST_NAME_INDEX.get(fn, {fn})
+                ln_stems = {ln}
+                if len(ln) >= 4:
+                    ln_stems.add(ln[:-1])
+                if len(ln) >= 5:
+                    ln_stems.add(ln[:-2])
+                if ln.endswith('ок') and len(ln) >= 4:
+                    ln_stems.add(ln[:-2] + 'к')
+                if ln.endswith('ець') and len(ln) >= 5:
+                    ln_stems.add(ln[:-3] + 'ц')
 
-                has_last_name = bool(re.search(r'\b' + re.escape(ln_stem), lower_text, re.IGNORECASE))
+                base_forms = _FIRST_NAME_INDEX.get(fn, {fn})
+                first_name_forms = set(base_forms)
+                for f in base_forms:
+                    if f.endswith(('о', 'а')):
+                        first_name_forms.add(f[:-1] + 'ом')
+                        first_name_forms.add(f[:-1] + 'ою')
+                    elif f.endswith('й'):
+                        first_name_forms.add(f[:-1] + 'єм')
+                        first_name_forms.add(f[:-1] + 'я')
+                    elif f.endswith('я'):
+                        first_name_forms.add(f[:-1] + 'ею')
+                        first_name_forms.add(f[:-1] + 'єю')
+                    elif f.endswith('ь'):
+                        first_name_forms.add(f[:-1] + 'ем')
+                    else:
+                        first_name_forms.add(f + 'ом')
+                        first_name_forms.add(f + 'а')
+                        first_name_forms.add(f + 'у')
+
+                has_last_name = any(re.search(r'\b' + re.escape(s), lower_text, re.IGNORECASE) for s in ln_stems)
                 has_first_name = any(re.search(r'\b' + re.escape(form), lower_text, re.IGNORECASE) for form in first_name_forms)
 
                 if has_last_name and has_first_name:
@@ -446,7 +481,7 @@ def extract_coauthors_from_comment(
                         'last_name': st.last_name,
                         'full_name': st.get_full_name(),
                     })
-                elif has_last_name and any(kw in lower_text for kw in ['разом', 'викону', 'автор', 'група', 'парі', 'співавтор', 'робили', 'працювали']):
+                elif has_last_name and any(kw in lower_text for kw in ['разом', 'спільно', 'вдвох', 'в парі', 'у парі', 'співавтор']):
                     seen_identities.add(st_key)
                     found_coauthors.append({
                         'student': st,
@@ -457,17 +492,15 @@ def extract_coauthors_from_comment(
         except Exception:
             pass
 
-    # 2. Інтелектуальний парсинг ключових фраз групової роботи
+    # 2. Інтелектуальний парсинг ключових фраз групової роботи (тільки чіткі вказівки на співпрацю)
     keyword_patterns = [
-        r'(?:(?:виконувал[иао]|виконал[иао]|працювал[иа]|робил[иа]|здавал[иа])\s*(?:разом|вдвох|в\s+парі|у\s+парі)?\s*(?:з|із|зі)?|'
+        r'(?:(?:виконувал[иао]|виконал[иао]|працювал[иа]|робил[иа]|здавал[иа])\s*(?:разом|вдвох|в\s+парі|у\s+парі)?\s*(?:з|із|зі)|'
         r'разом\s+(?:з|із|зі)|'
         r'спільно\s+(?:з|із|зі)|'
         r'вдвох\s+(?:з|із|зі)|'
         r'(?:у|в)\s+парі\s+(?:з|із|зі)|'
-        r'разом[\s:]+|'
         r'співавтор[иів]*[\s:]+|'
-        r'автор[иів]*\s*(?:роботи|проєкту|проекту)?[\s:]+|'
-        r'учасник[иів]*[\s:]+)'
+        r'учасник[иів]*\s+групи[\s:]+)'
         r'[\s:]*([^\.\n;]+)',
     ]
 
@@ -568,12 +601,22 @@ def auto_bind_coauthors_from_comment(submission) -> List[Dict[str, Any]]:
                     co_st = s
                     break
             if not co_st:
+                # Якщо учень з таким ПІБ належить до ІНШОГО класу школи — КАТЕГОРИЧНО ЗАБОРОНЕНО
+                # створювати його дублікат у цьому класі чи лінкувати до завдання чужого класу!
+                other_class_exists = Student.objects.filter(
+                    Q(last_name__iexact=co_ln) & Q(first_name__iexact=co_fn)
+                ).exclude(class_group=submission.class_group).exists()
+                if other_class_exists:
+                    continue
                 co_st = Student.objects.create(
                     last_name=co_ln or "Учень",
                     first_name=co_fn,
                     class_group=submission.class_group
                 )
             co['student'] = co_st
+
+        if not co_st:
+            continue
 
         # Перевіряємо чи вже є здача у цього співавтора
         existing_sub = None
@@ -611,5 +654,23 @@ def auto_bind_coauthors_from_comment(submission) -> List[Dict[str, Any]]:
                     file=sf.file,
                     original_name=sf.original_name
                 )
+        else:
+            # Оновлюємо зв'язок і груповий статус у наявної здачі співавтора,
+            # щоб робота показувалась як здана в журналі та переглядачі робіт
+            update_fields = []
+            if not existing_sub.primary_submission_id and existing_sub.id != submission.id:
+                existing_sub.primary_submission = submission
+                update_fields.append('primary_submission')
+            if not existing_sub.is_group_work:
+                existing_sub.is_group_work = True
+                update_fields.append('is_group_work')
+            if existing_sub.group_authors != new_group_authors:
+                existing_sub.group_authors = new_group_authors
+                update_fields.append('group_authors')
+            if not existing_sub.file and submission.file:
+                existing_sub.file = submission.file
+                update_fields.append('file')
+            if update_fields:
+                existing_sub.save(update_fields=update_fields)
 
     return coauthors

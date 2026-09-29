@@ -2388,8 +2388,11 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
         # 4. Перевірка сторінки перегляду для учня (submission_detail)
         resp_student = self.client.get(reverse('submission_detail', args=[sub.id]))
         self.assertEqual(resp_student.status_code, 200)
-        self.assertNotContains(resp_student, 'Оцінювання за групами результатів')
-        self.assertNotContains(resp_student, 'ГР 1')
+        # Переконуємось що блок ГР-результатів (специфічні DOM-елементи) відсутній у сторінці учня.
+        # Примітка: 'ГР 1' зустрічається в changelog-модалі (контекстний процесор),
+        # тому перевіряємо DOM-ідентифікатори, що з'являються лише при реальних ГР-результатах.
+        self.assertNotContains(resp_student, 'gr-results-block')
+        self.assertNotContains(resp_student, 'gr-grade-badge')
 
         # 5. Перевірка сторінки перегляду для вчителя (view_file)
         self.client.login(username='teacher1', password='password123')

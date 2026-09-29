@@ -5,8 +5,17 @@
 
 from pathlib import Path
 import os
+import sys
 import dj_database_url
 from dotenv import load_dotenv
+
+# Захист від порожніх системних каталогів numpy у Python 3.14 (namespace packages без модуля)
+try:
+    import numpy
+    if not hasattr(numpy, '__file__') or not hasattr(numpy, '__version__'):
+        sys.modules['numpy'] = None
+except Exception:
+    pass
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 

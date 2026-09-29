@@ -862,6 +862,17 @@
                                 </div>
                             </div>
 
+                            <!-- Налаштування режиму Thinking Mode (Глибоке мислення за замовчуванням) -->
+                            <div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;background:var(--color-bg-secondary);border-radius:var(--radius-md);border:1px solid var(--color-border);margin-bottom:16px;">
+                                <input type="checkbox" name="default_thinking_mode" id="default_thinking_mode" value="1" {% if ai_settings.default_thinking_mode %}checked{% endif %} style="width:20px;height:20px;accent-color:var(--color-primary);cursor:pointer;margin-top:2px;">
+                                <label for="default_thinking_mode" style="font-weight:700;font-size:13.5px;cursor:pointer;margin:0;color:var(--color-text-primary);line-height:1.4;">
+                                    🧠 Увімкнути режим глибокого мислення (Thinking mode) за замовчуванням для перевірок
+                                    <div style="font-size:11.5px;font-weight:400;color:var(--color-text-secondary);margin-top:2px;">
+                                        Дозволяє моделям Gemini та reasoning-моделям використовувати внутрішній бюджет роздумів (thinking budget) для складних робіт. Вчитель також може вмикати або вимикати цей режим для кожного завдання чи прямо в картці учня.
+                                    </div>
+                                </label>
+                            </div>
+
                             <!-- Системний промт НУШ -->
                             <div class="form-group">
                                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
@@ -1364,6 +1375,109 @@
                             </div>
                         </div>
 
+                    </div>
+                </div>
+
+                <!-- 3.4. Журнал помилок та збоїв ШІ (AI Error Log) -->
+                <div class="form-card mb-4" id="ai-error-logs-section" style="border-color:{% if total_ai_errors_count %}rgba(239,68,68,0.4){% else %}var(--color-border){% endif %};">
+                    <div class="form-card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;background:{% if total_ai_errors_count %}rgba(239,68,68,0.06){% else %}var(--color-bg-secondary){% endif %};">
+                        <div>
+                            <h2 class="form-card-title" style="display:flex;align-items:center;gap:8px;color:{% if total_ai_errors_count %}#dc2626{% else %}var(--color-text-primary){% endif %};">
+                                <span>⚠️</span>
+                                <span>Журнал помилок та збоїв ШІ</span>
+                                <span class="badge" style="background:{% if total_ai_errors_count %}#ef4444{% else %}#6b7280{% endif %};color:#fff;font-size:12px;font-weight:800;padding:2px 8px;border-radius:12px;">
+                                    {{ total_ai_errors_count }}
+                                </span>
+                            </h2>
+                            <div style="font-size:12px;color:var(--color-text-muted);margin-top:2px;">
+                                Записуються виключно запити, що призвели до помилки (HTTP статуси, вичерпання лімітів, таймаути, збої парсингу JSON та причини спрацювання резерву). Успішні перевірки сюди не потрапляють.
+                            </div>
+                        </div>
+
+                        {% if total_ai_errors_count %}
+                        <form method="POST" style="margin:0;" onsubmit="return confirm('Ви дійсно бажаєте очистити весь журнал помилок ШІ?');">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="clear_ai_error_logs">
+                            <button type="submit" class="btn btn-secondary btn-sm" style="color:#ef4444;font-weight:700;border-color:rgba(239,68,68,0.3);background:var(--color-surface);font-size:12px;padding:5px 12px;">
+                                🗑️ Очистити журнал помилок
+                            </button>
+                        </form>
+                        {% endif %}
+                    </div>
+
+                    <div class="form-card-body" style="padding:0;">
+                        {% if ai_error_logs %}
+                        <div style="overflow-x:auto;">
+                            <table class="table" style="margin:0;font-size:12.5px;width:100%;border-collapse:collapse;">
+                                <thead>
+                                    <tr style="background:var(--color-bg-secondary);border-bottom:1px solid var(--color-border);color:var(--color-text-secondary);font-size:11.5px;text-transform:uppercase;">
+                                        <th style="padding:10px 14px;white-space:nowrap;">Час</th>
+                                        <th style="padding:10px 14px;">Провайдер / Модель</th>
+                                        <th style="padding:10px 14px;">Контекст / Робота</th>
+                                        <th style="padding:10px 14px;">Тип помилки</th>
+                                        <th style="padding:10px 14px;">Опис / Причина збою</th>
+                                        <th style="padding:10px 14px;text-align:center;">Резерв</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for log in ai_error_logs %}
+                                    <tr style="border-bottom:1px solid var(--color-border);vertical-align:top;">
+                                        <td style="padding:10px 14px;white-space:nowrap;font-size:11.5px;color:var(--color-text-muted);">
+                                            {{ log.created_at|date:"d.m.Y H:i:s" }}
+                                        </td>
+                                        <td style="padding:10px 14px;font-family:monospace;white-space:nowrap;">
+                                            <strong style="color:var(--color-text-primary);">{{ log.provider|default:"gemini" }}</strong>
+                                            <div style="font-size:11px;color:var(--color-text-secondary);">{{ log.model_name|default:"—" }}</div>
+                                        </td>
+                                        <td style="padding:10px 14px;font-size:12px;">
+                                            {% if log.submission %}
+                                            <a href="{% url 'view_file' log.submission.id %}" target="_blank" style="font-weight:700;color:var(--color-primary);text-decoration:none;">
+                                                📄 Робота #{{ log.submission.id }} ({{ log.submission.get_student_full_name }})
+                                            </a>
+                                            {% elif log.assignment %}
+                                            <span style="font-weight:600;color:var(--color-text-primary);">Завдання: {{ log.assignment.title|truncatechars:35 }}</span>
+                                            {% else %}
+                                            <span style="color:var(--color-text-muted);">{{ log.action }}</span>
+                                            {% endif %}
+                                            {% if log.teacher %}
+                                            <div style="font-size:11px;color:var(--color-text-muted);margin-top:2px;">Вчитель: {{ log.teacher.full_name }}</div>
+                                            {% endif %}
+                                        </td>
+                                        <td style="padding:10px 14px;white-space:nowrap;">
+                                            <span class="badge" style="background:rgba(239,68,68,0.12);color:#dc2626;border:1px solid rgba(239,68,68,0.25);font-size:11px;font-weight:700;">
+                                                {% if log.status_code %}HTTP {{ log.status_code }}{% else %}{{ log.error_type|default:"Error" }}{% endif %}
+                                            </span>
+                                        </td>
+                                        <td style="padding:10px 14px;color:var(--color-text-primary);max-width:380px;word-break:break-word;">
+                                            <div style="font-weight:600;color:#b91c1c;margin-bottom:3px;">{{ log.error_message }}</div>
+                                            {% if log.raw_response %}
+                                            <details style="margin-top:4px;font-size:11px;color:var(--color-text-muted);">
+                                                <summary style="cursor:pointer;color:var(--color-primary);font-weight:600;">Показати сиру відповідь API</summary>
+                                                <pre style="margin-top:4px;padding:6px 8px;background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:4px;font-size:10.5px;max-height:120px;overflow-y:auto;white-space:pre-wrap;word-break:break-all;">{{ log.raw_response }}</pre>
+                                            </details>
+                                            {% endif %}
+                                        </td>
+                                        <td style="padding:10px 14px;text-align:center;white-space:nowrap;">
+                                            {% if log.failover_triggered %}
+                                            <span class="badge" style="background:#fef3c7;color:#b45309;border:1px solid #fcd34d;font-size:11px;font-weight:700;" title="Система перемкнулася на резервну модель або ключ">
+                                                🔄 Резерв
+                                            </span>
+                                            {% else %}
+                                            <span style="color:var(--color-text-muted);font-size:11px;">—</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        {% else %}
+                        <div style="text-align:center;padding:32px 20px;color:var(--color-text-muted);">
+                            <div style="font-size:32px;margin-bottom:8px;">🎉</div>
+                            <div style="font-weight:700;font-size:14px;color:var(--color-text-primary);">Жодної помилки ШІ не зафіксовано</div>
+                            <div style="font-size:12px;margin-top:4px;">Всі запити до API провайдерів пройшли успішно або помилок ще не було.</div>
+                        </div>
+                        {% endif %}
                     </div>
                 </div>
 

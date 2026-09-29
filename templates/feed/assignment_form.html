@@ -578,7 +578,7 @@
                             </div>
 
                             <!-- Дозволити учням бачити аналіз ШІ («Як ШІ розуміє завдання») -->
-                            <div class="form-group" style="margin-bottom:0;">
+                            <div class="form-group" style="margin-bottom:12px;">
                                 <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:14px 16px;background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:var(--radius-md);width:fit-content;max-width:100%;">
                                     <input type="checkbox" name="allow_student_ai_understanding" id="id_allow_student_ai_understanding"
                                            value="1"
@@ -587,6 +587,20 @@
                                     <div>
                                         <div style="font-weight:700;font-size:14px;color:var(--color-text-primary);">🔍 Дозволити учням переглядати аналіз ШІ («Як ШІ розуміє завдання»)</div>
                                         <div style="font-size:12px;color:var(--color-text-muted);margin-top:2px;">ШІ автоматично проаналізує умову та файли і сформує для учнів доступний опис вимог з урахуванням їхнього класу та віку (за замовчуванням вимкнено).</div>
+                                    </div>
+                                </label>
+                            </div>
+
+                            <!-- Опція Thinking Mode для перевірки робіт завдання -->
+                            <div class="form-group" style="margin-bottom:0;">
+                                <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:14px 16px;background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:var(--radius-md);width:fit-content;max-width:100%;">
+                                    <input type="checkbox" name="ai_thinking_mode" id="id_ai_thinking_mode"
+                                           value="1"
+                                           {% if assignment and assignment.ai_thinking_mode or form.ai_thinking_mode.value %}checked{% endif %}
+                                           style="width:18px;height:18px;accent-color:var(--color-primary);flex-shrink:0;">
+                                    <div>
+                                        <div style="font-weight:700;font-size:14px;color:var(--color-text-primary);">🧠 Глибоке мислення (Thinking mode) для перевірки робіт</div>
+                                        <div style="font-size:12px;color:var(--color-text-muted);margin-top:2px;">Вмикає обов'язковий поглиблений аналіз та роздуми ШІ для складних завдань цього уроку. Можна також перемикати прямо у вікні перевірки кожної окремої здачі.</div>
                                     </div>
                                 </label>
                             </div>

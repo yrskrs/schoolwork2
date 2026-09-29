@@ -75,7 +75,7 @@ from .models import (
     Submission, SubmissionComment, SubmissionActivityLog, School, log_submission_activity,
     AISettings, AI_PROVIDER_CHOICES, DEFAULT_NUS_SYSTEM_PROMPT, DEFAULT_NUS_GR_SYSTEM_PROMPT, AICriteriaPreset, DEFAULT_TRADITIONAL_SYSTEM_PROMPT,
     BellSchedule, TeacherLessonSchedule, AssignmentScheduleTarget, SystemNotification,
-    AssignmentRescheduleLog
+    AssignmentRescheduleLog, AIErrorLog
 )
 
 from .forms import (
@@ -6590,6 +6590,7 @@ def teacher_settings_view(request):
             ai_settings.system_prompt = system_prompt
             ai_settings.temperature = temperature_val
             ai_settings.is_enabled = is_enabled
+            ai_settings.default_thinking_mode = bool(request.POST.get('default_thinking_mode'))
             if tolerance_val is not None:
                 try:
                     ai_settings.ai_detector_tolerance_percent = max(0, min(100, int(tolerance_val)))
@@ -6773,6 +6774,11 @@ def teacher_settings_view(request):
             messages.success(request, f"Шаблон «{preset.name}» встановлено як активний за замовчуванням ⭐")
             return redirect(f"{reverse('teacher_settings')}?tab=ai")
 
+        elif action == 'clear_ai_error_logs':
+            AIErrorLog.objects.all().delete()
+            messages.success(request, "Журнал помилок та збоїв ШІ успішно очищено! 🗑️")
+            return redirect(f"{reverse('teacher_settings')}?tab=ai")
+
     # Підготовка даних контексту для сторінки налаштувань
     teacher_subjects = teacher.subjects.all().order_by('name')
     teacher_classes = teacher.classes.all().order_by('grade', 'letter', 'name')
@@ -6904,6 +6910,8 @@ def teacher_settings_view(request):
         'level_medium': level_medium,
         'level_initial': level_initial,
         'level_rework': level_rework,
+        'ai_error_logs': AIErrorLog.objects.select_related('teacher', 'submission', 'assignment').order_by('-created_at')[:100],
+        'total_ai_errors_count': AIErrorLog.objects.count(),
     }
     return render(request, 'feed/settings.html', context)
 
@@ -6967,11 +6975,20 @@ def ai_check_single_submission(request, submission_id):
     elif request.POST.getlist('selected_gr_codes'):
         selected_gr_codes = request.POST.getlist('selected_gr_codes')
 
+    force_thinking_raw = request.POST.get('force_thinking')
+    force_thinking = None
+    if force_thinking_raw is not None:
+        force_thinking = str(force_thinking_raw).strip().lower() in ('1', 'true', 'yes', 'on')
+
+    teacher_obj = getattr(request.user, 'teacher_profile', None)
+
     result = evaluate_submission_with_gemini(
         submission,
         custom_prompt=custom_prompt,
         preset_id=preset_id,
-        selected_gr_codes=selected_gr_codes
+        selected_gr_codes=selected_gr_codes,
+        force_thinking=force_thinking,
+        teacher=teacher_obj
     )
 
     # Якщо запит із AJAX, fetch, або ?format=json — повертаємо чистий JSON

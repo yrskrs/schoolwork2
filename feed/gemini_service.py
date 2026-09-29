@@ -56,9 +56,28 @@ def get_ai_settings():
     return AISettings.get_solo()
 
 
+_HTTP_POOL = None
+
+
+def _get_http_pool():
+    global _HTTP_POOL
+    if _HTTP_POOL is None:
+        try:
+            import urllib3
+            _HTTP_POOL = urllib3.PoolManager(
+                num_pools=10,
+                maxsize=20,
+                headers={'Accept-Encoding': 'gzip, deflate'}
+            )
+        except Exception:
+            _HTTP_POOL = False
+    return _HTTP_POOL
+
+
 def _http_post_json(url, payload_dict, headers=None, timeout=30):
     """
-    Виконує HTTP POST запит із JSON тілом через вбудований urllib з підтримкою кастомних заголовків.
+    Виконує HTTP POST запит із JSON тілом через пул з'єднань urllib3 (з Keep-Alive та gzip)
+    або fallback на вбудований urllib з підтримкою кастомних заголовків.
     Повертає (status_code: int, response_data: dict | None, response_text: str).
     """
     json_bytes = json.dumps(payload_dict).encode('utf-8')
@@ -68,6 +87,27 @@ def _http_post_json(url, payload_dict, headers=None, timeout=30):
     }
     if headers:
         req_headers.update(headers)
+
+    pool = _get_http_pool()
+    if pool:
+        try:
+            resp = pool.request(
+                'POST',
+                url,
+                body=json_bytes,
+                headers=req_headers,
+                timeout=float(timeout)
+            )
+            status = resp.status
+            body_text = resp.data.decode('utf-8', errors='replace')
+            try:
+                data = json.loads(body_text)
+                return status, data, body_text
+            except json.JSONDecodeError:
+                return status, None, body_text
+        except Exception:
+            # Якщо виникла помилка підключення через пул — пробуємо нижче через стандартний urllib
+            pass
 
     req = urllib.request.Request(
         url,
@@ -119,7 +159,7 @@ def clean_model_name(name, provider='gemini'):
             return 'gemini-3.8-flash'
         if name in ['gemini-2.5-pro', 'gemini-pro-latest']:
             return 'gemini-3.1-pro-preview'
-        if name in ['gemini-2.0-flash-lite', 'gemini-2.5-flash-lite', 'gemini-3.1-flash-lite-preview']:
+        if name in ['gemini-2.0-flash-lite', 'gemini-2.5-flash-lite', 'gemini-3.0-flash-lite', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite-preview']:
             return 'gemini-3.1-flash-lite'
     return name
 
@@ -300,6 +340,37 @@ def call_ai_api(prompt_text, system_prompt="", inline_media=None, provider="gemi
                 return status_code, None, err_msg, data
         except Exception as e:
             return 0, None, str(e), None
+
+
+def log_ai_error(teacher=None, submission=None, assignment=None, action='evaluation',
+                 provider='', model_name='', status_code=None, error_type='',
+                 error_message='', prompt_preview='', raw_response='', failover_triggered=False):
+    """Фіксує збій або помилку ШІ у базі даних (AIErrorLog) для журналу помилок ШІ."""
+    try:
+        from .models import AIErrorLog
+        if submission and not assignment:
+            assignment = submission.assignment
+        if submission and not teacher:
+            teacher = submission.teacher or (submission.assignment.teacher if submission.assignment else None)
+        elif assignment and not teacher:
+            teacher = assignment.teacher
+
+        AIErrorLog.objects.create(
+            teacher=teacher,
+            submission=submission,
+            assignment=assignment,
+            action=action or 'evaluation',
+            provider=str(provider or '')[:50],
+            model_name=str(model_name or '')[:100],
+            status_code=status_code,
+            error_type=str(error_type or '')[:150],
+            error_message=str(error_message)[:4000],
+            prompt_preview=str(prompt_preview)[:2000] if prompt_preview else '',
+            raw_response=str(raw_response)[:3000] if raw_response else '',
+            failover_triggered=bool(failover_triggered),
+        )
+    except Exception:
+        pass
 
 
 def test_ai_connection(provider=None, api_key=None, model_name=None, custom_url=None):
@@ -1863,10 +1934,10 @@ def fetch_url_content(url, timeout=10, max_chars=20000):
         return None, None, f"Помилка завантаження {url}: {str(e)}"
 
 
-def _optimize_image_for_ai(file_path_or_bytes, max_dim=1600, quality=85):
+def _optimize_image_for_ai(file_path_or_bytes, max_dim=1280, quality=80):
     """
     Оптимізує та масштабує фотозображення перед кодуванням у base64 для передачі до ШІ API.
-    Зменшує 8-15 МБ фотографії з камер телефонів до 150-350 КБ без втрати читабельності рукописного тексту,
+    Зменшує 8-15 МБ фотографії з камер телефонів до 100-250 КБ без втрати читабельності рукописного тексту,
     зберігаючи вихідний MIME-тип (PNG для PNG, JPEG для JPEG).
     """
     try:
@@ -1884,8 +1955,8 @@ def _optimize_image_for_ai(file_path_or_bytes, max_dim=1600, quality=85):
         mime_type = 'image/png' if orig_fmt == 'PNG' else 'image/jpeg'
 
         w, h = img.size
-        # Якщо розмір файлу менше 1.5 МБ і роздільна здатність у нормі — повертаємо як є без перетиснення
-        if len(orig_bytes) <= 1536 * 1024 and w <= max_dim and h <= max_dim:
+        # Якщо розмір файлу менше 400 КБ і роздільна здатність у нормі — повертаємо як є без перетиснення
+        if len(orig_bytes) <= 400 * 1024 and w <= max_dim and h <= max_dim:
             return orig_bytes, mime_type
 
         try:
@@ -1936,14 +2007,6 @@ def extract_submission_content(submission):
     """
     text_parts = []
     inline_media = []
-
-    # Автоматично розпізнаємо та прив'язуємо співавторів із коментаря учня (якщо є)
-    if submission.comment_student:
-        try:
-            from .student_matcher import auto_bind_coauthors_from_comment
-            auto_bind_coauthors_from_comment(submission)
-        except Exception:
-            pass
 
     # 1. Текстовий коментар учня (обов'язково читається ШІ)
     if submission.comment_student:
@@ -2784,7 +2847,7 @@ def check_student_omitted_questions(task_questions: list[str], student_text: str
     return False
 
 
-def build_question_answer_mapping(task_questions: list[str], student_text: str) -> tuple[str, bool, int, int]:
+def build_question_answer_mapping(task_questions: list[str], student_text: str, is_practical_project: bool = False) -> tuple[str, bool, int, int]:
     """
     Якщо в завданні вчителя виявлено конкретні запитання, а учень надав відповіді
     (особливо без повторення тексту запитань), формує структурований блок
@@ -2796,7 +2859,7 @@ def build_question_answer_mapping(task_questions: list[str], student_text: str) 
         return "", False, 0, 0
 
     student_answers = extract_student_answers(student_text) if student_text else {}
-    omitted = check_student_omitted_questions(task_questions, student_text) if student_text else False
+    omitted = False if is_practical_project else (check_student_omitted_questions(task_questions, student_text) if student_text else False)
     
     lines = []
     lines.append("═══════════════════════════════════════════════════════════════════")
@@ -2838,19 +2901,18 @@ def build_question_answer_mapping(task_questions: list[str], student_text: str) 
         lines.append("🎯 КАТЕГОРИЧНІ ТА ОБОВ'ЯЗКОВІ ВИМОГИ ДО ОЦІНЮВАННЯ БАГАТОЗАДАЧНИХ РОБІТ:")
         lines.append(f"1. У завданні вчителя задано {total_qs} конкретних завдань/запитань.")
         lines.append("2. 🚫 ПРИНЦИП ВЗАЄМНО-ОДНОЗНАЧНОГО ЗІСТАВЛЕННЯ (СУВОРА ЗАБОРОНА ПОДВІЙНОГО ЗАРАХУВАННЯ):")
-        lines.append("   - Кожне завдання вимагає ВЛАСНОЇ, ОКРЕМОЇ відповіді учня!")
-        lines.append("   - ОДНЕ РЕЧЕННЯ ЧИ ОДИН ТЕКСТОВИЙ ФРАГМЕНТ КАТЕГОРИЧНО НЕ МОЖЕ ОДНОЧАСНО ЗАРАХОВУВАТИСЯ ЗА ДВА РІЗНІ ЗАВДАННЯ!")
-        lines.append("   - Наприклад, якщо одне завдання вимагає знайти тлумачення в українському словнику, а друге — перекласти його англійською: наведення лише одного речення англійською мовою НЕ МОЖЕ вважатися виконанням обох завдань! Українське тлумачення в такому разі відсутнє (Завдання не виконано).")
+        lines.append("   - Кожне завдання вимагає ВЛАСНОЇ, ОКРЕМОЇ відповіді або результату учня!")
+        lines.append("   - Один фрагмент чи речення категорично не може зараховуватися за виконання двох різних завдань одночасно.")
         lines.append("3. 🚫 СУВОРЕ ОБМЕЖЕННЯ ОЦІНКИ ЗА НЕПОВНИЙ ОБСЯГ (НУШ):")
         lines.append("   - 10–12 балів (Високий рівень) дозволено ставити ВИКЛЮЧНО якщо виконано ВСІ 100% поставлених завдань (усі окремо і якісно)!")
         lines.append("   - Якщо виконано лише 2 із 3 завдань (~66%): максимальна можлива оцінка — 7–8 балів (Достатній рівень). Ставити 9–12 балів (зокрема 10 чи 11 балів) СУВОРО ТА КАТЕГОРИЧНО ЗАБОРОНЕНО!")
         lines.append("   - Якщо виконано лише 1 із 3 завдань (~33%): максимальна можлива оцінка — 4–5 балів (Середній рівень).")
         lines.append("   - Якщо виконано лише половину (наприклад, 1 із 2 або 2 із 4): максимальна оцінка — 6–7 балів.")
         lines.append("4. ВКАЗАННЯ ПРОПУЩЕНИХ ЗАВДАНЬ У ВІДГУКУ:")
-        lines.append("   - Якщо будь-яке із завдань пропущено або не має окремої відповіді, ОБОВ'ЯЗКОВО чітко зазнач це в 'weaknesses' та 'feedback_comment' (наприклад: «Завдання 2 (пояснення крилатого вислову в онлайн-словнику) не виконано / пропущено»).")
+        lines.append("   - Якщо будь-яке із завдань пропущено або не має окремої відповіді, ОБОВ'ЯЗКОВО чітко зазнач це в 'weaknesses' та 'feedback_comment' (наприклад: «Завдання 2 не виконано / пропущено»).")
         lines.append("   - КАТЕГОРИЧНО ЗАБОРОНЕНО стверджувати у 'summary' чи відгуку, що «виконано всі завдання» чи «робота містить відповіді на завдання 1, 2 та 3», якщо хоча б одне завдання пропущено!")
 
-    if omitted:
+    if omitted and not is_practical_project:
         lines.append("- ⚠️ ОБОВ'ЯЗКОВО вкажи учневі в 'weaknesses' та 'feedback_comment' про недолік оформлення («питання-відповідь»):")
         lines.append("  «Порада щодо оформлення: ви надали відповіді без самих запитань. Будь ласка, завжди записуйте запитання разом із відповідями (формат «питання-відповідь») або чітко зазначайте номери запитань, щоб робота була структурованою і зрозумілою.»")
     
@@ -2906,6 +2968,9 @@ def apply_multi_task_evaluation_guardrail(
     # 2. Визначаємо очікувану кількість завдань (N)
     # НАЙВИЩИЙ ПРІОРИТЕТ: якщо вчитель явно задав конкретні номери завдань —
     # total_tasks = кількість заданих, незалежно від вмісту файлів.
+    ai_eval_list = result_json.get('tasks_evaluated') or []
+    ai_eval_len = len(ai_eval_list) if isinstance(ai_eval_list, list) else 0
+
     if teacher_scoped_task_nums:
         total_tasks = len(teacher_scoped_task_nums)
     else:
@@ -2917,9 +2982,6 @@ def apply_multi_task_evaluation_guardrail(
             ai_total = int(result_json.get('tasks_total_count') or 0)
         except (ValueError, TypeError):
             pass
-
-        ai_eval_list = result_json.get('tasks_evaluated') or []
-        ai_eval_len = len(ai_eval_list) if isinstance(ai_eval_list, list) else 0
 
         if explicit_count > 0:
             total_tasks = explicit_count
@@ -2967,14 +3029,21 @@ def apply_multi_task_evaluation_guardrail(
             if isinstance(t, dict):
                 st = str(t.get('status', '')).lower()
                 num = t.get('task_num')
+                num_int = None
+                if num is not None:
+                    try:
+                        num_int = int(num)
+                    except (ValueError, TypeError):
+                        pass
                 if st in ['completed', 'done', 'виконано', 'так']:
-                    completed_evals.append(t)
+                    if teacher_scoped_task_nums:
+                        if num_int is None or num_int in teacher_scoped_task_nums:
+                            completed_evals.append(t)
+                    else:
+                        completed_evals.append(t)
                 elif st in ['missing', 'omitted', 'not_completed', 'пропущено', 'не виконано', 'ні']:
-                    if num:
-                        try:
-                            detected_missing_nums.add(int(num))
-                        except (ValueError, TypeError):
-                            pass
+                    if num_int is not None:
+                        detected_missing_nums.add(num_int)
 
     # Шукаємо згадки про пропущені завдання у тексті відгуку ШІ
     all_ai_feedback_text = f"{summary} {' '.join(str(w) for w in weaknesses)} {feedback_comment}".lower()
@@ -3095,11 +3164,19 @@ def apply_multi_task_evaluation_guardrail(
     ]
 
     missing_desc = ''
-    if 2 in detected_missing_nums or double_count_task2_missing:
+    if double_count_task2_missing and has_dict_task:
         missing_desc = 'Завдання 2 (пояснення крилатого вислову в онлайн-словнику) пропущено / не виконано'
     elif detected_missing_nums:
-        m_list = ', '.join(f'Завдання {n}' for n in sorted(list(detected_missing_nums)))
-        missing_desc = f'{m_list} пропущено / не виконано'
+        items = []
+        for n in sorted(list(detected_missing_nums)):
+            task_label = f"Завдання {n}"
+            if task_questions and 1 <= n <= len(task_questions):
+                q_text = task_questions[n - 1].strip()
+                m_title = re.search(r'^(?:(?:крок|завдання|вправа|питання)\s*\d+[\.\:\–\—\-]?\s*)([^\.\n\r]+)', q_text, re.IGNORECASE)
+                if m_title:
+                    task_label += f" ({m_title.group(1).strip()[:35]})"
+            items.append(task_label)
+        missing_desc = f"{', '.join(items)} не виконано / пропущено"
     else:
         missing_desc = f'виконано {completed_tasks} із {total_tasks} завдань'
 
@@ -3130,7 +3207,7 @@ def apply_multi_task_evaluation_guardrail(
         ]):
             has_filtered_all_done = True
             continue
-        if double_count_task2_missing or (2 in detected_missing_nums):
+        if (double_count_task2_missing or (2 in detected_missing_nums)) and has_dict_task:
             if any(kw in s_lower for kw in [
                 'пояснення крилатого вислову в онлайн-словнику',
                 'знаходження пояснення крилатого вислову',
@@ -3144,18 +3221,28 @@ def apply_multi_task_evaluation_guardrail(
     strengths = clean_strengths
 
     missing_w_entry = f'{missing_desc} (роботу виконано частково: {completed_tasks} із {total_tasks} завдань).'
-    if not any(kw in ' '.join(str(w) for w in weaknesses).lower() for kw in ['завдання 2', 'пропущено', 'не виконано']):
+    has_existing_missing_mention = any(
+        kw in ' '.join(str(w) for w in weaknesses).lower()
+        for kw in ['пропущено', 'не виконано', 'не зроблено']
+    )
+    if not has_existing_missing_mention and detected_missing_nums:
+        has_existing_missing_mention = any(
+            f"завдання {n}" in ' '.join(str(w) for w in weaknesses).lower()
+            for n in detected_missing_nums
+        )
+    if not has_existing_missing_mention:
         weaknesses.insert(0, missing_w_entry)
 
-    # Очищення відгуку від похвал за пропущені завдання (як чоловічого, так і жіночого роду)
-    feedback_comment = re.sub(
-        r'(?:пояснив|пояснила|пояснено)\s+значення\s+(?:вислову|фразеологізму|крилатого\s+вислову)(?:,)?\s*',
-        '',
-        feedback_comment,
-        flags=re.IGNORECASE
-    )
-    feedback_comment = re.sub(r',\s*та\s+', ' та ', feedback_comment)
-    feedback_comment = re.sub(r'\s{2,}', ' ', feedback_comment)
+    # Очищення відгуку від похвал за пропущені завдання (якщо це завдання на словник)
+    if has_dict_task:
+        feedback_comment = re.sub(
+            r'(?:пояснив|пояснила|пояснено)\s+значення\s+(?:вислову|фразеологізму|крилатого\s+вислову)(?:,)?\s*',
+            '',
+            feedback_comment,
+            flags=re.IGNORECASE
+        )
+        feedback_comment = re.sub(r',\s*та\s+', ' та ', feedback_comment)
+        feedback_comment = re.sub(r'\s{2,}', ' ', feedback_comment)
 
     feedback_comment = re.sub(
         r'чудово\s+впора(?:вся|лася)\s+з\s+практичними\s+завданнями',
@@ -3170,24 +3257,35 @@ def apply_multi_task_evaluation_guardrail(
         flags=re.IGNORECASE
     )
 
-    if not any(kw in feedback_comment.lower() for kw in ['завдання 2', 'пропущено', f'{completed_tasks} із {total_tasks}']):
+    if not any(kw in feedback_comment.lower() for kw in ['пропущено', 'не виконано', 'відсутн', f'{completed_tasks} із {total_tasks}']):
         feedback_comment = (
             feedback_comment.strip() +
-            f"\n\nЗверніть увагу: {missing_desc}. Оскільки виконано {completed_tasks} із {total_tasks} завдань, оцінка становить {suggested_grade} б. (Достатній рівень)."
+            f"\n\nЗверніть увагу: {missing_desc}. Оскільки виконано {completed_tasks} із {total_tasks} завдань, оцінка становить {suggested_grade} б. ({level})."
         )
 
     return suggested_grade, level, clean_gr_results, numeric_gr_grades, avg_gr_grade, summary, strengths, weaknesses, feedback_comment
 
 
 
-def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=None, preset_id=None, criteria_preset=None, selected_gr_codes=None):
+def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=None, preset_id=None, criteria_preset=None, selected_gr_codes=None, force_thinking=None, teacher=None):
     """
     Виконує педагогічний аналіз та попереднє оцінювання роботи учня за допомогою Google Gemini.
-    Підтримує чергу пріоритетів моделей, вибір шаблону критеріїв та вибір конкретних ГР (прапорцями).
+    Підтримує чергу пріоритетів моделей, вибір шаблону критеріїв, вибір конкретних ГР (прапорцями)
+    та опціональний режим глибокого мислення (Thinking mode) для складних завдань.
     Результати записуються безпосередньо у submission (ai_suggested_grade, ai_feedback, ai_status тощо).
     """
     settings = ai_settings or get_ai_settings()
     act_provider, act_key, act_model, act_url, is_backup_active = settings.get_active_config()
+
+    asgn = submission.assignment
+    if force_thinking is not None:
+        use_thinking = bool(force_thinking)
+    elif asgn and getattr(asgn, 'ai_thinking_mode', False):
+        use_thinking = True
+    elif getattr(settings, 'default_thinking_mode', False):
+        use_thinking = True
+    else:
+        use_thinking = False
 
     if not act_key and act_provider != 'custom':
         # Якщо в активному провайдері немає ключа, але є резервний — використовуємо резервний
@@ -3201,6 +3299,17 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
             submission.ai_status = 'failed'
             submission.ai_error_reason = error_msg
             submission.save(update_fields=['ai_status', 'ai_error_reason'])
+            log_ai_error(
+                teacher=teacher,
+                submission=submission,
+                assignment=submission.assignment,
+                action='evaluation',
+                provider=act_provider,
+                model_name=act_model,
+                status_code=None,
+                error_type='Missing API Key',
+                error_message=error_msg
+            )
             return {'status': 'failed', 'error': error_msg}
 
     # Визначаємо шаблон критеріїв оцінювання
@@ -3463,11 +3572,11 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                     except Exception:
                         pass
 
-                # Прямий PDF документ: передаємо у Vision, якщо розмір до 4 МБ або якщо текст не вдалося видобути
+                # Прямий PDF документ: передаємо у Vision для повноцінного мультимодального аналізу (формули, схеми, скани)
                 elif af_ext == '.pdf':
                     try:
                         pdf_size = os.path.getsize(af.file.path)
-                        if (not af_text or len(af_text.strip()) < 60 or pdf_size <= 4 * 1024 * 1024) and pdf_size <= 10 * 1024 * 1024:
+                        if pdf_size <= 10 * 1024 * 1024:
                             with open(af.file.path, 'rb') as f_pdf:
                                 inline_media.append({
                                     "mime_type": "application/pdf",
@@ -3478,9 +3587,7 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                         pass
 
                 # Презентація (.pptx, .ppt, .odp) або Office документ:
-                # ОПТИМІЗАЦІЯ ШВИДКОДІЇ: якщо структурований текст слайдів/документа успішно видобуто,
-                # ШІ миттєво оцінює роботу за текстом без передачі важкого багатомегабайтного PDF прев'ю!
-                # Передаємо згенероване PDF прев'ю ТІЛЬКИ якщо текст відсутній (чисто графічні слайди чи скани).
+                # Перевіряємо згенероване PDF-прев'ю (до 10 МБ), щоб передати його в Vision (слайди, схеми)
                 elif af_ext in ['.pptx', '.ppt', '.odp', '.docx', '.xlsx', '.xls', '.ods']:
                     preview_pdf_path = None
                     cand1 = os.path.join(django_settings.MEDIA_ROOT, 'previews', f"{af.id}.pdf")
@@ -3489,8 +3596,7 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                         preview_pdf_path = cand1
                     elif os.path.exists(cand2):
                         preview_pdf_path = cand2
-                    elif not af_text or len(af_text.strip()) < 60:
-                        # Тільки якщо тексту немає, запускаємо важку конвертацію LibreOffice на льоту:
+                    else:
                         try:
                             from .views import get_pdf_preview_url
                             get_pdf_preview_url(af)
@@ -3499,7 +3605,7 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                         except Exception:
                             pass
 
-                    if preview_pdf_path and os.path.exists(preview_pdf_path) and os.path.getsize(preview_pdf_path) <= 6 * 1024 * 1024:
+                    if preview_pdf_path and os.path.exists(preview_pdf_path) and os.path.getsize(preview_pdf_path) <= 10 * 1024 * 1024:
                         try:
                             with open(preview_pdf_path, 'rb') as f_prev:
                                 inline_media.append({
@@ -3718,12 +3824,6 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
     prompt_lines.append("═══════════════════════════════════════════════════════════════════\n")
 
     # ── ПЕРЕВІРКА НА СПІВАВТОРІВ ТА КОЛЕКТИВНУ РОБОТУ ─────────────────────────
-    try:
-        from .student_matcher import auto_bind_coauthors_from_comment
-        auto_bind_coauthors_from_comment(submission)
-    except Exception:
-        pass
-
     if submission.is_group_work or submission.group_authors or getattr(submission, 'ignore_plagiarism', False):
         authors_str = submission.group_authors or submission.get_student_full_name()
         prompt_lines.append(
@@ -3823,8 +3923,20 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
         ]
         prompt_lines.append("\n".join(scope_block_lines))
 
+    is_file_project = False
+    if hasattr(submission, 'files') and submission.files.exists():
+        is_file_project = any(
+            f.file.name.lower().endswith((
+                '.accdb', '.mdb', '.sqlite', '.db', '.sql',
+                '.py', '.cpp', '.cs', '.java', '.pas', '.html', '.css', '.js',
+                '.xlsx', '.xls', '.ods', '.csv',
+                '.pptx', '.ppt', '.odp',
+                '.zip', '.rar', '.7z'
+            )) for f in submission.files.all()
+        )
+
     qa_mapping_block, questions_omitted, answered_count, total_questions = build_question_answer_mapping(
-        task_questions, student_combined_text
+        task_questions, student_combined_text, is_practical_project=is_file_project
     )
 
     if qa_mapping_block:
@@ -3839,13 +3951,13 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
             "- Учень міг написати на фото зошита чи у файлі ТІЛЬКИ ВІДПОВІДІ (наприклад, номери «1. ...», «2. ...») БЕЗ переписування тексту самих запитань!\n"
             "- ШІ ЗОБОВ'ЯЗАНИЙ підставити знайдені на зображенні/у файлі відповіді учня до відповідних запитань вище та оцінити їхню правильність.\n"
             "- Навіть якщо учень відповів лише на 1-2 запитання, ШІ ЗОБОВ'ЯЗАНИЙ зарахувати їх. КАТЕГОРИЧНО ЗАБОРОНЕНО заявляти «жодної відповіді не дано»!\n"
-            "- Якщо учень не переписав запитання: обов'язково порадь у 'weaknesses' та 'feedback_comment' дотримуватися формату «питання-відповідь»."
+            + ("- Якщо учень не переписав запитання у текстовій відповіді: обов'язково порадь у 'weaknesses' та 'feedback_comment' дотримуватися формату «питання-відповідь»." if not is_file_project else "- Для практичних робіт у файлах (бази даних, код програм) вимога текстового формату «питання-відповідь» НЕ застосовується.")
         )
         prompt_lines.append("═══════════════════════════════════════════════════════════════════\n")
 
 
     prompt_lines.append("ВИКОНАНА РОБОТА УЧНЯ ДЛЯ ОЦІНЮВАННЯ:")
-    if questions_omitted:
+    if questions_omitted and not is_file_project:
         prompt_lines.append(
             "⚠️ ЗВЕРНИ УВАГУ: Учень надав відповіді без переписування тексту самих запитань. "
             "Оціни повноту та зміст відповідей відповідно до зіставлених вище запитань вчителя, але обов'язково зазнач рекомендацію щодо формату «питання-відповідь»."
@@ -3862,6 +3974,33 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
         system_instruction = selected_preset.get_full_prompt().strip()
     else:
         system_instruction = (settings.system_prompt or DEFAULT_NUS_SYSTEM_PROMPT).strip()
+
+    # Динамічна санація системного промта від прикладів з інших предметів («крилатий вислів / словник»)
+    teacher_full_context = f"{assignment_title} {combined_task_for_qs} {' '.join(task_questions)}".lower()
+    has_real_dict_task = any(kw in teacher_full_context for kw in ['словник', 'тлумачення', 'фразеологізм', 'крилатого'])
+    if not has_real_dict_task and 'крилатого вислову' in system_instruction:
+        system_instruction = system_instruction.replace(
+            "«Завдання 2 не виконано: відсутнє пояснення крилатого вислову в онлайн-словнику»",
+            "«Завдання 2 не виконано: відсутня обов'язкова частина роботи»"
+        )
+        system_instruction = system_instruction.replace(
+            "Якщо Завдання 2 вимагало знайти пояснення вислову в українському онлайн-словнику, а Завдання 3 — перекласти його англійською: наведення лише одного речення англійською мовою НЕ МОЖЕ вважатися виконанням обох завдань! Українське тлумачення в такому разі відсутнє (Завдання 2 НЕ виконано).",
+            "Якщо завдання містить кілька окремих кроків (наприклад, створення структури, зв'язків чи відповіді на запитання): виконання лише одного кроку не може вважатися виконанням решти завдань!"
+        )
+        system_instruction = re.sub(
+            r'пояснення\s+крилатого\s+вислову\s+в\s+онлайн[- ]словнику',
+            'обов\'язкове завдання',
+            system_instruction,
+            flags=re.IGNORECASE
+        )
+
+    if is_file_project:
+        system_instruction += (
+            "\n\nПРАВИЛО ДЛЯ ПРАКТИЧНИХ РОБІТ ТА ПРОЄКТНИХ ФАЙЛІВ (БАЗИ ДАНИХ, КОД ПРОГРАМ, ЕЛЕКТРОННІ ТАБЛИЦІ):\n"
+            "- Робота учня подана як практичний файл (наприклад, файл бази даних Microsoft Access, файл скрипта, таблиця Excel тощо).\n"
+            "- КАТЕГОРИЧНО ЗАБОРОНЕНО вимагати текстовий формат «питання-відповідь» або робити зауваження, що «відсутні запитання», «надано відповіді без самих запитань» чи «робота подана у вигляді файлу БД без пояснювального документа»!\n"
+            "- Оцінюй виконання практичного завдання безпосередньо за наданим файлом: перевіряй наявність створених сутностей/таблиць, полів, ключів, зв'язків, коду відповідно до умови.\n"
+        )
 
     # Завжди гарантуємо правило Scope of Work в системній інструкції
     if "SCOPE OF WORK" not in system_instruction:
@@ -3901,13 +4040,14 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
         )
 
     if "ЗІСТАВЛЕННЯ ВІДПОВІДЕЙ УЧНЯ ІЗ ЗАПИТАННЯМИ ВЧИТЕЛЯ" not in system_instruction:
+        format_rec_line = "  * ⚠️ ОБОВ'ЯЗКОВО вкажи учневі в 'weaknesses' та 'feedback_comment' про недолік оформлення («питання-відповідь»): порадь використовувати формат «питання-відповідь» або чітку нумерацію запитань.\n" if not is_file_project else "  * Для практичних файлів (бази даних, код тощо) рекомендація щодо формату «питання-відповідь» НЕ застосовується.\n"
         system_instruction += (
             "\n\nЗІСТАВЛЕННЯ ВІДПОВІДЕЙ УЧНЯ ІЗ ЗАПИТАННЯМИ ВЧИТЕЛЯ (ФОРМАТ «ПИТАННЯ-ВІДПОВІДЬ»):\n"
             "- Якщо учень здав лише відповіді (номери 1, 2... або текст без переписування запитань):\n"
             "  * Візьми запитання з умови завдання чи матеріалів вчителя та підстав відповіді учня до кожного відповідного запитання.\n"
             "  * 🚫 СУВОРО ЗАБОРОНЕНО писати «жодної відповіді не дано», «відповіді відсутні» чи «робота порожня», якщо учень відповів хоча б на 1-2 запитання!\n"
             "  * Оціни зміст і правильність наданих учнем відповідей по суті запитань вчителя (навіть при частковому виконанні).\n"
-            "  * ⚠️ ОБОВ'ЯЗКОВО вкажи учневі в 'weaknesses' та 'feedback_comment' про недолік оформлення («питання-відповідь»): порадь використовувати формат «питання-відповідь» або чітку нумерацію запитань.\n"
+            f"{format_rec_line}"
         )
 
     if "РОЗДІЛЬНИЙ АНАЛІЗ КОЖНОГО ЗАВДАННЯ" not in system_instruction:
@@ -3915,8 +4055,8 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
             "\n\nРОЗДІЛЬНИЙ АНАЛІЗ КОЖНОГО ЗАВДАННЯ ТА СУВОРЕ ОБМЕЖЕННЯ БАЛІВ ЗА НЕПОВНИЙ ОБСЯГ (MULTI-TASK COMPLETION & STRICT CEILING):\n"
             "- Коли вчитель задав кілька конкретних завдань (наприклад: «виконати всі 3 завдання», або у презентації/файлі містяться Завдання 1, Завдання 2, Завдання 3):\n"
             "  * ШІ зобов'язаний оцінити кожне завдання окремо!\n"
-            "  * 🚫 СУВОРА ЗАБОРОНА ДУБЛЮВАННЯ ТА ПОДВІЙНОГО ЗАРАХУВАННЯ ВІДПОВІДЕЙ: одна відповідь, фраза чи речення учня КАТЕГОРИЧНО НЕ МОЖЕ одночасно зараховуватися як виконання двох або більше різних завдань! Кожне окреме завдання повинно мати власну окрему відповідь у роботі учня.\n"
-            "  * Якщо одне завдання вимагало знайти тлумачення в українському словнику, а друге — перекласти його англійською: наведення лише одного речення англійською мовою НЕ МОЖЕ вважатися виконанням обох завдань! Українське тлумачення в такому разі відсутнє (перше завдання вважається НЕВИКОНАНИМ).\n"
+            "  * 🚫 СУВОРА ЗАБОРОНА ДУБЛЮВАННЯ ТА ПОДВІЙНОГО ЗАРАХУВАННЯ ВІДПОВІДЕЙ: одна відповідь, фраза чи речення учня КАТЕГОРИЧНО НЕ МОЖЕ одночасно зараховуватися як виконання двох або більше різних завдань! Кожне окреме завдання повинно мати власну окрему відповідь або розв'язок у роботі учня.\n"
+            "  * Кожна вимога або частина завдання вимагає окремого розв'язку/відповіді: один фрагмент тексту чи дії не може зараховуватися за декілька різних завдань одночасно.\n"
             "- СУВОРІ ОБМЕЖЕННЯ БАЛІВ ЗА НЕПОВНИЙ ОБСЯГ (КРИТЕРІЇ НУШ):\n"
             "  * 10-12 балів (Високий рівень) призначаються ВИКЛЮЧНО за повне виконання 100% усіх завдань, визначених умовою чи матеріалами вчителя.\n"
             "  * Якщо задано 3 завдання, а учень здав лише 2 (66% обсягу): максимальна можлива оцінка — 7-8 балів (Достатній рівень). Ставити 9-12 балів (зокрема 10 чи 11 балів) КАТЕГОРИЧНО ЗАБОРОНЕНО!\n"
@@ -3925,7 +4065,7 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
             "- ЗВОРОТНИЙ ЗВ'ЯЗОК ТА СУВОРА ЗАБОРОНА ПОМИЛКОВИХ ПОХВАЛ:\n"
             "  * Якщо хоча б одне завдання не виконано або пропущено:\n"
             "    - КАТЕГОРИЧНО ЗАБОРОНЕНО писати у 'summary', 'strengths' чи 'feedback_comment', що «учень виконав усі завдання», «робота містить правильні відповіді на всі 3 завдання» тощо.\n"
-            "    - ОБОВ'ЯЗКОВО зазнач у 'weaknesses' та 'feedback_comment', яке саме завдання пропущено (наприклад: «Завдання 2 не виконано: відсутнє пояснення крилатого вислову в онлайн-словнику»).\n"
+            "    - ОБОВ'ЯЗКОВО зазнач у 'weaknesses' та 'feedback_comment', яке саме завдання пропущено (наприклад: «Завдання 2 не виконано / пропущено»).\n"
         )
 
     if "ДОСЛІДНИЦЬКІ, ПОШУКОВІ ЗАВДАННЯ" not in system_instruction:
@@ -4004,9 +4144,13 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
 
         for attempt in range(max_retries + 1):
             try:
-                # Оптимізація швидкодії: для Flash-моделей вимикаємо тривалий ланцюжок роздумів (thinkingBudget=0),
-                # що скорочує час очікування відповіді з 25-40 секунд до 2-4 секунд!
-                thinking_budget_val = 0 if ('flash' in c_model.lower() and c_provider == 'gemini') else None
+                if use_thinking:
+                    # Режим глибокого мислення (Thinking mode): даємо розширений бюджет міркувань
+                    thinking_budget_val = 4096 if c_provider == 'gemini' else None
+                else:
+                    # Оптимізація швидкодії: для Flash-моделей вимикаємо тривалий ланцюжок роздумів (thinkingBudget=0),
+                    # що скорочує час очікування відповіді з 25-40 секунд до 2-4 секунд!
+                    thinking_budget_val = 0 if ('flash' in c_model.lower() and c_provider == 'gemini') else None
 
                 status_code, raw_text, err_msg, raw_data = call_ai_api(
                     prompt_text=prompt_content,
@@ -4036,6 +4180,20 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                         fail_reason = err_msg or f"Помилка HTTP {status_code}"
 
                     attempted_errors.append(f"[{c_provider}/{c_model}]: {fail_reason}")
+                    log_ai_error(
+                        teacher=teacher,
+                        submission=submission,
+                        assignment=submission.assignment,
+                        action='evaluation',
+                        provider=c_provider,
+                        model_name=c_model,
+                        status_code=status_code,
+                        error_type=f"HTTP {status_code}" if status_code else "API Error",
+                        error_message=fail_reason,
+                        prompt_preview=prompt_content[:1500],
+                        raw_response=(raw_text or err_msg or '')[:2000],
+                        failover_triggered=fallback_happened
+                    )
                     break  # Переходимо до наступної моделі / резервного API
 
                 raw_text = raw_text.strip()
@@ -4050,6 +4208,22 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                         settings.save(update_fields=['last_failover_at', 'last_failover_reason'])
                     except Exception:
                         pass
+
+                if not result_json:
+                    log_ai_error(
+                        teacher=teacher,
+                        submission=submission,
+                        assignment=submission.assignment,
+                        action='evaluation',
+                        provider=c_provider,
+                        model_name=c_model,
+                        status_code=status_code,
+                        error_type='JSON Parsing Error',
+                        error_message='ШІ повернув некоректну або неповно структуровану відповідь (не вдалося розпарсити JSON)',
+                        prompt_preview=prompt_content[:1500],
+                        raw_response=raw_text[:2000],
+                        failover_triggered=fallback_happened
+                    )
 
                 if result_json:
                     suggested_grade = str(result_json.get('suggested_grade', '')).strip()
@@ -4243,11 +4417,11 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
 
                     # Визначаємо, чи є завдання пошуковим, краєзнавчим або відкритим дослідницьким
                     is_research_or_search_task = any(kw in combined_task_for_qs.lower() for kw in [
-                        'інтернет', 'пошук', 'знайдіть', 'знайти', 'досліджен', 'місто', 'село',
-                        'населен', 'краєзнав', 'повідомлен', 'відомост', 'реферат', 'інформаці'
+                        'інтернет', 'пошук в інтернеті', 'знайдіть в інтернеті', 'знайти в інтернеті',
+                        'досліджен', 'місто', 'село', 'населен', 'краєзнав', 'реферат'
                     ]) or any(kw in (assignment_title or '').lower() for kw in [
-                        'інтернет', 'пошук', 'знайдіть', 'знайти', 'досліджен', 'місто', 'село',
-                        'населен', 'краєзнав', 'повідомлен'
+                        'інтернет', 'пошук в інтернеті', 'знайдіть в інтернеті', 'знайти в інтернеті',
+                        'досліджен', 'місто', 'село', 'населен', 'краєзнав'
                     ])
 
                     # Змістовна робота є тільки якщо вона не відхилена і містить реальні відповіді або дослідження
@@ -4302,7 +4476,18 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                                 weaknesses = [w for w in weaknesses if phrase not in w.lower()]
 
                         if suggested_grade == 'Доопрацювати' and not is_rejected_submission:
-                            if is_research_or_search_task:
+                            # Якщо оцінюються групи результатів (ГР) — підсумковий бал обов'язково відповідає середньому балу ГР!
+                            if not is_traditional and numeric_gr_grades and avg_gr_grade is not None:
+                                suggested_grade = str(avg_gr_grade)
+                                if avg_gr_grade >= 10:
+                                    level = 'Високий (10-12)'
+                                elif avg_gr_grade >= 7:
+                                    level = 'Достатній (7-9)'
+                                elif avg_gr_grade >= 4:
+                                    level = 'Середній (4-6)'
+                                else:
+                                    level = 'Початковий (1-3)'
+                            elif is_research_or_search_task:
                                 if len(student_raw_text) >= 120 or (inline_media and len(inline_media) > 0):
                                     suggested_grade = '10'
                                     level = 'Високий (10-12)'
@@ -4340,7 +4525,8 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                             weaknesses = [w for w in weaknesses if not re.search(oph, w, flags=re.IGNORECASE)]
 
                     # Обов'язкова порада щодо оформлення «питання-відповідь», якщо учень здав лише відповіді без запитань
-                    if not is_rejected_submission and (questions_omitted or (answered_count > 0 and check_student_omitted_questions(task_questions, student_raw_text))):
+                    # НЕ додавати для практичних комп'ютерних файлів (БД Access, код, електронні таблиці тощо)
+                    if not is_rejected_submission and not is_file_project and (questions_omitted or (answered_count > 0 and check_student_omitted_questions(task_questions, student_raw_text))):
                         format_advice_phrase = "Порада щодо оформлення: ви надали відповіді без самих запитань. Будь ласка, записуйте самі запитання разом із відповідями (формат «питання-відповідь») або чітко вказуйте номери запитань, щоб робота була структурованою і зрозумілою."
                         has_advice_in_weaknesses = any(kw in w.lower() for w in weaknesses for kw in ['питання-відповідь', 'без запитань', 'запитання разом'])
                         if not has_advice_in_weaknesses:
@@ -4468,6 +4654,26 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                             weaknesses = [f"Робота виконана не в повному обсязі або потребує доопрацювання та детальнішого розкриття вимог ({summary})."]
                         else:
                             weaknesses = ["Робота виконана не в повному обсязі або потребує доопрацювання: окремі вимоги завдання виконані лише частково."]
+
+                    # Фінальна фільтрація галюцинацій іншого уроку («пояснення крилатого вислову в онлайн-словнику»)
+                    if not has_real_dict_task:
+                        weaknesses = [w for w in weaknesses if not any(kw in str(w).lower() for kw in ['крилатого вислову', 'онлайн-словник', 'тлумачення вислову'])]
+                        feedback_comment = re.sub(r'([^\.\n]*?(?:крилатого\s+вислову|онлайн[- ]словник)[^\.\n]*?\.)', '', feedback_comment, flags=re.IGNORECASE)
+                        summary = re.sub(r'([^\.\n]*?(?:крилатого\s+вислову|онлайн[- ]словник)[^\.\n]*?\.)', '', summary, flags=re.IGNORECASE)
+
+                    # Фінальна фільтрація помилкових порад щодо формату «питання-відповідь» для практичних файлів (БД, коду)
+                    if is_file_project:
+                        weaknesses = [w for w in weaknesses if not any(kw in str(w).lower() for kw in [
+                            'питання-відповідь', 'відсутні запитання', 'без самих запитань',
+                            'без пояснювального документа', 'вигляді файлу бд без', 'подана у вигляді файлу'
+                        ])]
+                        feedback_comment = re.sub(r'(?:порада\s+щодо\s+оформлення:[^\.\n]*?\.)', '', feedback_comment, flags=re.IGNORECASE)
+                        feedback_comment = re.sub(r'([^\.\n]*?(?:питання-відповідь|без\s+самих\s+запитань|без\s+пояснювального\s+документа)[^\.\n]*?\.)', '', feedback_comment, flags=re.IGNORECASE)
+                        summary = re.sub(r'([^\.\n]*?(?:питання-відповідь|без\s+самих\s+запитань|без\s+пояснювального\s+документа)[^\.\n]*?\.)', '', summary, flags=re.IGNORECASE)
+
+                    # Очищення від подвійних пробілів та порожніх рядків після видалення
+                    feedback_comment = re.sub(r'\n{3,}', '\n\n', feedback_comment).strip()
+                    summary = re.sub(r'\s{2,}', ' ', summary).strip()
 
                     full_feedback_parts = []
                     if format_warning:
@@ -5082,6 +5288,7 @@ def analyze_assignment_task_understanding(assignment, force_refresh=False) -> di
     result_data = None
     if act_key or act_provider == 'custom':
         try:
+            thinking_budget_val = 0 if ('flash' in str(act_model).lower() and act_provider == 'gemini') else None
             status_code, raw_text, err_msg, raw_data = call_ai_api(
                 prompt_text="\n".join(prompt_lines),
                 system_prompt=system_instruction,
@@ -5093,7 +5300,8 @@ def analyze_assignment_task_understanding(assignment, force_refresh=False) -> di
                 temperature=0.2,
                 max_output_tokens=2500,
                 timeout=40,
-                json_mode=True
+                json_mode=True,
+                thinking_budget=thinking_budget_val
             )
             if status_code == 200 and raw_text:
                 parsed = extract_json_from_text(raw_text)

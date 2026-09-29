@@ -45,26 +45,48 @@ def is_mdbtools_available() -> bool:
 # ПАРСИНГ ЧЕРЕЗ MDBTOOLS (СИСТЕМНА УТИЛІТА)
 # ═══════════════════════════════════════════════════════════════════════════════
 
+def _get_mdb_env(locale_name: str = 'C.UTF-8') -> dict:
+    env = dict(os.environ)
+    # Гарантуємо UTF-8 локаль для mdbtools/glib аргументів:
+    # Важливо: LC_ALL та LC_CTYPE мають пріоритет над LANG у libc/glib.
+    # Якщо на сервері стояло LC_ALL=C, g_option_context_parse падав з
+    # 'argument parsing failed: Invalid byte sequence in conversion input' для кириличних назв таблиць ('Таблиця1')
+    env['LC_ALL'] = locale_name
+    env['LC_CTYPE'] = locale_name
+    env['LANG'] = locale_name
+    env['MDB_JET3_CHARSET'] = 'windows-1251'
+    env['MDB_ICONV'] = 'UTF-8'
+    return env
+
+
 def _run_mdb_command(args: list, timeout: int = 10) -> Tuple[str, Optional[str]]:
     """Виконує команду mdbtools і повертає (stdout, error)."""
-    try:
-        result = subprocess.run(
-            args,
-            capture_output=True,
-            timeout=timeout,
-            env={**os.environ, 'MDB_JET3_CHARSET': 'windows-1251', 'LANG': 'uk_UA.UTF-8'}
-        )
-        stdout = result.stdout.decode('utf-8', errors='replace').strip()
-        stderr = result.stderr.decode('utf-8', errors='replace').strip()
-        if result.returncode != 0 and not stdout:
-            return '', stderr or f"Помилка mdbtools (код {result.returncode})"
-        return stdout, None
-    except subprocess.TimeoutExpired:
-        return '', "Перевищено час очікування при читанні .mdb файлу"
-    except FileNotFoundError:
-        return '', "mdbtools не встановлено"
-    except Exception as e:
-        return '', str(e)
+    locales_to_try = ['C.UTF-8', 'uk_UA.UTF-8', 'en_US.UTF-8', 'UTF-8']
+    last_err = ""
+    for loc in locales_to_try:
+        try:
+            result = subprocess.run(
+                args,
+                capture_output=True,
+                timeout=timeout,
+                env=_get_mdb_env(loc)
+            )
+            stdout = result.stdout.decode('utf-8', errors='replace').strip()
+            stderr = result.stderr.decode('utf-8', errors='replace').strip()
+            if result.returncode == 0 or stdout:
+                return stdout, None
+            last_err = stderr or f"Помилка mdbtools (код {result.returncode})"
+            # Якщо це помилка парсингу кодування аргументів, пробуємо наступну локаль
+            if 'conversion input' in last_err or 'Invalid byte sequence' in last_err:
+                continue
+            return '', last_err
+        except subprocess.TimeoutExpired:
+            return '', "Перевищено час очікування при читанні .mdb файлу"
+        except FileNotFoundError:
+            return '', "mdbtools не встановлено"
+        except Exception as e:
+            return '', str(e)
+    return '', last_err
 
 
 def _parse_csv_line(line: str, delimiter: str = ';') -> List[str]:
@@ -128,6 +150,32 @@ def _export_table_mdbtools(file_path: str, table: str, max_rows: int = 200) -> T
     return rows, headers, None
 
 
+def _extract_headers_from_schema(schema_text: str, table_name: str) -> List[str]:
+    """Витягує назви стовпців таблиці зі схеми DDL (mdb-schema), якщо mdb-export не дав заголовків."""
+    if not schema_text or not table_name:
+        return []
+    escaped_tbl = re.escape(table_name)
+    pattern = rf'CREATE\s+TABLE\s+(?:\[{escaped_tbl}\]|"{escaped_tbl}"|`{escaped_tbl}`|{escaped_tbl})\s*\((.*?)\);'
+    match = re.search(pattern, schema_text, re.DOTALL | re.IGNORECASE)
+    if not match:
+        return []
+    body = match.group(1)
+    headers = []
+    for line in body.splitlines():
+        line = line.strip().rstrip(',')
+        if not line:
+            continue
+        if re.match(r'^(?:primary\s+key|constraint|foreign\s+key|unique)\b', line, re.IGNORECASE):
+            continue
+        col_m = re.match(r'^(?:\[([^\]]+)\]|"([^"]+)"|`([^`]+)`|([^\s\(\)]+))\s*(.*)', line)
+        if col_m:
+            c_name = col_m.group(1) or col_m.group(2) or col_m.group(3) or col_m.group(4)
+            c_type = col_m.group(5).strip() if col_m.group(5) else ""
+            if c_name:
+                headers.append(f"{c_name} ({c_type})" if c_type else c_name)
+    return headers
+
+
 def parse_access_with_mdbtools(file_path: str, max_rows_per_table: int = 200) -> Tuple[dict, Optional[str]]:
     tables, err = _get_entries_mdbtools(file_path, 'table')
     queries, _ = _get_entries_mdbtools(file_path, 'query')
@@ -163,6 +211,14 @@ def parse_access_with_mdbtools(file_path: str, max_rows_per_table: int = 200) ->
 
     for table_name in (tables or [])[:30]:
         rows, headers, exp_err = _export_table_mdbtools(file_path, table_name, max_rows_per_table)
+        # Якщо mdb-export не зміг отримати заголовки або повернув помилку через кирилицю/порожню таблицю,
+        # спробуємо знайти поля в DDL схемі (mdb-schema)
+        if (not headers or exp_err) and schema_out:
+            schema_headers = _extract_headers_from_schema(schema_out, table_name)
+            if schema_headers:
+                headers = schema_headers
+                exp_err = None
+
         result['tables'].append({
             'name': table_name,
             'headers': headers,
@@ -310,12 +366,16 @@ def convert_access_to_html(file_path: str, max_rows: int = 100) -> Tuple[str, Op
                 html_parts.append(f'<h4 style="font-size:14px;font-weight:800;color:var(--color-primary,#6366f1);margin-bottom:10px;">📋 Таблиця: {html_escape(table["name"])}</h4>')
 
                 if table.get('error'):
-                    html_parts.append(f'<p style="color:#dc2626;">⚠️ {html_escape(table["error"])}</p>')
-                elif not table.get('headers'):
-                    html_parts.append('<p style="color:var(--color-text-muted,#94a3b8);">Таблиця порожня або недоступна</p>')
+                    err_text = str(table['error']).strip()
+                    if 'conversion input' in err_text or 'Invalid byte sequence' in err_text:
+                        html_parts.append('<p style="color:var(--color-text-muted,#94a3b8);padding:8px 0;font-style:italic;">📭 Таблиця створена, але не містить записів або назва містить спеціальні символи</p>')
+                    else:
+                        html_parts.append(f'<p style="color:#dc2626;">⚠️ {html_escape(err_text)}</p>')
+                elif not table.get('headers') and not table.get('rows'):
+                    html_parts.append('<p style="color:var(--color-text-muted,#94a3b8);padding:10px 0;font-style:italic;">📭 Таблиця порожня або не містить полів</p>')
                 else:
-                    headers = table['headers']
-                    rows = table['rows']
+                    headers = table.get('headers') or []
+                    rows = table.get('rows') or []
                     html_parts.append('<div class="table-responsive" style="overflow-x:auto;">')
                     html_parts.append('<table class="excel-table table table-bordered" style="width:100%;border-collapse:collapse;font-size:13px;">')
                     html_parts.append('<thead><tr style="background:var(--color-bg-secondary,#f8fafc);">')
@@ -324,14 +384,18 @@ def convert_access_to_html(file_path: str, max_rows: int = 100) -> Tuple[str, Op
                         html_parts.append(f'<th style="padding:6px 10px;font-weight:700;white-space:nowrap;">{html_escape(str(col))}</th>')
                     html_parts.append('</tr></thead><tbody>')
 
-                    for row_idx, row in enumerate(rows[:max_rows], 1):
-                        bg = 'background:rgba(99,102,241,0.04);' if row_idx % 2 == 0 else ''
-                        html_parts.append(f'<tr style="{bg}"><td style="text-align:center;font-weight:600;color:var(--color-text-muted,#94a3b8);padding:5px 8px;font-size:11px;">{row_idx}</td>')
-                        for cell in row:
-                            html_parts.append(f'<td style="padding:5px 10px;border:1px solid var(--color-border,#e2e8f0);">{html_escape(str(cell) if cell is not None else "")}</td>')
-                        for _ in range(len(headers) - len(row)):
-                            html_parts.append('<td></td>')
-                        html_parts.append('</tr>')
+                    if rows:
+                        for row_idx, row in enumerate(rows[:max_rows], 1):
+                            bg = 'background:rgba(99,102,241,0.04);' if row_idx % 2 == 0 else ''
+                            html_parts.append(f'<tr style="{bg}"><td style="text-align:center;font-weight:600;color:var(--color-text-muted,#94a3b8);padding:5px 8px;font-size:11px;">{row_idx}</td>')
+                            for cell in row:
+                                html_parts.append(f'<td style="padding:5px 10px;border:1px solid var(--color-border,#e2e8f0);">{html_escape(str(cell) if cell is not None else "")}</td>')
+                            for _ in range(len(headers) - len(row)):
+                                html_parts.append('<td></td>')
+                            html_parts.append('</tr>')
+                    else:
+                        colspan = max(1, len(headers) + 1)
+                        html_parts.append(f'<tr><td colspan="{colspan}" style="text-align:center;padding:16px;color:var(--color-text-muted,#94a3b8);font-style:italic;">📭 Таблиця створена, але не містить записів (порожня)</td></tr>')
 
                     html_parts.append('</tbody></table></div>')
                     count_note = f"Показано перші {max_rows} записів" if len(rows) >= max_rows else f"Всього записів: {len(rows)}"
@@ -458,8 +522,8 @@ def extract_access_text_for_ai(file_path: str, max_rows_per_table: int = 50) -> 
                         parts.append(f"Колонки: {' | '.join(headers)}")
                     for i, row in enumerate(rows[:max_rows_per_table], 1):
                         parts.append(f"  {i}. {' | '.join(str(c) for c in row)}")
-                    if not headers and not rows:
-                        parts.append(f"  (Помилка: {table.get('error', 'невідома')})" if table.get('error') else "  (порожня)")
+                    if not rows:
+                        parts.append("  (Таблиця створена, але не містить записів / порожня)")
 
             if queries:
                 parts.append("\n🔍 ЗАПИТИ (SQL QUERIES):")

@@ -274,15 +274,17 @@ def check_submission_duplicates(submission):
            other.class_group_id == submission.class_group_id:
             continue
 
-        # Перевірка: чи є учень співавтором або чи увімкнено ігнорування плагіату
+        # Перевірка: чи є учень дійсним співавтором
         is_coauthor = (
             (hasattr(submission, 'is_coauthor_with') and submission.is_coauthor_with(other)) or
             (hasattr(other, 'is_coauthor_with') and other.is_coauthor_with(submission)) or
-            getattr(submission, 'ignore_plagiarism', False) or
-            getattr(other, 'ignore_plagiarism', False) or
             (submission.primary_submission_id and submission.primary_submission_id == other.primary_submission_id) or
             (submission.primary_submission_id and submission.primary_submission_id == other.id) or
             (other.primary_submission_id and other.primary_submission_id == submission.id)
+        )
+        is_plagiarism_explicitly_ignored = (
+            getattr(submission, 'ignore_plagiarism', False) or
+            getattr(other, 'ignore_plagiarism', False)
         )
 
         is_binary_match = bool(sub_hash and other_hash and sub_hash == other_hash)
@@ -294,7 +296,7 @@ def check_submission_duplicates(submission):
 
         if is_binary_match or is_text_match:
             if is_coauthor:
-                # Встановлено спільну роботу / ігнорування плагіату: не вважаємо плагіатом!
+                # Встановлено спільну роботу: не вважаємо плагіатом!
                 result.update({
                     'is_duplicate': False,
                     'is_duplicate_student': False,
@@ -310,6 +312,26 @@ def check_submission_duplicates(submission):
                     'warning_message': (
                         f"👥 Спільна/колективна робота: файл збігається з роботою співавтора {other_name} ({other_class}). "
                         f"Плагіат виключено (робота оцінюється за спільний результат)."
+                    )
+                })
+                submission._cached_dup_info = result
+                return result
+            elif is_plagiarism_explicitly_ignored:
+                # Вчитель або система увімкнули ігнорування плагіату для цієї роботи (не спільна група, але перевірка без штрафу)
+                result.update({
+                    'is_duplicate': False,
+                    'is_duplicate_student': False,
+                    'plagiarism_ignored': True,
+                    'is_coauthor': False,
+                    'duplicate_submission_id': other.id,
+                    'duplicate_student_name': other_name,
+                    'duplicate_student_first_name': other.first_name,
+                    'duplicate_student_last_name': other.last_name,
+                    'duplicate_class': other_class,
+                    'duplicate_submitted_at': other.submitted_at,
+                    'type': 'ignored_plagiarism',
+                    'warning_message': (
+                        f"ℹ️ Збіг файлу з роботою {other_name} ({other_class}) проігноровано вчителем."
                     )
                 })
                 submission._cached_dup_info = result

@@ -6,6 +6,14 @@ import sys
 
 def main():
     """Run administrative tasks."""
+    # Захист від порожніх системних каталогів numpy у Python 3.14 (namespace packages без модуля)
+    try:
+        import numpy
+        if not hasattr(numpy, '__file__') or not hasattr(numpy, '__version__'):
+            sys.modules['numpy'] = None
+    except Exception:
+        pass
+
     os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'schoolnet.settings')
     try:
         from django.core.management import execute_from_command_line

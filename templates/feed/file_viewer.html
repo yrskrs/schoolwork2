@@ -1239,6 +1239,15 @@
                         </div>
                     </div>
 
+                    <!-- Опція Thinking Mode (Глибоке мислення) -->
+                    <div style="margin-bottom:10px;padding:8px 12px;background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:space-between;gap:8px;">
+                        <label for="force-thinking-checkbox" style="display:flex;align-items:center;gap:7px;font-size:12px;font-weight:600;color:var(--color-text);cursor:pointer;margin:0;" title="Увімкніть для складних завдань, поглибленого аналізу або якщо маєте сумніви щодо швидкої перевірки">
+                            <span style="font-size:15px;">🧠</span>
+                            <span>Глибоке мислення (Thinking mode)</span>
+                        </label>
+                        <input type="checkbox" id="force-thinking-checkbox" {% if submission.assignment.ai_thinking_mode %}checked{% endif %} style="width:16px;height:16px;cursor:pointer;accent-color:var(--color-primary);" title="Увімкніть для складних завдань, поглибленого аналізу або якщо маєте сумніви щодо швидкої перевірки">
+                    </div>
+
                     <!-- Головна помітна кнопка перевірки ШІ -->
                     <div style="margin-bottom:12px;">
                         <button type="button" class="btn-ai-prominent" id="btn-run-ai-check" onclick="runSingleAICheck({{ submission.id }})">
@@ -1887,12 +1896,23 @@ function runSingleAICheck(subId) {
         checkedGrCodes.push(cb.value);
     });
 
+    var thinkingCb = document.getElementById('force-thinking-checkbox');
+    var isThinking = thinkingCb ? thinkingCb.checked : false;
+
     if (btn) {
         btn.disabled = true;
-        btn.innerHTML = '<span style="display:inline-block;animation:spin 0.8s linear infinite;margin-right:4px;">⏳</span> <span>ШІ аналізує роботу...</span>';
+        if (isThinking) {
+            btn.innerHTML = '<span style="display:inline-block;animation:spin 0.8s linear infinite;margin-right:4px;">🧠</span> <span>ШІ детально мислить...</span>';
+        } else {
+            btn.innerHTML = '<span style="display:inline-block;animation:spin 0.8s linear infinite;margin-right:4px;">⏳</span> <span>ШІ аналізує роботу...</span>';
+        }
     }
     if (box) {
-        box.innerHTML = '<div style="text-align:center;padding:12px;font-size:12px;color:var(--color-primary);font-weight:600;">🤖 Google Gemini аналізує завдання та роботу учня...</div>';
+        if (isThinking) {
+            box.innerHTML = '<div style="text-align:center;padding:12px;font-size:12px;color:var(--color-primary);font-weight:600;">🧠 Thinking mode: ШІ виконує багатокроковий поглиблений аналіз роботи...</div>';
+        } else {
+            box.innerHTML = '<div style="text-align:center;padding:12px;font-size:12px;color:var(--color-primary);font-weight:600;">🤖 Google Gemini аналізує завдання та роботу учня...</div>';
+        }
     }
 
     var formData = new FormData();
@@ -1903,6 +1923,7 @@ function runSingleAICheck(subId) {
     if (checkedGrCodes.length > 0) {
         formData.append('selected_gr_codes', JSON.stringify(checkedGrCodes));
     }
+    formData.append('force_thinking', isThinking ? '1' : '0');
 
     fetch('/teacher/ai/check/' + subId + '/?format=json', {
         method: 'POST',

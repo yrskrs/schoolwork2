@@ -609,6 +609,11 @@ class Assignment(models.Model):
         default=False,
         help_text='Якщо увімкнено, учням дозволено використовувати генеративний ШІ для виконання завдання'
     )
+    ai_thinking_mode = models.BooleanField(
+        'Режим глибокого мислення ШІ (Thinking mode)',
+        default=False,
+        help_text='Увімкніть для складних завдань: ШІ виконуватиме поглиблений покроковий аналіз робіт перед виставленням оцінки'
+    )
     custom_criteria = models.TextField(
         'Індивідуальні критерії оцінювання',
         blank=True,
@@ -2207,8 +2212,6 @@ class Submission(models.Model):
             return False
         if self.id and other_sub.id and self.id == other_sub.id:
             return True
-        if getattr(self, 'ignore_plagiarism', False) or getattr(other_sub, 'ignore_plagiarism', False):
-            return True
 
         # Зв'язок за primary_submission
         if self.primary_submission_id and self.primary_submission_id == other_sub.id:
@@ -3152,7 +3155,7 @@ DEFAULT_NUS_SYSTEM_PROMPT = """Ти — висококваліфікований
   1. Візьми запитання з умови завдання чи матеріалів вчителя та ПІДСТАВ відповіді учня до кожного відповідного запитання!
   2. 🚫 СУВОРО ЗАБОРОНЕНО писати «жодної відповіді не дано», «відповіді відсутні» чи «робота порожня», якщо учень відповів хоча б на 1-2 запитання!
   3. Оціни правильність і зміст наданих учнем відповідей (навіть при частковому виконанні).
-  4. ⚠️ ОБОВ'ЯЗКОВО вкажи учневі у "weaknesses" та "feedback_comment" про недолік оформлення («питання-відповідь»): порадь завжди записувати запитання разом із відповідями (формат «питання-відповідь») або чітко зазначати номери питань, щоб робота була структурованою.
+  4. ⚠️ Вкажи учневі у "weaknesses" та "feedback_comment" рекомендацію щодо оформлення («питання-відповідь»), якщо це текстова відповідь: порадь записувати запитання разом із відповідями або чітко зазначати номери питань. ВАЖЛИВО: для практичних проєктів та файлів (бази даних Access, код програм, таблиці) ця вимога НЕ застосовується!
 
 РОЗДІЛЬНИЙ АНАЛІЗ КОЖНОГО ЗАВДАННЯ ТА СУВОРЕ ОБМЕЖЕННЯ БАЛІВ ЗА НЕПОВНИЙ ОБСЯГ (MULTI-TASK COMPLETION & STRICT CEILING):
 1. Коли вчитель задав кілька конкретних завдань (наприклад: «виконати всі 3 завдання», або у презентації/файлі містяться Завдання 1, Завдання 2, Завдання 3):
@@ -3160,7 +3163,7 @@ DEFAULT_NUS_SYSTEM_PROMPT = """Ти — висококваліфікований
    - 🚫 СУВОРА ЗАБОРОНА ДУБЛЮВАННЯ ТА ПОДВІЙНОГО ЗАРАХУВАННЯ ВІДПОВІДЕЙ:
      * Одна відповідь, речення чи абзац учня КАТЕГОРИЧНО НЕ МОЖЕ одночасно зараховуватися як виконання двох або більше різних завдань!
      * Кожне окреме завдання повинно мати власну окрему відповідь у роботі учня.
-     * Якщо Завдання 2 вимагало знайти пояснення вислову в українському онлайн-словнику, а Завдання 3 — перекласти його англійською: наведення лише одного речення англійською мовою НЕ МОЖЕ вважатися виконанням обох завдань! Українське тлумачення в такому разі відсутнє (Завдання 2 НЕ виконано).
+     * Якщо завдання містить кілька окремих кроків (наприклад, створення структури, побудова схеми або відповіді на питання): виконання лише одного кроку не може вважатися виконанням решти завдань!
 2. СУВОРІ ОБМЕЖЕННЯ БАЛІВ ЗА НЕПОВНИЙ ОБСЯГ (КРИТЕРІЇ НУШ):
    - 10-12 балів (Високий рівень) призначаються ВИКЛЮЧНО за повне виконання 100% усіх завдань, визначених умовою чи матеріалами вчителя.
    - Якщо задано 3 завдання, а учень здав лише 2 (66% обсягу): максимальна можлива оцінка — 7-8 балів (Достатній рівень). Ставити 9-12 балів (зокрема 10 чи 11 балів) КАТЕГОРИЧНО ЗАБОРОНЕНО!
@@ -3169,7 +3172,7 @@ DEFAULT_NUS_SYSTEM_PROMPT = """Ти — висококваліфікований
 3. ЗВОРОТНИЙ ЗВ'ЯЗОК ТА СУВОРА ЗАБОРОНА ПОМИЛКОВИХ ПОХВАЛ:
    - Якщо хоча б одне завдання не виконано або пропущено:
      * КАТЕГОРИЧНО ЗАБОРОНЕНО писати у "summary", "strengths" чи "feedback_comment", що «учень виконав усі завдання», «робота містить правильні відповіді на всі 3 завдання» тощо.
-     * ОБОВ'ЯЗКОВО зазнач у "weaknesses" та "feedback_comment", яке саме завдання пропущено (наприклад: «Завдання 2 не виконано: відсутнє пояснення крилатого вислову в онлайн-словнику»).
+     * ОБОВ'ЯЗКОВО зазнач у "weaknesses" та "feedback_comment", яке саме завдання пропущено за умовою вчителя (наприклад: «Завдання 2 не виконано»).
 
 ФОРМАТ ВІДПОВІДІ (ТІЛЬКИ ВАЛІДНИЙ JSON БЕЗ ЗАЙВОГО ТЕКСТУ):
 {
@@ -3307,6 +3310,11 @@ class AISettings(models.Model):
         help_text="Поріг збігів або окремих слів (за замовчуванням 25%), нижче якого контент вважається самостійною роботою, а не ШІ"
     )
     is_enabled = models.BooleanField('Модуль ШІ увімкнено', default=False)
+    default_thinking_mode = models.BooleanField(
+        'Режим глибокого мислення за замовчуванням (Thinking mode)',
+        default=False,
+        help_text='ШІ детальніше розмірковує (Thinking budget) перед виставленням оцінок робіт учнів'
+    )
     updated_at = models.DateTimeField('Останнє оновлення', auto_now=True)
 
     @property
@@ -3572,6 +3580,59 @@ class AISettings(models.Model):
 
         self.saved_models_list = json.dumps(current_models, ensure_ascii=False)
         self.save(update_fields=['saved_models_list', 'updated_at'])
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ЖУРНАЛ ПОМИЛОК ТА ЗБОЇВ ШІ (AI ERROR LOG)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class AIErrorLog(models.Model):
+    """
+    Журнал збоїв та помилок ШІ при зверненні до API.
+    Фіксує виключно невдалі запити, таймаути, помилки парсингу та причини спрацювання failover.
+    """
+    teacher = models.ForeignKey(
+        'Teacher',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='ai_error_logs',
+        verbose_name='Вчитель'
+    )
+    submission = models.ForeignKey(
+        'Submission',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='ai_error_logs',
+        verbose_name='Робота учня'
+    )
+    assignment = models.ForeignKey(
+        'Assignment',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='ai_error_logs',
+        verbose_name='Завдання'
+    )
+    action = models.CharField('Дія ШІ', max_length=100, default='evaluation')
+    provider = models.CharField('Провайдер', max_length=50, blank=True, default='')
+    model_name = models.CharField('Модель', max_length=100, blank=True, default='')
+    status_code = models.IntegerField('HTTP Код', null=True, blank=True)
+    error_type = models.CharField('Тип помилки', max_length=150, blank=True, default='')
+    error_message = models.TextField('Текст помилки')
+    prompt_preview = models.TextField('Фрагмент промта / контексту', blank=True, default='')
+    raw_response = models.TextField('Сира відповідь API', blank=True, default='')
+    failover_triggered = models.BooleanField('Спрацював Failover', default=False)
+    created_at = models.DateTimeField('Час помилки', auto_now_add=True, db_index=True)
+
+    class Meta:
+        verbose_name = 'Помилка ШІ'
+        verbose_name_plural = 'Журнал помилок ШІ'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"[{self.created_at.strftime('%d.%m %H:%M')}] {self.model_name or self.provider}: {self.error_type or self.error_message[:40]}"
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
