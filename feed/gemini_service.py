@@ -2860,30 +2860,9 @@ def find_question_by_task_num(questions: list[str], target_num: int) -> str | No
         if body_num_pattern.search(q):
             return q
 
-    # 4. Якщо в списку питань взагалі є елементи з явними номерами завдань (наприклад: «Вправа 1», «Завдання 3»),
-    # то список є структурованим за номерами. Позиційний fallback ЗАБОРОНЕНО, бо він підхопить
-    # сторонні заголовки, теорію або приклади («Приклад», «Контрольне питання»)!
-    any_named_pattern = re.compile(
-        r'(?:\b(?:завдан[а-яіїє]*|вправ[а-яіїє]*|пункт[а-яіїє]*|номер[а-яіїє]*|exercise|task)\b|(?:завд|впр|ном)\b\.?|\bп\.\s*|№)\s*(?:№\s*)?\d+\b',
-        re.IGNORECASE
-    )
-    any_start_pattern = re.compile(
-        r'^(?:(?:📽️\s*)?(?:\[?\s*слайд\s*\d+\b[^\]\n\r]*\]?[\s\:\-]*)?)?(?:[•\-\*]\s*)?\d+[\.\)\:\–\—\-]\s+',
-        re.IGNORECASE
-    )
-    has_any_explicit_numbering = any(any_named_pattern.search(q) or any_start_pattern.search(q) for q in questions)
-    if has_any_explicit_numbering:
-        return None
-
-    # Лише якщо у списку взагалі НЕМАЄ жодних номерів, перевіряємо індекс target_num - 1,
-    # переконуючись, що це не нерелевантний заголовок/приклад
-    idx_0b = target_num - 1
-    if 0 <= idx_0b < len(questions):
-        cand = questions[idx_0b]
-        is_non_task = bool(re.search(r'^(?:приклад|теорія|контрольн[а-яіїє]*\s+питан|хід\s+роботи|слайд\s*\d+)\b', cand.strip(), re.IGNORECASE))
-        if not is_non_task:
-            return cand
-
+    # 4. Позиційний fallback (idx = target_num - 1) КАТЕГОРИЧНО ЗАБОРОНЕНО (Section 19),
+    # оскільки список може містити заголовки, теорію, приклади або питання для самоперевірки.
+    # Номер завдання визначається ВИКЛЮЧНО за явним маркером (Вправа 2, Завдання 2, № 2, 2., 2)).
     return None
 
 
@@ -3147,32 +3126,130 @@ class TaskComponentsList(list):
         return any(isinstance(c, dict) and c.get('type') == item for c in self)
 
 
+def extract_assignment_topic_and_action(
+    title: str = "",
+    desc: str = "",
+    custom_criteria: str = "",
+    subject_name: str = ""
+) -> dict:
+    """
+    Розділяє тему (topic) та дію (action) у завданні вчителя (SOURCE A).
+    Запобігає хибному перетворенню теми на тип завдання (наприклад,
+    «Створити презентацію про програмування» -> topic='програмування', task_type='presentation').
+    """
+    t_clean = strip_html_tags(title or "").strip()
+    d_clean = strip_html_tags(desc or "").strip()
+    c_clean = strip_html_tags(custom_criteria or "").strip()
+
+    topic_patterns = [
+        r'\bна\s+тему\s+["«\']?([^"»\'\.\,\;\!\?\n]+)["«\']?',
+        r'\bза\s+темою\s+["«\']?([^"»\'\.\,\;\!\?\n]+)["«\']?',
+        r'\b(?:з|із)\s+теми\s+["«\']?([^"»\'\.\,\;\!\?\n]+)["«\']?',
+        r'\bщодо\s+["«\']?([^"»\'\.\,\;\!\?\n]+)["«\']?',
+        r'\bприсвячен[а-яіїє]*\s+["«\']?([^"»\'\.\,\;\!\?\n]+)["«\']?',
+        r'\bпро\s+["«\']?([^"»\'\.\,\;\!\?\n]+)["«\']?',
+        r'\bпро[єе]кт[а-яіїє]*\s+["«\']([^"»\']+)["»\']',
+        r'\bтема\s*:\s*["«\']?([^"»\'\.\,\;\!\?\n]+)["«\']?',
+    ]
+
+    extracted_topic = ""
+    topic_full_match = ""
+
+    for pat in topic_patterns:
+        m = re.search(pat, d_clean, re.IGNORECASE)
+        if not m:
+            m = re.search(pat, t_clean, re.IGNORECASE)
+        if m:
+            extracted_topic = m.group(1).strip()
+            topic_full_match = m.group(0).strip()
+            break
+
+    # Якщо до знайденої теми випадково причепилася наступна дія (наприклад, «про штучний інтелект та відповісти на 5 питань»):
+    if extracted_topic:
+        action_split_m = re.search(
+            r'\s+(?:та|і|й|а|але)\s+(?:відпові[а-яіїє]*|напис[а-яіїє]*|створ[а-яіїє]*|розроб[а-яіїє]*|викон[а-яіїє]*|скла[а-яіїє]*|побуду[а-яіїє]*|заповн[а-яіїє]*|розв\'яз[а-яіїє]*|перевір[а-яіїє]*|оформ[а-яіїє]*|захист[а-яіїє]*)\b',
+            extracted_topic,
+            re.IGNORECASE
+        )
+        if action_split_m:
+            cutoff = action_split_m.start()
+            truncated_topic = extracted_topic[:cutoff].strip()
+            if truncated_topic:
+                if topic_full_match and extracted_topic in topic_full_match:
+                    topic_full_match = topic_full_match[:topic_full_match.find(extracted_topic) + len(truncated_topic)].strip()
+                extracted_topic = truncated_topic
+
+    action_kw_pattern = r'\b(?:створ[а-яіїє]*|розроб[а-яіїє]*|підготу[а-яіїє]*|напис[а-яіїє]*|скла[а-яіїє]*|побуду[а-яіїє]*|заповн[а-яіїє]*|викон[а-яіїє]*|розв\'яз[а-яіїє]*|намал[а-яіїє]*|оформ[а-яіїє]*|презентаці[а-яіїє]*|таблиц[а-яіїє]*|код[а-яіїє]*|програм[а-яіїє]*|баз[а-яіїє]*\s+даних|есе|твір|реферат)\b'
+    has_action_in_desc = bool(re.search(action_kw_pattern, d_clean, re.IGNORECASE))
+    has_action_in_title = bool(re.search(action_kw_pattern, t_clean, re.IGNORECASE))
+
+    if not extracted_topic:
+        if t_clean and has_action_in_desc and not has_action_in_title:
+            extracted_topic = t_clean
+        elif t_clean and not has_action_in_title:
+            extracted_topic = t_clean
+        elif d_clean and not has_action_in_desc:
+            extracted_topic = d_clean
+        else:
+            extracted_topic = t_clean or subject_name or "Навчальна тема"
+
+    masked_d = d_clean
+    masked_t = t_clean
+
+    if topic_full_match:
+        masked_d = re.sub(re.escape(topic_full_match), ' __TOPIC__ ', masked_d, flags=re.IGNORECASE)
+        masked_t = re.sub(re.escape(topic_full_match), ' __TOPIC__ ', masked_t, flags=re.IGNORECASE)
+    elif extracted_topic and len(extracted_topic) >= 4 and extracted_topic.lower() != t_clean.lower():
+        masked_d = re.sub(re.escape(extracted_topic), ' __TOPIC__ ', masked_d, flags=re.IGNORECASE)
+        masked_t = re.sub(re.escape(extracted_topic), ' __TOPIC__ ', masked_t, flags=re.IGNORECASE)
+
+    # Якщо Title є суто назвою теми уроку (без дієслів/продукту дії), а в описі задано дію:
+    if has_action_in_desc and not has_action_in_title and t_clean:
+        masked_t = ' __TOPIC__ '
+
+    action_text = f"{masked_t} {masked_d} {c_clean}".strip().lower()
+
+    return {
+        'topic': extracted_topic,
+        'subject': subject_name or 'Інформатика',
+        'action_text': action_text,
+        'raw_title': t_clean,
+        'raw_desc': d_clean,
+        'raw_criteria': c_clean
+    }
+
+
 def identify_task_components(
     title: str = "",
     desc: str = "",
     custom_criteria: str = "",
     teacher_files_text: str = "",
     target_slide_text: str = "",
+    subject_name: str = "",
     **kwargs
-) -> list[dict]:
+) -> TaskComponentsList:
     """
-    Визначає окремі компоненти складеного або простого завдання (task_components).
-    Підтримує складені завдання на кшталт:
-    - «Створити презентацію про штучний інтелект та відповісти на 5 контрольних запитань» -> [presentation, question_answer]
-    - «Створити програму та додати короткий опис алгоритму» -> [programming, document]
+    Визначає окремі компоненти завдання (task_components) ВИКЛЮЧНО з інструкцій вчителя (SOURCE A).
+    Навчальні матеріали та прикріплені файли вчителя (SOURCE B) НЕ створюють нових завдань
+    і не перетворюють навчальні запитання для самоперевірки на завдання учня.
     """
     if not desc and 'description' in kwargs:
         desc = kwargs['description']
-    t_clean = strip_html_tags(title or "").strip()
-    d_clean = strip_html_tags(desc or "").strip()
-    c_clean = strip_html_tags(custom_criteria or "").strip()
+
+    topic_info = extract_assignment_topic_and_action(title, desc, custom_criteria, subject_name)
+    combined = topic_info['action_text']
     s_clean = strip_html_tags(target_slide_text or "").strip()
-    combined = f"{t_clean} {d_clean} {c_clean} {s_clean}".strip().lower()
+    if s_clean:
+        combined = f"{combined} {s_clean.lower()}"
+
+    # Якщо в SOURCE A взагалі немає жодної інструкції або назви (екстремальний fallback)
+    if not combined.replace('__topic__', '').strip() and teacher_files_text:
+        combined = strip_html_tags(teacher_files_text[:1500]).lower()
 
     components = []
 
     # 1. Презентація
-    if re.search(r'\b(?:презентаці[яієїю]|створити\s+слайд[а-яіїє]*|розробити\s+презентаці[а-яіїє]*|powerpoint|pptx?|canva|гугл\s+презентаці[яієїю]|google\s+slides?)\b', combined):
+    if re.search(r'\b(?:презентаці[яієїю]|створити\s+слайд[а-яіїє]*|розробити\s+презентаці[а-яіїє]*|підготувати\s+презентаці[а-яіїє]*|powerpoint|pptx?|canva|гугл\s+презентаці[яієїю]|google\s+slides?)\b', combined):
         components.append({
             'type': 'presentation',
             'required': True,
@@ -3181,7 +3258,7 @@ def identify_task_components(
         })
 
     # 2. Програмування (код, Python, Scratch)
-    if re.search(r'\b(?:програм[ауиіе]|код[а-яіїє]*|написати\s+програму|розробити\s+програму|створити\s+програму|python|пайтон|паскаль|pascal|c\+\+|java\b|scratch|скретч|скрипт[а-яіїє]*)\b', combined):
+    if re.search(r'\b(?:написати\s+програму|розробити\s+програму|створити\s+програму|програмний\s+код|код\s+програми|програм[ауиіе]\s+на\s+(?:python|пайтон|c\+\+|паскаль|java|scratch)|код\s+на\s+python|python|пайтон|pascal|паскаль|c\+\+|scratch|скретч|скрипт[а-яіїє]*)\b', combined):
         components.append({
             'type': 'programming',
             'required': True,
@@ -3189,9 +3266,9 @@ def identify_task_components(
             'description': 'Написати програмний код'
         })
 
-    # 3. Відповіді на запитання (question_answer) - перевіряється ТІЛЬКИ в інструкціях вчителя
+    # 3. Відповіді на запитання (question_answer) - ТІЛЬКИ за прямою вимогою вчителя в SOURCE A
     has_qa = bool(re.search(
-        r'\b(?:відповід[а-яіїє]*\s+на\s+(?:запитан|питан)[а-яіїє]*|дати\s+(?:\w+\s+)?відповід[а-яіїє]*\s+на|контрольн[а-яіїє]*\s+(?:запитан|питан)[а-яіїє]*|тест[а-яіїє]*\b|опитуванн[а-яіїє]*|питанн[а-яіїє]*\s+\d+|запитанн[а-яіїє]*\s+\d+)\b',
+        r'\b(?:відпові[а-яіїє]*(?:\s+[\w\d]+){0,4}\s+(?:запитан|питан)[а-яіїє]*|дати\s+(?:[\w\d]+\s+){0,3}відповід[а-яіїє]*|контрольн[а-яіїє]*\s+(?:запитан|питан)[а-яіїє]*|тест[а-яіїє]*\b|опитуванн[а-яіїє]*|питанн[а-яіїє]*\s+\d+|запитанн[а-яіїє]*\s+\d+)\b',
         combined
     ))
     if has_qa:
@@ -3203,7 +3280,7 @@ def identify_task_components(
         })
 
     # 4. База даних (MS Access, SQL)
-    if re.search(r'\b(?:баз[а-яіїє]*\s+даних|бд\b|ms\s+access|access\b|sql\b|sqlite|реляційн[а-яіїє]*)\b', combined):
+    if re.search(r'\b(?:баз[а-яіїє]*\s+даних|бд\b|ms\s+access|access\b|sql\b|sqlite|реляційн[а-яіїє]*\s+таблиц[а-яіїє]*)\b', combined):
         components.append({
             'type': 'database',
             'required': True,
@@ -3212,7 +3289,7 @@ def identify_task_components(
         })
 
     # 5. Електронна таблиця (Excel, Таблиці)
-    if re.search(r'\b(?:електронн[а-яіїє]*\s+таблиц[а-яіїє]*|створити\s+таблиц[яіюеь]|заповнити\s+таблиц[яіюеь]|excel|ексель|sheets|spreadsheet|табличн[а-яіїє]*\s+процесор[а-яіїє]*)\b', combined):
+    if re.search(r'\b(?:електронн[а-яіїє]*\s+таблиц[а-яіїє]*|створити\s+таблиц[яіюеь]|заповнити\s+таблиц[яіюеь]|побудувати\s+таблиц[яіюеь]|таблиц[яіюеь]\s+в\s+excel|таблиц[яіюеь]\s+результатів|excel|ексель|sheets|spreadsheet|табличн[а-яіїє]*\s+процесор[а-яіїє]*)\b', combined):
         components.append({
             'type': 'table',
             'required': True,
@@ -3239,7 +3316,7 @@ def identify_task_components(
         })
 
     # 8. Проєкт
-    if re.search(r'\b(?:про[єе]кт[а-яіїє]*|робота\s+над\s+.*?про[єе]ктом)\b', combined):
+    if re.search(r'\b(?:робота\s+над\s+.*?про[єе]ктом|навчальн[а-яіїє]*\s+про[єе]кт|створити\s+про[єе]кт|розробити\s+про[єе]кт)\b', combined) or (re.search(r'\bпро[єе]кт[а-яіїє]*\b', combined) and not components):
         components.append({
             'type': 'project',
             'required': True,
@@ -3247,14 +3324,17 @@ def identify_task_components(
             'description': 'Виконати навчальний проєкт'
         })
 
-    # 9. Дослідження, пошук інформації
-    if re.search(r'\b(?:досліджен[а-яіїє]*|пошук[а-яіїє]*\s+інформаці[а-яіїє]*|знайти\s+(?:в\s+інтернеті|інформацію|відомості))\b', combined):
-        components.append({
-            'type': 'research',
-            'required': True,
-            'source': 'teacher_description',
-            'description': 'Знайти та опрацювати інформацію'
-        })
+    # 9. Дослідження, пошук інформації (ТІЛЬКИ коли дослідження є самостійною дією, а не темою/змістом іншого продукту)
+    is_genitive_research = bool(re.search(r'\b(?:таблиц[а-яіїє]*|презентаці[а-яіїє]*|результат[а-яіїє]*|дані)\s+(?:результатів\s+)?дослідження\b', combined))
+    has_research_action = bool(re.search(r'\b(?:провести\s+дослідження|дослідити\s+|звіт\s+про\s+дослідження|пошукове\s+дослідження|пошук[а-яіїє]*\s+інформаці[а-яіїє]*|знайти\s+(?:в\s+інтернеті|інформацію|відомості))\b', combined))
+    if has_research_action and not is_genitive_research:
+        if not any(c['type'] in ['table', 'presentation', 'database', 'programming'] for c in components):
+            components.append({
+                'type': 'research',
+                'required': True,
+                'source': 'teacher_description',
+                'description': 'Знайти та опрацювати інформацію'
+            })
 
     # 10. Математичні обчислення, задачі
     if re.search(r'\b(?:обчисленн[а-яіїє]*|обчислити|розв\'язати\s+задач[а-яіїє]*|розв\'язок\s+задач[а-яіїє]*|знайти\s+значення\s+виразу|математичн[а-яіїє]*\s+розрахунк[а-яіїє]*)\b', combined):
@@ -3298,27 +3378,34 @@ def determine_assignment_task_type(
     desc: str = "",
     custom_criteria: str = "",
     teacher_files_text: str = "",
+    target_slide_text: str = "",
+    subject_name: str = "",
     **kwargs
 ) -> str:
     """
-    Динамічно визначає основний тип завдання (main_task_type).
-    Для складених завдань (наприклад: презентація + питання, або програма + опис):
-    пріоритет надається основному практичному продукту (deliverable),
-    а складові компоненти фіксуються в task_components.
+    Динамічно визначає основний тип завдання (main_task_type) на основі SOURCE A.
+    Матеріали вчителя (наприклад, лекція у PowerPoint для завдання з баз даних)
+    НІКОЛИ не перетворюють практичне завдання на інший тип.
     """
     if 'description' in kwargs and not desc:
         desc = kwargs['description']
 
-    components = identify_task_components(title, desc, custom_criteria, teacher_files_text)
+    components = identify_task_components(
+        title=title,
+        desc=desc,
+        custom_criteria=custom_criteria,
+        target_slide_text=target_slide_text,
+        subject_name=subject_name
+    )
     comp_types = [c['type'] for c in components]
 
-    # Пріоритет основного типу продукту:
+    # Пріоритет основного типу практичного продукту:
     for p_type in ['presentation', 'programming', 'table', 'database', 'diagram', 'creative', 'project', 'calculation', 'document', 'research', 'question_answer', 'practical']:
         if p_type in comp_types:
             return p_type
 
-    # Якщо опис був мінімальним, перевіряємо матеріали вчителя
-    if teacher_files_text:
+    # Лише якщо опис і назва були повністю порожніми, перевіряємо матеріали вчителя як останній fallback
+    if not (title or desc) and teacher_files_text:
         tf_lower = teacher_files_text[:3000].lower()
         if re.search(r'\b(?:баз[а-яіїє]*\s+даних|ms\s+access|sql\b)\b', tf_lower):
             return 'database'
@@ -3338,33 +3425,27 @@ def is_questions_expected(
     desc: str = "",
     custom_criteria: str = "",
     task_components: list = None,
+    target_slide_text: str = "",
     **kwargs
 ) -> bool:
     """
     Визначає, чи є модель «питання-відповідь» невід'ємною частиною того, що учень має здати.
-    ГОЛОВНЕ ПРАВИЛО: Не кожне навчальне завдання містить запитання для учня.
-    Якщо завдання передбачає створення презентації, написання програми, створення таблиці,
-    практичну роботу чи проєкт — questions_expected = False.
-    questions_expected = True ТІЛЬКИ якщо вчитель прямо вимагає відповісти на запитання.
-
-    Для складених завдань:
-    Якщо завдання містить як створення файлу, так і відповіді на питання (наприклад:
-    «Створити презентацію та відповісти на питання 1–5»), questions_expected = True.
+    ГОЛОВНЕ ПРАВИЛО: questions_expected = True ТІЛЬКИ коли вчитель у SOURCE A прямо вимагає
+    відповісти на запитання. Будь-які запитання для самоперевірки у файлах вчителя
+    НЕ є завданням для учня.
     """
     if not desc and 'description' in kwargs:
         desc = kwargs['description']
     components = task_components if task_components is not None else kwargs.get('components')
 
-    # 1. Пряма вимога вчителя в title, desc або custom_criteria
-    teacher_text = f"{title} {desc} {custom_criteria}".lower()
+    teacher_text = f"{title} {desc} {custom_criteria} {target_slide_text}".lower()
     has_explicit_teacher_qa = bool(re.search(
-        r'\b(?:відповід[а-яіїє]*\s+на\s+(?:запитан|питан)[а-яіїє]*|дати\s+(?:\w+\s+)?відповід[а-яіїє]*\s+на|контрольн[а-яіїє]*\s+(?:запитан|питан)[а-яіїє]*|тест[а-яіїє]*\b|опитуванн[а-яіїє]*|питанн[а-яіїє]*\s+\d+|запитанн[а-яіїє]*\s+\d+)\b',
+        r'\b(?:відпові[а-яіїє]*(?:\s+[\w\d]+){0,4}\s+(?:запитан|питан)[а-яіїє]*|дати\s+(?:[\w\d]+\s+){0,3}відповід[а-яіїє]*|контрольн[а-яіїє]*\s+(?:запитан|питан)[а-яіїє]*|тест[а-яіїє]*\b|опитуванн[а-яіїє]*|питанн[а-яіїє]*\s+\d+|запитанн[а-яіїє]*\s+\d+)\b',
         teacher_text
     ))
     if has_explicit_teacher_qa:
         return True
 
-    # 2. Перевірка компонентів складеного завдання
     if components:
         for c in components:
             c_type = c.get('type') if isinstance(c, dict) else str(c)
@@ -3372,11 +3453,9 @@ def is_questions_expected(
             if c_type == 'question_answer' and c_req:
                 return True
 
-    # 3. Якщо основний тип завдання — відповіді на питання
     if task_type == 'question_answer':
         return True
 
-    # 4. В усіх інших випадках (презентація, програма, таблиця, БД, проєкт тощо без вимоги питань)
     return False
 
 
@@ -3386,29 +3465,33 @@ def categorize_task_requirements_and_criteria(
     custom_criteria: str = "",
     compiled_criteria: list = None,
     teacher_files_text: str = ""
-) -> tuple[list[str], list[str], list[str]]:
+) -> tuple[list[str], list[str], list[str], list[dict]]:
     """
     Розділяє вимоги та критерії на:
-    1. teacher_requirements: обов'язкові вимоги вчителя (впливають на оцінку).
+    1. teacher_requirements: обов'язкові вимоги вчителя (рядок-список для зворотної сумісності).
     2. teacher_criteria: обов'язкові критерії оцінювання вчителя.
-    3. generic_quality_recommendations: загальні рекомендації до якості (НЕ впливають на оцінку,
-       не знижують бал, не перетворюються на failed criteria_results).
-    Заборонено вигадувати неіснуючі обов'язкові вимоги (висновок, джерела, 8 слайдів),
-    якщо вчитель їх явно не задавав.
+    3. generic_quality_recommendations: загальні рекомендації до якості (НЕ знижують бал).
+    4. mandatory_requirements: структурований список обов'язкових вимог із зазначенням source.
     """
     teacher_requirements = []
     teacher_criteria = []
     generic_quality_recommendations = []
+    mandatory_requirements = []
 
-    # 1. Індивідуальні критерії вчителя (Пріоритет 2)
+    # 1. Індивідуальні критерії вчителя (SOURCE A - Пріоритет 2)
     if custom_criteria and custom_criteria.strip():
         for line in custom_criteria.strip().splitlines():
             line_s = line.strip(' \t\n\r-*•;')
             if len(line_s) > 2 and line_s not in teacher_requirements:
                 teacher_requirements.append(line_s)
                 teacher_criteria.append(line_s)
+                mandatory_requirements.append({
+                    'requirement': line_s,
+                    'source': 'custom_criteria',
+                    'mandatory': True
+                })
 
-    # 2. Явні вимоги з назви та опису вчителя (Пріоритет 1)
+    # 2. Явні вимоги з назви та опису вчителя (SOURCE A - Пріоритет 1)
     t_clean = strip_html_tags(title or "").strip()
     d_clean = strip_html_tags(desc or "").strip()
 
@@ -3429,8 +3512,12 @@ def categorize_task_requirements_and_criteria(
                 val = m.group(0).strip()
                 if not any(val.lower() in r.lower() for r in teacher_requirements):
                     teacher_requirements.append(val)
+                    mandatory_requirements.append({
+                        'requirement': val,
+                        'source': 'teacher_description',
+                        'mandatory': True
+                    })
 
-        # Булети під заголовком "Вимоги:" у тексті опису
         in_req_block = False
         for line in txt.splitlines():
             line_s = line.strip(' \t\n\r-*•;')
@@ -3445,17 +3532,22 @@ def categorize_task_requirements_and_criteria(
                     clean_item = re.sub(r'^\d+[\.\)]\s*', '', line_s).strip()
                     if len(clean_item) > 2 and not any(clean_item.lower() in r.lower() for r in teacher_requirements):
                         teacher_requirements.append(clean_item)
+                        mandatory_requirements.append({
+                            'requirement': clean_item,
+                            'source': 'teacher_description',
+                            'mandatory': True
+                        })
 
-    # 3. Критерії з файлів учителя, які мають mandatory == True і стосуються поточного завдання
+    # 3. Критерії з файлів учителя (SOURCE B), які мають mandatory == True і стосуються поточного завдання
     if compiled_criteria:
         for c in compiled_criteria:
             c_name = c['name'] if isinstance(c, dict) else str(c)
             c_name_clean = c_name.strip(' \t\n\r-*•;')
             is_mand = c.get('mandatory', True) if isinstance(c, dict) else True
-            if not is_mand:
+            applies_to = c.get('applies_to', 'general') if isinstance(c, dict) else 'general'
+            if not is_mand or applies_to == 'other_exercise':
                 continue
 
-            # Перевіряємо, чи це не є типовою загальною рекомендацією
             is_generic = any(kw in c_name_clean.lower() for kw in [
                 'читабельний шрифт', 'охайне оформлення', 'єдиний стиль оформлення',
                 'розподіл часу', 'грамотність', 'орфографічні помилки'
@@ -3469,8 +3561,13 @@ def categorize_task_requirements_and_criteria(
                         teacher_requirements.append(c_name_clean)
                     if not any(c_name_clean.lower() in r.lower() for r in teacher_criteria):
                         teacher_criteria.append(c_name_clean)
+                    if not any(c_name_clean.lower() in r['requirement'].lower() for r in mandatory_requirements):
+                        mandatory_requirements.append({
+                            'requirement': c_name_clean,
+                            'source': c.get('source', 'teacher_file') if isinstance(c, dict) else 'teacher_file',
+                            'mandatory': True
+                        })
 
-    # Додаємо базові корисні поради (якщо немає інших)
     default_generic = [
         "Бажано використовувати читабельний шрифт та лаконічний текст",
         "Дотримуватися охайного візуального оформлення роботи"
@@ -3479,7 +3576,7 @@ def categorize_task_requirements_and_criteria(
         if not any(dg.lower() in g.lower() for g in generic_quality_recommendations):
             generic_quality_recommendations.append(dg)
 
-    return teacher_requirements, teacher_criteria, generic_quality_recommendations
+    return teacher_requirements, teacher_criteria, generic_quality_recommendations, mandatory_requirements
 
 
 def extract_task_requirements(
@@ -3512,7 +3609,7 @@ def extract_task_requirements(
         )
         compiled_criteria = extracted.get('criteria', [])
 
-    teacher_reqs, _, _ = categorize_task_requirements_and_criteria(
+    teacher_reqs, _, _, _ = categorize_task_requirements_and_criteria(
         title=title,
         desc=desc,
         custom_criteria=custom_criteria,
@@ -3520,6 +3617,227 @@ def extract_task_requirements(
         teacher_files_text=teacher_files_text
     )
     return teacher_reqs
+
+
+def build_teacher_intent(
+    title: str = "",
+    desc: str = "",
+    custom_criteria: str = "",
+    task_type: str = "other",
+    task_components: list = None,
+    topic: str = "",
+    teacher_requirements: list = None,
+    questions_expected: bool = False
+) -> dict:
+    """
+    Формує структуроване розуміння суті завдання (teacher_intent) відповідно до Section 10:
+    - what_teacher_asks: просте і зрозуміле формулювання того, що просить вчитель
+    - why_student_does_it: мета учнівської роботи
+    - expected_result: очікуваний практичний результат
+    - required_actions: конкретні кроки дій
+    - required_components: обов'язкові елементи
+    - explicit_constraints: обмеження від учителя
+    - forbidden_assumptions: заборонені штучні припущення
+    """
+    t_clean = strip_html_tags(title or "").strip()
+    d_clean = strip_html_tags(desc or "").strip()
+    c_clean = strip_html_tags(custom_criteria or "").strip()
+
+    if d_clean:
+        what_teacher_asks = f"Вчитель просить: {d_clean}"
+    elif t_clean:
+        if task_type == 'presentation':
+            what_teacher_asks = f"Вчитель просить створити презентацію на тему «{topic or t_clean}»."
+        elif task_type == 'programming':
+            what_teacher_asks = f"Вчитель просить написати програму за темою «{topic or t_clean}»."
+        elif task_type == 'database':
+            what_teacher_asks = f"Вчитель просить створити базу даних за темою «{topic or t_clean}»."
+        elif task_type == 'table':
+            what_teacher_asks = f"Вчитель просить створити електронну таблицю за темою «{topic or t_clean}»."
+        elif task_type == 'question_answer':
+            what_teacher_asks = f"Вчитель просить надати відповіді на запитання за темою «{topic or t_clean}»."
+        else:
+            what_teacher_asks = f"Вчитель просить виконати навчальне завдання «{t_clean}»."
+    else:
+        what_teacher_asks = "Вчитель просить виконати навчальне завдання відповідно до інструкцій."
+
+    why_student_does_it = f"Опанування навчального матеріалу та демонстрація практичних навичок за темою «{topic or t_clean or 'уроку'}»."
+
+    result_map = {
+        'presentation': f"Готова презентація про {topic or 'тему завдання'}.",
+        'programming': f"Працездатна програма / вихідний код за темою {topic or 'завдання'}.",
+        'table': f"Готова електронна таблиця з даними за темою {topic or 'завдання'}.",
+        'database': f"Спроєктована база даних за темою {topic or 'завдання'}.",
+        'diagram': f"Побудована діаграма або схема за темою {topic or 'завдання'}.",
+        'creative': f"Виконана творча робота за темою {topic or 'завдання'}.",
+        'project': f"Завершений навчальний проєкт за темою {topic or 'завдання'}.",
+        'research': f"Звіт / опрацьована інформація за темою {topic or 'завдання'}.",
+        'calculation': f"Розв'язані задачі з розрахунками за темою {topic or 'завдання'}.",
+        'document': f"Оформлений текстовий документ за темою {topic or 'завдання'}.",
+        'question_answer': f"Письмові відповіді на поставлені запитання за темою {topic or 'завдання'}.",
+        'practical': "Виконана практична робота за інструкцією вчителя.",
+        'other': "Виконане навчальне завдання."
+    }
+    expected_result = result_map.get(task_type, f"Виконана робота за темою {topic or 'завдання'}.")
+
+    required_actions = []
+    if task_type == 'presentation':
+        required_actions.append(f"Ознайомитися з матеріалом теми «{topic or 'уроку'}»")
+        required_actions.append("Створити слайди презентації за змістом завдання")
+        if questions_expected:
+            required_actions.append("Дати письмові відповіді на визначені запитання завдання")
+        required_actions.append("Зберегти файл презентації та надіслати на перевірку")
+    elif task_type == 'programming':
+        required_actions.append(f"Скласти алгоритм для розв'язання задачі за темою «{topic or 'уроку'}»")
+        required_actions.append("Написати та налагодити програмний код")
+        required_actions.append("Перевірити роботу програми на тестових даних")
+        required_actions.append("Зберегти код програми та надіслати роботу")
+    elif task_type == 'table':
+        required_actions.append("Створити таблицю в табличному процесорі")
+        required_actions.append("Внести необхідні дані та формули для обчислень")
+        required_actions.append("Зберегти файл електронної таблиці та прикріпити до здачі")
+    elif task_type == 'database':
+        required_actions.append(f"Спроєктувати структуру бази даних за темою «{topic or 'уроку'}»")
+        required_actions.append("Створити необхідні таблиці та зв'язки")
+        required_actions.append("Зберегти файл бази даних та надіслати на перевірку")
+    elif task_type == 'question_answer':
+        required_actions.append("Уважно прочитати поставлені вчителем запитання")
+        required_actions.append("Сформулювати чіткі відповіді на кожне запитання")
+        required_actions.append("Надіслати письмові відповіді на перевірку")
+    else:
+        required_actions.append("Опрацювати інструкції вчителя")
+        required_actions.append("Виконати практичні завдання")
+        required_actions.append("Зберегти та надіслати готову роботу")
+
+    required_components = []
+    if teacher_requirements:
+        for r in teacher_requirements:
+            req_str = r.get('requirement') if isinstance(r, dict) else str(r)
+            if req_str and req_str not in required_components:
+                required_components.append(req_str)
+    if not required_components:
+        if task_type == 'presentation':
+            required_components = ["зміст слайдів за темою завдання"]
+            if questions_expected:
+                required_components.append("відповіді на поставлені запитання")
+        elif task_type == 'programming':
+            required_components = ["працездатний вихідний код програми"]
+        elif task_type == 'table':
+            required_components = ["таблиця з внесеними даними"]
+        elif task_type == 'database':
+            required_components = ["структура бази даних та таблиці"]
+        elif task_type == 'question_answer':
+            required_components = ["відповіді на поставлені запитання"]
+        else:
+            required_components = ["виконання вимог інструкції вчителя"]
+
+    explicit_constraints = []
+    if c_clean:
+        for line in c_clean.splitlines():
+            line_s = line.strip(' \t\n\r-*•;')
+            if len(line_s) > 2:
+                explicit_constraints.append(line_s)
+
+    forbidden_assumptions = [
+        "Не вимагати виконання вправ або прикладів з навчальних матеріалів/презентацій вчителя, якщо вчитель не задав їх прямо.",
+        "Не вимагати наявності титульного слайду, фіксованої кількості слайдів (наприклад, 8), висновку чи списку джерел, якщо вчитель цього явно не вимагав у тексті завдання.",
+        "Не застосовувати модель «питання-відповідь» і не шукати контрольні запитання для самоперевірки у прикріплених матеріалах, якщо вчитель дав завдання створити продукт/файл.",
+        "Не знижувати оцінку за загальними порадами щодо охайності чи шрифтів (generic recommendations)."
+    ]
+
+    return {
+        "what_teacher_asks": what_teacher_asks,
+        "why_student_does_it": why_student_does_it,
+        "expected_result": expected_result,
+        "required_actions": required_actions,
+        "required_components": required_components,
+        "explicit_constraints": explicit_constraints,
+        "forbidden_assumptions": forbidden_assumptions,
+        "task_type": task_type,
+        "topic": topic
+    }
+
+
+def build_final_task_understanding(
+    teacher_intent: dict,
+    subject: str,
+    topic: str,
+    task_type: str,
+    task_components: list,
+    assigned_scope: list,
+    expected_result: str,
+    required_actions: list,
+    mandatory_requirements: list,
+    optional_recommendations: list,
+    questions_expected: bool,
+    confidence: float = 0.95,
+    ambiguities: list = None
+) -> dict:
+    """
+    Створює об'єкт FINAL TASK UNDERSTANDING (Section 20), який є єдиним джерелом істини
+    для AI-оцінювання, student_explanation, deliverable та критеріїв.
+    """
+    return {
+        "teacher_intent": teacher_intent,
+        "subject": subject,
+        "topic": topic,
+        "task_type": task_type,
+        "task_components": list(task_components),
+        "assigned_scope": assigned_scope or [expected_result],
+        "expected_result": expected_result,
+        "required_actions": required_actions,
+        "mandatory_requirements": mandatory_requirements,
+        "optional_recommendations": optional_recommendations,
+        "questions_expected": questions_expected,
+        "task_understanding_confidence": confidence,
+        "ambiguities": ambiguities or [],
+        "source_priority": {
+            "teacher_description": 1,
+            "custom_criteria": 2,
+            "explicit_teacher_file_instruction": 3,
+            "teacher_material_context": 4,
+            "generic_recommendations": 5
+        }
+    }
+
+
+def log_task_understanding_diagnostics(
+    title: str,
+    desc: str,
+    custom_criteria: str,
+    file_context: str,
+    final_task_understanding: dict,
+    ignored_tasks: list = None
+):
+    """
+    Форматована діагностика інтерпретації завдання у відповідності до Section 26.
+    """
+    ignored_str = "\n".join(f"- {item}" for item in (ignored_tasks or [])) if ignored_tasks else "Немає (усі матеріали релевантні або сторонні вправи відсутні)"
+    mand_reqs = final_task_understanding.get('mandatory_requirements', [])
+    mand_str = "\n".join(f"- {r.get('requirement', str(r))} [{r.get('source', 'teacher')}]" if isinstance(r, dict) else f"- {r}" for r in mand_reqs) if mand_reqs else "Базові вимоги відповідно до формату"
+    ambiguities = final_task_understanding.get('ambiguities', [])
+    amb_str = "\n".join(f"- {a}" for a in ambiguities) if ambiguities else "Не виявлено"
+
+    diag_text = (
+        "\n=== TASK UNDERSTANDING ===\n\n"
+        f"TEACHER TITLE:\n{title or '(порожньо)'}\n\n"
+        f"TEACHER DESCRIPTION:\n{desc or '(порожньо)'}\n\n"
+        f"CUSTOM CRITERIA:\n{custom_criteria or '(не задано)'}\n\n"
+        f"TEACHER FILE CONTEXT:\n{file_context[:300] if file_context else '(файли відсутні)'}\n\n"
+        f"DETECTED TEACHER INTENT:\n{json.dumps(final_task_understanding.get('teacher_intent', {}), ensure_ascii=False, indent=2)}\n\n"
+        f"TASK TYPE:\n{final_task_understanding.get('task_type')}\n\n"
+        f"TASK COMPONENTS:\n{json.dumps(final_task_understanding.get('task_components', []), ensure_ascii=False)}\n\n"
+        f"ASSIGNED SCOPE:\n{json.dumps(final_task_understanding.get('assigned_scope', []), ensure_ascii=False)}\n\n"
+        f"EXPECTED RESULT:\n{final_task_understanding.get('expected_result')}\n\n"
+        f"MANDATORY REQUIREMENTS:\n{mand_str}\n\n"
+        f"IGNORED MATERIAL:\n{ignored_str}\n\n"
+        f"QUESTIONS EXPECTED:\n{final_task_understanding.get('questions_expected')}\n\n"
+        f"CONFIDENCE:\n{final_task_understanding.get('task_understanding_confidence')}\n\n"
+        f"AMBIGUITIES:\n{amb_str}\n"
+        "===========================\n"
+    )
+    logger.info(diag_text)
+    print(diag_text)
 
 
 def interpret_assignment_task(
@@ -3530,6 +3848,8 @@ def interpret_assignment_task(
     compiled_criteria: list = None,
     raw_found_questions: list = None,
     assigned_tasks: list = None,
+    subject_name: str = "",
+    target_slide_text: str = "",
     **kwargs
 ) -> dict:
     """
@@ -3541,10 +3861,33 @@ def interpret_assignment_task(
     clean_title = strip_html_tags(title or "").strip()
     clean_desc = strip_html_tags(desc or "").strip()
 
-    task_components = identify_task_components(clean_title, clean_desc, custom_criteria, teacher_files_text)
-    task_type = determine_assignment_task_type(clean_title, clean_desc, custom_criteria, teacher_files_text)
-    questions_expected = is_questions_expected(task_type, clean_title, clean_desc, custom_criteria, task_components=task_components)
-    teacher_requirements, teacher_criteria, generic_recommendations = categorize_task_requirements_and_criteria(
+    topic_info = extract_assignment_topic_and_action(clean_title, clean_desc, custom_criteria, subject_name)
+    topic = topic_info['topic']
+    subject = topic_info['subject']
+
+    task_components = identify_task_components(
+        title=clean_title,
+        desc=clean_desc,
+        custom_criteria=custom_criteria,
+        target_slide_text=target_slide_text,
+        subject_name=subject
+    )
+    task_type = determine_assignment_task_type(
+        title=clean_title,
+        desc=clean_desc,
+        custom_criteria=custom_criteria,
+        target_slide_text=target_slide_text,
+        subject_name=subject
+    )
+    questions_expected = is_questions_expected(
+        task_type=task_type,
+        title=clean_title,
+        desc=clean_desc,
+        custom_criteria=custom_criteria,
+        task_components=task_components,
+        target_slide_text=target_slide_text
+    )
+    teacher_requirements, teacher_criteria, generic_recommendations, mandatory_requirements = categorize_task_requirements_and_criteria(
         title=clean_title,
         desc=clean_desc,
         custom_criteria=custom_criteria,
@@ -3552,56 +3895,75 @@ def interpret_assignment_task(
         teacher_files_text=teacher_files_text
     )
 
+    teacher_intent = build_teacher_intent(
+        title=clean_title,
+        desc=clean_desc,
+        custom_criteria=custom_criteria,
+        task_type=task_type,
+        task_components=task_components,
+        topic=topic,
+        teacher_requirements=mandatory_requirements,
+        questions_expected=questions_expected
+    )
+
     # Визначення Deliverable та очікуваного формату за типом завдання
     format_map = {
-        'presentation': ('презентація (PPTX, PPT, ODP або посилання)', 'Готова презентація за темою'),
-        'programming': ('програмний код / файл програми (.py, .cpp, .sb3 тощо)', 'Працездатна програма з вихідним кодом'),
-        'table': ('електронна таблиця (XLSX, XLS, ODS, Google Таблиці)', 'Створена електронна таблиця з даними та розрахунками'),
-        'database': ('файл бази даних (ACCDB, MDB, SQL) або схема БД', 'Спроєктована база даних зі структурою та таблицями'),
-        'diagram': ('діаграма, схема або графік (зображення чи документ)', 'Побудована діаграма або графічне представлення даних'),
-        'creative': ('графічний файл / творча робота (PNG, JPG, PDF або відео)', 'Виконана творча робота'),
-        'project': ('матеріали проєкту (презентація, документ або архів)', 'Завершений проєкт з необхідними компонентами'),
-        'research': ('повідомлення / звіт про дослідження (документ або презентація)', 'Звіт про самостійно опрацьовану інформацію'),
-        'document': ('текстовий документ (DOCX, PDF або текст)', 'Оформлений текстовий документ'),
-        'calculation': ('розв\'язання задач із розрахунками (документ чи фото зошита)', 'Правильно розв\'язані задачі з формулами та відповідями'),
-        'question_answer': ('письмові відповіді на запитання (у зошиті чи документі)', 'Відповіді на всі поставлені запитання'),
-        'practical': ('файл практичної роботи відповідно до інструкції', 'Виконана практична робота за кроками інструкції'),
-        'other': ('файл або документ відповідно до вказівок', 'Виконане навчальне завдання'),
+        'presentation': ('презентація (PPTX, PPT, ODP або посилання)', f"Готова презентація за темою {topic or 'уроку'}"),
+        'programming': ('програмний код / файл програми (.py, .cpp, .sb3 тощо)', f"Працездатна програма за темою {topic or 'уроку'}"),
+        'table': ('електронна таблиця (XLSX, XLS, ODS, Google Таблиці)', f"Створена електронна таблиця за темою {topic or 'уроку'}"),
+        'database': ('файл бази даних (ACCDB, MDB, SQL) або схема БД', f"Спроєктована база даних за темою {topic or 'уроку'}"),
+        'diagram': ('діаграма, схема або графік (зображення чи документ)', f"Побудована діаграма або схема ({topic or 'уроку'})"),
+        'creative': ('графічний файл / творча робота (PNG, JPG, PDF або відео)', f"Виконана творча робота за темою {topic or 'уроку'}"),
+        'project': ('матеріали проєкту (презентація, документ або архів)', f"Завершений проєкт за темою {topic or 'уроку'}"),
+        'research': ('повідомлення / звіт про дослідження (документ або презентація)', f"Звіт про опрацьовану інформацію ({topic or 'уроку'})"),
+        'document': ('текстовий документ (DOCX, PDF або текст)', f"Оформлений текстовий документ за темою {topic or 'уроку'}"),
+        'calculation': ('розв\'язання задач із розрахунками (документ чи фото зошита)', f"Правильно розв'язані задачі за темою {topic or 'уроку'}"),
+        'question_answer': ('письмові відповіді на запитання (у зошиті чи документі)', f"Відповіді на поставлені запитання за темою {topic or 'уроку'}"),
+        'practical': ('файл практичної роботи відповідно до інструкції', f"Виконана практична робота за інструкцією"),
+        'other': ('файл або документ відповідно до вказівок', f"Виконане навчальне завдання"),
     }
 
     expected_format, default_deliverable_desc = format_map.get(task_type, format_map['other'])
 
-    # Опис того, що учень має зробити
-    what_student_must_do = clean_desc or clean_title or default_deliverable_desc
-    expected_result = default_deliverable_desc
+    # Опис deliverable з підтримкою складених завдань
+    has_qa_comp = any(c.get('type') == 'question_answer' for c in task_components)
+    if has_qa_comp and task_type != 'question_answer':
+        deliverable_desc = f"{default_deliverable_desc} та письмові відповіді на запитання"
+    elif clean_title and (clean_desc or len(clean_title) >= 15):
+        deliverable_desc = clean_title
+    else:
+        deliverable_desc = default_deliverable_desc
 
-    # Формування компонентів deliverable без вигадування неіснуючих вимог
+    what_student_must_do = clean_desc or clean_title or default_deliverable_desc
+    expected_result = teacher_intent.get('expected_result') or default_deliverable_desc
+
+    # Формування обов'язкових компонентів deliverable
     deliverable_components = []
     if teacher_requirements:
         deliverable_components = list(teacher_requirements)
     else:
-        # Базові компоненти без штучних титульних слайдів чи висновків
-        if any(c.get('type') == 'question_answer' for c in task_components) and task_type != 'question_answer':
+        if has_qa_comp and task_type != 'question_answer':
             deliverable_components = [default_deliverable_desc, 'відповіді на поставлені запитання']
         elif task_type == 'presentation':
-            deliverable_components = ['слайди за темою завдання']
+            deliverable_components = ['зміст слайдів за темою завдання']
         elif task_type == 'programming':
-            deliverable_components = ['код програми відповідно до умови']
+            deliverable_components = ['працездатний вихідний код програми']
         elif task_type == 'table':
             deliverable_components = ['таблиця з внесеними даними']
+        elif task_type == 'database':
+            deliverable_components = ['структура бази даних та таблиці']
         elif task_type == 'question_answer':
             deliverable_components = ['відповіді на поставлені запитання']
         else:
             deliverable_components = ['виконання основних практичних дій за темою']
 
     deliverable = {
-        'description': clean_title if clean_title else default_deliverable_desc,
+        'description': deliverable_desc,
         'type': task_type,
         'format': expected_format,
         'required_components': deliverable_components
     }
 
-    # Спосіб перевірки (evaluation_method)
     evaluation_method = {
         'check_content': True,
         'check_structure': True,
@@ -3613,64 +3975,53 @@ def interpret_assignment_task(
         'check_data': task_type in ['table', 'database'],
     }
 
-    # Дії учня (required_actions)
-    has_qa_comp = any(c.get('type') == 'question_answer' for c in task_components)
-    required_actions = []
-    if task_type == 'presentation':
-        if has_qa_comp:
-            required_actions = [
-                'Ознайомитися з темою та підготувати інформацію',
-                'Створити слайди презентації',
-                'Дати письмові відповіді на запитання завдання',
-                'Зберегти та надіслати виконану роботу'
-            ]
-        else:
-            required_actions = [
-                'Ознайомитися з темою та підготувати інформацію',
-                'Створити слайди презентації за змістом завдання',
-                'Перевірити охайність та зрозумілість матеріалу',
-                'Зберегти файл презентації та надіслати на перевірку'
-            ]
-    elif task_type == 'programming':
-        required_actions = [
-            'Ознайомитися з умовою задачі та скласти алгоритм',
-            'Написати програмний код',
-            'Протестувати роботу програми на вхідних даних',
-            'Зберегти код програми (.py) та здати роботу'
-        ]
-    elif task_type == 'table':
-        required_actions = [
-            'Створити таблицю в табличному процесорі',
-            'Заповнити таблицю вхідними даними',
-            'Застосувати необхідні формули для обчислень',
-            'Зберегти файл таблиці та прикріпити до здачі'
-        ]
-    elif task_type == 'question_answer':
-        required_actions = [
-            'Прочитати запитання та знайти відповіді у навчальних матеріалах',
-            'Записати чіткі відповіді на кожне запитання',
-            'Перевірити повноту відповідей',
-            'Надіслати роботу на перевірку'
-        ]
-    else:
-        required_actions = [
-            'Опрацювати інструкцію вчителя',
-            'Виконати практичні дії за планом',
-            'Перевірити якість отриманого результату',
-            'Зберегти та надіслати готову роботу'
+    required_actions = teacher_intent.get('required_actions', [])
+
+    # Непризначені матеріали з навчального файлу вчителя
+    unassigned_material = []
+    teacher_material_context = []
+    if raw_found_questions and not questions_expected:
+        unassigned_material = list(raw_found_questions)
+        teacher_material_context = [
+            f"У прикріплених матеріалах виявлено {len(raw_found_questions)} запитань/вправ, які слугують навчальним контекстом уроку і НЕ є обов'язковими завданнями для здачі."
         ]
 
-    # Виявлення прикріплених матеріалів, які НЕ є завданнями (теорія, приклади, контрольні запитання)
-    relevant_teacher_material = []
-    if raw_found_questions and not questions_expected:
-        relevant_teacher_material.append(
-            f"У прикріплених матеріалах виявлено {len(raw_found_questions)} запитань/вправ, які слугують навчальним контекстом уроку і НЕ є обов'язковими завданнями для здачі."
-        )
+    confidence = 0.95
+    ambiguities = []
+    if not clean_desc and not clean_title:
+        confidence = 0.40
+        ambiguities.append("Не визначено опис та назву завдання від вчителя")
+    elif not clean_desc and len(clean_title) < 10:
+        confidence = 0.70
+        ambiguities.append("Короткий заголовок без докладних інструкцій учителя")
+
+    assigned_scope = [t['description'] for t in assigned_tasks] if assigned_tasks else [clean_desc or clean_title or expected_result]
+
+    final_task_understanding = build_final_task_understanding(
+        teacher_intent=teacher_intent,
+        subject=subject,
+        topic=topic,
+        task_type=task_type,
+        task_components=task_components,
+        assigned_scope=assigned_scope,
+        expected_result=expected_result,
+        required_actions=required_actions,
+        mandatory_requirements=mandatory_requirements,
+        optional_recommendations=generic_recommendations,
+        questions_expected=questions_expected,
+        confidence=confidence,
+        ambiguities=ambiguities
+    )
 
     return {
         'task_type': task_type,
         'main_task_type': task_type,
+        'subject': subject,
+        'topic': topic,
         'task_components': task_components,
+        'teacher_assignment': clean_desc or clean_title or "Навчальне завдання",
+        'teacher_intent': teacher_intent,
+        'assigned_scope': assigned_scope,
         'what_student_must_do': what_student_must_do,
         'expected_result': expected_result,
         'deliverable': deliverable,
@@ -3679,11 +4030,17 @@ def interpret_assignment_task(
         'required_actions': required_actions,
         'requirements': teacher_requirements,
         'teacher_requirements': teacher_requirements,
+        'mandatory_requirements': mandatory_requirements,
         'teacher_criteria': teacher_criteria,
         'generic_recommendations': generic_recommendations,
         'criteria': teacher_criteria,
-        'relevant_teacher_material': relevant_teacher_material,
+        'teacher_material_context': teacher_material_context,
+        'unassigned_material': unassigned_material,
+        'relevant_teacher_material': teacher_material_context,
         'evaluation_method': evaluation_method,
+        'task_understanding_confidence': confidence,
+        'ambiguities': ambiguities,
+        'final_task_understanding': final_task_understanding
     }
 
 
@@ -3801,10 +4158,65 @@ def resolve_assignment_scope(
         t_reqs = task_interpretation.get('teacher_requirements', [])
         t_crit = task_interpretation.get('teacher_criteria', [])
         g_recs = task_interpretation.get('generic_recommendations', [])
+        mand_reqs = task_interpretation.get('mandatory_requirements', [])
+
+        assigned_scope = [t['description'] for t in assigned_list] if assigned_list else [desc or title or "Навчальне завдання"]
+        unassigned_mat = [item['description'] for item in ignored_list]
+
+        # Розрахунок впевненості та неоднозначностей
+        confidence = 0.95
+        amb_list = list(ambiguities or [])
+        if not desc and not title:
+            confidence = 0.40
+            amb_list.append("Відсутній опис та назва завдання від вчителя")
+        elif not desc and len(title) < 10:
+            confidence = 0.70
+            amb_list.append("Короткий заголовок без докладних інструкцій учителя")
+
+        # Оновлюємо teacher_intent актуальним assigned_scope та expected_result
+        t_intent = dict(task_interpretation.get('teacher_intent') or {})
+        if assigned_scope and len(assigned_scope) == 1:
+            t_intent['expected_result'] = task_interpretation.get('expected_result') or assigned_scope[0]
+
+        final_tu = build_final_task_understanding(
+            teacher_intent=t_intent,
+            subject=task_interpretation.get('subject', 'Інформатика'),
+            topic=task_interpretation.get('topic', title),
+            task_type=task_type,
+            task_components=task_interpretation.get('task_components', []),
+            assigned_scope=assigned_scope,
+            expected_result=task_interpretation.get('expected_result', deliverable.get('description', '')),
+            required_actions=task_interpretation.get('required_actions', []),
+            mandatory_requirements=mand_reqs,
+            optional_recommendations=g_recs,
+            questions_expected=questions_expected,
+            confidence=confidence,
+            ambiguities=amb_list
+        )
+
+        task_interpretation['final_task_understanding'] = final_tu
+        task_interpretation['assigned_scope'] = assigned_scope
+        task_interpretation['unassigned_material'] = unassigned_mat
+        task_interpretation['teacher_material_context'] = unassigned_mat
+        task_interpretation['task_understanding_confidence'] = confidence
+        task_interpretation['ambiguities'] = amb_list
+
+        log_task_understanding_diagnostics(
+            title=title,
+            desc=desc,
+            custom_criteria=custom_criteria,
+            file_context=all_files_text,
+            final_task_understanding=final_tu,
+            ignored_tasks=[item['description'] for item in ignored_list]
+        )
+
         return {
             'assignment_type': assignment_type,
             'task_type': task_type,
+            'topic': task_interpretation.get('topic', ''),
+            'teacher_intent': t_intent,
             'task_interpretation': task_interpretation,
+            'final_task_understanding': final_tu,
             'deliverable': deliverable,
             'evaluation_method': evaluation_method,
             'questions_expected': questions_expected,
@@ -3813,10 +4225,12 @@ def resolve_assignment_scope(
             'scope_source': scope_src,
             'assigned_tasks': assigned_list,
             'assigned_task_count': len(assigned_list),
+            'assigned_scope': assigned_scope,
             'specific_task_numbers': specific_nums if specific_nums is not None else (teacher_specific_task_nums or []),
             'teacher_requirements': t_reqs,
             'teacher_criteria': t_crit,
             'generic_quality_recommendations': g_recs,
+            'mandatory_requirements': mand_reqs,
             'requirements': t_reqs,
             'custom_criteria': custom_criteria_rules,
             'file_based_criteria': [c for c in file_criteria_extracted.get('criteria', []) + primary_criteria_extracted.get('criteria', []) if c.get('mandatory', True)],
@@ -3827,7 +4241,8 @@ def resolve_assignment_scope(
             'ignored_found_tasks': [item['description'] for item in ignored_list],
             'unassigned_materials_ignored': [item['description'] for item in ignored_list],
             'evidence_sources': ['student_file', 'student_comment', 'student_link'],
-            'ambiguities_or_conflicts': ambiguities or []
+            'ambiguities_or_conflicts': amb_list,
+            'task_understanding_confidence': confidence
         }
 
     # 7. Перевірка конкретного слайду або сторінки (наприклад: «зі слайду 15», «на слайді 15»)
@@ -3873,7 +4288,13 @@ def resolve_assignment_scope(
             'is_single_complex_task': True,
             'assigned_task_count': 1,
             'assigned_tasks': assigned_tasks,
+            'assigned_scope': eval_plan.get('assigned_scope', []),
             'ignored_found_tasks': ignored,
+            'unassigned_material': eval_plan.get('unassigned_materials_ignored', []),
+            'final_task_understanding': eval_plan.get('final_task_understanding', {}),
+            'task_understanding_confidence': eval_plan.get('task_understanding_confidence', 0.95),
+            'ambiguities': eval_plan.get('ambiguities_or_conflicts', []),
+            'teacher_intent': eval_plan.get('final_task_understanding', {}).get('teacher_intent', {}),
             'custom_criteria_rules': custom_criteria_rules,
             'file_criteria_rules': compiled_criteria,
             'evaluation_plan': eval_plan,
@@ -3883,12 +4304,14 @@ def resolve_assignment_scope(
             'task_questions': [clean_slide_task[:300]],
             'clean_instruction_text': desc or f"Завдання зі слайду {target_slide_num}",
             'task_type': task_type,
+            'topic': task_interpretation.get('topic', ''),
             'task_interpretation': task_interpretation,
             'task_components': task_interpretation.get('task_components', []),
             'deliverable': deliverable,
             'evaluation_method': evaluation_method,
             'questions_expected': questions_expected,
             'teacher_requirements': eval_plan.get('teacher_requirements', []),
+            'mandatory_requirements': eval_plan.get('mandatory_requirements', []),
             'teacher_criteria': eval_plan.get('teacher_criteria', []),
             'generic_quality_recommendations': eval_plan.get('generic_quality_recommendations', []),
             'criteria': eval_plan.get('criteria', []),
@@ -3932,7 +4355,13 @@ def resolve_assignment_scope(
             'is_single_complex_task': (len(teacher_specific_task_nums) == 1),
             'assigned_task_count': len(teacher_specific_task_nums),
             'assigned_tasks': assigned_tasks,
+            'assigned_scope': eval_plan.get('assigned_scope', []),
             'ignored_found_tasks': ignored,
+            'unassigned_material': eval_plan.get('unassigned_materials_ignored', []),
+            'final_task_understanding': eval_plan.get('final_task_understanding', {}),
+            'task_understanding_confidence': eval_plan.get('task_understanding_confidence', 0.95),
+            'ambiguities': eval_plan.get('ambiguities_or_conflicts', []),
+            'teacher_intent': eval_plan.get('final_task_understanding', {}).get('teacher_intent', {}),
             'custom_criteria_rules': custom_criteria_rules,
             'file_criteria_rules': compiled_criteria,
             'evaluation_plan': eval_plan,
@@ -3942,23 +4371,20 @@ def resolve_assignment_scope(
             'task_questions': scoped_questions,
             'clean_instruction_text': desc,
             'task_type': task_type,
+            'topic': task_interpretation.get('topic', ''),
             'task_interpretation': task_interpretation,
             'task_components': task_interpretation.get('task_components', []),
             'deliverable': deliverable,
             'evaluation_method': evaluation_method,
             'questions_expected': questions_expected,
             'teacher_requirements': eval_plan.get('teacher_requirements', []),
+            'mandatory_requirements': eval_plan.get('mandatory_requirements', []),
             'teacher_criteria': eval_plan.get('teacher_criteria', []),
             'generic_quality_recommendations': eval_plan.get('generic_quality_recommendations', []),
             'criteria': eval_plan.get('criteria', []),
         }
 
     # ── СЦЕНАРІЙ В-0: Одне комплексне завдання / практична / лабораторна робота / проєкт ──
-    # Якщо завдання за своєю суттю є одним цілісним процесом (створення БД, проєкт,
-    # практична робота з покроковою інструкцією «Крок 1..N» або рубрикою «Критерії оцінювання»),
-    # і вчитель НЕ задав перелік окремих вправ (як «Вправа 1, 2, 3» чи «Завдання 1, 2»)
-    # та не зазначив явну кількість завдань (explicit_count > 1),
-    # це завдання розглядається як ОДНЕ цілісне комплексне завдання.
     has_single_task_kw = any(kw in combined_desc_title for kw in SINGLE_TASK_KEYWORDS)
     has_workflow_steps = bool(re.search(r'\b(?:крок|етап)\s*\d+\b', desc, re.IGNORECASE))
     has_rubrics = bool(re.search(r'\bкритерії\s+оцінювання\b|\b\d+\s+бал\w*[\:\-]', desc, re.IGNORECASE))
@@ -3985,7 +4411,13 @@ def resolve_assignment_scope(
             'is_single_complex_task': True,
             'assigned_task_count': 1,
             'assigned_tasks': assigned_tasks,
+            'assigned_scope': eval_plan.get('assigned_scope', []),
             'ignored_found_tasks': ignored,
+            'unassigned_material': eval_plan.get('unassigned_materials_ignored', []),
+            'final_task_understanding': eval_plan.get('final_task_understanding', {}),
+            'task_understanding_confidence': eval_plan.get('task_understanding_confidence', 0.95),
+            'ambiguities': eval_plan.get('ambiguities_or_conflicts', []),
+            'teacher_intent': eval_plan.get('final_task_understanding', {}).get('teacher_intent', {}),
             'custom_criteria_rules': custom_criteria_rules,
             'file_criteria_rules': compiled_criteria,
             'evaluation_plan': eval_plan,
@@ -3995,12 +4427,14 @@ def resolve_assignment_scope(
             'task_questions': [],
             'clean_instruction_text': desc,
             'task_type': task_type,
+            'topic': task_interpretation.get('topic', ''),
             'task_interpretation': task_interpretation,
             'task_components': task_interpretation.get('task_components', []),
             'deliverable': deliverable,
             'evaluation_method': evaluation_method,
             'questions_expected': questions_expected,
             'teacher_requirements': eval_plan.get('teacher_requirements', []),
+            'mandatory_requirements': eval_plan.get('mandatory_requirements', []),
             'teacher_criteria': eval_plan.get('teacher_criteria', []),
             'generic_quality_recommendations': eval_plan.get('generic_quality_recommendations', []),
             'criteria': eval_plan.get('criteria', []),
@@ -4030,7 +4464,13 @@ def resolve_assignment_scope(
             'is_single_complex_task': False,
             'assigned_task_count': len(desc_questions),
             'assigned_tasks': assigned_tasks,
+            'assigned_scope': eval_plan.get('assigned_scope', []),
             'ignored_found_tasks': ignored,
+            'unassigned_material': eval_plan.get('unassigned_materials_ignored', []),
+            'final_task_understanding': eval_plan.get('final_task_understanding', {}),
+            'task_understanding_confidence': eval_plan.get('task_understanding_confidence', 0.95),
+            'ambiguities': eval_plan.get('ambiguities_or_conflicts', []),
+            'teacher_intent': eval_plan.get('final_task_understanding', {}).get('teacher_intent', {}),
             'custom_criteria_rules': custom_criteria_rules,
             'file_criteria_rules': compiled_criteria,
             'evaluation_plan': eval_plan,
@@ -4040,12 +4480,14 @@ def resolve_assignment_scope(
             'task_questions': desc_questions,
             'clean_instruction_text': desc,
             'task_type': task_type,
+            'topic': task_interpretation.get('topic', ''),
             'task_interpretation': task_interpretation,
             'task_components': task_interpretation.get('task_components', []),
             'deliverable': deliverable,
             'evaluation_method': evaluation_method,
             'questions_expected': questions_expected,
             'teacher_requirements': eval_plan.get('teacher_requirements', []),
+            'mandatory_requirements': eval_plan.get('mandatory_requirements', []),
             'teacher_criteria': eval_plan.get('teacher_criteria', []),
             'generic_quality_recommendations': eval_plan.get('generic_quality_recommendations', []),
             'criteria': eval_plan.get('criteria', []),
@@ -4091,7 +4533,13 @@ def resolve_assignment_scope(
             'is_single_complex_task': False,
             'assigned_task_count': explicit_count,
             'assigned_tasks': assigned_tasks,
+            'assigned_scope': eval_plan.get('assigned_scope', []),
             'ignored_found_tasks': ignored,
+            'unassigned_material': eval_plan.get('unassigned_materials_ignored', []),
+            'final_task_understanding': eval_plan.get('final_task_understanding', {}),
+            'task_understanding_confidence': eval_plan.get('task_understanding_confidence', 0.95),
+            'ambiguities': eval_plan.get('ambiguities_or_conflicts', []),
+            'teacher_intent': eval_plan.get('final_task_understanding', {}).get('teacher_intent', {}),
             'custom_criteria_rules': custom_criteria_rules,
             'file_criteria_rules': compiled_criteria,
             'evaluation_plan': eval_plan,
@@ -4101,12 +4549,14 @@ def resolve_assignment_scope(
             'task_questions': source_qs,
             'clean_instruction_text': desc,
             'task_type': task_type,
+            'topic': task_interpretation.get('topic', ''),
             'task_interpretation': task_interpretation,
             'task_components': task_interpretation.get('task_components', []),
             'deliverable': deliverable,
             'evaluation_method': evaluation_method,
             'questions_expected': questions_expected,
             'teacher_requirements': eval_plan.get('teacher_requirements', []),
+            'mandatory_requirements': eval_plan.get('mandatory_requirements', []),
             'teacher_criteria': eval_plan.get('teacher_criteria', []),
             'generic_quality_recommendations': eval_plan.get('generic_quality_recommendations', []),
             'criteria': eval_plan.get('criteria', []),
@@ -4133,7 +4583,13 @@ def resolve_assignment_scope(
             'is_single_complex_task': False,
             'assigned_task_count': len(primary_questions),
             'assigned_tasks': assigned_tasks,
+            'assigned_scope': eval_plan.get('assigned_scope', []),
             'ignored_found_tasks': [],
+            'unassigned_material': eval_plan.get('unassigned_materials_ignored', []),
+            'final_task_understanding': eval_plan.get('final_task_understanding', {}),
+            'task_understanding_confidence': eval_plan.get('task_understanding_confidence', 0.95),
+            'ambiguities': eval_plan.get('ambiguities_or_conflicts', []),
+            'teacher_intent': eval_plan.get('final_task_understanding', {}).get('teacher_intent', {}),
             'custom_criteria_rules': custom_criteria_rules,
             'file_criteria_rules': compiled_criteria,
             'evaluation_plan': eval_plan,
@@ -4143,12 +4599,14 @@ def resolve_assignment_scope(
             'task_questions': primary_questions,
             'clean_instruction_text': desc or "Завдання з основного файлу",
             'task_type': task_type,
+            'topic': task_interpretation.get('topic', ''),
             'task_interpretation': task_interpretation,
             'task_components': task_interpretation.get('task_components', []),
             'deliverable': deliverable,
             'evaluation_method': evaluation_method,
             'questions_expected': questions_expected,
             'teacher_requirements': eval_plan.get('teacher_requirements', []),
+            'mandatory_requirements': eval_plan.get('mandatory_requirements', []),
             'teacher_criteria': eval_plan.get('teacher_criteria', []),
             'generic_quality_recommendations': eval_plan.get('generic_quality_recommendations', []),
             'criteria': eval_plan.get('criteria', []),
@@ -4176,7 +4634,13 @@ def resolve_assignment_scope(
         'is_single_complex_task': True,
         'assigned_task_count': 1,
         'assigned_tasks': assigned_tasks,
+        'assigned_scope': eval_plan.get('assigned_scope', []),
         'ignored_found_tasks': ignored,
+        'unassigned_material': eval_plan.get('unassigned_materials_ignored', []),
+        'final_task_understanding': eval_plan.get('final_task_understanding', {}),
+        'task_understanding_confidence': eval_plan.get('task_understanding_confidence', 0.95),
+        'ambiguities': eval_plan.get('ambiguities_or_conflicts', []),
+        'teacher_intent': eval_plan.get('final_task_understanding', {}).get('teacher_intent', {}),
         'custom_criteria_rules': custom_criteria_rules,
         'file_criteria_rules': compiled_criteria,
         'evaluation_plan': eval_plan,
@@ -4186,12 +4650,14 @@ def resolve_assignment_scope(
         'task_questions': [],
         'clean_instruction_text': task_label,
         'task_type': task_type,
+        'topic': task_interpretation.get('topic', ''),
         'task_interpretation': task_interpretation,
         'task_components': task_interpretation.get('task_components', []),
         'deliverable': deliverable,
         'evaluation_method': evaluation_method,
         'questions_expected': questions_expected,
         'teacher_requirements': eval_plan.get('teacher_requirements', []),
+        'mandatory_requirements': eval_plan.get('mandatory_requirements', []),
         'teacher_criteria': eval_plan.get('teacher_criteria', []),
         'generic_quality_recommendations': eval_plan.get('generic_quality_recommendations', []),
         'criteria': eval_plan.get('criteria', []),
@@ -5402,8 +5868,47 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
 
     student_combined_text = "\n".join(text_parts) if text_parts else ""
 
+    final_task_understanding = scope.get('final_task_understanding') or {}
+    teacher_intent = scope.get('teacher_intent') or final_task_understanding.get('teacher_intent') or {}
+    unassigned_material = scope.get('unassigned_material') or []
+    mandatory_reqs = scope.get('mandatory_requirements') or final_task_understanding.get('mandatory_requirements') or []
+    task_understanding_conf = scope.get('task_understanding_confidence', 1.0)
+    ambiguities = scope.get('ambiguities') or []
+    assigned_scope = scope.get('assigned_scope') or []
+    task_components = task_interpretation.get('task_components') or []
+    t_reqs = task_interpretation.get('teacher_requirements') or []
+    t_crit = task_interpretation.get('teacher_criteria') or []
+    g_recs = task_interpretation.get('generic_recommendations') or []
+
     # ── ПРОМПТ: SCOPE OF WORK BLOCK (НАЙВИЩИЙ ПРІОРИТЕТ) ───────────────────────
     scope_block_lines = [
+        "═══════════════════════════════════════════════════════════════════",
+        "🎯 FINAL TASK UNDERSTANDING (ДЖЕРЕЛО ІСТИНИ ДЛЯ ОЦІНЮВАННЯ):",
+        "ЦЕ Є ВЖЕ ВИЗНАЧЕНИЙ СИСТЕМОЮ КОНТЕКСТ ЗАВДАННЯ.",
+        "Не змінюй його на основі випадкових вправ, прикладів або питань із матеріалів учителя!",
+        "",
+        f"Що задав учитель:\n{teacher_intent.get('what_teacher_asks') or assignment_desc or assignment_title}",
+        "",
+        f"Що повинен зробити учень:\n{task_interpretation.get('what_student_must_do') or assignment_desc or assignment_title}",
+        "",
+        f"Очікуваний результат:\n{final_task_understanding.get('expected_result') or teacher_intent.get('expected_result') or deliverable.get('description', '')}",
+        "",
+        f"Обов'язкові компоненти:\n{json.dumps(teacher_intent.get('required_components') or deliverable.get('required_components', ['зміст за темою']), ensure_ascii=False)}",
+        "",
+        f"Обов'язкові дії (required_actions):\n{json.dumps(teacher_intent.get('required_actions') or deliverable.get('required_actions', []), ensure_ascii=False)}",
+        "",
+        f"Обов'язкові критерії та вимоги:\n{json.dumps(mandatory_reqs or t_reqs or t_crit, ensure_ascii=False)}",
+        "",
+        f"Що НЕ є завданням (unassigned_material / навчальний контекст):\n{json.dumps(unassigned_material, ensure_ascii=False) if unassigned_material else 'Випадкові вправи, теорія або питання з файлів учителя, які вчитель не задавав'}",
+        "",
+        f"Впевненість розуміння завдання (confidence): {task_understanding_conf}",
+        f"Неоднозначності (ambiguities): {json.dumps(ambiguities, ensure_ascii=False)}",
+        "",
+        "⚠️ СУВОРЕ РОЗМЕЖУВАННЯ РОБОТИ УЧНЯ ТА ЗАВДАННЯ ВЧИТЕЛЯ:",
+        "1. STUDENT SUBMISSION ≠ TEACHER ASSIGNMENT: Учнівська робота, здані файли та коментар учня показують, що ФАКТИЧНО виконав учень.",
+        "   Але вони НЕ МОЖУТЬ підмінити собою завдання вчителя і НЕ створюють нове чи інше завдання!",
+        "2. Якщо учень у коментарі чи роботі написав «Я виконав вправу 4» або надіслав вправу 4, а вчитель задав створити презентацію — це НЕ змінює Scope завдання!",
+        "   Оцінюй здане відносно завдання вчителя («Створити презентацію»). Заборонено підміняти Scope завдання вчителя на 'Вправа 4' через коментар або дію учня!",
         "═══════════════════════════════════════════════════════════════════",
         "🎯 ТОЧНИЙ ОБСЯГ ЗАВДАННЯ ВІД ВЧИТЕЛЯ (SCOPE OF WORK — НАЙВИЩИЙ ПРІОРИТЕТ):",
     ]
@@ -5923,6 +6428,10 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                     result_json.setdefault('task_type', task_type)
                     result_json.setdefault('deliverable', deliverable)
                     result_json.setdefault('questions_expected', questions_expected)
+                    result_json.setdefault('final_task_understanding', scope.get('final_task_understanding', {}))
+                    result_json.setdefault('teacher_intent', scope.get('teacher_intent', {}))
+                    result_json.setdefault('task_understanding_confidence', scope.get('task_understanding_confidence', 1.0))
+                    result_json.setdefault('ambiguities', scope.get('ambiguities', []))
 
                     # Нормалізуємо submission_evidence
                     sub_evidence = result_json.get('submission_evidence')
@@ -6762,6 +7271,10 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                         'task_interpretation': result_json.get('task_interpretation') or task_interpretation,
                         'deliverable': deliverable,
                         'questions_expected': questions_expected,
+                        'final_task_understanding': result_json.get('final_task_understanding') or scope.get('final_task_understanding') or {},
+                        'teacher_intent': result_json.get('teacher_intent') or scope.get('teacher_intent') or {},
+                        'task_understanding_confidence': result_json.get('task_understanding_confidence') or scope.get('task_understanding_confidence', 1.0),
+                        'ambiguities': result_json.get('ambiguities') or scope.get('ambiguities') or [],
                         'model_used': model_name,
                         'fallback_activated': fallback_happened
                     }
@@ -6859,6 +7372,10 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                         'task_interpretation': task_interpretation,
                         'deliverable': deliverable,
                         'questions_expected': questions_expected,
+                        'final_task_understanding': scope.get('final_task_understanding') or {},
+                        'teacher_intent': scope.get('teacher_intent') or {},
+                        'task_understanding_confidence': scope.get('task_understanding_confidence', 1.0),
+                        'ambiguities': scope.get('ambiguities', []),
                         'model_used': model_name
                     }
 
@@ -7710,6 +8227,10 @@ def analyze_assignment_task_understanding(assignment, force_refresh=False) -> di
                     result_data['questions_expected'] = scope.get('questions_expected', False)
                     result_data['task_interpretation'] = scope.get('task_interpretation', {})
                     result_data['teacher_requirements'] = scope.get('task_interpretation', {}).get('teacher_requirements', [])
+                    result_data['final_task_understanding'] = scope.get('final_task_understanding', {})
+                    result_data['teacher_intent'] = scope.get('teacher_intent', {})
+                    result_data['task_understanding_confidence'] = scope.get('task_understanding_confidence', 1.0)
+                    result_data['ambiguities'] = scope.get('ambiguities', [])
 
                     if is_single_task:
                         if isinstance(result_data.get('tasks'), list) and len(result_data['tasks']) > 1:
@@ -7834,6 +8355,10 @@ def analyze_assignment_task_understanding(assignment, force_refresh=False) -> di
             "questions_expected": questions_expected,
             "task_interpretation": task_interpretation,
             "teacher_requirements": task_interpretation.get('teacher_requirements', []),
+            "final_task_understanding": scope.get('final_task_understanding') or {},
+            "teacher_intent": scope.get('teacher_intent') or {},
+            "task_understanding_confidence": scope.get('task_understanding_confidence', 1.0),
+            "ambiguities": scope.get('ambiguities', []),
             "student_explanation": student_guide_text,
             "tasks_source_info": "Умова та прикріплені матеріали завдання",
             "tasks_total_count": total_cnt,
