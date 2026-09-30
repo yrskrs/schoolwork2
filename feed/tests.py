@@ -7673,3 +7673,435 @@ class DynamicTaskTypeAndDeliverableTests(TestCase):
         self.assertEqual(data['deliverable']['description'], interp['deliverable']['description'])
         self.assertIn("Покроковий план", data['student_explanation'])
 
+
+class ContextualDeliverableAndCompositeTaskTests(TestCase):
+    """
+    12 обов'язкових автоматизованих тестів фінального доопрацювання моделі AI-оцінювання:
+    1. test_01_presentation_no_questions_expected
+    2. test_02_composite_presentation_and_questions
+    3. test_03_file_questions_are_reference_material
+    4. test_04_file_criteria_of_another_exercise_ignored
+    5. test_05_file_criteria_matching_presentation_applied
+    6. test_06_programming_task_no_qa_expected
+    7. test_07_no_hallucinated_presentation_requirements
+    8. test_08_student_guide_explains_both_composite_parts
+    9. test_09_submission_only_presentation_no_qa_penalty
+    10. test_10_specific_exercise_2_non_positional
+    11. test_11_project_with_4_exercises_is_single_task
+    12. test_12_fallback_without_ai_api_maintains_truth
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='teacher_ctx', password='password123', is_staff=True)
+        self.teacher = Teacher.objects.create(user=self.user, full_name='Коваленко Сергій Петрович')
+        self.class_group = ClassGroup.objects.create(grade=8, letter='А', name='8-А')
+        self.teacher.classes.add(self.class_group)
+        self.subject = Subject.objects.create(name='Інформатика', icon='💻', color='#2563eb')
+        self.teacher.subjects.add(self.subject)
+        self.client = Client()
+        self.client.login(username='teacher_ctx', password='password123')
+
+        self.ai_settings = AISettings.get_solo()
+        self.ai_settings.is_enabled = True
+        self.ai_settings.api_key = "AIzaSyFakeKeyForCtxDeliverableTesting"
+        self.ai_settings.ai_provider = 'gemini'
+        self.ai_settings.model_name = 'gemini-2.5-flash'
+        self.ai_settings.save()
+
+    def test_01_presentation_no_questions_expected(self):
+        """
+        Тест 1. Завдання «Створити презентацію»:
+        task_type == 'presentation', questions_expected is False,
+        task_components містить лише presentation.
+        """
+        from .gemini_service import (
+            determine_assignment_task_type,
+            is_questions_expected,
+            identify_task_components,
+            resolve_assignment_scope
+        )
+
+        title = "Створити презентацію"
+        desc = "Підготуйте комп'ютерну презентацію на тему 'Штучний інтелект у сучасному світі'."
+
+        task_type = determine_assignment_task_type(title=title, description=desc)
+        self.assertEqual(task_type, 'presentation')
+
+        components = identify_task_components(title=title, description=desc)
+        self.assertIn('presentation', components)
+        self.assertNotIn('question_answer', components)
+
+        self.assertFalse(is_questions_expected(task_type, desc, components=components))
+
+        scope = resolve_assignment_scope(assignment_title=title, assignment_desc=desc)
+        self.assertEqual(scope['task_type'], 'presentation')
+        self.assertFalse(scope['questions_expected'])
+        self.assertEqual(scope['assigned_task_count'], 1)
+
+    def test_02_composite_presentation_and_questions(self):
+        """
+        Тест 2. Складене завдання «Створити презентацію про штучний інтелект та відповісти на 5 контрольних запитань»:
+        task_components містить 'presentation' та 'question_answer',
+        questions_expected is True.
+        """
+        from .gemini_service import (
+            determine_assignment_task_type,
+            is_questions_expected,
+            identify_task_components,
+            resolve_assignment_scope
+        )
+
+        title = "Створити презентацію та відповісти на питання"
+        desc = "Створити презентацію про штучний інтелект та відповісти на 5 контрольних запитань."
+
+        components = identify_task_components(title=title, description=desc)
+        self.assertIn('presentation', components)
+        self.assertIn('question_answer', components)
+
+        task_type = determine_assignment_task_type(title=title, description=desc)
+        self.assertEqual(task_type, 'presentation')
+
+        self.assertTrue(is_questions_expected(task_type, desc, components=components))
+
+        scope = resolve_assignment_scope(assignment_title=title, assignment_desc=desc)
+        self.assertEqual(scope['task_type'], 'presentation')
+        self.assertTrue(scope['questions_expected'])
+        self.assertIn('presentation', scope['task_components'])
+        self.assertIn('question_answer', scope['task_components'])
+        self.assertIn('презентац', scope['deliverable']['description'].lower())
+        self.assertIn('відпові', scope['deliverable']['description'].lower())
+
+    def test_03_file_questions_are_reference_material(self):
+        """
+        Тест 3. Вчитель задав «Створити презентацію», але у прикріпленому файлі є контрольні запитання:
+        questions_expected is False (питання у файлі є довідковим матеріалом / самоперевіркою).
+        """
+        from .gemini_service import resolve_assignment_scope
+
+        title = "Створити презентацію"
+        desc = "Підготувати презентацію на тему 'Будова клітини' у PowerPoint."
+        file_content = [
+            "Тема уроку: Будова клітини\n"
+            "Контрольні запитання:\n"
+            "1. Що таке клітинна мембрана?\n"
+            "2. Яку функцію виконують мітохондрії?\n"
+            "3. Що міститься в клітинному ядрі?\n"
+            "4. Яка роль ендоплазматичної сітки?\n"
+            "5. Чим відрізняється рослинна клітина від тваринної?"
+        ]
+
+        scope = resolve_assignment_scope(
+            assignment_title=title,
+            assignment_desc=desc,
+            teacher_files_content=file_content
+        )
+        self.assertEqual(scope['task_type'], 'presentation')
+        self.assertFalse(scope['questions_expected'])
+        self.assertEqual(scope['assigned_task_count'], 1)
+
+    def test_04_file_criteria_of_another_exercise_ignored(self):
+        """
+        Тест 4. Вчитель задав створити презентацію, а у файлі є блок критеріїв для «Вправа 1. Буклет»:
+        Критерії іншої вправи отримують mandatory = False та не потрапляють до обов'язкових teacher_requirements.
+        """
+        from .gemini_service import (
+            extract_criteria_and_requirements_from_text,
+            resolve_assignment_scope
+        )
+
+        title = "Створити презентацію на тему 'Козацька доба'"
+        desc = "Підготуйте учнівську презентацію про козацькі клейноди."
+        file_text = (
+            "Вправа 1. Буклет\n"
+            "Критерії оцінювання:\n"
+            "- Мінімум 8 слайдів\n"
+            "- Обов'язковий висновок\n"
+            "- Список використаних джерел\n\n"
+            "Вправа 2. Презентація\n"
+            "Підготуйте слайди."
+        )
+
+        extracted = extract_criteria_and_requirements_from_text(
+            text=file_text,
+            assignment_title=title,
+            assignment_desc=desc,
+            task_type='presentation'
+        )
+        for crit in extracted['criteria']:
+            # Критерії під заголовком "Вправа 1. Буклет" не повинні бути обов'язковими для презентації
+            if 'буклет' in crit.get('source_location', '').lower() or crit.get('applies_to') == 'other_exercise':
+                self.assertFalse(crit['mandatory'])
+
+        scope = resolve_assignment_scope(
+            assignment_title=title,
+            assignment_desc=desc,
+            teacher_files_content=[file_text]
+        )
+        teacher_reqs = scope.get('teacher_requirements', [])
+        reqs_text = " ".join(teacher_reqs).lower()
+        self.assertNotIn("буклет", reqs_text)
+
+    def test_05_file_criteria_matching_presentation_applied(self):
+        """
+        Тест 5. Вчитель задав «Створити презентацію», і у файлі є критерії:
+        «Критерії оцінювання цієї презентації: мінімум 8 слайдів, висновок, джерела».
+        Критерії відповідають поточному завданню, мають mandatory = True і потрапляють до teacher_requirements.
+        """
+        from .gemini_service import (
+            extract_criteria_and_requirements_from_text,
+            resolve_assignment_scope
+        )
+
+        title = "Створити презентацію на тему 'Козацька доба'"
+        desc = "Підготуйте учнівську презентацію."
+        file_text = (
+            "Критерії оцінювання цієї презентації:\n"
+            "- Мінімум 8 слайдів (2 бали)\n"
+            "- Обов'язковий висновок (2 бали)\n"
+            "- Список використаних джерел (2 бали)"
+        )
+
+        extracted = extract_criteria_and_requirements_from_text(
+            text=file_text,
+            assignment_title=title,
+            assignment_desc=desc,
+            task_type='presentation'
+        )
+        self.assertTrue(len(extracted['criteria']) >= 3)
+        for crit in extracted['criteria']:
+            self.assertTrue(crit['mandatory'])
+
+        scope = resolve_assignment_scope(
+            assignment_title=title,
+            assignment_desc=desc,
+            teacher_files_content=[file_text]
+        )
+        teacher_reqs = scope.get('teacher_requirements', [])
+        self.assertTrue(any("висновок" in r or "джерел" in r or "слайд" in r for r in teacher_reqs))
+
+    def test_06_programming_task_no_qa_expected(self):
+        """
+        Тест 6. Завдання «Написати програму Python»:
+        task_type == 'programming', questions_expected is False.
+        """
+        from .gemini_service import (
+            determine_assignment_task_type,
+            is_questions_expected,
+            resolve_assignment_scope
+        )
+
+        title = "Програмування мовою Python"
+        desc = "Написати програму Python для обчислення факторіалу числа."
+
+        task_type = determine_assignment_task_type(title=title, description=desc)
+        self.assertEqual(task_type, 'programming')
+        self.assertFalse(is_questions_expected(task_type, desc))
+
+        scope = resolve_assignment_scope(assignment_title=title, assignment_desc=desc)
+        self.assertEqual(scope['task_type'], 'programming')
+        self.assertFalse(scope['questions_expected'])
+        self.assertEqual(scope['deliverable']['type'], 'programming')
+
+    def test_07_no_hallucinated_presentation_requirements(self):
+        """
+        Тест 7. Завдання «Створити презентацію» без додаткових вимог:
+        Немає галюцинованих вимог (висновок, джерела, 8 слайдів, титульний слайд, збереження під своїм прізвищем).
+        """
+        from .gemini_service import (
+            extract_task_requirements,
+            generate_age_appropriate_student_guide,
+            interpret_assignment_task
+        )
+
+        title = "Створити презентацію"
+        desc = "Підготувати презентацію на тему 'Космічні дослідження'."
+
+        reqs = extract_task_requirements(title=title, description=desc, task_type='presentation')
+        reqs_text = " ".join(reqs).lower()
+        self.assertNotIn("8 слайдів", reqs_text)
+        self.assertNotIn("обов'язковий висновок", reqs_text)
+        self.assertNotIn("список використаних джерел", reqs_text)
+        self.assertNotIn("прізвищ", reqs_text)
+
+        interp = interpret_assignment_task(title=title, description=desc)
+        guide = generate_age_appropriate_student_guide(
+            grade_str="7 клас",
+            min_grade=7,
+            assignment_title=title,
+            assignment_desc=desc,
+            task_interpretation=interp
+        )
+        guide_text = str(guide).lower()
+        self.assertNotIn("під своїм прізвищем", guide_text)
+        self.assertNotIn("обов'язково 8 слайдів", guide_text)
+        self.assertNotIn("обов'язковий висновок на останньому слайді", guide_text)
+
+    def test_08_student_guide_explains_both_composite_parts(self):
+        """
+        Тест 8. Учнівський гайд для складеного завдання «Створити презентацію про космос та дати відповіді на 3 питання»:
+        Роз'яснення та покроковий план містять обидві складові.
+        """
+        from .gemini_service import (
+            interpret_assignment_task,
+            generate_age_appropriate_student_guide
+        )
+
+        title = "Створити презентацію про космос та відповісти на 3 контрольні запитання"
+        desc = "Підготувати слайдову презентацію про планети та дати письмові відповіді на 3 запитання."
+
+        interp = interpret_assignment_task(title=title, description=desc)
+        self.assertIn('presentation', interp['task_components'])
+        self.assertIn('question_answer', interp['task_components'])
+
+        guide = generate_age_appropriate_student_guide(
+            grade_str="8 клас",
+            min_grade=8,
+            assignment_title=title,
+            assignment_desc=desc,
+            task_interpretation=interp
+        )
+        guide_lower = guide.lower()
+        self.assertIn("презентац", guide_lower)
+        self.assertIn("відповід", guide_lower)
+
+    @patch('feed.gemini_service.call_ai_api')
+    def test_09_submission_only_presentation_no_qa_penalty(self, mock_ai):
+        """
+        Тест 9. Вчитель задав презентацію, у матеріалах є 5 контрольних питань.
+        Учень здав презентацію без відповідей на питання. ШІ не карає за відсутність відповідей на 5 питань.
+        """
+        from .gemini_service import evaluate_submission_with_gemini
+
+        assignment = Assignment.objects.create(
+            teacher=self.teacher,
+            subject=self.subject,
+            title="Створити презентацію про історію комп'ютерів",
+            description="Створити презентацію в PowerPoint на тему 'Історія розвитку ЕОМ'.",
+            status=Assignment.STATUS_PUBLISHED
+        )
+        assignment.classes.add(self.class_group)
+
+        # Прикріплюємо файл із контрольними питаннями
+        file_obj = SimpleUploadedFile(
+            "lesson_questions.txt",
+            "Контрольні питання:\n1. Хто створив першу ЕОМ?\n2. Що таке ENIAC?\n3. Які є покоління ЕОМ?\n4. Що таке мікропроцесор?\n5. Хто такий Алан Тюрінг?".encode('utf-8'),
+            content_type="text/plain"
+        )
+        AssignmentFile.objects.create(assignment=assignment, file=file_obj, original_name="lesson_questions.txt")
+
+        student_pptx = SimpleUploadedFile(
+            "computers_history.pptx",
+            b"PK\x03\x04MockPptxContentForPresentation",
+            content_type="application/vnd.openxmlformats-officedocument.presentationml.presentation"
+        )
+        submission = Submission.objects.create(
+            assignment=assignment,
+            first_name='Оксана',
+            last_name='Шевченко',
+            class_group=self.class_group,
+            teacher=self.teacher,
+            file=student_pptx
+        )
+
+        mock_ai.return_value = (200, json.dumps({
+            "suggested_grade": "11",
+            "level": "Високий (10-12)",
+            "tasks_total_count": 1,
+            "tasks_completed_count": 1,
+            "tasks_evaluated": [{"task_num": 1, "status": "completed"}],
+            "summary": "Гарна презентація, але не виконано 5 питань.",
+            "weaknesses": ["Немає відповідей на 5 запитань з файлу вчителя."],
+            "strengths": ["Чудовий візуальний стиль", "Логічна структура"],
+            "feedback_comment": "Потрібно було дати відповіді на 5 питань у форматі «питання-відповідь»."
+        }, ensure_ascii=False), None, {})
+
+        result = evaluate_submission_with_gemini(submission)
+        self.assertEqual(result['task_type'], 'presentation')
+        self.assertFalse(result['questions_expected'])
+
+        weaknesses_str = " ".join(result.get('weaknesses', [])).lower()
+        self.assertNotIn("немає відповідей на 5 запитань", weaknesses_str)
+        self.assertNotIn("відсутність відповідей на запитання", weaknesses_str)
+        self.assertNotIn("питання-відповідь", (result.get('feedback_comment') or '').lower())
+
+    def test_10_specific_exercise_2_non_positional(self):
+        """
+        Тест 10. Вчитель вказав «Виконати вправу 2».
+        У файлі є: «Вправа 1», «Приклад розв'язання», «Контрольне питання», «Вправа 2», «Вправа 3».
+        find_question_by_task_num знаходить саме «Вправа 2», а не бере позиційний індекс 1 («Приклад»).
+        """
+        from .gemini_service import find_question_by_task_num
+
+        pool = [
+            "Вправа 1. Поняття моделі та її види.",
+            "Приклад розв'язання задачі з фізики.",
+            "Контрольне запитання для самоперевірки.",
+            "Вправа 2. Побудова інформаційної діаграми у табличному процесорі.",
+            "Вправа 3. Аналіз отриманих результатів."
+        ]
+
+        found = find_question_by_task_num(pool, 2)
+        self.assertIsNotNone(found)
+        self.assertIn("Вправа 2", found)
+        self.assertIn("Побудова інформаційної діаграми", found)
+        self.assertNotIn("Приклад", found)
+        self.assertNotIn("Контрольне запитання", found)
+
+    def test_11_project_with_4_exercises_is_single_task(self):
+        """
+        Тест 11. Навчальний проєкт з 4 вправами у файлі — це 1 комплексне завдання,
+        а не 4 окремі завдання. tasks_total_count == 1.
+        """
+        from .gemini_service import resolve_assignment_scope
+
+        title = "Робота над проєктом 'Розумний будинок'"
+        desc = "Робота над проєктом. Підготувати матеріали першого етапу."
+        teacher_files = [
+            "Тема: Проєкт 'Розумний будинок'\n"
+            "Вправа 1. Дослідження датчиків температури.\n"
+            "Вправа 2. Проєктування схеми освітлення.\n"
+            "Вправа 3. Налаштування мікроконтролера.\n"
+            "Вправа 4. Підготовка підсумкового звіту."
+        ]
+
+        scope = resolve_assignment_scope(
+            assignment_title=title,
+            assignment_desc=desc,
+            teacher_files_content=teacher_files
+        )
+        self.assertEqual(scope['assigned_task_count'], 1)
+        self.assertEqual(scope['task_type'], 'project')
+
+    @patch('feed.gemini_service.call_ai_api')
+    def test_12_fallback_without_ai_api_maintains_truth(self, mock_ai):
+        """
+        Тест 12. При недоступності ШІ API (помилка 500) fallback гарантовано зберігає правду:
+        tasks_total_count == 1, task_type == 'presentation', questions_expected is False,
+        deliverable та teacher_requirements узгоджені зі scope.
+        """
+        from .gemini_service import analyze_assignment_task_understanding
+
+        assignment = Assignment.objects.create(
+            teacher=self.teacher,
+            subject=self.subject,
+            title="Створити презентацію на тему 'Архітектура Києва'",
+            description="Створити презентацію про визначні архітектурні пам'ятки Києва.",
+            status=Assignment.STATUS_PUBLISHED
+        )
+        assignment.classes.add(self.class_group)
+
+        # Імітуємо відмову зовнішнього API
+        mock_ai.return_value = (500, None, "AI Service Down", {})
+
+        analysis = analyze_assignment_task_understanding(assignment, force_refresh=True)
+        self.assertEqual(analysis['status'], 'success')
+        data = analysis['data']
+
+        self.assertEqual(data['tasks_total_count'], 1)
+        self.assertEqual(data['task_type'], 'presentation')
+        self.assertFalse(data['questions_expected'])
+        self.assertEqual(data['deliverable']['type'], 'presentation')
+        self.assertIsInstance(data['teacher_requirements'], list)
+        self.assertIn("Покроковий план", data['student_explanation'])
+
+
