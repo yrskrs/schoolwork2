@@ -7234,6 +7234,99 @@ class IntelligentStudentEvaluationRequirementsTests(TestCase):
         self.assertEqual(len(data['tasks']), 1)
         self.assertNotIn("вправу 13", str(data).lower())
 
+    def test_ai_task_understanding_age_appropriate_and_no_html_markup(self):
+        """
+        Перевірка, що:
+        1. strip_html_tags коректно вирізає будь-яку Word/HTML розмітку (span, b, u, style).
+        2. Вік дитини визначається точно і генерується покрокове роз'яснення (Крок 1, Крок 2...).
+        3. Завдання з HTML-розміткою ("Що потрібно зробити: <span...>") повністю очищаються від тегів
+           і формулюються природною українською мовою без залишків коду.
+        """
+        from .gemini_service import (
+            strip_html_tags,
+            get_assignment_min_grade,
+            generate_age_appropriate_student_guide,
+            analyze_assignment_task_understanding
+        )
+
+        # 1. Перевірка функції strip_html_tags
+        raw_html = '<span style=\'font-size: 14pt; line-height: 115%; font-family: "Times New Roman", serif;\'><u>Виконати </u><b>Вправа 3.</b></span>'
+        cleaned = strip_html_tags(raw_html)
+        self.assertEqual(cleaned, "Виконати Вправа 3.")
+        self.assertNotIn("<", cleaned)
+        self.assertNotIn(">", cleaned)
+        self.assertNotIn("span", cleaned)
+
+        # 2. Перевірка генератора покрокового пояснення для молодших (5 клас) та старших (11 клас)
+        guide_5 = generate_age_appropriate_student_guide(
+            grade_str="5-й клас",
+            age_str="10–11 років",
+            min_grade=5,
+            assignment_title="Табличний процесор",
+            assignment_desc="Вправа 3",
+            tasks_list=[{"title": "Вправа 3", "expected_actions": "Побудувати діаграму"}]
+        )
+        self.assertIn("5-й клас", guide_5)
+        self.assertIn("Крок 1", guide_5)
+        self.assertIn("Крок 2", guide_5)
+        self.assertIn("Крок 3", guide_5)
+        self.assertIn("Крок 4", guide_5)
+        self.assertNotIn("<", guide_5)
+
+        guide_11 = generate_age_appropriate_student_guide(
+            grade_str="11-й клас",
+            age_str="16–17 років",
+            min_grade=11,
+            assignment_title="Бази даних",
+            assignment_desc="Створити таблиці",
+            tasks_list=[{"title": "Проєкт БД", "expected_actions": "Створити зв'язки"}],
+            is_single_task=True
+        )
+        self.assertIn("старшокласник", guide_11.lower())
+        self.assertIn("Крок 1", guide_11)
+        self.assertIn("Крок 2", guide_11)
+
+        # 3. Перевірка analyze_assignment_task_understanding із вбудованою HTML-розміткою
+        raw_desc = (
+            "<p><span style='font-size: 14pt; line-height: 115%; font-family: \"Times New Roman\", serif;'>"
+            "<u>Виконати </u><b>Вправа 3.</b>"
+            "</span></p>"
+        )
+        assignment = Assignment.objects.create(
+            teacher=self.teacher,
+            subject=self.subject,
+            title="Інформатика. Практикум",
+            description=raw_desc
+        )
+        assignment.classes.add(self.class_group)
+
+        res = analyze_assignment_task_understanding(assignment, force_refresh=True)
+        self.assertEqual(res['status'], 'success')
+        data = res['data']
+
+        # Перевірка відсутності HTML-тегів у всіх полях
+        data_str = json.dumps(data, ensure_ascii=False)
+        self.assertNotIn("<span", data_str)
+        self.assertNotIn("font-family", data_str)
+        self.assertNotIn("<u>", data_str)
+        self.assertNotIn("</u>", data_str)
+        self.assertNotIn("<b>", data_str)
+        self.assertNotIn("</b>", data_str)
+
+        # Перевірка покрокового пояснення
+        student_expl = data.get('student_explanation', '')
+        self.assertTrue(len(student_expl) > 50)
+        self.assertIn("Крок 1", student_expl)
+        self.assertIn("Крок 2", student_expl)
+
+        # Перевірка списку завдань та відсутності сміття у expected_actions
+        tasks = data.get('tasks', [])
+        self.assertEqual(len(tasks), 1)
+        expected_act = tasks[0].get('expected_actions', '')
+        self.assertNotIn("<", expected_act)
+        self.assertIn("Виконати вправу 3", expected_act)
+
+
 
 
 

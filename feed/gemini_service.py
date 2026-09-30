@@ -13,6 +13,7 @@ import mimetypes
 import urllib.request
 import urllib.error
 from urllib.parse import urlparse
+import html
 from html.parser import HTMLParser
 import re
 import time
@@ -2549,7 +2550,38 @@ def parse_teacher_specific_task_numbers(description: str) -> list[int]:
     return sorted(found_nums)
 
 
+def strip_html_tags(text: str) -> str:
+    """
+    Повністю видаляє HTML-теги, вбудовані стилі, атрибути та сутності з тексту,
+    перетворюючи його на чистий, охайний текстовий рядок без залишків розмітки.
 
+    1. Замінює блочні теги (<br>, </p>, </div>, </li>, </tr>, </h1>..</h6>) на переноси рядка.
+    2. Видаляє скрипти та стилі разом із їхнім вмістом.
+    3. Вирізає всі інші теги: <span ...>, <b>, <u>, <em> тощо.
+    4. Декодує HTML-сутності (&nbsp;, &quot;, &lt;, &gt;, &#39; тощо).
+    5. Замінює нерозривні пробіли (\xa0, &nbsp;) та схлопує зайві пробіли.
+    """
+    if not text:
+        return ""
+    if not isinstance(text, str):
+        text = str(text)
+
+    # Заміна блочних розділювачів на переноси рядка, щоб слова не злипалися
+    s = re.sub(r'<(?:br\s*/?|/p|/div|/li|/tr|/h[1-6])>', '\n', text, flags=re.IGNORECASE)
+    # Видалення скриптів та стилів разом із вмістом
+    s = re.sub(r'<style[^>]*>[\s\S]*?</style>', '', s, flags=re.IGNORECASE)
+    s = re.sub(r'<script[^>]*>[\s\S]*?</script>', '', s, flags=re.IGNORECASE)
+    # Видалення всіх інших HTML-тегів
+    s = re.sub(r'<[^>]+>', '', s)
+    # Декодування HTML entities
+    s = html.unescape(s)
+    # Нормалізація нерозривних пробілів та замінників
+    s = s.replace('\xa0', ' ').replace('&nbsp;', ' ')
+    # Схлопування зайвих горизонтальних пробілів в один
+    s = re.sub(r'[ \t]+', ' ', s)
+    # Схлопування надлишкових переносів рядків (не більше двох поспіль)
+    s = re.sub(r'\n\s*\n\s*\n+', '\n\n', s)
+    return s.strip()
 
 
 def extract_task_questions(text: str, explicit_count: int = 0) -> list[str]:
@@ -2559,7 +2591,12 @@ def extract_task_questions(text: str, explicit_count: int = 0) -> list[str]:
     Розумно розрізняє теоретичні нумеровані списки на слайдах лекції
     та реальні практичні завдання (наприклад, Завдання 1..3 на фінальних слайдах).
     """
-    if not text or not text.strip():
+    if not text or not str(text).strip():
+        return []
+
+    # Очищуємо текст від HTML-розмітки та стилів (візуальний редактор вчителя, Word тощо)
+    text = strip_html_tags(text)
+    if not text:
         return []
 
     if explicit_count <= 0:
@@ -3021,8 +3058,8 @@ def resolve_assignment_scope(
     ПРІОРИТЕТ 4 — прикріплені файли вчителя (teacher_files_content), ТІЛЬКИ якщо є джерелом умови.
     ПРІОРИТЕТ 5 — загальні критерії НУШ (лише для якості, ніколи не створюють завдань).
     """
-    title = (assignment_title or "").strip()
-    desc = (assignment_desc or "").strip()
+    title = strip_html_tags(assignment_title or "")
+    desc = strip_html_tags(assignment_desc or "")
     combined_desc_title = f"{title} {desc}".strip().lower()
     desc_lower = desc.lower()
 
@@ -6098,6 +6135,36 @@ def generate_criteria_with_gemini(teacher_notes, assignment_title='', assignment
     }
 
 
+def get_assignment_min_grade(assignment) -> int:
+    """
+    Визначає мінімальний номер класу для завдання (1..11).
+    Якщо не вдалося визначити за прив'язаними класами, шукає в назві або описі.
+    За замовчуванням повертає 7 (базова середня школа).
+    """
+    grades = []
+    try:
+        classes = assignment.classes.all()
+        for c in classes:
+            m = re.search(r'(\d+)', c.name)
+            if m:
+                grades.append(int(m.group(1)))
+    except Exception:
+        pass
+
+    if grades:
+        return min(grades)
+
+    try:
+        combined = f"{assignment.title or ''} {assignment.description or ''}"
+        m = re.search(r'\b([1-9]|1[0-2])\s*[-–—]?\s*(?:й|ий|ій)?\s*клас', combined, re.IGNORECASE)
+        if m:
+            return int(m.group(1))
+    except Exception:
+        pass
+
+    return 7
+
+
 def get_assignment_target_grades_and_ages(assignment) -> tuple[str, str]:
     """
     Визначає цільовий клас та орієнтовний вік учнів для завдання.
@@ -6116,6 +6183,15 @@ def get_assignment_target_grades_and_ages(assignment) -> tuple[str, str]:
     except Exception:
         pass
 
+    if not grades:
+        try:
+            combined = f"{assignment.title or ''} {assignment.description or ''}"
+            m = re.search(r'\b([1-9]|1[0-2])\s*[-–—]?\s*(?:й|ий|ій)?\s*клас', combined, re.IGNORECASE)
+            if m:
+                grades.append(int(m.group(1)))
+        except Exception:
+            pass
+
     if grades:
         min_g, max_g = min(grades), max(grades)
         if min_g == max_g:
@@ -6130,6 +6206,101 @@ def get_assignment_target_grades_and_ages(assignment) -> tuple[str, str]:
     return grade_str, age_str
 
 
+def sanitize_ai_understanding_data(data: dict) -> dict:
+    """
+    Рекурсивно очищує всі текстові поля звіту аналізу розуміння завдання
+    від залишків HTML-тегів, шрифтових стилів та зайвих пробілів.
+    """
+    if not isinstance(data, dict):
+        return data
+
+    def _clean_val(v):
+        if isinstance(v, str):
+            return strip_html_tags(v)
+        elif isinstance(v, list):
+            return [_clean_val(item) for item in v]
+        elif isinstance(v, dict):
+            return {k: _clean_val(item) for k, item in v.items()}
+        return v
+
+    return _clean_val(data)
+
+
+def generate_age_appropriate_student_guide(
+    grade_str: str,
+    age_str: str,
+    min_grade: int,
+    assignment_title: str,
+    assignment_desc: str,
+    tasks_list: list[dict],
+    is_single_task: bool = False
+) -> str:
+    """
+    Генерує доступне, структуроване та покрокове роз'яснення для учнів,
+    строго адаптуючи стиль мови, складність інструкцій та тон під вік дитини.
+    Пояснює крок за кроком (Крок 1, Крок 2, Крок 3, Крок 4):
+    що відкрити, що саме зробити практично, як перевірити та що надіслати.
+    """
+    title_clean = strip_html_tags(assignment_title or "Практичне завдання")
+
+    # Формуємо конкретну дію для Кроку 2
+    if tasks_list and len(tasks_list) == 1:
+        t0 = tasks_list[0]
+        t_title = strip_html_tags(t0.get('title') or '')
+        t_actions = strip_html_tags(t0.get('expected_actions') or '')
+        if t_actions and len(t_actions) > 5 and not t_actions.lower().startswith('виконати роботу'):
+            action_desc = t_actions
+        elif t_title:
+            action_desc = f"Виконай завдання «{t_title}» згідно з інструкцією вчителя"
+        else:
+            action_desc = f"Виконай практичне завдання «{title_clean}» відповідно до умов"
+    elif tasks_list and len(tasks_list) > 1:
+        task_names = [strip_html_tags(t.get('title') or f"Завдання {t.get('num', idx)}") for idx, t in enumerate(tasks_list, 1)]
+        action_desc = f"Послідовно виконай обов'язкові завдання: {', '.join(task_names)}"
+    elif is_single_task:
+        action_desc = f"Виконай комплексне практичне завдання «{title_clean}» згідно з інструкцією вчителя"
+    else:
+        action_desc = f"Опрацюй завдання «{title_clean}» за матеріалами уроку"
+
+    # 1. Початкова школа (1–4 класи, 6–10 років)
+    if min_grade <= 4:
+        guide = (
+            f"Привіт! Ось прості кроки, як легко виконати це завдання ({grade_str}):\n"
+            f"• Крок 1 (Подивись): Уважно роздивись завдання «{title_clean}» та переглянь матеріали або малюнки від вчителя.\n"
+            f"• Крок 2 (Зроби): {action_desc}. Роби все не поспішаючи, крок за кроком.\n"
+            f"• Крок 3 (Перевір): Подивись на свою роботу: чи все виконано охайно, гарно і без пропусків?\n"
+            f"• Крок 4 (Здай вчителю): Зроби чітке фото зошита або збережи свій файл і надішли на перевірку. Ти обов'язково впораєшся! 🌟"
+        )
+    # 2. Адаптаційний цикл (5–6 класи НУШ, 10–12 років)
+    elif min_grade <= 6:
+        guide = (
+            f"Покрокова інструкція для учнів ({grade_str}, вік: {age_str}):\n"
+            f"• Крок 1 (Підготовка): Відкрий тему «{title_clean}» та уважно прочитай вказівки вчителя і матеріали уроку.\n"
+            f"• Крок 2 (Виконання): {action_desc}. Пиши розбірливо, уважно записуй відповіді та обов'язково нумеруй кожний пункт.\n"
+            f"• Крок 3 (Самоперевірка): Переконайся, що виконано всі вимоги завдання, а створений файл або запис у зошиті збережено охайно.\n"
+            f"• Крок 4 (Здача на платформу): Прикріпи свій файл або фото виконаної роботи та натисни кнопку здачі на перевірку."
+        )
+    # 3. Базова школа (7–9 класи, 12–15 років)
+    elif min_grade <= 9:
+        guide = (
+            f"Алгоритм виконання завдання для учнів ({grade_str}, {age_str}):\n"
+            f"• Крок 1 (Аналіз завдання): Опрацюй теоретичний матеріал до теми «{title_clean}» та виділи ключові вимоги вчителя.\n"
+            f"• Крок 2 (Практична робота): {action_desc}. Дотримуйся логіки виконання, структуруй свої розв'язки або код.\n"
+            f"• Крок 3 (Контроль якості): Перевір повноту відповідей, коректність розрахунків чи працездатність створеного файлу.\n"
+            f"• Крок 4 (Здача результату): Збережи роботу під своїм прізвищем, завантаж підсумковий файл чи документ на платформу."
+        )
+    # 4. Старша профільна школа (10–11 класи, 15–17 років)
+    else:
+        guide = (
+            f"Покроковий план виконання для старшокласників ({grade_str}, {age_str}):\n"
+            f"• Крок 1 (Постановка завдання та критерії): Опрацюй умови завдання «{title_clean}», визнач обов'язкові компоненти та шкалу критеріїв оцінювання НУШ.\n"
+            f"• Крок 2 (Практична реалізація): {action_desc}. Реалізуй необхідні структури, зв'язки чи розв'язки з дотриманням академічної доброчесності.\n"
+            f"• Крок 3 (Верифікація та висновки): Перевір цілісність результатів, відсутність технічних помилок та дай чіткі обґрунтовані відповіді на контрольні питання.\n"
+            f"• Крок 4 (Фіксація та здача): Сформуй підсумковий документ чи файл проєкту у відповідному форматі та надішли на перевірку."
+        )
+    return guide
+
+
 def analyze_assignment_task_understanding(assignment, force_refresh=False) -> dict:
     """
     Аналізує навчальне завдання за допомогою ШІ та формує звіт для вчителя та учнів:
@@ -6142,10 +6313,31 @@ def analyze_assignment_task_understanding(assignment, force_refresh=False) -> di
       заборона зарахування однієї фрази за два різні завдання)
     - Педагогічні зауваження та поради вчителю
     """
+    assignment_title = strip_html_tags(assignment.title or "")
+    assignment_desc = strip_html_tags(assignment.description or "")
+    subject_name = assignment.subject.name if assignment.subject else "Навчальний предмет"
+    classes_str = ", ".join(c.name for c in assignment.classes.all()) or "Всі класи"
+    custom_criteria = strip_html_tags(assignment.custom_criteria or "")
+
+    grade_str, age_str = get_assignment_target_grades_and_ages(assignment)
+    min_grade = get_assignment_min_grade(assignment)
+
     if not force_refresh and assignment.ai_task_understanding:
         try:
             cached_data = json.loads(assignment.ai_task_understanding)
             if isinstance(cached_data, dict):
+                cached_data = sanitize_ai_understanding_data(cached_data)
+                cur_expl = cached_data.get('student_explanation') or ''
+                if not cur_expl or len(cur_expl) < 50 or 'крок' not in cur_expl.lower():
+                    cached_data['student_explanation'] = generate_age_appropriate_student_guide(
+                        grade_str=cached_data.get('target_audience') or grade_str,
+                        age_str=age_str,
+                        min_grade=min_grade,
+                        assignment_title=assignment_title,
+                        assignment_desc=assignment_desc,
+                        tasks_list=cached_data.get('tasks', []),
+                        is_single_task=(cached_data.get('tasks_total_count') == 1)
+                    )
                 return {
                     'status': 'success',
                     'data': cached_data,
@@ -6154,14 +6346,6 @@ def analyze_assignment_task_understanding(assignment, force_refresh=False) -> di
                 }
         except Exception:
             pass
-
-    assignment_title = assignment.title or ""
-    assignment_desc = assignment.description or ""
-    subject_name = assignment.subject.name if assignment.subject else "Навчальний предмет"
-    classes_str = ", ".join(c.name for c in assignment.classes.all()) or "Всі класи"
-    custom_criteria = assignment.custom_criteria or ""
-
-    grade_str, age_str = get_assignment_target_grades_and_ages(assignment)
 
     files_content_parts = []
     inline_media = []
@@ -6190,7 +6374,8 @@ def analyze_assignment_task_understanding(assignment, force_refresh=False) -> di
                         pass
 
                 if af_text and af_text.strip():
-                    files_content_parts.append(f"• Матеріал вчителя «{af_name}» ({af_ext}):\n{af_text[:16000]}")
+                    clean_af_text = strip_html_tags(af_text)
+                    files_content_parts.append(f"• Матеріал вчителя «{af_name}» ({af_ext}):\n{clean_af_text[:16000]}")
 
                 if af_ext in ['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif']:
                     try:
@@ -6260,14 +6445,47 @@ def analyze_assignment_task_understanding(assignment, force_refresh=False) -> di
     elif explicit_count > 0:
         prompt_lines.append(f"\n⚠️ ВКАЗІВКА ВЧИТЕЛЯ ЩОДО ОБСЯГУ: Вчитель чітко зазначив обов'язкову кількість завдань: {explicit_count}.")
 
+    if min_grade <= 4:
+        age_tone_guide = (
+            f"УЧНІ ПОЧАТКОВОЇ ШКОЛИ ({grade_str}, {age_str}):\n"
+            f"- Мова має бути максимально простою, доброзичливою, без дорослих наукових термінів.\n"
+            f"- Звертайся до дитини тепло та підбадьорливо.\n"
+            f"- Опиши дуже прості кроки: що відкрити/роздивитись, яку дію зробити, що сфотографувати або показати батькам і вчителю."
+        )
+    elif min_grade <= 6:
+        age_tone_guide = (
+            f"УЧНІ 5–6 КЛАСІВ НУШ ({grade_str}, {age_str}):\n"
+            f"- Доступна, жива мова молодших підлітків, дружній тон турботливого наставника.\n"
+            f"- Складні поняття пояснюй простими словами на зрозумілих життєвих прикладах.\n"
+            f"- Чіткі пронумеровані кроки дій (Крок 1, Крок 2...): що відкрити, які дії виконати, як підписати роботу і що здати."
+        )
+    elif min_grade <= 9:
+        age_tone_guide = (
+            f"УЧНІ 7–9 КЛАСІВ ({grade_str}, {age_str}):\n"
+            f"- Структурована, ділова і зрозуміла мова, практичний підхід.\n"
+            f"- Покроковий алгоритм розв'язку або виконання практичної роботи (Крок 1, Крок 2...).\n"
+            f"- Акцент на самоконтролі, охайності та дотриманні вимог вчителя."
+        )
+    else:
+        age_tone_guide = (
+            f"СТАРШОКЛАСНИКИ ({grade_str}, {age_str}):\n"
+            f"- Дорослий, професійний, партнерський тон.\n"
+            f"- Чіткий алгоритм реалізації проєкту/практичної роботи (Крок 1 — аналіз структури, Крок 2 — реалізація, Крок 3 — верифікація та відповіді на питання, Крок 4 — здача файлу).\n"
+            f"- Акцент на критеріях якості НУШ, цілісності результатів та обґрунтованості висновків."
+        )
+
     prompt_lines.append(
         f"\n👶 ВРАХУВАННЯ ВІКУ ТА КЛАСУ УЧНІВ ({grade_str}, вік: {age_str}):\n"
-        f"1. Завдання призначене для учнів {grade_str} ({age_str}).\n"
-        f"2. Обов'язково заповни поле 'student_explanation': сформулюй покроковий, доступний і доброзичливий опис того, "
-        f"що саме вимагається від учня, мовою, зрозумілою для дітей цього віку ({age_str}, {grade_str}).\n"
-        f"   - Уникай складної сухої академічної термінології.\n"
-        f"   - Поясни крок за кроком (Крок 1, Крок 2...): яку дію виконати, який результат отримати, "
-        f"і що надіслати вчителю на перевірку."
+        f"{age_tone_guide}\n\n"
+        f"ОБОВ'ЯЗКОВА ВИМОГА ДО ПОЛЯ 'student_explanation':\n"
+        f"1. Сформулюй покроковий, доступний і доброзичливий опис того, що САМЕ вимагається від учня, "
+        f"мовою, строго адаптованою для учнів {grade_str} ({age_str}).\n"
+        f"2. Опис ОБОВ'ЯЗКОВО має бути структурований по кроках (Крок 1, Крок 2, Крок 3...), щоб дитина точно розуміла послідовність дій:\n"
+        f"   - Крок 1: Що відкрити, прочитати або підготувати.\n"
+        f"   - Крок 2: Які конкретно практичні дії виконати.\n"
+        f"   - Крок 3: Як оформити роботу і що перевірити перед здачею.\n"
+        f"   - Крок 4: Що саме прикріпити та здати на платформу.\n"
+        f"3. КАТЕГОРИЧНО ЗАБОРОНЕНО використовувати HTML-теги (<span...>, <u>, <b> тощо) або фрагменти коду розмітки — тільки чистий текст!\n"
     )
 
     prompt_lines.append(
@@ -6284,7 +6502,8 @@ def analyze_assignment_task_understanding(assignment, force_refresh=False) -> di
         "Ти — провідний експерт-методист та педагогічний ШІ шкільної платформи (НУШ).\n"
         "Твоя мета — проаналізувати опубліковане вчителем завдання та сформувати звіт:\n"
         "- чітко вказати тему, мету уроку та цільову аудиторію (клас, вік учнів);\n"
-        "- скласти зрозуміле покрокове роз'яснення для учнів з урахуванням їхнього віку та класу (student_explanation);\n"
+        "- обов'язково скласти детальне покрокове роз'яснення для дитини відповідно до її віку та класу (student_explanation) з чіткими етапами (Крок 1, Крок 2...), пояснюючи простою і зрозумілою для учнів цього віку мовою, що саме потрібно зробити;\n"
+        "- ЖОДНОГО HTML-тегу в полях JSON (усі значення мають бути чистим текстом без <span...>, <u>, <b> тощо);\n"
         "- якщо вчитель вказав конкретний номер завдання/вправи (наприклад «виконати вправа 2»), у звіті зафіксувати ЛИШЕ це завдання (tasks_total_count = 1), не вимагаючи виконання інших завдань з файлу;\n"
         "- перелічити кожне виявлене завдання з джерелом (наприклад, «Слайд 18 презентації»);\n"
         "- роз'яснити вимоги до оформлення та шкалу оцінювання;\n"
@@ -6293,7 +6512,7 @@ def analyze_assignment_task_understanding(assignment, force_refresh=False) -> di
         "{\n"
         '  "topic_and_goal": "Короткий опис теми та мети роботи",\n'
         f'  "target_audience": "{grade_str} ({age_str})",\n'
-        '  "student_explanation": "Зрозуміле для учнів цього віку покрокове пояснення того, що вимагається виконати і здати (Крок 1, Крок 2...)",\n'
+        '  "student_explanation": "Зрозуміле для учнів цього віку покрокове пояснення того, що вимагається виконати і здати (Крок 1: ..., Крок 2: ...)",\n'
         '  "tasks_source_info": "Звідки витягнуто завдання (наприклад: Слайд 18 презентації)",\n'
         '  "tasks_total_count": 1,\n'
         '  "is_choice_based": false,\n'
@@ -6302,7 +6521,7 @@ def analyze_assignment_task_understanding(assignment, force_refresh=False) -> di
         '      "num": 1,\n'
         '      "title": "Назва завдання",\n'
         '      "source": "Матеріали уроку",\n'
-        '      "expected_actions": "Що учень має зробити",\n'
+        '      "expected_actions": "Що учень має зробити (покроково без HTML-тегів)",\n'
         '      "expected_submission": "Що має бути у відповіді"\n'
         '    }\n'
         '  ],\n'
@@ -6341,17 +6560,26 @@ def analyze_assignment_task_understanding(assignment, force_refresh=False) -> di
             if status_code == 200 and raw_text:
                 parsed = extract_json_from_text(raw_text)
                 if isinstance(parsed, dict) and 'tasks_total_count' in parsed:
-                    result_data = parsed
-                    # Гарантуємо наявність target_audience та student_explanation
+                    result_data = sanitize_ai_understanding_data(parsed)
+                    # Гарантуємо наявність target_audience та якісного student_explanation
                     result_data.setdefault('target_audience', f"{grade_str} ({age_str})")
-                    if not result_data.get('student_explanation'):
-                        result_data['student_explanation'] = (
-                            f"Пояснення для учнів ({grade_str}, {age_str}):\n"
-                            f"Ознайомтеся з матеріалами та виконайте завдання згідно з інструкцією вчителя. "
-                            f"Звертайте увагу на повноту та охайність відповідей."
+                    current_expl = strip_html_tags(result_data.get('student_explanation') or "")
+                    if not current_expl or len(current_expl) < 50 or "крок" not in current_expl.lower():
+                        result_data['student_explanation'] = generate_age_appropriate_student_guide(
+                            grade_str=grade_str,
+                            age_str=age_str,
+                            min_grade=min_grade,
+                            assignment_title=assignment_title,
+                            assignment_desc=assignment_desc,
+                            tasks_list=result_data.get('tasks', []),
+                            is_single_task=is_single_task
                         )
+                    else:
+                        result_data['student_explanation'] = current_expl
                     # Суворий пріоритет обсягу завдань від вчителя
-                    if is_single_task:
+                    if teacher_specific_task_nums:
+                        result_data['tasks_total_count'] = len(teacher_specific_task_nums)
+                    elif is_single_task:
                         result_data['tasks_total_count'] = 1
                         if isinstance(result_data.get('tasks'), list) and len(result_data['tasks']) > 1:
                             result_data['tasks'] = [{
@@ -6361,8 +6589,6 @@ def analyze_assignment_task_understanding(assignment, force_refresh=False) -> di
                                 'expected_actions': assignment_desc or 'Виконати роботу над завданням/проєктом',
                                 'expected_submission': 'Готова робота у відповідному форматі'
                             }]
-                    elif teacher_specific_task_nums:
-                        result_data['tasks_total_count'] = len(teacher_specific_task_nums)
                     elif explicit_count > 1:
                         result_data['tasks_total_count'] = explicit_count
         except Exception:
@@ -6370,16 +6596,7 @@ def analyze_assignment_task_understanding(assignment, force_refresh=False) -> di
 
     # Якщо ШІ API недоступне або повернуло некоректну відповідь — генеруємо якісний структурний звіт на основі видобутих даних
     if not result_data or not isinstance(result_data, dict):
-        if is_single_task:
-            total_cnt = 1
-            tasks_list = [{
-                "num": 1,
-                "title": assignment_title or "Комплексне завдання",
-                "source": "Опис завдання вчителя",
-                "expected_actions": assignment_desc[:300] if assignment_desc else "Виконати завдання/проєкт згідно з інструкцією",
-                "expected_submission": "Здана робота у відповідному форматі"
-            }]
-        elif teacher_specific_task_nums:
+        if teacher_specific_task_nums:
             total_cnt = len(teacher_specific_task_nums)
             tasks_list = []
             for num in teacher_specific_task_nums:
@@ -6388,27 +6605,51 @@ def analyze_assignment_task_understanding(assignment, force_refresh=False) -> di
                     if re.search(rf'(?:\b(?:завдан[а-яіїє]*|вправ[а-яіїє]*|пункт[а-яіїє]*|номер[а-яіїє]*)\b|(?:завд|впр|ном)\b\.?|\bп\.\s*|№)\s*(?:№\s*)?{num}\b', q, re.IGNORECASE):
                         found_q = q
                         break
-                clean_q = re.sub(r'^(?:[•\-\*]?\s*(?:(?:\d+|[IVXLCDM]+)[\.\)\–\—\-]|(?:питання|завдання|вправа|відповідь|№)\s*\d+[\.\:\)\–\—\-]?))\s*', '', found_q or "").strip()
+                clean_q = strip_html_tags(found_q or "").strip()
+                # Видаляємо нумерацію на початку рядка: "1. ", "• "
+                clean_q = re.sub(r'^(?:[•\-\*]?\s*(?:(?:\d+|[IVXLCDM]+)[\.\)\–\—\-]|(?:питання|завдання|вправа|відповідь|номер|№)\s*\d+[\.\:\)\–\—\-]?))\s*', '', clean_q, flags=re.IGNORECASE).strip()
+                # Видаляємо префікси на кшталт «Виконати вправу 3»
+                clean_q = re.sub(rf'^(?:виконати|зробити)\s+(?:вправ[а-яіїє]*|завдан[а-яіїє]*|пункт[а-яіїє]*|номер[а-яіїє]*|№)?\s*{num}\s*[\.\:\–\—\-]?\s*', '', clean_q, flags=re.IGNORECASE).strip()
+                # Видаляємо дубльовані назви «Вправа 3»
+                clean_q = re.sub(rf'^(?:вправ[а-яіїє]*|завдан[а-яіїє]*|пункт[а-яіїє]*|номер[а-яіїє]*|№)\s*{num}\s*[\.\:\–\—\-]?\s*', '', clean_q, flags=re.IGNORECASE).strip()
+                clean_q = clean_q.strip(' .,:;-')
+
                 is_ex = "вправ" in (assignment_desc or "").lower()
                 task_term = f"вправу {num}" if is_ex else f"завдання {num}"
+
+                if clean_q and len(clean_q) > 3 and clean_q.lower() not in ['виконати', 'виконати вправу', 'виконати завдання', 'зробити']:
+                    actions_desc = f"Виконати {task_term}: {clean_q}"
+                else:
+                    actions_desc = f"Виконати {task_term} відповідно до інструкцій вчителя та прикріплених матеріалів"
+
                 tasks_list.append({
                     "num": num,
                     "title": f"Вправа {num}" if is_ex else f"Завдання {num}",
                     "source": "Вказівка вчителя та прикріплені матеріали",
-                    "expected_actions": clean_q or f"Виконати {task_term} відповідно до інструкцій вчителя",
+                    "expected_actions": actions_desc,
                     "expected_submission": "Виконана робота або відповідь у зошиті/документі"
                 })
+        elif is_single_task:
+            total_cnt = 1
+            tasks_list = [{
+                "num": 1,
+                "title": assignment_title or "Комплексне завдання",
+                "source": "Опис завдання вчителя",
+                "expected_actions": assignment_desc[:300] if assignment_desc else "Виконати завдання/проєкт згідно з інструкцією",
+                "expected_submission": "Здана робота у відповідному форматі"
+            }]
         else:
             total_cnt = explicit_count if explicit_count > 0 else (len(extracted_qs) if extracted_qs else 1)
             tasks_list = []
             if extracted_qs:
                 for idx, q in enumerate(extracted_qs, 1):
-                    clean_q = re.sub(r'^(?:[•\-\*]?\s*(?:(?:\d+|[IVXLCDM]+)[\.\)\–\—\-]|(?:питання|завдання|вправа|відповідь|№)\s*\d+[\.\:\)\–\—\-]?))\s*', '', q).strip()
+                    clean_q = strip_html_tags(q).strip()
+                    clean_q = re.sub(r'^(?:[•\-\*]?\s*(?:(?:\d+|[IVXLCDM]+)[\.\)\–\—\-]|(?:питання|завдання|вправа|відповідь|номер|№)\s*\d+[\.\:\)\–\—\-]?))\s*', '', clean_q, flags=re.IGNORECASE).strip()
                     tasks_list.append({
                         "num": idx,
                         "title": f"Завдання {idx}",
                         "source": "Матеріали уроку / презентація",
-                        "expected_actions": clean_q or q,
+                        "expected_actions": clean_q or f"Виконати завдання {idx} відповідно до навчальних матеріалів",
                         "expected_submission": "Відповідь або виконаний файл відповідно до умови"
                     })
             else:
@@ -6420,11 +6661,14 @@ def analyze_assignment_task_understanding(assignment, force_refresh=False) -> di
                     "expected_submission": "Здана робота у відповідному форматі"
                 })
 
-        student_guide_text = (
-            f"Пояснення для учнів ({grade_str}, {age_str}):\n"
-            f"1. Уважно прочитайте тему «{assignment_title}» та перегляньте матеріали, додані вчителем.\n"
-            f"2. Виконайте завдання відповідно до вказівок. Пишіть розбірливо, нумеруйте кожну відповідь.\n"
-            f"3. Обов'язково перевірте свою роботу та додайте власні висновки, перш ніж здавати на перевірку."
+        student_guide_text = generate_age_appropriate_student_guide(
+            grade_str=grade_str,
+            age_str=age_str,
+            min_grade=min_grade,
+            assignment_title=assignment_title,
+            assignment_desc=assignment_desc,
+            tasks_list=tasks_list,
+            is_single_task=is_single_task
         )
 
         result_data = {
@@ -6449,6 +6693,9 @@ def analyze_assignment_task_understanding(assignment, force_refresh=False) -> di
                 "Умова містить конкретні завдання. Нагадуйте учням нумерувати свої відповіді у форматі «питання-відповідь»."
             ]
         }
+
+    # Фінальна санітизація всіх полів від будь-яких залишків HTML-розмітки
+    result_data = sanitize_ai_understanding_data(result_data)
 
     # Зберігаємо результат в базі даних
     try:

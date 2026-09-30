@@ -71,13 +71,13 @@
                     <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
                         <div style="display:flex;align-items:center;gap:8px;">
                             <span style="font-size:18px;">💡</span>
-                            <span style="font-weight:800;font-size:13px;color:#059669;text-transform:uppercase;letter-spacing:0.04em;">
+                            <span id="ai-und-student-guide-title" style="font-weight:800;font-size:13px;color:#059669;text-transform:uppercase;letter-spacing:0.04em;">
                                 Що вимагається від учнів (простими словами)
                             </span>
                         </div>
                         <span id="ai-und-target-audience-badge" class="badge" style="background:rgba(16,185,129,0.15);color:#047857;border:1px solid rgba(16,185,129,0.3);font-size:11.5px;font-weight:750;padding:2px 8px;border-radius:6px;"></span>
                     </div>
-                    <div id="ai-und-student-explanation" style="font-size:13.5px;line-height:1.6;color:var(--color-text-primary);white-space:pre-line;"></div>
+                    <div id="ai-und-student-explanation" style="font-size:13.5px;line-height:1.6;color:var(--color-text-primary);"></div>
                 </div>
 
                 <!-- 2. ПЕРЕЛІК ВИЯВЛЕНИХ ЗАВДАНЬ -->
@@ -293,6 +293,43 @@ function fetchAiUnderstanding(assignmentId, forceRefresh) {
     }
 }
 
+function stripHtmlTags(text) {
+    if (!text) return '';
+    if (typeof text !== 'string') text = String(text);
+    var s = text.replace(/<(?:br\s*\/|\/p|\/div|\/li|\/tr|\/h[1-6])>/gi, '\n');
+    s = s.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '');
+    s = s.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '');
+    s = s.replace(/<[^>]+>/g, '');
+    var doc = new DOMParser().parseFromString(s, 'text/html');
+    return (doc.body.textContent || '').replace(/[ \t]+/g, ' ').replace(/\n\s*\n\s*\n+/g, '\n\n').trim();
+}
+
+function renderStudentExplanationHtml(rawText) {
+    if (!rawText) return '';
+    var cleanText = stripHtmlTags(rawText);
+    var lines = cleanText.split('\n');
+    var html = '';
+    var inSteps = false;
+
+    lines.forEach(function(line) {
+        line = line.trim();
+        if (!line) return;
+        var stepMatch = line.match(/^(?:[•\-\*]?\s*)?(Крок\s*\d+|Етап\s*\d+|\d+\s*[\.\)])\s*[\:\–\—\-]?\s*(.*)$/i);
+        if (stepMatch) {
+            inSteps = true;
+            var stepLabel = stepMatch[1].replace(/[\.\)]$/, '');
+            var stepBody = stepMatch[2];
+            html += '<div style="display:flex;gap:10px;align-items:flex-start;margin-top:8px;background:var(--color-surface);border:1.5px solid rgba(16,185,129,0.25);border-radius:8px;padding:9px 12px;box-shadow:0 1px 3px rgba(0,0,0,0.04);">';
+            html += '<span style="background:linear-gradient(135deg,#059669,#10b981);color:#fff;font-size:11px;font-weight:800;padding:2px 8px;border-radius:6px;white-space:nowrap;margin-top:1px;letter-spacing:0.02em;">' + escapeHtml(stepLabel) + '</span>';
+            html += '<span style="font-size:13px;line-height:1.55;color:var(--color-text-primary);flex:1;">' + escapeHtml(stepBody) + '</span>';
+            html += '</div>';
+        } else {
+            html += '<div style="font-size:13px;line-height:1.6;color:var(--color-text-primary);margin-bottom:6px;font-weight:' + (inSteps ? '500' : '650') + ';">' + escapeHtml(line) + '</div>';
+        }
+    });
+    return html || ('<div style="font-size:13px;line-height:1.6;color:var(--color-text-primary);">' + escapeHtml(cleanText) + '</div>');
+}
+
 function renderAiUnderstandingData(data, updatedAt, isCached, isTeacher) {
     // Дата та статус
     const badge = document.getElementById('ai-und-status-badge');
@@ -300,14 +337,17 @@ function renderAiUnderstandingData(data, updatedAt, isCached, isTeacher) {
     const refreshBtn = document.getElementById('btn-ai-und-refresh');
     const tipsCard = document.getElementById('ai-und-tips-card');
     const modalTitle = document.querySelector('#ai-understanding-modal h3');
+    const studentGuideTitle = document.getElementById('ai-und-student-guide-title');
 
     if (isTeacher === false) {
         if (refreshBtn) refreshBtn.style.display = 'none';
         if (tipsCard) tipsCard.style.display = 'none';
         if (modalTitle) modalTitle.textContent = 'Як ШІ розуміє це завдання (підказка до виконання)';
+        if (studentGuideTitle) studentGuideTitle.textContent = '🎒 Покрокове пояснення для тебе (відповідно до твого класу)';
     } else {
         if (refreshBtn) refreshBtn.style.display = 'inline-flex';
         if (modalTitle) modalTitle.textContent = 'Як ШІ розуміє це завдання';
+        if (studentGuideTitle) studentGuideTitle.textContent = '💡 Пояснення для учнів відповідно до віку (покроково)';
     }
 
     if (updatedAt) {
@@ -320,9 +360,9 @@ function renderAiUnderstandingData(data, updatedAt, isCached, isTeacher) {
     const targetAudEl = document.getElementById('ai-und-target-audience-badge');
 
     if (data.student_explanation) {
-        studentExplEl.textContent = data.student_explanation;
+        studentExplEl.innerHTML = renderStudentExplanationHtml(data.student_explanation);
         if (data.target_audience) {
-            targetAudEl.textContent = data.target_audience;
+            targetAudEl.textContent = stripHtmlTags(data.target_audience);
             targetAudEl.style.display = 'inline-block';
         } else {
             targetAudEl.style.display = 'none';
@@ -334,10 +374,10 @@ function renderAiUnderstandingData(data, updatedAt, isCached, isTeacher) {
 
     // 1. Тема та мета
     const topicGoalEl = document.getElementById('ai-und-topic-goal');
-    topicGoalEl.textContent = data.topic_and_goal || 'Навчальне практичне завдання';
+    topicGoalEl.textContent = stripHtmlTags(data.topic_and_goal || 'Навчальне практичне завдання');
 
     const sourceInfoEl = document.getElementById('ai-und-source-info');
-    sourceInfoEl.innerHTML = `<span>📍</span> <span>Джерело завдань: <strong>${escapeHtml(data.tasks_source_info || 'Умова та презентація')}</strong></span>`;
+    sourceInfoEl.innerHTML = `<span>📍</span> <span>Джерело завдань: <strong>${escapeHtml(stripHtmlTags(data.tasks_source_info || 'Умова та презентація'))}</strong></span>`;
 
     // 2. Кількість завдань
     const countBadge = document.getElementById('ai-und-task-count-badge');
@@ -352,20 +392,25 @@ function renderAiUnderstandingData(data, updatedAt, isCached, isTeacher) {
         tasks.forEach(t => {
             const card = document.createElement('div');
             card.className = 'ai-task-card';
+            var cleanTitle = stripHtmlTags(t.title || '');
+            var cleanSource = stripHtmlTags(t.source || '');
+            var cleanActions = stripHtmlTags(t.expected_actions || '');
+            var cleanSubmission = stripHtmlTags(t.expected_submission || '');
+
             card.innerHTML = `
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
                     <div style="font-weight:750;font-size:13px;color:var(--color-primary);display:flex;align-items:center;gap:6px;">
                         <span>📌</span>
-                        <span>Завдання ${t.num || ''}: ${escapeHtml(t.title || '')}</span>
+                        <span>Завдання ${escapeHtml(String(t.num || ''))}: ${escapeHtml(cleanTitle)}</span>
                     </div>
-                    ${t.source ? `<span style="font-size:11px;background:rgba(99,102,241,0.08);color:var(--color-text-secondary);padding:2px 7px;border-radius:4px;border:1px solid var(--color-border);">${escapeHtml(t.source)}</span>` : ''}
+                    ${cleanSource ? `<span style="font-size:11px;background:rgba(99,102,241,0.08);color:var(--color-text-secondary);padding:2px 7px;border-radius:4px;border:1px solid var(--color-border);">${escapeHtml(cleanSource)}</span>` : ''}
                 </div>
-                <div style="font-size:12.5px;color:var(--color-text-primary);margin-top:2px;">
-                    <strong>Що потрібно зробити:</strong> ${escapeHtml(t.expected_actions || '')}
+                <div style="font-size:12.5px;color:var(--color-text-primary);margin-top:4px;line-height:1.5;">
+                    <strong>Що потрібно зробити:</strong> ${escapeHtml(cleanActions)}
                 </div>
-                ${t.expected_submission ? `
-                <div style="font-size:12px;color:var(--color-text-muted);margin-top:2px;">
-                    <strong>Очікувана відповідь:</strong> ${escapeHtml(t.expected_submission)}
+                ${cleanSubmission ? `
+                <div style="font-size:12px;color:var(--color-text-muted);margin-top:3px;line-height:1.45;">
+                    <strong>Очікувана відповідь:</strong> ${escapeHtml(cleanSubmission)}
                 </div>` : ''}
             `;
             tasksListEl.appendChild(card);
@@ -376,7 +421,7 @@ function renderAiUnderstandingData(data, updatedAt, isCached, isTeacher) {
 
     // 3. Формат здачі
     const formatEl = document.getElementById('ai-und-submission-format');
-    formatEl.textContent = data.submission_format_expected || 'Один документ або файл відповідно до інструкцій.';
+    formatEl.textContent = stripHtmlTags(data.submission_format_expected || 'Один документ або файл відповідно до інструкцій.');
 
     // 4. Шкала оцінювання
     const gb = data.grading_breakdown || {};
