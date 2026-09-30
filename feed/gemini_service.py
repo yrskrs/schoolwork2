@@ -39,7 +39,7 @@ GROQ_API_BASE_URL = "https://api.groq.com/openai/v1"
 OPENROUTER_API_BASE_URL = "https://openrouter.ai/api/v1"
 
 DEFAULT_MODELS_BY_PROVIDER = {
-    'gemini': ['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.1-flash-lite', 'gemini-3-flash-preview', 'gemini-3.1-pro-preview'],
+    'gemini': ['gemini-3.6-flash', 'gemini-3.1-flash-lite', 'gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-flash-latest', 'gemini-3.1-pro-preview'],
     'openai': ['gpt-4o-mini', 'gpt-4o', 'gpt-4-turbo', 'o3-mini'],
     'deepseek': ['deepseek-chat', 'deepseek-reasoner'],
     'groq': ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768'],
@@ -52,7 +52,7 @@ def get_default_model_for_provider(provider):
     """Повертає рекомендовану модель за замовчуванням для обраного провайдера."""
     prov = (provider or 'gemini').lower().strip()
     models = DEFAULT_MODELS_BY_PROVIDER.get(prov, [])
-    return models[0] if models else 'gemini-3.8-flash'
+    return models[0] if models else 'gemini-3.6-flash'
 
 
 def get_ai_settings():
@@ -156,8 +156,6 @@ def clean_model_name(name, provider='gemini'):
             'gemini-1.5-pro', 'gemini-1.5-pro-latest',
             'gemini-2.0-flash', 'gemini-2.0-flash-exp', 'gemini-2.0-flash-001',
             'gemini-2.5-flash', 'gemini-2.0-pro', 'gemini-2.0-pro-exp-02-05',
-            # Моделі з проблемами квоти/доступу — перенаправляємо на актуальну
-            'gemini-3.5-flash', 'gemini-3.6-flash', 'gemini-flash-latest',
         ]
         if name in legacy_flash:
             return 'gemini-3.8-flash'
@@ -6214,9 +6212,16 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
     # 1. Спроби для активної конфігурації
     if act_provider == 'gemini':
         models_chain = settings.get_active_fallback_chain() if hasattr(settings, 'get_active_fallback_chain') else [act_model]
-        models_to_try = [clean_model_name(m) for m in models_chain if m]
+        models_to_try = []
+        for m in models_chain:
+            m_clean = clean_model_name(m)
+            if m_clean and m_clean not in models_to_try:
+                models_to_try.append(m_clean)
         if not models_to_try:
-            models_to_try = [clean_model_name(act_model or 'gemini-2.5-flash')]
+            models_to_try = [clean_model_name(act_model or 'gemini-3.6-flash')]
+        for backup_m in ['gemini-3.6-flash', 'gemini-3.1-flash-lite', 'gemini-3.8-flash', 'gemini-3.7-flash']:
+            if backup_m not in models_to_try:
+                models_to_try.append(backup_m)
         for m in models_to_try:
             attempts_configs.append({
                 'provider': act_provider,
@@ -7475,7 +7480,7 @@ def generate_criteria_with_gemini(teacher_notes, assignment_title='', assignment
             m_clean = clean_model_name(settings.model_name)
             if m_clean not in models_to_try:
                 models_to_try.append(m_clean)
-        for fallback in ['gemini-2.5-flash', 'gemini-1.5-flash', 'gemini-3.6-flash']:
+        for fallback in ['gemini-3.6-flash', 'gemini-3.1-flash-lite', 'gemini-3.8-flash', 'gemini-3.7-flash']:
             if fallback not in models_to_try:
                 models_to_try.append(fallback)
         for m in models_to_try:
@@ -8179,71 +8184,87 @@ def analyze_assignment_task_understanding(assignment, force_refresh=False) -> di
     settings = get_ai_settings()
     act_provider, act_key, act_model, act_url, is_backup_active = settings.get_active_config()
 
+    models_to_try = []
+    if act_provider == 'gemini':
+        if hasattr(settings, 'get_active_fallback_chain'):
+            for m in settings.get_active_fallback_chain():
+                m_clean = clean_model_name(m)
+                if m_clean and m_clean not in models_to_try:
+                    models_to_try.append(m_clean)
+        for def_m in ['gemini-3.6-flash', 'gemini-3.1-flash-lite', 'gemini-3.8-flash']:
+            if def_m not in models_to_try:
+                models_to_try.append(def_m)
+    else:
+        models_to_try = [act_model or get_default_model_for_provider(act_provider)]
+
     result_data = None
     if act_key or act_provider == 'custom':
-        try:
-            thinking_budget_val = 0 if ('flash' in str(act_model).lower() and act_provider == 'gemini') else None
-            status_code, raw_text, err_msg, raw_data = call_ai_api(
-                prompt_text="\n".join(prompt_lines),
-                system_prompt=system_instruction,
-                inline_media=inline_media,
-                provider=act_provider,
-                api_key=act_key,
-                model_name=act_model,
-                custom_url=act_url,
-                temperature=0.2,
-                max_output_tokens=2500,
-                timeout=40,
-                json_mode=True,
-                thinking_budget=thinking_budget_val
-            )
-            if status_code == 200 and raw_text:
-                parsed = extract_json_from_text(raw_text)
-                if isinstance(parsed, dict) and 'tasks_total_count' in parsed:
-                    result_data = sanitize_ai_understanding_data(parsed)
-                    # Гарантуємо наявність target_audience та якісного student_explanation
-                    result_data.setdefault('target_audience', f"{grade_str} ({age_str})")
-                    result_data.setdefault('task_type', scope.get('task_type', 'practical'))
-                    result_data.setdefault('deliverable', scope.get('deliverable', {}))
-                    result_data.setdefault('questions_expected', scope.get('questions_expected', False))
-                    current_expl = strip_html_tags(result_data.get('student_explanation') or "")
-                    if not current_expl or len(current_expl) < 50 or "крок" not in current_expl.lower():
-                        result_data['student_explanation'] = generate_age_appropriate_student_guide(
-                            grade_str=grade_str,
-                            age_str=age_str,
-                            min_grade=min_grade,
-                            assignment_title=assignment_title,
-                            assignment_desc=assignment_desc,
-                            tasks_list=result_data.get('tasks', []),
-                            is_single_task=is_single_task,
-                            task_interpretation=scope.get('task_interpretation')
-                        )
-                    else:
-                        result_data['student_explanation'] = current_expl
-                    # Суворий пріоритет обсягу завдань від вчителя
-                    result_data['tasks_total_count'] = scope.get('assigned_task_count', 1)
-                    result_data['task_type'] = scope.get('task_type', 'practical')
-                    result_data['deliverable'] = scope.get('deliverable', {})
-                    result_data['questions_expected'] = scope.get('questions_expected', False)
-                    result_data['task_interpretation'] = scope.get('task_interpretation', {})
-                    result_data['teacher_requirements'] = scope.get('task_interpretation', {}).get('teacher_requirements', [])
-                    result_data['final_task_understanding'] = scope.get('final_task_understanding', {})
-                    result_data['teacher_intent'] = scope.get('teacher_intent', {})
-                    result_data['task_understanding_confidence'] = scope.get('task_understanding_confidence', 1.0)
-                    result_data['ambiguities'] = scope.get('ambiguities', [])
+        for target_m in models_to_try:
+            try:
+                thinking_budget_val = 0 if ('flash' in str(target_m).lower() and act_provider == 'gemini') else None
+                status_code, raw_text, err_msg, raw_data = call_ai_api(
+                    prompt_text="\n".join(prompt_lines),
+                    system_prompt=system_instruction,
+                    inline_media=inline_media,
+                    provider=act_provider,
+                    api_key=act_key,
+                    model_name=target_m,
+                    custom_url=act_url,
+                    temperature=0.2,
+                    max_output_tokens=2500,
+                    timeout=40,
+                    json_mode=True,
+                    thinking_budget=thinking_budget_val
+                )
+                if status_code == 200 and raw_text:
+                    parsed = extract_json_from_text(raw_text)
+                    if isinstance(parsed, dict) and 'tasks_total_count' in parsed:
+                        result_data = sanitize_ai_understanding_data(parsed)
+                        break
+            except Exception:
+                pass
 
-                    if is_single_task:
-                        if isinstance(result_data.get('tasks'), list) and len(result_data['tasks']) > 1:
-                            result_data['tasks'] = [{
-                                'num': 1,
-                                'title': assignment_title or 'Комплексне завдання',
-                                'source': 'Опис завдання вчителя',
-                                'expected_actions': assignment_desc or 'Виконати роботу над завданням/проєктом',
-                                'expected_submission': 'Готова робота у відповідному форматі'
-                            }]
+        if result_data:
+            # Гарантуємо наявність target_audience та якісного student_explanation
+            result_data.setdefault('target_audience', f"{grade_str} ({age_str})")
+            result_data.setdefault('task_type', scope.get('task_type', 'practical'))
+            result_data.setdefault('deliverable', scope.get('deliverable', {}))
+            result_data.setdefault('questions_expected', scope.get('questions_expected', False))
+            current_expl = strip_html_tags(result_data.get('student_explanation') or "")
+            if not current_expl or len(current_expl) < 50 or "крок" not in current_expl.lower():
+                result_data['student_explanation'] = generate_age_appropriate_student_guide(
+                    grade_str=grade_str,
+                    age_str=age_str,
+                    min_grade=min_grade,
+                    assignment_title=assignment_title,
+                    assignment_desc=assignment_desc,
+                    tasks_list=result_data.get('tasks', []),
+                    is_single_task=is_single_task,
+                    task_interpretation=scope.get('task_interpretation')
+                )
+            else:
+                result_data['student_explanation'] = current_expl
+            # Суворий пріоритет обсягу завдань від вчителя
+            result_data['tasks_total_count'] = scope.get('assigned_task_count', 1)
+            result_data['task_type'] = scope.get('task_type', 'practical')
+            result_data['deliverable'] = scope.get('deliverable', {})
+            result_data['questions_expected'] = scope.get('questions_expected', False)
+            result_data['task_interpretation'] = scope.get('task_interpretation', {})
+            result_data['teacher_requirements'] = scope.get('task_interpretation', {}).get('teacher_requirements', [])
+            result_data['final_task_understanding'] = scope.get('final_task_understanding', {})
+            result_data['teacher_intent'] = scope.get('teacher_intent', {})
+            result_data['task_understanding_confidence'] = scope.get('task_understanding_confidence', 1.0)
+            result_data['ambiguities'] = scope.get('ambiguities', [])
 
-        except Exception:
-            pass
+            if is_single_task:
+                if isinstance(result_data.get('tasks'), list) and len(result_data['tasks']) > 1:
+                    result_data['tasks'] = [{
+                        'num': 1,
+                        'title': assignment_title or 'Комплексне завдання',
+                        'source': 'Опис завдання вчителя',
+                        'expected_actions': assignment_desc or 'Виконати роботу над завданням/проєктом',
+                        'expected_submission': 'Готова робота у відповідному форматі'
+                    }]
 
     # Якщо ШІ API недоступне або повернуло некоректну відповідь — генеруємо якісний структурний звіт на основі видобутих даних
     if not result_data or not isinstance(result_data, dict):

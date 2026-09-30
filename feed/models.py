@@ -3312,7 +3312,7 @@ class AISettings(models.Model):
     model_name = models.CharField(
         'Основна модель',
         max_length=100,
-        default='gemini-3.8-flash',
+        default='gemini-3.6-flash',
         help_text="Основна модель (Пріоритет #1)"
     )
     custom_api_url = models.CharField(
@@ -3378,7 +3378,7 @@ class AISettings(models.Model):
     )
 
     # ── Загальні параметри генерації та черги моделей ──────────────────────────
-    saved_models_list = models.TextField('Збережені моделі з пріоритетами', blank=True, default='[{"name": "gemini-3.8-flash", "priority": 1, "enabled": true}, {"name": "gemini-3.7-flash", "priority": 2, "enabled": true}, {"name": "gemini-3.1-flash-lite", "priority": 3, "enabled": true}, {"name": "gemini-3.1-pro-preview", "priority": 4, "enabled": true}]')
+    saved_models_list = models.TextField('Збережені моделі з пріоритетами', blank=True, default='[{"name": "gemini-3.6-flash", "priority": 1, "enabled": true}, {"name": "gemini-3.1-flash-lite", "priority": 2, "enabled": true}, {"name": "gemini-3.8-flash", "priority": 3, "enabled": true}, {"name": "gemini-3.7-flash", "priority": 4, "enabled": true}]')
     system_prompt = models.TextField('Системний промт (Критерії НУШ)', default=DEFAULT_NUS_SYSTEM_PROMPT)
     temperature = models.FloatField('Температура (креативність)', default=0.2)
     ai_detector_tolerance_percent = models.IntegerField(
@@ -3475,7 +3475,7 @@ class AISettings(models.Model):
         """
         result = []
         seen_names = set()
-        default_names = ['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.1-flash-lite', 'gemini-3.1-pro-preview']
+        default_names = ['gemini-3.6-flash', 'gemini-3.1-flash-lite', 'gemini-3.8-flash', 'gemini-3.7-flash']
 
         try:
             raw_data = json.loads(self.saved_models_list) if self.saved_models_list else []
