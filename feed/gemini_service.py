@@ -2748,10 +2748,15 @@ SINGLE_TASK_KEYWORDS = [
     'опрацювати тему', 'опрацювання теми', 'вивчення теми',
     'підготувати повідомлення', 'підготувати доповідь', 'підготувати реферат',
     'написати твір', 'написати есе', 'творча робота',
-    'створити буклет', 'створити веб-сторінку', 'створити сайт',
-    'створити базу даних', 'створити таблицю', 'база даних', 'бази даних', 'баз даних', 'базою даних',
+    'створити буклет', 'створити веб-сторінку', 'створити сайт', 'створити плакат', 'створити постер',
+    'створити базу даних', 'створити таблицю', 'заповнити таблицю', 'електронна таблиця',
+    'база даних', 'бази даних', 'баз даних', 'базою даних',
     'реляційн', 'сутність', 'сутност', 'атрибут', 'первинний ключ', 'зовнішній ключ',
-    'ер-схем', 'er-схем', 'ms access', 'access', 'індивідуальне завдання'
+    'ер-схем', 'er-схем', 'ms access', 'access', 'індивідуальне завдання',
+    'побудувати діаграму', 'створити діаграму', 'намалювати схему', 'створити схему',
+    'створити текстовий документ', 'провести дослідження', 'знайти та опрацювати інформацію',
+    'створити зображення', 'виконати обчислення', 'налаштувати програму', 'створити вебсторінку',
+    'виконати послідовність практичних дій', 'виконати завдання за інструкцією'
 ]
 
 
@@ -3043,6 +3048,355 @@ def analyze_student_comment_nuance(
     }
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# ДИНАМІЧНА ІНТЕРПРЕТАЦІЯ ТИПУ, ОБСЯГУ ТА ОЧІКУВАНОГО РЕЗУЛЬТАТУ ЗАВДАННЯ
+# ═══════════════════════════════════════════════════════════════════════════════
+
+ASSIGNMENT_TASK_TYPES = [
+    'presentation',        # Презентація, слайди
+    'programming',         # Програмування, код
+    'table',               # Електронна таблиця, розрахунки Excel/Sheets
+    'database',            # База даних, Access, SQL
+    'diagram',             # Діаграма, схема, графік
+    'creative',            # Творча робота, малюнок, плакат, буклет
+    'project',             # Проєкт, комплексна розробка
+    'research',            # Дослідження, краєзнавство, пошук інформації
+    'document',            # Текстовий документ, реферат, есе, твір
+    'calculation',         # Математичні/фізичні обчислення, задачі
+    'question_answer',     # Відповіді на конкретні запитання, тести
+    'practical',           # Практична або лабораторна робота за інструкцією
+    'other',               # Загальне завдання
+]
+
+
+def determine_assignment_task_type(
+    title: str = "",
+    desc: str = "",
+    custom_criteria: str = "",
+    teacher_files_text: str = "",
+    **kwargs
+) -> str:
+    """
+    Динамічно визначає тип завдання (task_type) з контексту інструкцій вчителя та матеріалів.
+    Пріоритет: явні вказівки вчителя в title та desc > custom_criteria > прикріплені матеріали.
+    """
+    if 'description' in kwargs and not desc:
+        desc = kwargs['description']
+    t_clean = strip_html_tags(title or "").strip()
+    d_clean = strip_html_tags(desc or "").strip()
+    primary_text = f"{t_clean} {d_clean}".lower()
+    crit_text = strip_html_tags(custom_criteria or "").lower()
+    full_context = f"{primary_text} {crit_text}".strip()
+
+    # Якщо опис дуже стислий, долучаємо контекст із матеріалів вчителя
+    if len(full_context) < 30 and teacher_files_text:
+        full_context += " " + teacher_files_text[:3000].lower()
+
+    # 1. ПРІОРИТЕТ 1: Явна вимога відповісти на запитання у title/desc вчителя
+    if re.search(r'\b(?:відповід[а-яіїє]*\s+на\s+(?:запитан|питан)[а-яіїє]*|дати\s+(?:\w+\s+)?відповід[а-яіїє]*\s+на|контрольн[а-яіїє]*\s+(?:запитан|питан)[а-яіїє]*|тест[а-яіїє]*\b|опитуванн[а-яіїє]*|питанн[а-яіїє]*\s+\d+|запитанн[а-яіїє]*\s+\d+)\b', primary_text):
+        return 'question_answer'
+
+    # 2. Програмування (Python, код, Scratch тощо)
+    if re.search(r'\b(?:програм[ауиіе]|код[а-яіїє]*|написати\s+програму|розробити\s+програму|створити\s+програму|python|пайтон|паскаль|pascal|c\+\+|java\b|scratch|скретч|скрипт[а-яіїє]*)\b', primary_text or full_context):
+        return 'programming'
+
+    # 3. Презентація (PowerPoint, Google Презентації, Canva, створення слайдів)
+    if re.search(r'\b(?:презентаці[яієїю]|створити\s+слайд[а-яіїє]*|розробити\s+презентаці[а-яіїє]*|powerpoint|pptx?|odp|canva|гугл\s+презентаці[яієїю]|google\s+slides?)\b', primary_text or full_context):
+        return 'presentation'
+
+    # 4. База даних (MS Access, SQL)
+    if re.search(r'\b(?:баз[а-яіїє]*\s+даних|бд\b|ms\s+access|access\b|sql\b|sqlite|реляційн[а-яіїє]*|ер-діаграм[а-яіїє]*|er-діаграм[а-яіїє]*)\b', primary_text or full_context):
+        return 'database'
+
+    # 5. Електронна таблиця (Excel, Таблиці)
+    if re.search(r'\b(?:електронн[а-яіїє]*\s+таблиц[а-яіїє]*|створити\s+таблиц[яіюеь]|заповнити\s+таблиц[яіюеь]|таблиц[яіюеь]|excel|ексель|sheets|spreadsheet|табличн[а-яіїє]*\s+процесор[а-яіїє]*)\b', primary_text or full_context):
+        return 'table'
+
+    # 6. Діаграма, схема, графік
+    if re.search(r'\b(?:побудувати\s+діаграм[ауие]|діаграм[ауие]|графік[ауи]?|блок-схем[а-яіїє]*|інфографік[а-яіїє]*|ментальн[а-яіїє]*\s+карт[а-яіїє]*|mind\s*map|схем[ауие])\b', primary_text or full_context):
+        return 'diagram'
+
+    # 7. Творча робота (малюнок, буклет, плакат, колаж)
+    if re.search(r'\b(?:намалювати|малюнок|буклет|плакат|постер|листівк[а-яіїє]*|колаж|дизайн|ілюстраці[яієїю]|відеоролик|відеомонтаж)\b', primary_text or full_context):
+        return 'creative'
+
+    # 8. Проєкт
+    if re.search(r'\b(?:про[єе]кт[а-яіїє]*|робота\s+над\s+.*?про[єе]ктом)\b', primary_text or full_context):
+        return 'project'
+
+    # 9. Дослідження, пошук інформації
+    if re.search(r'\b(?:досліджен[а-яіїє]*|пошук[а-яіїє]*\s+інформаці[а-яіїє]*|знайти\s+(?:в\s+інтернеті|інформацію|відомості)|краєзнавств[а-яіїє]*|дізнатися\s+про)\b', primary_text or full_context):
+        return 'research'
+
+    # 10. Математичні обчислення, задачі
+    if re.search(r'\b(?:обчисленн[а-яіїє]*|обчислити|розв\'язати\s+задач[а-яіїє]*|розв\'язок\s+задач[а-яіїє]*|знайти\s+значення\s+виразу|математичн[а-яіїє]*\s+розрахунк[а-яіїє]*)\b', primary_text or full_context):
+        return 'calculation'
+
+    # 11. Текстовий документ (реферат, есе, твір)
+    if re.search(r'\b(?:текстов[а-яіїє]*\s+документ[а-яіїє]*|реферат[а-яіїє]*|есе\b|твір\b|повідомленн[а-яіїє]*|доповід[а-яіїє]*|статт[а-яіїє]*|конспект[а-яіїє]*)\b', primary_text or full_context):
+        return 'document'
+
+    # 12. Відповіді на запитання у контексті критеріїв або файлів
+    if re.search(r'\b(?:відповід[а-яіїє]*\s+на\s+(?:запитан|питан)[а-яіїє]*|дати\s+(?:\w+\s+)?відповід[а-яіїє]*\s+на|контрольн[а-яіїє]*\s+(?:запитан|питан)[а-яіїє]*|тест[а-яіїє]*\b|опитуванн[а-яіїє]*|питанн[а-яіїє]*\s+\d+|запитанн[а-яіїє]*\s+\d+)\b', full_context):
+        return 'question_answer'
+
+    # 13. Практична робота за інструкцією
+    if re.search(r'\b(?:практичн[а-яіїє]*\s+робот[а-яіїє]*|лабораторн[а-яіїє]*\s+робот[а-яіїє]*|інструкційн[а-яіїє]*\s+картк[а-яіїє]*|за\s+інструкцією)\b', full_context):
+        return 'practical'
+
+    # Перевірка контексту прикріплених матеріалів, якщо опис був мінімальним
+    if teacher_files_text:
+        tf_lower = teacher_files_text[:3000].lower()
+        if re.search(r'\b(?:баз[а-яіїє]*\s+даних|ms\s+access|sql\b)\b', tf_lower):
+            return 'database'
+        if re.search(r'\b(?:програм[ауиіе]|код|python)\b', tf_lower):
+            return 'programming'
+        if re.search(r'\b(?:таблиц[яіюеь]|excel)\b', tf_lower):
+            return 'table'
+        if re.search(r'\b(?:презентаці[яієїю]|powerpoint)\b', tf_lower):
+            return 'presentation'
+
+    return 'practical' if any(kw in full_context for kw in ['робота', 'виконати', 'зробити']) else 'other'
+
+
+def is_questions_expected(
+    task_type: str,
+    title: str = "",
+    desc: str = "",
+    custom_criteria: str = ""
+) -> bool:
+    """
+    Визначає, чи є модель «питання-відповідь» невід'ємною частиною того, що учень має здати.
+    ГОЛОВНЕ ПРАВИЛО: Не кожне навчальне завдання містить запитання для учня.
+    Якщо завдання передбачає створення презентації, написання програми, створення таблиці,
+    практичну роботу чи проєкт — questions_expected = False.
+    questions_expected = True ТІЛЬКИ якщо вчитель прямо вимагає відповісти на запитання.
+    """
+    if task_type == 'question_answer':
+        return True
+
+    # Для типів, які створюють самостійні результати/файли: questions_expected = False
+    if task_type in ['presentation', 'programming', 'table', 'database', 'diagram', 'creative', 'project', 'calculation']:
+        return False
+
+    # Для practical, document, research, other перевіряємо наявність явної вимоги відповісти на запитання
+    text = f"{title} {desc} {custom_criteria}".lower()
+    return bool(re.search(r'\b(?:відповід[а-яіїє]*\s+на\s+(?:запитан|питан)[а-яіїє]*|дати\s+(?:\w+\s+)?відповід[а-яіїє]*\s+на|контрольн[а-яіїє]*\s+(?:запитан|питан)[а-яіїє]*)\b', text))
+
+
+def extract_task_requirements(
+    desc: str = "",
+    custom_criteria: str = "",
+    compiled_criteria: list = None,
+    teacher_files_text: str = "",
+    title: str = "",
+    **kwargs
+) -> list[str]:
+    """
+    Витягує реальні вимоги та критерії вчителя без вигадування неіснуючих обмежень.
+    """
+    if 'description' in kwargs and not desc:
+        desc = kwargs['description']
+    if 'teacher_files_content' in kwargs and not teacher_files_text:
+        tfc = kwargs['teacher_files_content']
+        if isinstance(tfc, list):
+            teacher_files_text = "\n".join(str(x) for x in tfc)
+        elif isinstance(tfc, str):
+            teacher_files_text = tfc
+
+    reqs = []
+    if custom_criteria:
+        for line in custom_criteria.splitlines():
+            line_s = line.strip(' \t\n\r-*•;')
+            if len(line_s) > 2 and line_s not in reqs:
+                reqs.append(line_s)
+
+    if compiled_criteria:
+        for c in compiled_criteria:
+            c_name = c['name'] if isinstance(c, dict) else str(c)
+            c_name_clean = c_name.strip(' \t\n\r-*•;')
+            if c_name_clean and len(c_name_clean) > 2 and c_name_clean not in reqs:
+                reqs.append(c_name_clean)
+
+    if teacher_files_text:
+        in_req_block = False
+        for line in teacher_files_text.splitlines():
+            line_s = line.strip(' \t\n\r-*•;')
+            if re.search(r'\b(?:вимог[а-яіїє]*|критері[а-яіїє]*)\b', line, re.IGNORECASE):
+                in_req_block = True
+                continue
+            if in_req_block:
+                if not line_s:
+                    in_req_block = False
+                    continue
+                if line.strip().startswith(('-', '•', '*')) or re.match(r'^\d+[\.\)]', line.strip()):
+                    clean_item = re.sub(r'^\d+[\.\)]\s*', '', line_s).strip()
+                    if len(clean_item) > 2 and clean_item not in reqs:
+                        reqs.append(clean_item)
+
+    # Виявлення конкретних кількісних чи якісних вимог з опису та матеріалів уроку
+    texts_to_check = [title, desc, teacher_files_text[:3000] if teacher_files_text else ""]
+    patterns = [
+        r'\b(?:\d+\s+слайд\w*)\b',
+        r'\b(?:титульн\w*\s+слайд\w*)\b',
+        r'\b(?:висновок\w*|наявність\s+висновку)\b',
+        r'\b(?:джерел\w*|список\s+джерел\w*|використані\s+джерела)\b',
+        r'\b(?:\d+\s+ілюстрац\w*|\d+\s+малюнк\w*|\d+\s+зображен\w*)\b',
+        r'\b(?:\d+\s+таблиц\w*)\b',
+        r'\b(?:\d+\s+діаграм\w*)\b',
+    ]
+    for txt in texts_to_check:
+        if not txt:
+            continue
+        for p in patterns:
+            for match in re.finditer(p, txt, re.IGNORECASE):
+                val = match.group(0).strip()
+                if not any(val.lower() in r.lower() for r in reqs):
+                    reqs.append(val)
+
+    return reqs
+
+
+def interpret_assignment_task(
+    title: str = "",
+    desc: str = "",
+    custom_criteria: str = "",
+    teacher_files_text: str = "",
+    compiled_criteria: list = None,
+    raw_found_questions: list = None,
+    assigned_tasks: list = None,
+) -> dict:
+    """
+    Формує повну структуру інтерпретації завдання (task_interpretation), спільну
+    як для AI-оцінювання, так і для покрокових підказок учню у вікні «Як ШІ розуміє це завдання».
+    """
+    clean_title = strip_html_tags(title or "").strip()
+    clean_desc = strip_html_tags(desc or "").strip()
+
+    task_type = determine_assignment_task_type(clean_title, clean_desc, custom_criteria, teacher_files_text)
+    questions_expected = is_questions_expected(task_type, clean_title, clean_desc, custom_criteria)
+    requirements = extract_task_requirements(clean_desc, custom_criteria, compiled_criteria, teacher_files_text)
+
+    # Визначення Deliverable та очікуваного формату за типом завдання
+    format_map = {
+        'presentation': ('презентація (PPTX, PPT, ODP або посилання)', 'Готова презентація за темою'),
+        'programming': ('програмний код / файл програми (.py, .cpp, .sb3 тощо)', 'Працездатна програма з вихідним кодом'),
+        'table': ('електронна таблиця (XLSX, XLS, ODS, Google Таблиці)', 'Створена електронна таблиця з даними та розрахунками'),
+        'database': ('файл бази даних (ACCDB, MDB, SQL) або схема БД', 'Спроєктована база даних зі структурою та таблицями'),
+        'diagram': ('діаграма, схема або графік (зображення чи документ)', 'Побудована діаграма або графічне представлення даних'),
+        'creative': ('графічний файл / творча робота (PNG, JPG, PDF або відео)', 'Виконана творча робота'),
+        'project': ('матеріали проєкту (презентація, документ або архів)', 'Завершений проєкт з необхідними компонентами'),
+        'research': ('повідомлення / звіт про дослідження (документ або презентація)', 'Звіт про самостійно опрацьовану інформацію'),
+        'document': ('текстовий документ (DOCX, PDF або текст)', 'Оформлений текстовий документ'),
+        'calculation': ('розв\'язання задач із розрахунками (документ чи фото зошита)', 'Правильно розв\'язані задачі з формулами та відповідями'),
+        'question_answer': ('письмові відповіді на запитання (у зошиті чи документі)', 'Відповіді на всі поставлені запитання'),
+        'practical': ('файл практичної роботи відповідно до інструкції', 'Виконана практична робота за кроками інструкції'),
+        'other': ('файл або документ відповідно до вказівок', 'Виконане навчальне завдання'),
+    }
+
+    expected_format, default_deliverable_desc = format_map.get(task_type, format_map['other'])
+
+    # Опис того, що учень має зробити
+    what_student_must_do = clean_desc or clean_title or default_deliverable_desc
+    expected_result = default_deliverable_desc
+
+    # Формування обов'язкових компонентів deliverable
+    deliverable_components = []
+    for req in requirements:
+        if any(kw in req.lower() for kw in ['слайд', 'титульн', 'висновок', 'джерел', 'ілюстрац', 'таблиц', 'діаграм', 'pk', 'fk', 'код', 'формул']):
+            deliverable_components.append(req)
+
+    if not deliverable_components:
+        if task_type == 'presentation':
+            deliverable_components = ['титульний слайд', 'змістовні слайди за темою', 'охайне візуальне оформлення']
+        elif task_type == 'programming':
+            deliverable_components = ['вихідний код програми', 'коректне виконання поставленої задачі']
+        elif task_type == 'table':
+            deliverable_components = ['структура таблиці', 'внесені дані', 'коректні формули та розрахунки']
+        elif task_type == 'question_answer':
+            deliverable_components = ['відповіді на поставлені запитання']
+        else:
+            deliverable_components = ['виконання основних практичних дій за темою']
+
+    deliverable = {
+        'description': clean_title if clean_title else default_deliverable_desc,
+        'type': task_type,
+        'format': expected_format,
+        'required_components': deliverable_components
+    }
+
+    # Спосіб перевірки (evaluation_method)
+    evaluation_method = {
+        'check_content': True,
+        'check_structure': True,
+        'check_format': True,
+        'check_answers': bool(questions_expected),
+        'check_functionality': task_type in ['programming', 'table', 'database', 'practical', 'project'],
+        'check_code': task_type == 'programming',
+        'check_calculations': task_type in ['table', 'calculation'],
+        'check_data': task_type in ['table', 'database'],
+    }
+
+    # Дії учня (required_actions)
+    required_actions = []
+    if task_type == 'presentation':
+        required_actions = [
+            'Ознайомитися з темою та підготувати інформацію',
+            'Створити слайди в PowerPoint, Google Презентаціях або Canva',
+            'Оформити зміст, додати ілюстрації та необхідні елементи',
+            'Зберегти файл презентації та надіслати на перевірку'
+        ]
+    elif task_type == 'programming':
+        required_actions = [
+            'Ознайомитися з умовою задачі та скласти алгоритм',
+            'Написати програмний код',
+            'Протестувати роботу програми на вхідних даних',
+            'Зберегти код програми (.py) та здати роботу'
+        ]
+    elif task_type == 'table':
+        required_actions = [
+            'Створити таблицю в табличному процесорі',
+            'Заповнити таблицю вхідними даними',
+            'Застосувати необхідні формули для обчислень',
+            'Зберегти файл таблиці та прикріпити до здачі'
+        ]
+    elif task_type == 'question_answer':
+        required_actions = [
+            'Прочитати запитання та знайти відповіді у навчальних матеріалах',
+            'Записати чіткі відповіді на кожне запитання',
+            'Перевірити повноту відповідей',
+            'Надіслати роботу на перевірку'
+        ]
+    else:
+        required_actions = [
+            'Опрацювати інструкцію вчителя',
+            'Виконати практичні дії за планом',
+            'Перевірити якість отриманого результату',
+            'Зберегти та надіслати готову роботу'
+        ]
+
+    # Виявлення прикріплених матеріалів, які НЕ є завданнями (теорія, приклади, контрольні запитання)
+    relevant_teacher_material = []
+    if raw_found_questions and not questions_expected:
+        relevant_teacher_material.append(
+            f"У прикріплених матеріалах виявлено {len(raw_found_questions)} запитань/вправ, які слугують навчальним контекстом уроку і НЕ є обов'язковими завданнями для здачі."
+        )
+
+    return {
+        'task_type': task_type,
+        'what_student_must_do': what_student_must_do,
+        'expected_result': expected_result,
+        'deliverable': deliverable,
+        'expected_format': expected_format,
+        'questions_expected': questions_expected,
+        'required_actions': required_actions,
+        'requirements': requirements,
+        'criteria': [c['name'] for c in (compiled_criteria or []) if isinstance(c, dict)],
+        'relevant_teacher_material': relevant_teacher_material,
+        'evaluation_method': evaluation_method,
+    }
+
+
 def resolve_assignment_scope(
     assignment_title: str = "",
     assignment_desc: str = "",
@@ -3113,10 +3467,40 @@ def resolve_assignment_scope(
     teacher_specific_task_nums = parse_teacher_specific_task_numbers(desc)
     explicit_count = detect_expected_task_count(desc)
 
+    # 4. Виявлення матеріалів уроку для пошуку завдань
+    raw_found_questions = []
+    if teacher_files_content:
+        raw_found_questions = extract_task_questions(all_files_text)
+
+    # 5. Перевірка, чи в описі прямо міститься список завдань («1. ... 2. ...»)
+    desc_questions = extract_task_questions(desc, explicit_count=explicit_count)
+
+    # 6. Динамічна інтерпретація завдання (ТИП ЗАВДАННЯ, DELIVERABLE, КРИТЕРІЇ ТА QUESTIONS_EXPECTED)
+    task_interpretation = interpret_assignment_task(
+        title=title,
+        desc=desc,
+        custom_criteria=custom_criteria,
+        teacher_files_text=all_files_text,
+        compiled_criteria=compiled_criteria,
+        raw_found_questions=raw_found_questions,
+    )
+    task_type = task_interpretation['task_type']
+    questions_expected = task_interpretation['questions_expected']
+    deliverable = task_interpretation['deliverable']
+    evaluation_method = task_interpretation['evaluation_method']
+
     def _build_evaluation_plan(assigned_list, ignored_list, scope_src, assignment_type="standard", specific_nums=None, ambiguities=None):
         reqs = list(set(file_criteria_extracted.get('format_requirements', []) + primary_criteria_extracted.get('format_requirements', [])))
+        for r in task_interpretation.get('requirements', []):
+            if r not in reqs:
+                reqs.append(r)
         return {
             'assignment_type': assignment_type,
+            'task_type': task_type,
+            'task_interpretation': task_interpretation,
+            'deliverable': deliverable,
+            'evaluation_method': evaluation_method,
+            'questions_expected': questions_expected,
             'assignment_description': desc or title or "Навчальне завдання",
             'task_summary': desc or title or "Навчальне завдання",
             'scope_source': scope_src,
@@ -3136,7 +3520,7 @@ def resolve_assignment_scope(
             'ambiguities_or_conflicts': ambiguities or []
         }
 
-    # 4. Перевірка конкретного слайду або сторінки (наприклад: «зі слайду 15», «на слайді 15»)
+    # 7. Перевірка конкретного слайду або сторінки (наприклад: «зі слайду 15», «на слайді 15»)
     target_slide_num = None
     slide_m = re.search(r'(?:зі?\s+|на\s+)?(?:слайд[уаі]|стор(?:інц[іях]|\.)?)\s*(\d+)', desc_lower)
     if slide_m:
@@ -3144,14 +3528,6 @@ def resolve_assignment_scope(
             target_slide_num = int(slide_m.group(1))
         except (ValueError, TypeError):
             pass
-
-    # 5. Виявлення матеріалів уроку для пошуку завдань
-    raw_found_questions = []
-    if teacher_files_content:
-        raw_found_questions = extract_task_questions(all_files_text)
-
-    # 6. Перевірка, чи в описі прямо міститься список завдань («1. ... 2. ...»)
-    desc_questions = extract_task_questions(desc, explicit_count=explicit_count)
 
     # ── СЦЕНАРІЙ А: Вчитель вказав конкретний слайд (наприклад: Слайд 15) ──
     if target_slide_num and not teacher_specific_task_nums:
@@ -3195,7 +3571,12 @@ def resolve_assignment_scope(
             'points_distribution': eval_plan['points_distribution'],
             'teacher_specific_task_nums': [],
             'task_questions': [clean_slide_task[:300]],
-            'clean_instruction_text': desc or f"Завдання зі слайду {target_slide_num}"
+            'clean_instruction_text': desc or f"Завдання зі слайду {target_slide_num}",
+            'task_type': task_type,
+            'task_interpretation': task_interpretation,
+            'deliverable': deliverable,
+            'evaluation_method': evaluation_method,
+            'questions_expected': questions_expected,
         }
 
     # ── СЦЕНАРІЙ Б: Вчитель вказав конкретні номери («Виконати вправу 2» або «Завдання 1, 2 та 3») ──
@@ -3244,7 +3625,12 @@ def resolve_assignment_scope(
             'points_distribution': eval_plan['points_distribution'],
             'teacher_specific_task_nums': teacher_specific_task_nums,
             'task_questions': scoped_questions,
-            'clean_instruction_text': desc
+            'clean_instruction_text': desc,
+            'task_type': task_type,
+            'task_interpretation': task_interpretation,
+            'deliverable': deliverable,
+            'evaluation_method': evaluation_method,
+            'questions_expected': questions_expected,
         }
 
     # ── СЦЕНАРІЙ В-0: Одне комплексне завдання / практична / лабораторна робота / проєкт ──
@@ -3287,7 +3673,12 @@ def resolve_assignment_scope(
             'points_distribution': eval_plan['points_distribution'],
             'teacher_specific_task_nums': [],
             'task_questions': [],
-            'clean_instruction_text': desc
+            'clean_instruction_text': desc,
+            'task_type': task_type,
+            'task_interpretation': task_interpretation,
+            'deliverable': deliverable,
+            'evaluation_method': evaluation_method,
+            'questions_expected': questions_expected,
         }
 
     # ── СЦЕНАРІЙ В: Вчитель вказав конкретний перелік завдань безпосередньо в описі ──
@@ -3322,7 +3713,12 @@ def resolve_assignment_scope(
             'points_distribution': eval_plan['points_distribution'],
             'teacher_specific_task_nums': list(range(1, len(desc_questions) + 1)),
             'task_questions': desc_questions,
-            'clean_instruction_text': desc
+            'clean_instruction_text': desc,
+            'task_type': task_type,
+            'task_interpretation': task_interpretation,
+            'deliverable': deliverable,
+            'evaluation_method': evaluation_method,
+            'questions_expected': questions_expected,
         }
 
     # ── СЦЕНАРІЙ Г: Вчитель явно зазначив кількість завдань (наприклад: «виконати всі 3 завдання») ──
@@ -3375,7 +3771,12 @@ def resolve_assignment_scope(
             'points_distribution': eval_plan['points_distribution'],
             'teacher_specific_task_nums': list(range(1, explicit_count + 1)),
             'task_questions': source_qs,
-            'clean_instruction_text': desc
+            'clean_instruction_text': desc,
+            'task_type': task_type,
+            'task_interpretation': task_interpretation,
+            'deliverable': deliverable,
+            'evaluation_method': evaluation_method,
+            'questions_expected': questions_expected,
         }
 
     # ── СЦЕНАРІЙ Ґ: Основний файл завдання (Пріоритет 3) з явною вказівкою ──
@@ -3407,7 +3808,12 @@ def resolve_assignment_scope(
             'points_distribution': eval_plan['points_distribution'],
             'teacher_specific_task_nums': list(range(1, len(primary_questions) + 1)),
             'task_questions': primary_questions,
-            'clean_instruction_text': desc or "Завдання з основного файлу"
+            'clean_instruction_text': desc or "Завдання з основного файлу",
+            'task_type': task_type,
+            'task_interpretation': task_interpretation,
+            'deliverable': deliverable,
+            'evaluation_method': evaluation_method,
+            'questions_expected': questions_expected,
         }
 
     # ── СЦЕНАРІЙ Д: Одне комплексне завдання або ПРАВИЛО НЕВИЗНАЧЕНОСТІ ──
@@ -3440,7 +3846,12 @@ def resolve_assignment_scope(
         'points_distribution': eval_plan['points_distribution'],
         'teacher_specific_task_nums': [],
         'task_questions': [],
-        'clean_instruction_text': task_label
+        'clean_instruction_text': task_label,
+        'task_type': task_type,
+        'task_interpretation': task_interpretation,
+        'deliverable': deliverable,
+        'evaluation_method': evaluation_method,
+        'questions_expected': questions_expected,
     }
 
 
@@ -4640,6 +5051,11 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
     is_single_complex_task = scope.get('is_single_complex_task', False)
     assigned_task_count = scope.get('assigned_task_count', 1)
     assigned_tasks_list = scope.get('assigned_tasks', [])
+    task_interpretation = scope.get('task_interpretation') or {}
+    task_type = scope.get('task_type') or 'other'
+    questions_expected = scope.get('questions_expected', False)
+    deliverable = scope.get('deliverable') or {}
+    evaluation_method = scope.get('evaluation_method') or {}
 
     student_combined_text = "\n".join(text_parts) if text_parts else ""
 
@@ -4681,6 +5097,39 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
             f"Кількість визначених обов'язкових завдань: assigned_task_count = {assigned_task_count}.",
             "Оцінюй тільки ті завдання, які прямо задав учитель. Не створюй нових завдань із випадкових прикладів чи вправ у файлах!",
             f"У полі 'tasks_total_count' повертай {assigned_task_count}, та заповни 'task_resolution'.",
+        ])
+
+    # ── БЛОК ТИПУ ЗАВДАННЯ ТА DELIVERABLE ──
+    scope_block_lines.extend([
+        "",
+        "🎯 ТИП ЗАВДАННЯ ТА ОЧІКУВАНИЙ РЕЗУЛЬТАТ (DELIVERABLE):",
+        f"- Визначений тип завдання: {task_type}",
+        f"- Що учень мав зробити: {task_interpretation.get('what_student_must_do', assignment_desc or assignment_title)}",
+        f"- Очікуваний результат (deliverable): {deliverable.get('description', '')} [формат: {deliverable.get('format', '')}]",
+        f"- Чи очікуються текстові відповіді на запитання (questions_expected): {'ТАК (модель питання-відповідь)' if questions_expected else 'НІ (створення файлу/продукту)'}",
+    ])
+    if deliverable.get('required_components'):
+        comps_str = ", ".join(deliverable['required_components'])
+        scope_block_lines.append(f"- Обов'язкові компоненти: {comps_str}")
+
+    if not questions_expected:
+        scope_block_lines.extend([
+            "",
+            "⚠️ СУВОРА ЗАБОРОНА МОДЕЛІ «ПИТАННЯ-ВІДПОВІДЬ» ДЛЯ ЦЬОГО ЗАВДАННЯ:",
+            "1. Завдання НЕ передбачає відповідей на запитання. Учень створює практичний продукт/файл!",
+            "2. 🚫 КАТЕГОРИЧНО ЗАБОРОНЕНО вимагати текстові відповіді на запитання, шукати питання у файлах чи знижувати оцінку через відсутність відповідей!",
+            "3. 🚫 КАТЕГОРИЧНО ЗАБОРОНЕНО писати у 'weaknesses', 'summary' чи 'feedback_comment':",
+            "   - «відсутні відповіді на запитання» / «не надано відповідей»;",
+            "   - «рекомендується дотримуватися формату питання-відповідь»;",
+            "   - «не виконано питання зі слайдів / PDF».",
+            "4. Якщо у матеріалах уроку є питання для обговорення чи самоперевірки, вони слугують навчальним контекстом уроку і НЕ є обов'язковими вимогами до учня.",
+            "5. ✅ Оцінюй БЕЗПОСЕРЕДНЬО якість, зміст, структуру, розрахунки, код чи висновки створеного результату (deliverable).",
+        ])
+    else:
+        scope_block_lines.extend([
+            "",
+            "📝 МОДЕЛЬ «ПИТАННЯ-ВІДПОВІДЬ» ДЛЯ ЦЬОГО ЗАВДАННЯ:",
+            "Вчитель вимагає надати відповіді на запитання. Перевір правильність та повноту кожної відповіді учня.",
         ])
 
     if custom_criteria:
@@ -4741,13 +5190,19 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
             )) for f in submission.files.all()
         )
 
-    qa_mapping_block, questions_omitted, answered_count, total_questions = build_question_answer_mapping(
-        task_questions, student_combined_text, is_practical_project=is_file_project
-    )
+    qa_mapping_block = None
+    questions_omitted = False
+    answered_count = 0
+    total_questions = 0
+
+    if questions_expected and task_questions:
+        qa_mapping_block, questions_omitted, answered_count, total_questions = build_question_answer_mapping(
+            task_questions, student_combined_text, is_practical_project=is_file_project
+        )
 
     if qa_mapping_block:
         prompt_lines.append(qa_mapping_block)
-    elif task_questions:
+    elif questions_expected and task_questions:
         prompt_lines.append("═══════════════════════════════════════════════════════════════════")
         prompt_lines.append("📋 КОНКРЕТНІ ЗАПИТАННЯ / ВПРАВИ ІЗ ЗАВДАННЯ ВЧИТЕЛЯ ДЛЯ ПІДСТАНОВКИ ВІДПОВІДЕЙ:")
         for idx, q in enumerate(task_questions, 1):
@@ -4757,13 +5212,12 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
             "- Учень міг написати на фото зошита чи у файлі ТІЛЬКИ ВІДПОВІДІ (наприклад, номери «1. ...», «2. ...») БЕЗ переписування тексту самих запитань!\n"
             "- ШІ ЗОБОВ'ЯЗАНИЙ підставити знайдені на зображенні/у файлі відповіді учня до відповідних запитань вище та оцінити їхню правильність.\n"
             "- Навіть якщо учень відповів лише на 1-2 запитання, ШІ ЗОБОВ'ЯЗАНИЙ зарахувати їх. КАТЕГОРИЧНО ЗАБОРОНЕНО заявляти «жодної відповіді не дано»!\n"
-            + ("- Якщо учень не переписав запитання у текстовій відповіді: обов'язково порадь у 'weaknesses' та 'feedback_comment' дотримуватися формату «питання-відповідь»." if not is_file_project else "- Для практичних робіт у файлах (бази даних, код програм) вимога текстового формату «питання-відповідь» НЕ застосовується.")
+            "- Якщо учень не переписав запитання у текстовій відповіді: порадь у 'weaknesses' та 'feedback_comment' дотримуватися формату «питання-відповідь»."
         )
         prompt_lines.append("═══════════════════════════════════════════════════════════════════\n")
 
-
     prompt_lines.append("ВИКОНАНА РОБОТА УЧНЯ ДЛЯ ОЦІНЮВАННЯ:")
-    if questions_omitted and not is_file_project:
+    if questions_expected and questions_omitted and not is_file_project:
         prompt_lines.append(
             "⚠️ ЗВЕРНИ УВАГУ: Учень надав відповіді без переписування тексту самих запитань. "
             "Оціни повноту та зміст відповідей відповідно до зіставлених вище запитань вчителя, але обов'язково зазнач рекомендацію щодо формату «питання-відповідь»."
@@ -5100,7 +5554,16 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                     eval_plan = result_json.get('evaluation_plan')
                     if not isinstance(eval_plan, dict) or not eval_plan.get('criteria'):
                         eval_plan = scope.get('evaluation_plan', {})
+                    scope_plan = scope.get('evaluation_plan', {})
+                    if isinstance(scope_plan, dict):
+                        for k in ['task_type', 'task_interpretation', 'deliverable', 'evaluation_method', 'questions_expected']:
+                            if k in scope_plan and (k not in eval_plan or not eval_plan.get(k)):
+                                eval_plan[k] = scope_plan[k]
                     result_json['evaluation_plan'] = eval_plan
+                    result_json.setdefault('task_interpretation', task_interpretation)
+                    result_json.setdefault('task_type', task_type)
+                    result_json.setdefault('deliverable', deliverable)
+                    result_json.setdefault('questions_expected', questions_expected)
 
                     # Нормалізуємо submission_evidence
                     sub_evidence = result_json.get('submission_evidence')
@@ -5570,8 +6033,9 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                             weaknesses = [w for w in weaknesses if not re.search(oph, w, flags=re.IGNORECASE)]
 
                     # Обов'язкова порада щодо оформлення «питання-відповідь», якщо учень здав лише відповіді без запитань
-                    # НЕ додавати для практичних комп'ютерних файлів (БД Access, код, електронні таблиці тощо)
-                    if not is_rejected_submission and not is_file_project and (questions_omitted or (answered_count > 0 and check_student_omitted_questions(task_questions, student_raw_text))):
+                    # Застосовується ТІЛЬКИ коли в завданні очікуються відповіді на запитання (questions_expected = True)
+                    # НЕ додавати для практичних робіт, презентацій, коду, таблиць тощо
+                    if questions_expected and not is_rejected_submission and not is_file_project and (questions_omitted or (answered_count > 0 and check_student_omitted_questions(task_questions, student_raw_text))):
                         format_advice_phrase = "Порада щодо оформлення: ви надали відповіді без самих запитань. Будь ласка, записуйте самі запитання разом із відповідями (формат «питання-відповідь») або чітко вказуйте номери запитань, щоб робота була структурованою і зрозумілою."
                         has_advice_in_weaknesses = any(kw in w.lower() for w in weaknesses for kw in ['питання-відповідь', 'без запитань', 'запитання разом'])
                         if not has_advice_in_weaknesses:
@@ -5580,6 +6044,23 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                         has_advice_in_fb = any(kw in feedback_comment.lower() for kw in ['питання-відповідь', 'без запитань', 'запитання разом'])
                         if not has_advice_in_fb:
                             feedback_comment = (feedback_comment.strip() + f"\n\n💡 {format_advice_phrase}").strip()
+
+                    # ── Захист від галюцинацій щодо моделі «питання-відповідь», коли запитання НЕ очікувалися ──
+                    if not questions_expected and not is_rejected_submission:
+                        qa_hallucination_patterns = [
+                            r'\b(?:немає|відсутні|не\s+надано)\s+відповідей\s+на\s+(?:запитан|питан)[а-яіїє]*\b',
+                            r'\b(?:не\s+відповів|не\s+відповіла|не\s+відповіли)\s+на\s+(?:запитан|питан)[а-яіїє]*\b',
+                            r'\bдотримуватис[яь]\s+формату\s*«?питання-відповідь»?\b',
+                            r'\bформат[уі]?\s*«?питання-відповідь»?\b',
+                            r'\bпитання\s+із\s+слайд\w*\s+не\s+розглянут[а-яіїє]*\b',
+                            r'\bконтрольні\s+запитання\s+не\s+виконан[а-яіїє]*\b',
+                        ]
+                        for pat in qa_hallucination_patterns:
+                            weaknesses = [w for w in weaknesses if not re.search(pat, w, flags=re.IGNORECASE)]
+                            if re.search(pat, summary, flags=re.IGNORECASE):
+                                summary = re.sub(pat, 'роботу виконано за темою завдання', summary, flags=re.IGNORECASE)
+                            if re.search(pat, feedback_comment, flags=re.IGNORECASE):
+                                feedback_comment = re.sub(pat, 'роботу виконано за темою', feedback_comment, flags=re.IGNORECASE)
 
                     # ── Захист від помилкового твердження «діаграма відсутня» при наявності діаграм у роботі ──
                     has_charts_in_work = False
@@ -5707,15 +6188,18 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                         feedback_comment = re.sub(r'([^\.\n]*?(?:крилатого\s+вислову|онлайн[- ]словник)[^\.\n]*?\.)', '', feedback_comment, flags=re.IGNORECASE)
                         summary = re.sub(r'([^\.\n]*?(?:крилатого\s+вислову|онлайн[- ]словник)[^\.\n]*?\.)', '', summary, flags=re.IGNORECASE)
 
-                    # Фінальна фільтрація помилкових порад щодо формату «питання-відповідь» для практичних файлів (БД, коду)
-                    if is_file_project:
+                    # Фінальна фільтрація помилкових порад та зауважень щодо формату «питання-відповідь» або відсутності відповідей
+                    if not questions_expected or is_file_project:
                         weaknesses = [w for w in weaknesses if not any(kw in str(w).lower() for kw in [
                             'питання-відповідь', 'відсутні запитання', 'без самих запитань',
-                            'без пояснювального документа', 'вигляді файлу бд без', 'подана у вигляді файлу'
+                            'без пояснювального документа', 'вигляді файлу бд без', 'подана у вигляді файлу',
+                            'немає відповідей', 'немає відповіді', 'відсутні відповіді', 'не надано відповідей',
+                            'відсутність відповідей', 'не відповів на запитання', 'не відповів на питання',
+                            'відповіді на контрольні'
                         ])]
                         feedback_comment = re.sub(r'(?:порада\s+щодо\s+оформлення:[^\.\n]*?\.)', '', feedback_comment, flags=re.IGNORECASE)
-                        feedback_comment = re.sub(r'([^\.\n]*?(?:питання-відповідь|без\s+самих\s+запитань|без\s+пояснювального\s+документа)[^\.\n]*?\.)', '', feedback_comment, flags=re.IGNORECASE)
-                        summary = re.sub(r'([^\.\n]*?(?:питання-відповідь|без\s+самих\s+запитань|без\s+пояснювального\s+документа)[^\.\n]*?\.)', '', summary, flags=re.IGNORECASE)
+                        feedback_comment = re.sub(r'([^\.\n]*?(?:питання-відповідь|без\s+самих\s+запитань|без\s+пояснювального\s+документа|немає\s+відповідей|відсутні\s+відповіді|не\s+надано\s+відповідей|відсутність\s+відповідей|відповідей\s+на\s+контрольні)[^\.\n]*?\.)', '', feedback_comment, flags=re.IGNORECASE)
+                        summary = re.sub(r'([^\.\n]*?(?:питання-відповідь|без\s+самих\s+запитань|без\s+пояснювального\s+документа|немає\s+відповідей|відсутні\s+відповіді|не\s+надано\s+відповідей|відсутність\s+відповідей|відповідей\s+на\s+контрольні)[^\.\n]*?\.)', '', summary, flags=re.IGNORECASE)
 
                     # Очищення від подвійних пробілів та порожніх рядків після видалення
                     feedback_comment = re.sub(r'\n{3,}', '\n\n', feedback_comment).strip()
@@ -5841,6 +6325,10 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                         'feedback': combined_feedback,
                         'clean_feedback': clean_student_feedback,
                         'raw_json': result_json,
+                        'task_type': task_type,
+                        'task_interpretation': result_json.get('task_interpretation') or task_interpretation,
+                        'deliverable': deliverable,
+                        'questions_expected': questions_expected,
                         'model_used': model_name,
                         'fallback_activated': fallback_happened
                     }
@@ -5934,6 +6422,10 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                         'unclear_task': unclear_task,
                         'format_warning': "Не зрозуміло, яке саме завдання виконане. Будь ласка, вкажіть номер завдання у коментарі до здачі та надішліть роботу повторно." if unclear_task else "",
                         'summary': clean_feedback,
+                        'task_type': task_type,
+                        'task_interpretation': task_interpretation,
+                        'deliverable': deliverable,
+                        'questions_expected': questions_expected,
                         'model_used': model_name
                     }
 
@@ -6232,73 +6724,220 @@ def generate_age_appropriate_student_guide(
     min_grade: int,
     assignment_title: str,
     assignment_desc: str,
-    tasks_list: list[dict],
-    is_single_task: bool = False
+    tasks_list: list[dict] = None,
+    is_single_task: bool = False,
+    task_interpretation: dict = None,
 ) -> str:
     """
     Генерує доступне, структуроване та покрокове роз'яснення для учнів,
-    строго адаптуючи стиль мови, складність інструкцій та тон під вік дитини.
-    Пояснює крок за кроком (Крок 1, Крок 2, Крок 3, Крок 4):
-    що відкрити, що саме зробити практично, як перевірити та що надіслати.
+    строго адаптуючи стиль мови, складність інструкцій та тон під вік дитини:
+    - «Коротко: що потрібно зробити»
+    - «Покроковий план виконання:» (Крок 1, Крок 2, Крок 3, Крок 4)
+    - «Що має бути в результаті:»
+    - «Перед здачею перевір:»
+    Не вигадує неіснуючих вимог і базується на реальному deliverable та вимогах вчителя.
     """
-    title_clean = strip_html_tags(assignment_title or "Практичне завдання")
+    title_clean = strip_html_tags(assignment_title or "Практичне завдання").strip()
+    desc_clean = strip_html_tags(assignment_desc or "").strip()
 
-    # Формуємо конкретну дію для Кроку 2
+    # Отримуємо інтерпретацію завдання
+    if not task_interpretation:
+        task_interpretation = interpret_assignment_task(
+            title=title_clean,
+            desc=desc_clean
+        )
+
+    task_type = task_interpretation.get('task_type') or 'practical'
+    deliverable = task_interpretation.get('deliverable') or {}
+    requirements = task_interpretation.get('requirements') or []
+    questions_expected = task_interpretation.get('questions_expected', False)
+
+    # 1. Заголовок відповідності віку (зі збереженням маркерів для повної сумісності з тестами)
+    if min_grade <= 4:
+        age_header = f"Привіт! Ось прості кроки, як легко виконати це завдання ({grade_str}):"
+    elif min_grade <= 6:
+        age_header = f"Покрокова інструкція для учнів ({grade_str}, вік: {age_str}):"
+    elif min_grade <= 9:
+        age_header = f"Алгоритм виконання завдання для учнів ({grade_str}, {age_str}):"
+    else:
+        age_header = f"Покроковий план виконання для старшокласників ({grade_str}, {age_str}):"
+
+    # 2. Блок «Коротко: що потрібно зробити»
+    short_summaries = {
+        'presentation': f"Створити презентацію на тему «{title_clean}».",
+        'programming': f"Написати та протестувати програму на Python за умовою завдання «{title_clean}».",
+        'table': f"Створити та заповнити електронну таблицю за темою «{title_clean}».",
+        'database': f"Спроєктувати базу даних та створити необхідні таблиці за темою «{title_clean}».",
+        'diagram': f"Побудувати діаграму або схему за даними завдання «{title_clean}».",
+        'creative': f"Створити творчу роботу за темою «{title_clean}».",
+        'project': f"Виконати проєкт за темою «{title_clean}».",
+        'calculation': f"Розв'язати поставлені задачі з обчисленнями за темою «{title_clean}».",
+        'document': f"Підготувати оформлений текстовий документ за темою «{title_clean}».",
+        'research': f"Знайти та опрацювати інформацію за темою «{title_clean}».",
+        'question_answer': f"Дати чіткі відповіді на поставлені запитання за темою «{title_clean}».",
+        'practical': f"Виконати практичну роботу за інструкцією до теми «{title_clean}».",
+        'other': f"Виконати навчальне завдання «{title_clean}» згідно з інструкцією вчителя."
+    }
+    short_summary = short_summaries.get(task_type, short_summaries['other'])
+
+    # Формуємо дію для Кроку 2 з урахуванням переданих tasks_list
     if tasks_list and len(tasks_list) == 1:
         t0 = tasks_list[0]
-        t_title = strip_html_tags(t0.get('title') or '')
         t_actions = strip_html_tags(t0.get('expected_actions') or '')
         if t_actions and len(t_actions) > 5 and not t_actions.lower().startswith('виконати роботу'):
             action_desc = t_actions
-        elif t_title:
-            action_desc = f"Виконай завдання «{t_title}» згідно з інструкцією вчителя"
+        elif t0.get('title'):
+            action_desc = f"Виконай завдання «{strip_html_tags(t0['title'])}»"
         else:
-            action_desc = f"Виконай практичне завдання «{title_clean}» відповідно до умов"
+            action_desc = short_summary
     elif tasks_list and len(tasks_list) > 1:
         task_names = [strip_html_tags(t.get('title') or f"Завдання {t.get('num', idx)}") for idx, t in enumerate(tasks_list, 1)]
-        action_desc = f"Послідовно виконай обов'язкові завдання: {', '.join(task_names)}"
-    elif is_single_task:
-        action_desc = f"Виконай комплексне практичне завдання «{title_clean}» згідно з інструкцією вчителя"
+        action_desc = f"Послідовно виконай завдання: {', '.join(task_names)}"
     else:
-        action_desc = f"Опрацюй завдання «{title_clean}» за матеріалами уроку"
+        action_desc = short_summary
 
-    # 1. Початкова школа (1–4 класи, 6–10 років)
-    if min_grade <= 4:
-        guide = (
-            f"Привіт! Ось прості кроки, як легко виконати це завдання ({grade_str}):\n"
-            f"• Крок 1 (Подивись): Уважно роздивись завдання «{title_clean}» та переглянь матеріали або малюнки від вчителя.\n"
-            f"• Крок 2 (Зроби): {action_desc}. Роби все не поспішаючи, крок за кроком.\n"
-            f"• Крок 3 (Перевір): Подивись на свою роботу: чи все виконано охайно, гарно і без пропусків?\n"
-            f"• Крок 4 (Здай вчителю): Зроби чітке фото зошита або збережи свій файл і надішли на перевірку. Ти обов'язково впораєшся! 🌟"
-        )
-    # 2. Адаптаційний цикл (5–6 класи НУШ, 10–12 років)
-    elif min_grade <= 6:
-        guide = (
-            f"Покрокова інструкція для учнів ({grade_str}, вік: {age_str}):\n"
-            f"• Крок 1 (Підготовка): Відкрий тему «{title_clean}» та уважно прочитай вказівки вчителя і матеріали уроку.\n"
-            f"• Крок 2 (Виконання): {action_desc}. Пиши розбірливо, уважно записуй відповіді та обов'язково нумеруй кожний пункт.\n"
-            f"• Крок 3 (Самоперевірка): Переконайся, що виконано всі вимоги завдання, а створений файл або запис у зошиті збережено охайно.\n"
-            f"• Крок 4 (Здача на платформу): Прикріпи свій файл або фото виконаної роботи та натисни кнопку здачі на перевірку."
-        )
-    # 3. Базова школа (7–9 класи, 12–15 років)
-    elif min_grade <= 9:
-        guide = (
-            f"Алгоритм виконання завдання для учнів ({grade_str}, {age_str}):\n"
-            f"• Крок 1 (Аналіз завдання): Опрацюй теоретичний матеріал до теми «{title_clean}» та виділи ключові вимоги вчителя.\n"
-            f"• Крок 2 (Практична робота): {action_desc}. Дотримуйся логіки виконання, структуруй свої розв'язки або код.\n"
-            f"• Крок 3 (Контроль якості): Перевір повноту відповідей, коректність розрахунків чи працездатність створеного файлу.\n"
-            f"• Крок 4 (Здача результату): Збережи роботу під своїм прізвищем, завантаж підсумковий файл чи документ на платформу."
-        )
-    # 4. Старша профільна школа (10–11 класи, 15–17 років)
+    # 3. Покроковий план виконання (Крок 1..4) залежно від типу завдання та віку учнів
+    if task_type == 'presentation':
+        if min_grade <= 4:
+            s1 = f"• Крок 1 (Подивись): Уважно роздивись тему «{title_clean}» та підготуй малюнки або текст."
+            s2 = f"• Крок 2 (Зроби): {action_desc}. Додай слайди з текстом та ілюстраціями."
+            s3 = f"• Крок 3 (Перевір): Подивись: чи всі слайди охайні і красиві?"
+            s4 = f"• Крок 4 (Здай вчителю): Збережи файл презентації і відправ на перевірку. Ти обов'язково впораєшся! 🌟"
+        elif min_grade <= 6:
+            s1 = f"• Крок 1 (Підготовка): Відкрий тему «{title_clean}» та дізнайся основну інформацію."
+            s2 = f"• Крок 2 (Створення): {action_desc}. Створи презентацію, розмісти інформацію по слайдах та додай потрібні зображення."
+            s3 = f"• Крок 3 (Оформлення): Перевір охайність тексту, наявність титульного слайда та висновку."
+            s4 = f"• Крок 4 (Здача): Збережи файл презентації (.pptx або посилання) та прикріпи до відповіді."
+        elif min_grade <= 9:
+            s1 = f"• Крок 1 (Збір матеріалів): Опрацюй тему «{title_clean}» та відбери ключові факти й ілюстрації."
+            s2 = f"• Крок 2 (Розробка слайдів): {action_desc}. Створи структуровану презентацію з єдиним стилем оформлення."
+            s3 = f"• Крок 3 (Висновки та джерела): Сформулюй підсумковий висновок і додай список використаних джерел."
+            s4 = f"• Крок 4 (Збереження та здача): Збережи роботу під своїм прізвищем та завантаж файл на платформу."
+        else:
+            s1 = f"• Крок 1 (Концепція та структура): Проаналізуй тему «{title_clean}», визнач логіку подання та критерії якості."
+            s2 = f"• Крок 2 (Створення презентації): {action_desc}. Реалізуй змістовні слайди, схеми та візуалізацію даних."
+            s3 = f"• Крок 3 (Аналітика та висновки): Перевір обґрунтованість тез, наявність підсумкових висновків і джерел."
+            s4 = f"• Крок 4 (Експорт та здача): Сформуй фінальну версію презентації та надішли на перевірку."
+
+    elif task_type == 'programming':
+        if min_grade <= 6:
+            s1 = f"• Крок 1 (Умова): Уважно прочитай задачу «{title_clean}» та зрозумій, що має робити програма."
+            s2 = f"• Крок 2 (Код програми): {action_desc}. Запусти середовище програмування та напиши код."
+            s3 = f"• Крок 3 (Перевірка запуску): Запусти програму і перевір, як вона відповідає на введені дані."
+            s4 = f"• Крок 4 (Здача файлу): Збережи файл програми (.py) та прикріпи до відповіді."
+        elif min_grade <= 9:
+            s1 = f"• Крок 1 (Алгоритм): Проаналізуй умову «{title_clean}», визнач змінні та алгоритм розв'язку."
+            s2 = f"• Крок 2 (Реалізація): {action_desc}. Напиши програмний код з дотриманням синтаксису мови."
+            s3 = f"• Крок 3 (Тестування): Протестуй роботу програми на різних вхідних даних та виправ можливі помилки."
+            s4 = f"• Крок 4 (Здача): Збережи вихідний код програми (.py) та відправ на перевірку."
+        else:
+            s1 = f"• Крок 1 (Постановка та архітектура): Формалізуй вимоги до програми «{title_clean}», вибери структури даних та алгоритм."
+            s2 = f"• Крок 2 (Розробка коду): {action_desc}. Реалізуй логіку з дотриманням стандартів кодування та коментарями."
+            s3 = f"• Крок 3 (Верифікація): Проведи тестування крайових випадків та переконайся у коректності роботи."
+            s4 = f"• Крок 4 (Здача репозиторію/файлу): Завантаж підсумковий файл коду на платформу."
+
+    elif task_type in ['table', 'database']:
+        if min_grade <= 6:
+            s1 = f"• Крок 1 (Підготовка): Відкрий програму для роботи з даними та створи новий файл до теми «{title_clean}»."
+            s2 = f"• Крок 2 (Заповнення): {action_desc}. Внеси дані та налаштуй таблицю."
+            s3 = f"• Крок 3 (Перевірка): Переконайся, що всі дані на своїх місцях і розрахунки правильні."
+            s4 = f"• Крок 4 (Збереження): Збережи свій файл та відправ вчителю."
+        elif min_grade <= 9:
+            s1 = f"• Крок 1 (Структура): Ознайомся з даними для теми «{title_clean}» та визнач поля/колонки таблиці."
+            s2 = f"• Крок 2 (Побудова та формули): {action_desc}. Заповни таблицю, застосуй формули або зв'язки."
+            s3 = f"• Крок 3 (Контроль розрахунків): Перевір коректність обчислень, типів даних та форматування."
+            s4 = f"• Крок 4 (Здача): Збережи підсумковий файл таблиці/БД і завантаж на перевірку."
+        else:
+            s1 = f"• Крок 1 (Проєктування): Проаналізуй модель даних та вимоги до завдання «{title_clean}»."
+            s2 = f"• Крок 2 (Реалізація структури): {action_desc}. Налаштуй схему, формули, фільтрацію чи зв'язки."
+            s3 = f"• Крок 3 (Валідація даних): Перевір цілісність даних, роботу формул і відсутність помилок."
+            s4 = f"• Крок 4 (Фіксація результату): Сформуй підсумковий документ чи файл і надішли на перевірку."
+
+    elif task_type == 'question_answer':
+        s1 = f"• Крок 1 (Ознайомлення): Уважно прочитай усі запитання до теми «{title_clean}»."
+        s2 = f"• Крок 2 (Пошук відповідей): Знайди точні відповіді у матеріалах уроку або підручнику."
+        s3 = f"• Крок 3 (Формулювання): Запиши чіткі відповіді, обов'язково вказуючи номери запитань."
+        s4 = f"• Крок 4 (Здача роботи): Перевір повноту своїх відповідей і відправ роботу на платформу."
+
     else:
-        guide = (
-            f"Покроковий план виконання для старшокласників ({grade_str}, {age_str}):\n"
-            f"• Крок 1 (Постановка завдання та критерії): Опрацюй умови завдання «{title_clean}», визнач обов'язкові компоненти та шкалу критеріїв оцінювання НУШ.\n"
-            f"• Крок 2 (Практична реалізація): {action_desc}. Реалізуй необхідні структури, зв'язки чи розв'язки з дотриманням академічної доброчесності.\n"
-            f"• Крок 3 (Верифікація та висновки): Перевір цілісність результатів, відсутність технічних помилок та дай чіткі обґрунтовані відповіді на контрольні питання.\n"
-            f"• Крок 4 (Фіксація та здача): Сформуй підсумковий документ чи файл проєкту у відповідному форматі та надішли на перевірку."
-        )
-    return guide
+        # Універсальний покроковий план практичної діяльності
+        if min_grade <= 4:
+            s1 = f"• Крок 1 (Подивись): Уважно роздивись завдання «{title_clean}» та інструкцію вчителя."
+            s2 = f"• Крок 2 (Зроби): {action_desc}. Роби все не поспішаючи, крок за кроком."
+            s3 = f"• Крок 3 (Перевір): Подивись на результат: чи все виконано охайно і без пропусків?"
+            s4 = f"• Крок 4 (Здай вчителю): Збережи свій файл або зроби фото та відправ на перевірку. 🌟"
+        elif min_grade <= 6:
+            s1 = f"• Крок 1 (Підготовка): Відкрий тему «{title_clean}» та уважно прочитай вказівки вчителя."
+            s2 = f"• Крок 2 (Виконання): {action_desc}. Виконуй дії послідовно за планом."
+            s3 = f"• Крок 3 (Самоперевірка): Переконайся, що виконано всі вимоги завдання."
+            s4 = f"• Крок 4 (Здача на платформу): Прикріпи файл виконаної роботи та надішли на перевірку."
+        elif min_grade <= 9:
+            s1 = f"• Крок 1 (Аналіз завдання): Опрацюй умови завдання «{title_clean}» та виділи ключові вимоги."
+            s2 = f"• Крок 2 (Практична робота): {action_desc}. Дотримуйся логіки виконання та структуруй результат."
+            s3 = f"• Крок 3 (Контроль якості): Перевір повноту виконання поставлених умов."
+            s4 = f"• Крок 4 (Здача результату): Збережи підсумковий файл та завантаж на платформу."
+        else:
+            s1 = f"• Крок 1 (Постановка завдання та критерії): Опрацюй умови завдання «{title_clean}» та шкалу критеріїв."
+            s2 = f"• Крок 2 (Практична реалізація): {action_desc}. Виконай роботу з дотриманням академічної доброчесності."
+            s3 = f"• Крок 3 (Верифікація): Перевір якість отриманого результату та відсутність неточностей."
+            s4 = f"• Крок 4 (Фіксація та здача): Сформуй підсумковий документ чи файл і надішли на перевірку."
+
+    # 4. Блок «Що має бути в результаті»
+    res_items = []
+    res_items.append(f"Готовий результат: {deliverable.get('description', title_clean)}")
+    for rc in deliverable.get('required_components', []):
+        if rc and rc not in res_items and len(rc) < 80:
+            res_items.append(rc)
+    if not deliverable.get('required_components') and requirements:
+        for r in requirements[:3]:
+            res_items.append(r)
+
+    # 5. Блок «Перед здачею перевір»
+    check_items = []
+    if requirements:
+        for r in requirements[:4]:
+            check_items.append(f"Виконано вимогу: {r}")
+    else:
+        if task_type == 'presentation':
+            check_items.append("Усі слайди оформлено охайно та єдиним шрифтом")
+            check_items.append("Є титульний слайд із темою та твоїм прізвищем")
+        elif task_type == 'programming':
+            check_items.append("Програма запускається без синтаксичних помилок")
+            check_items.append("Результат роботи відповідає умові задачі")
+        elif task_type == 'table':
+            check_items.append("Дані внесені у відповідні комірки та формули працюють")
+        elif task_type == 'question_answer':
+            check_items.append("Надано відповіді на всі поставлені запитання")
+        else:
+            check_items.append("Робота повністю відповідає темі завдання")
+    check_items.append("Файл збережено під зрозумілою назвою та успішно прикріплено")
+
+    # Збирання структури
+    lines = [
+        age_header,
+        "",
+        "Коротко: що потрібно зробити",
+        short_summary,
+        "",
+        "Покроковий план виконання:",
+        s1,
+        s2,
+        s3,
+        s4,
+        "",
+        "Що має бути в результаті:",
+    ]
+    for ri in res_items[:4]:
+        lines.append(f"- {ri}")
+
+    lines.extend([
+        "",
+        "Перед здачею перевір:",
+    ])
+    for ci in check_items[:4]:
+        lines.append(f"- {ci}")
+
+    return "\n".join(lines)
 
 
 def analyze_assignment_task_understanding(assignment, force_refresh=False) -> dict:
@@ -6563,6 +7202,9 @@ def analyze_assignment_task_understanding(assignment, force_refresh=False) -> di
                     result_data = sanitize_ai_understanding_data(parsed)
                     # Гарантуємо наявність target_audience та якісного student_explanation
                     result_data.setdefault('target_audience', f"{grade_str} ({age_str})")
+                    result_data.setdefault('task_type', scope.get('task_type', 'practical'))
+                    result_data.setdefault('deliverable', scope.get('deliverable', {}))
+                    result_data.setdefault('questions_expected', scope.get('questions_expected', False))
                     current_expl = strip_html_tags(result_data.get('student_explanation') or "")
                     if not current_expl or len(current_expl) < 50 or "крок" not in current_expl.lower():
                         result_data['student_explanation'] = generate_age_appropriate_student_guide(
@@ -6572,7 +7214,8 @@ def analyze_assignment_task_understanding(assignment, force_refresh=False) -> di
                             assignment_title=assignment_title,
                             assignment_desc=assignment_desc,
                             tasks_list=result_data.get('tasks', []),
-                            is_single_task=is_single_task
+                            is_single_task=is_single_task,
+                            task_interpretation=scope.get('task_interpretation')
                         )
                     else:
                         result_data['student_explanation'] = current_expl
@@ -6596,6 +7239,11 @@ def analyze_assignment_task_understanding(assignment, force_refresh=False) -> di
 
     # Якщо ШІ API недоступне або повернуло некоректну відповідь — генеруємо якісний структурний звіт на основі видобутих даних
     if not result_data or not isinstance(result_data, dict):
+        task_interpretation = scope.get('task_interpretation') or {}
+        task_type = scope.get('task_type') or 'practical'
+        deliverable = scope.get('deliverable') or {}
+        questions_expected = scope.get('questions_expected', False)
+
         if teacher_specific_task_nums:
             total_cnt = len(teacher_specific_task_nums)
             tasks_list = []
@@ -6627,7 +7275,7 @@ def analyze_assignment_task_understanding(assignment, force_refresh=False) -> di
                     "title": f"Вправа {num}" if is_ex else f"Завдання {num}",
                     "source": "Вказівка вчителя та прикріплені матеріали",
                     "expected_actions": actions_desc,
-                    "expected_submission": "Виконана робота або відповідь у зошиті/документі"
+                    "expected_submission": deliverable.get('format') or "Виконана робота відповідно до умови"
                 })
         elif is_single_task:
             total_cnt = 1
@@ -6636,7 +7284,7 @@ def analyze_assignment_task_understanding(assignment, force_refresh=False) -> di
                 "title": assignment_title or "Комплексне завдання",
                 "source": "Опис завдання вчителя",
                 "expected_actions": assignment_desc[:300] if assignment_desc else "Виконати завдання/проєкт згідно з інструкцією",
-                "expected_submission": "Здана робота у відповідному форматі"
+                "expected_submission": deliverable.get('format') or "Готова робота у відповідному форматі"
             }]
         else:
             total_cnt = explicit_count if explicit_count > 0 else (len(extracted_qs) if extracted_qs else 1)
@@ -6650,7 +7298,7 @@ def analyze_assignment_task_understanding(assignment, force_refresh=False) -> di
                         "title": f"Завдання {idx}",
                         "source": "Матеріали уроку / презентація",
                         "expected_actions": clean_q or f"Виконати завдання {idx} відповідно до навчальних матеріалів",
-                        "expected_submission": "Відповідь або виконаний файл відповідно до умови"
+                        "expected_submission": deliverable.get('format') or "Відповідь або виконаний файл відповідно до умови"
                     })
             else:
                 tasks_list.append({
@@ -6658,7 +7306,7 @@ def analyze_assignment_task_understanding(assignment, force_refresh=False) -> di
                     "title": assignment_title or "Навчальне завдання",
                     "source": "Опис завдання",
                     "expected_actions": assignment_desc[:300] if assignment_desc else "Виконати завдання згідно з інструкцією",
-                    "expected_submission": "Здана робота у відповідному форматі"
+                    "expected_submission": deliverable.get('format') or "Здана робота у відповідному форматі"
                 })
 
         student_guide_text = generate_age_appropriate_student_guide(
@@ -6668,30 +7316,50 @@ def analyze_assignment_task_understanding(assignment, force_refresh=False) -> di
             assignment_title=assignment_title,
             assignment_desc=assignment_desc,
             tasks_list=tasks_list,
-            is_single_task=is_single_task
+            is_single_task=is_single_task,
+            task_interpretation=task_interpretation
         )
+
+        if not questions_expected:
+            submission_format = deliverable.get('format') or "Файл створеної роботи відповідно до вказівок вчителя"
+            teacher_recs = [
+                f"Завдання має тип «{task_type}». Оцінюйте якість створеного результату ({deliverable.get('description', '')}), його структуру та зміст.",
+                "Не вимагайте від учнів відповідей на запитання, якщо завдання полягає у створенні файлу або практичного результату."
+            ]
+            rules_list = [
+                "Оцінюється безпосередньо якість зданого файлу/продукту та виконання вимог вчителя.",
+                "Відсутність текстового формату «питання-відповідь» не є підставою для зниження оцінки для цього типу завдання."
+            ]
+        else:
+            submission_format = "Відповіді на запитання у документі або на фото зошита"
+            teacher_recs = [
+                "Умова містить конкретні запитання. Нагадуйте учням нумерувати свої відповіді у форматі «питання-відповідь»."
+            ]
+            rules_list = [
+                "Кожне запитання вимагає окремої відповіді. Одне речення не зараховується за два завдання.",
+                "При неповному обсязі оцінка суворо обмежується відповідною стелею НУШ."
+            ]
 
         result_data = {
             "topic_and_goal": f"{assignment_title}. {subject_name}, {classes_str}.",
             "target_audience": f"{grade_str} ({age_str})",
+            "task_type": task_type,
+            "deliverable": deliverable,
+            "questions_expected": questions_expected,
+            "task_interpretation": task_interpretation,
             "student_explanation": student_guide_text,
             "tasks_source_info": "Умова та прикріплені матеріали завдання",
             "tasks_total_count": total_cnt,
             "is_choice_based": False,
             "tasks": tasks_list,
-            "submission_format_expected": "Один спільний документ або файл відповідно до вказівок вчителя",
+            "submission_format_expected": submission_format,
             "grading_breakdown": {
                 "full_completion": f"10-12 б. (Високий рівень) — якісне виконання всіх {total_cnt} завдань у повному обсязі.",
                 "partial_two_tasks": f"7-8 б. (Достатній рівень) — часткове виконання (близько 66% завдань).",
                 "partial_one_task": f"4-5 б. (Середній рівень) — виконання початкового обсягу (близько 33% завдань).",
-                "rules": [
-                    "Кожне завдання вимагає окремої відповіді. Одне речення не зараховується за два завдання.",
-                    "При неповному обсязі оцінка суворо обмежується відповідною стелею НУШ."
-                ]
+                "rules": rules_list
             },
-            "teacher_recommendations": [
-                "Умова містить конкретні завдання. Нагадуйте учням нумерувати свої відповіді у форматі «питання-відповідь»."
-            ]
+            "teacher_recommendations": teacher_recs
         }
 
     # Фінальна санітизація всіх полів від будь-яких залишків HTML-розмітки

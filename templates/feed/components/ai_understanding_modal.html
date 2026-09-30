@@ -63,6 +63,10 @@
                         </span>
                     </div>
                     <div id="ai-und-topic-goal" style="font-size:13.5px;line-height:1.55;color:var(--color-text-primary);font-weight:600;"></div>
+                    <div id="ai-und-deliverable-wrap" style="display:none;margin-top:8px;align-items:center;gap:8px;flex-wrap:wrap;">
+                        <span id="ai-und-task-type-badge" class="badge" style="background:#4f46e5;color:#fff;font-size:11.5px;font-weight:750;padding:2px 8px;border-radius:6px;"></span>
+                        <span id="ai-und-deliverable-desc" style="font-size:12px;color:var(--color-text-secondary);font-weight:600;"></span>
+                    </div>
                     <div id="ai-und-source-info" style="font-size:12px;color:var(--color-text-muted);margin-top:6px;display:flex;align-items:center;gap:5px;"></div>
                 </div>
 
@@ -309,23 +313,71 @@ function renderStudentExplanationHtml(rawText) {
     var cleanText = stripHtmlTags(rawText);
     var lines = cleanText.split('\n');
     var html = '';
-    var inSteps = false;
 
     lines.forEach(function(line) {
         line = line.trim();
         if (!line) return;
+
+        // 1. Step matcher: "Крок 1: ...", "Етап 2: ...", "1. ..."
         var stepMatch = line.match(/^(?:[•\-\*]?\s*)?(Крок\s*\d+|Етап\s*\d+|\d+\s*[\.\)])\s*[\:\–\—\-]?\s*(.*)$/i);
         if (stepMatch) {
-            inSteps = true;
             var stepLabel = stepMatch[1].replace(/[\.\)]$/, '');
             var stepBody = stepMatch[2];
             html += '<div style="display:flex;gap:10px;align-items:flex-start;margin-top:8px;background:var(--color-surface);border:1.5px solid rgba(16,185,129,0.25);border-radius:8px;padding:9px 12px;box-shadow:0 1px 3px rgba(0,0,0,0.04);">';
             html += '<span style="background:linear-gradient(135deg,#059669,#10b981);color:#fff;font-size:11px;font-weight:800;padding:2px 8px;border-radius:6px;white-space:nowrap;margin-top:1px;letter-spacing:0.02em;">' + escapeHtml(stepLabel) + '</span>';
             html += '<span style="font-size:13px;line-height:1.55;color:var(--color-text-primary);flex:1;">' + escapeHtml(stepBody) + '</span>';
             html += '</div>';
-        } else {
-            html += '<div style="font-size:13px;line-height:1.6;color:var(--color-text-primary);margin-bottom:6px;font-weight:' + (inSteps ? '500' : '650') + ';">' + escapeHtml(line) + '</div>';
+            return;
         }
+
+        // 2. Section Headers
+        var isSectionHeader = false;
+        var headerIcon = '';
+        var headerColor = '#059669';
+
+        if (/^(?:[📌🎯📋✅🎒]\s*)?коротко\s*[:\–\—\-]/i.test(line)) {
+            isSectionHeader = true;
+            headerIcon = '📌';
+            headerColor = '#4f46e5';
+        } else if (/^(?:[📌🎯📋✅🎒]\s*)?покроковий план/i.test(line)) {
+            isSectionHeader = true;
+            headerIcon = '📋';
+            headerColor = '#059669';
+        } else if (/^(?:[📌🎯📋✅🎒]\s*)?що має бути в результаті/i.test(line)) {
+            isSectionHeader = true;
+            headerIcon = '🎯';
+            headerColor = '#2563eb';
+        } else if (/^(?:[📌🎯📋✅🎒]\s*)?перед здачею перевір/i.test(line)) {
+            isSectionHeader = true;
+            headerIcon = '✅';
+            headerColor = '#d97706';
+        } else if (/^🎒\s*як (?:підготувати|виконати)/i.test(line)) {
+            isSectionHeader = true;
+            headerIcon = '🎒';
+            headerColor = '#059669';
+        }
+
+        if (isSectionHeader) {
+            html += '<div style="margin-top:14px;margin-bottom:6px;font-weight:800;font-size:13px;color:' + headerColor + ';display:flex;align-items:center;gap:6px;letter-spacing:0.02em;">';
+            html += '<span>' + headerIcon + '</span>';
+            html += '<span>' + escapeHtml(line.replace(/^[📌🎯📋✅🎒]\s*/, '')) + '</span>';
+            html += '</div>';
+            return;
+        }
+
+        // 3. Bullet or checklist item: starts with •, -, *, [ ], [x], ✔, ✓
+        var bulletMatch = line.match(/^(?:[•\-\*]|\[[\s x]\]|[✔✓])\s*(.*)$/i);
+        if (bulletMatch) {
+            var itemBody = bulletMatch[1];
+            html += '<div style="display:flex;gap:8px;align-items:flex-start;margin-top:5px;margin-left:4px;font-size:12.8px;line-height:1.5;color:var(--color-text-primary);">';
+            html += '<span style="color:#10b981;font-weight:bold;margin-top:1px;">✔</span>';
+            html += '<span style="flex:1;">' + escapeHtml(itemBody) + '</span>';
+            html += '</div>';
+            return;
+        }
+
+        // 4. Regular line
+        html += '<div style="font-size:13px;line-height:1.6;color:var(--color-text-primary);margin-bottom:6px;font-weight:500;">' + escapeHtml(line) + '</div>';
     });
     return html || ('<div style="font-size:13px;line-height:1.6;color:var(--color-text-primary);">' + escapeHtml(cleanText) + '</div>');
 }
@@ -375,6 +427,39 @@ function renderAiUnderstandingData(data, updatedAt, isCached, isTeacher) {
     // 1. Тема та мета
     const topicGoalEl = document.getElementById('ai-und-topic-goal');
     topicGoalEl.textContent = stripHtmlTags(data.topic_and_goal || 'Навчальне практичне завдання');
+
+    // Відображення типу завдання та очікуваного результату (Deliverable)
+    const delivWrap = document.getElementById('ai-und-deliverable-wrap');
+    const typeBadge = document.getElementById('ai-und-task-type-badge');
+    const delivDesc = document.getElementById('ai-und-deliverable-desc');
+    if (delivWrap && (data.task_type || data.deliverable)) {
+        delivWrap.style.display = 'flex';
+        if (typeBadge) {
+            var typeLabels = {
+                'presentation': '📊 Презентація',
+                'programming': '💻 Програмування',
+                'table': '📈 Таблиця',
+                'diagram': '📊 Діаграма / Схема',
+                'database': '🗄️ База даних',
+                'creative': '🎨 Творче завдання',
+                'project': '🚀 Проєкт',
+                'research': '🔍 Дослідження',
+                'document': '📄 Текстовий документ',
+                'calculation': '🔢 Обчислення',
+                'practical': '⚙️ Практична робота',
+                'question_answer': '❓ Відповіді на запитання',
+                'other': '📌 Практичне завдання'
+            };
+            typeBadge.textContent = typeLabels[data.task_type] || ('📌 ' + (data.task_type || 'Завдання'));
+        }
+        if (delivDesc) {
+            var d = data.deliverable || {};
+            var descText = typeof d === 'string' ? d : (d.description || d.type || '');
+            delivDesc.textContent = descText ? ('Очікуваний результат: ' + descText) : '';
+        }
+    } else if (delivWrap) {
+        delivWrap.style.display = 'none';
+    }
 
     const sourceInfoEl = document.getElementById('ai-und-source-info');
     sourceInfoEl.innerHTML = `<span>📍</span> <span>Джерело завдань: <strong>${escapeHtml(stripHtmlTags(data.tasks_source_info || 'Умова та презентація'))}</strong></span>`;

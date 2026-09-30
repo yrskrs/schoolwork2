@@ -7327,14 +7327,349 @@ class IntelligentStudentEvaluationRequirementsTests(TestCase):
         self.assertIn("Виконати вправу 3", expected_act)
 
 
+class DynamicTaskTypeAndDeliverableTests(TestCase):
+    """
+    10 обов'язкових автоматизованих тестів нової моделі AI-оцінювання
+    (типи завдань, очікуваний deliverable, questions_expected, узгоджений контекст):
+    1. test_task_type_presentation
+    2. test_task_type_programming
+    3. test_task_type_question_answer
+    4. test_task_type_project
+    5. test_task_type_practical
+    6. test_teacher_file_with_questions_for_presentation
+    7. test_criteria_in_teacher_file_extracted
+    8. test_age_appropriate_guide
+    9. test_table_no_text_answers_no_penalty
+    10. test_unified_context_evaluation_and_guide
+    """
 
+    def setUp(self):
+        self.user = User.objects.create_user(username='teacher_dyn', password='password123', is_staff=True)
+        self.teacher = Teacher.objects.create(user=self.user, full_name='Іванченко Тамара Олексіївна')
+        self.class_group = ClassGroup.objects.create(grade=7, letter='Б', name='7-Б')
+        self.teacher.classes.add(self.class_group)
+        self.subject = Subject.objects.create(name='Інформатика', icon='💻', color='#10b981')
+        self.teacher.subjects.add(self.subject)
+        self.client = Client()
+        self.client.login(username='teacher_dyn', password='password123')
 
+        self.ai_settings = AISettings.get_solo()
+        self.ai_settings.is_enabled = True
+        self.ai_settings.api_key = "AIzaSyFakeKeyForDynEvaluationTesting"
+        self.ai_settings.ai_provider = 'gemini'
+        self.ai_settings.model_name = 'gemini-2.5-flash'
+        self.ai_settings.save()
 
+    def test_task_type_presentation(self):
+        """
+        Тест 1. Завдання «Створити презентацію на тему 'Будова клітини'»:
+        task_type == 'presentation', questions_expected is False.
+        """
+        from .gemini_service import determine_assignment_task_type, is_questions_expected, resolve_assignment_scope
 
+        task_type = determine_assignment_task_type(
+            title="Створити презентацію на тему 'Будова клітини'",
+            description="Підготуйте слайдову презентацію в PowerPoint або Canva."
+        )
+        self.assertEqual(task_type, 'presentation')
+        self.assertFalse(is_questions_expected(task_type, "Підготуйте слайдову презентацію"))
 
+        scope = resolve_assignment_scope(
+            assignment_title="Створити презентацію на тему 'Будова клітини'",
+            assignment_desc="Підготуйте слайдову презентацію в PowerPoint."
+        )
+        self.assertEqual(scope['task_type'], 'presentation')
+        self.assertFalse(scope['questions_expected'])
+        self.assertIn('deliverable', scope)
+        self.assertIn(scope['deliverable']['type'], ['presentation', 'file'])
+        self.assertEqual(scope['task_interpretation']['task_type'], 'presentation')
 
+    def test_task_type_programming(self):
+        """
+        Тест 2. Завдання «Написати програму на Python для обчислення факторіалу»:
+        task_type == 'programming', questions_expected is False.
+        """
+        from .gemini_service import determine_assignment_task_type, is_questions_expected, resolve_assignment_scope
 
+        task_type = determine_assignment_task_type(
+            title="Написати програму на Python для обчислення факторіалу",
+            description="Складіть програмний код мовою Python, який зчитує число n та виводить факторіал."
+        )
+        self.assertEqual(task_type, 'programming')
+        self.assertFalse(is_questions_expected(task_type, "Складіть програмний код"))
 
+        scope = resolve_assignment_scope(
+            assignment_title="Написати програму на Python для обчислення факторіалу",
+            assignment_desc="Складіть код програми на Python."
+        )
+        self.assertEqual(scope['task_type'], 'programming')
+        self.assertFalse(scope['questions_expected'])
+        self.assertIn(scope['deliverable']['type'], ['programming', 'code', 'file'])
 
+    def test_task_type_question_answer(self):
+        """
+        Тест 3. Завдання «Дайте відповіді на запитання 1-5 на сторінці 45»:
+        task_type == 'question_answer', questions_expected is True.
+        """
+        from .gemini_service import determine_assignment_task_type, is_questions_expected, resolve_assignment_scope
 
+        task_type = determine_assignment_task_type(
+            title="Дайте відповіді на запитання 1-5 на сторінці 45",
+            description="Письмово дайте відповіді на контрольні запитання підручника."
+        )
+        self.assertEqual(task_type, 'question_answer')
+        self.assertTrue(is_questions_expected(task_type, "Дайте відповіді на контрольні запитання"))
+
+        scope = resolve_assignment_scope(
+            assignment_title="Дайте відповіді на запитання",
+            assignment_desc="Дайте письмові відповіді на запитання 1-5."
+        )
+        self.assertEqual(scope['task_type'], 'question_answer')
+        self.assertTrue(scope['questions_expected'])
+
+    def test_task_type_project(self):
+        """
+        Тест 4. Завдання «Робота над навчальним проєктом 'Розумний дім'»:
+        task_type == 'project', questions_expected is False.
+        """
+        from .gemini_service import determine_assignment_task_type, is_questions_expected, resolve_assignment_scope
+
+        task_type = determine_assignment_task_type(
+            title="Робота над навчальним проєктом 'Розумний дім'",
+            description="Розробіть концепцію та матеріали для навчального проєкту."
+        )
+        self.assertEqual(task_type, 'project')
+        self.assertFalse(is_questions_expected(task_type, "Розробіть навчальний проєкт"))
+
+        scope = resolve_assignment_scope(
+            assignment_title="Робота над навчальним проєктом 'Розумний дім'",
+            assignment_desc="Проєкт 'Розумний дім'."
+        )
+        self.assertEqual(scope['task_type'], 'project')
+        self.assertFalse(scope['questions_expected'])
+
+    def test_task_type_practical(self):
+        """
+        Тест 5. Завдання «Практична робота: налаштування мережі»:
+        task_type in ('practical', 'other'), questions_expected is False.
+        """
+        from .gemini_service import determine_assignment_task_type, is_questions_expected, resolve_assignment_scope
+
+        task_type = determine_assignment_task_type(
+            title="Практична робота: налаштування мережі",
+            description="Виконайте покрокове налаштування локальної мережі за інструкцією."
+        )
+        self.assertIn(task_type, ['practical', 'other'])
+        self.assertFalse(is_questions_expected(task_type, "Виконайте налаштування"))
+
+        scope = resolve_assignment_scope(
+            assignment_title="Практична робота: налаштування мережі",
+            assignment_desc="Виконайте послідовність дій для налаштування мережі."
+        )
+        self.assertIn(scope['task_type'], ['practical', 'other'])
+        self.assertFalse(scope['questions_expected'])
+
+    def test_teacher_file_with_questions_for_presentation(self):
+        """
+        Тест 6. Вчитель задав створити презентацію, але прикріплений файл містить контрольні запитання:
+        questions_expected is False, запитання з файлу не стають обов'язковими для учня.
+        """
+        from .gemini_service import resolve_assignment_scope
+
+        teacher_file = (
+            "Матеріали уроку: Історія комп'ютерної техніки.\n"
+            "Контрольні запитання для самоперевірки:\n"
+            "1. Хто сконструював першу ЕОМ?\n"
+            "2. Які елементи використовувалися у першому поколінні?\n"
+            "3. Що таке інтегральна схема?\n"
+            "4. Які переваги персональних комп'ютерів?"
+        )
+
+        scope = resolve_assignment_scope(
+            assignment_title="Історія комп'ютерів",
+            assignment_desc="Створити презентацію на тему 'Історія комп'ютерної техніки'.",
+            teacher_files_content=[teacher_file]
+        )
+        self.assertEqual(scope['task_type'], 'presentation')
+        self.assertFalse(scope['questions_expected'])
+        # Оскільки questions_expected is False, task_questions не нав'язуються як обов'язкові
+        self.assertEqual(scope['task_questions'], [])
+        self.assertEqual(scope['assigned_task_count'], 1)
+
+    def test_criteria_in_teacher_file_extracted(self):
+        """
+        Тест 7. Критерії з файлу вчителя («не менше 8 слайдів», «наявність висновку»,
+        «список джерел») витягуються у requirements / criteria.
+        """
+        from .gemini_service import resolve_assignment_scope, extract_task_requirements
+
+        teacher_file = (
+            "Презентація 'Сучасні хмарні сервіси'.\n"
+            "Вимоги до оформлення роботи:\n"
+            "- обсяг презентації: не менше 8 слайдів\n"
+            "- обов'язкова наявність висновку на передостанньому слайді\n"
+            "- останній слайд: список використаних джерел\n"
+            "- титульний слайд із темою та прізвищем автора"
+        )
+
+        reqs = extract_task_requirements(
+            title="Хмарні сервіси",
+            desc="Створити презентацію",
+            custom_criteria="",
+            teacher_files_content=[teacher_file]
+        )
+        reqs_str = " ".join(reqs).lower()
+        self.assertTrue("8 слайдів" in reqs_str or "слайд" in reqs_str)
+        self.assertTrue("висновк" in reqs_str)
+        self.assertTrue("джерел" in reqs_str)
+
+        scope = resolve_assignment_scope(
+            assignment_title="Хмарні сервіси",
+            assignment_desc="Створити презентацію",
+            teacher_files_content=[teacher_file]
+        )
+        all_reqs = " ".join(scope.get('requirements', []) + scope.get('task_interpretation', {}).get('requirements', [])).lower()
+        self.assertTrue("висновк" in all_reqs or "джерел" in all_reqs or "слайд" in all_reqs)
+
+    def test_age_appropriate_guide(self):
+        """
+        Тест 8. Перевірка, що покрокова інструкція для учня генерується відповідно до віку,
+        зрозумілою мовою, без вигаданих вимог, за структурою із 4 обов'язкових блоків.
+        """
+        from .gemini_service import generate_age_appropriate_student_guide
+
+        # Для 6-го класу
+        guide_6 = generate_age_appropriate_student_guide(
+            grade_str="6-й клас",
+            age_str="11–12 років",
+            min_grade=6,
+            assignment_title="Створити презентацію 'Моя улюблена книга'",
+            assignment_desc="Підготуйте презентацію про улюблену книжку.",
+            tasks_list=[{"title": "Презентація", "expected_actions": "Створити 5-6 слайдів"}],
+            task_interpretation={
+                "task_type": "presentation",
+                "questions_expected": False,
+                "deliverable": {"description": "Слайдова презентація", "format": "Файл презентації"}
+            }
+        )
+        self.assertIn("Коротко:", guide_6)
+        self.assertIn("Покроковий план виконання:", guide_6)
+        self.assertIn("Крок 1", guide_6)
+        self.assertIn("Крок 2", guide_6)
+        self.assertIn("Що має бути в результаті:", guide_6)
+        self.assertIn("Перед здачею перевір:", guide_6)
+        # Жодних вигаданих вимог чи формулювань про запитання
+        self.assertNotIn("питання-відповідь", guide_6.lower())
+
+        # Для 10-го класу
+        guide_10 = generate_age_appropriate_student_guide(
+            grade_str="10-й клас",
+            age_str="15–16 років",
+            min_grade=10,
+            assignment_title="Розробка бази даних в Access",
+            assignment_desc="Спроєктуйте структуру БД.",
+            tasks_list=[{"title": "Проєкт БД", "expected_actions": "Створити таблиці"}],
+            task_interpretation={
+                "task_type": "database",
+                "questions_expected": False,
+                "deliverable": {"description": "База даних", "format": "Файл .accdb"}
+            }
+        )
+        self.assertIn("старшокласник", guide_10.lower())
+        self.assertIn("Покроковий план", guide_10)
+        self.assertIn("Перед здачею перевір", guide_10)
+
+    @patch('feed.gemini_service.call_ai_api')
+    def test_table_no_text_answers_no_penalty(self, mock_ai):
+        """
+        Тест 9. Завдання — створити таблицю в Excel. Учень здав .xlsx файл без текстових
+        відповідей на запитання. ШІ не знижує оцінку за «відсутність відповідей на питання»,
+        а оцінює саму таблицю.
+        """
+        from .gemini_service import evaluate_submission_with_gemini
+
+        assignment = Assignment.objects.create(
+            teacher=self.teacher,
+            subject=self.subject,
+            title="Електронні таблиці",
+            description="Створити таблицю в Excel для підрахунку витрат родини з формулами.",
+            status=Assignment.STATUS_PUBLISHED
+        )
+        assignment.classes.add(self.class_group)
+
+        excel_file = SimpleUploadedFile(
+            "budget.xlsx",
+            b"PK\x03\x04MockExcelTableContent",
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        submission = Submission.objects.create(
+            assignment=assignment,
+            first_name='Андрій',
+            last_name='Мельник',
+            class_group=self.class_group,
+            teacher=self.teacher,
+            file=excel_file
+        )
+
+        mock_ai.return_value = (200, json.dumps({
+            "suggested_grade": "11",
+            "level": "Високий (10-12)",
+            "tasks_total_count": 1,
+            "tasks_completed_count": 1,
+            "tasks_evaluated": [{"task_num": 1, "status": "completed"}],
+            "summary": "Таблиця побудована правильно, формули обраховані.",
+            "weaknesses": ["Немає відповідей на контрольні запитання."],
+            "strengths": ["Коректні формули", "Акуратне форматування"],
+            "feedback_comment": "Рекомендується дотримуватися формату «питання-відповідь»."
+        }, ensure_ascii=False), None, {})
+
+        result = evaluate_submission_with_gemini(submission)
+        self.assertEqual(result['task_type'], 'table')
+        self.assertFalse(result['questions_expected'])
+        # Перевірка санітизації: заборонено штрафувати за відсутність відповідей та вимагати питання-відповідь
+        all_weaknesses = " ".join(result.get('weaknesses', [])).lower()
+        self.assertNotIn("немає відповідей на", all_weaknesses)
+        self.assertNotIn("відсутність відповідей на запитання", all_weaknesses)
+        self.assertNotIn("питання-відповідь", (result.get('feedback_comment') or '').lower())
+        self.assertNotIn("питання-відповідь", all_weaknesses)
+
+    def test_unified_context_evaluation_and_guide(self):
+        """
+        Тест 10. Перевірка, що task_interpretation використовується узгоджено як для
+        генерації evaluation_plan, так і для формування student_explanation.
+        """
+        from .gemini_service import (
+            resolve_assignment_scope,
+            interpret_assignment_task,
+            analyze_assignment_task_understanding
+        )
+
+        assignment = Assignment.objects.create(
+            teacher=self.teacher,
+            subject=self.subject,
+            title="Створення сайту",
+            description="Створити вебсторінку про видатних діячів науки за допомогою HTML.",
+            status=Assignment.STATUS_PUBLISHED
+        )
+        assignment.classes.add(self.class_group)
+
+        # 1. resolve_assignment_scope формує узгоджену інтерпретацію
+        scope = resolve_assignment_scope(
+            assignment_title=assignment.title,
+            assignment_desc=assignment.description
+        )
+        interp = scope.get('task_interpretation')
+        self.assertIsNotNone(interp)
+        self.assertEqual(interp['task_type'], scope['task_type'])
+        self.assertEqual(interp['questions_expected'], scope['questions_expected'])
+        self.assertEqual(interp['deliverable'], scope['deliverable'])
+
+        # 2. analyze_assignment_task_understanding використовує ту саму інтерпретацію
+        analysis = analyze_assignment_task_understanding(assignment, force_refresh=True)
+        self.assertEqual(analysis['status'], 'success')
+        data = analysis['data']
+        self.assertEqual(data['task_type'], interp['task_type'])
+        self.assertEqual(data['questions_expected'], interp['questions_expected'])
+        self.assertEqual(data['deliverable']['description'], interp['deliverable']['description'])
+        self.assertIn("Покроковий план", data['student_explanation'])
 
