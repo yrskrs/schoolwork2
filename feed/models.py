@@ -3438,7 +3438,7 @@ class AISettings(models.Model):
                 return (
                     self.ai_provider or 'gemini',
                     self.api_key.strip(),
-                    (self.model_name or 'gemini-2.5-flash').strip(),
+                    (self.model_name or 'gemini-3.6-flash').strip(),
                     (self.custom_api_url or '').strip()
                 )
             return None
@@ -3447,7 +3447,7 @@ class AISettings(models.Model):
                 return (
                     self.backup_ai_provider or 'gemini',
                     self.backup_api_key.strip(),
-                    (self.backup_model_name.strip() or self.model_name or 'gemini-2.5-flash'),
+                    (self.backup_model_name.strip() or self.model_name or 'gemini-3.6-flash'),
                     (self.backup_custom_api_url or '').strip()
                 )
             return None
@@ -3549,7 +3549,7 @@ class AISettings(models.Model):
             chain.insert(0, curr)
 
         if not chain:
-            chain = [curr or 'gemini-2.5-flash']
+            chain = [curr or 'gemini-3.6-flash']
 
         return chain
 
@@ -3606,7 +3606,7 @@ class AISettings(models.Model):
 
         if not current_models:
             current_models = [{
-                'name': 'gemini-2.5-flash',
+                'name': 'gemini-3.6-flash',
                 'priority': 1,
                 'enabled': True,
             }]
@@ -3710,6 +3710,33 @@ class AIErrorLog(models.Model):
 
     def __str__(self):
         return f"[{self.created_at.strftime('%d.%m %H:%M')}] {self.model_name or self.provider}: {self.error_type or self.error_message[:40]}"
+
+
+class AIRequestLog(models.Model):
+    """
+    Журнал викликів та використання токенів ШІ (Google Gemini, OpenAI, DeepSeek тощо).
+    Фіксує кожен виконаний запит до моделі, статус-код, тривалість та точну кількість токенів
+    (Prompt, Candidates/Completion, Total) для формування детальної аналітики: RPM, RPD та токенів.
+    """
+    model_name = models.CharField('Модель', max_length=100, db_index=True)
+    provider = models.CharField('Провайдер', max_length=50, default='gemini', db_index=True)
+    action = models.CharField('Дія', max_length=100, default='evaluation')
+    status_code = models.IntegerField('HTTP Статус', default=200)
+    is_success = models.BooleanField('Успішний запит', default=True)
+    prompt_tokens = models.IntegerField('Вхідні токени (Prompt)', default=0)
+    completion_tokens = models.IntegerField('Вихідні токени (Candidates)', default=0)
+    total_tokens = models.IntegerField('Всього токенів', default=0)
+    latency_ms = models.IntegerField('Тривалість (мс)', default=0)
+    created_at = models.DateTimeField('Час запиту', auto_now_add=True, db_index=True)
+
+    class Meta:
+        verbose_name = 'Запит ШІ / Токени'
+        verbose_name_plural = 'Журнал запитів та токенів ШІ'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.model_name} [{self.status_code}] - {self.total_tokens} токенів ({self.created_at.strftime('%d.%m %H:%M:%S')})"
+
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

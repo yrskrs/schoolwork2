@@ -6,7 +6,7 @@ from unittest.mock import patch, MagicMock
 
 from feed.models import (
     Teacher, Subject, ClassGroup, Student, Assignment,
-    Submission, AISettings, AIErrorLog, School
+    Submission, AISettings, AIErrorLog, AIRequestLog, School
 )
 from feed.gemini_service import evaluate_submission_with_gemini
 from feed.student_matcher import auto_bind_coauthors_from_comment
@@ -159,3 +159,91 @@ class AIThinkingAndErrorLogTestCase(TestCase):
             self.assertNotEqual(self.submission.ai_suggested_grade, '10')
             self.assertIn(self.submission.ai_suggested_grade, ['3', 'Доопрацювати'])
             self.assertNotIn('висок', self.submission.ai_score_level.lower())
+
+    def test_automatic_fallback_on_high_demand_503_or_429(self):
+        """Перевіряємо що при 503/429 (High Demand) на основній моделі, система реально перемикається на резервну модель."""
+        self.ai_settings.model_name = 'gemini-3.8-flash'
+        self.ai_settings.backup_model_name = 'gemini-3.6-flash'
+        self.ai_settings.active_fallback_chain = ['gemini-3.8-flash', 'gemini-3.6-flash']
+        self.ai_settings.auto_fallback_enabled = True
+        self.ai_settings.save()
+
+        AIErrorLog.objects.all().delete()
+        AIRequestLog.objects.all().delete()
+
+        # Перший виклик (gemini-3.8-flash) видає 503 High Demand
+        # Другий виклик (gemini-3.6-flash) успішно оцінює роботу
+        def fake_call_ai_api(**kwargs):
+            m_name = kwargs.get('model_name')
+            if m_name == 'gemini-3.8-flash':
+                return (503, None, 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', {})
+            elif m_name == 'gemini-3.6-flash':
+                return (200, '{"suggested_grade": "11", "score_level": "Високий", "feedback": "Відмінна робота"}', '', {'prompt_tokens': 150, 'completion_tokens': 45, 'total_tokens': 195})
+            return (500, None, 'Unknown model', {})
+
+        with patch('feed.gemini_service.call_ai_api', side_effect=fake_call_ai_api):
+            res = evaluate_submission_with_gemini(self.submission, teacher=self.teacher)
+
+            self.assertEqual(res['status'], 'success')
+            self.submission.refresh_from_db()
+            # Перевіряємо що зберіглась оцінка і саме резервна модель яка реально виконала запит!
+            self.assertEqual(self.submission.ai_suggested_grade, '11')
+            self.assertEqual(self.submission.ai_model_used, 'gemini-3.6-flash')
+
+            # Перевіряємо що в налаштуваннях зафіксовано спрацювання failover та його причину
+            self.ai_settings.refresh_from_db()
+            self.assertIsNotNone(self.ai_settings.last_failover_at)
+            self.assertIn('gemini-3.8-flash', self.ai_settings.last_failover_reason)
+            self.assertIn('503', self.ai_settings.last_failover_reason)
+
+            # Перевіряємо що журнал помилок зафіксував failover_triggered=True
+            err = AIErrorLog.objects.filter(model_name='gemini-3.8-flash').first()
+            self.assertIsNotNone(err)
+            self.assertTrue(err.failover_triggered)
+            self.assertEqual(err.status_code, 503)
+
+    def test_ai_request_log_metrics_and_used_model_stats(self):
+        """Перевіряємо логування запитів у AIRequestLog та формування статистики тільки для використаних моделей."""
+        AIRequestLog.objects.all().delete()
+
+        # Створюємо запити для двох моделей
+        AIRequestLog.objects.create(
+            model_name='gemini-3.6-flash',
+            provider='gemini',
+            action='evaluation',
+            status_code=200,
+            is_success=True,
+            prompt_tokens=200,
+            completion_tokens=60,
+            total_tokens=260
+        )
+        AIRequestLog.objects.create(
+            model_name='gemini-3.8-flash',
+            provider='gemini',
+            action='evaluation',
+            status_code=503,
+            is_success=False,
+            prompt_tokens=0,
+            completion_tokens=0,
+            total_tokens=0
+        )
+
+        self.client.force_login(self.user)
+        resp = self.client.get(reverse('teacher_settings') + '?tab=ai&stats_days=7')
+        self.assertEqual(resp.status_code, 200)
+
+        # Перевіряємо наявність контексту
+        used_stats = resp.context.get('used_model_usage_stats', [])
+        used_model_names = [s['name'] for s in used_stats]
+
+        # Тільки використані моделі повинні бути в статистиці
+        self.assertIn('gemini-3.6-flash', used_model_names)
+        self.assertIn('gemini-3.8-flash', used_model_names)
+        self.assertNotIn('gemini-1.5-pro', used_model_names) # Невикористана модель не повинна відображатися!
+
+        # Перевіряємо що передано каталог моделей Gemini
+        catalog = resp.context.get('gemini_catalog_models', [])
+        self.assertGreater(len(catalog), 0)
+        catalog_names = [m['name'] for m in catalog]
+        self.assertIn('gemini-3.6-flash', catalog_names)
+

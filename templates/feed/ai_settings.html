@@ -284,20 +284,42 @@
                                 </div>
 
                                 <div class="form-group mb-3">
-                                    <label for="model_name" class="form-label" style="font-weight:700;font-size:12.5px;">Основна модель:</label>
-                                    <input type="text" name="model_name" id="model_name" value="{{ ai_settings.model_name|default:'gemini-3.6-flash' }}"
-                                           list="primary-models-datalist" class="form-input" style="font-family:monospace;font-weight:700;font-size:13px;">
-                                    <datalist id="primary-models-datalist">
-                                        <option value="gemini-3.6-flash">Google Gemini 3.6 Flash (Рекомендована)</option>
-                                        <option value="gemini-flash-latest">Google Gemini Flash Latest</option>
-                                        <option value="gemini-3-flash-preview">Google Gemini 3 Flash Preview</option>
-                                        <option value="gemini-3.1-flash-lite-preview">Google Gemini 3.1 Flash Lite</option>
-                                        <option value="gemini-3.1-pro-preview">Google Gemini 3.1 Pro Preview</option>
-                                        <option value="gpt-4o-mini">OpenAI GPT-4o-mini</option>
-                                        <option value="gpt-4o">OpenAI GPT-4o</option>
-                                        <option value="deepseek-chat">DeepSeek Chat (V3)</option>
-                                        <option value="llama-3.3-70b-versatile">Groq Llama 3.3 70B</option>
-                                    </datalist>
+                                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+                                        <label for="primary_model_select" class="form-label" style="font-weight:700;font-size:12.5px;margin:0;">Основна модель:</label>
+                                        <button type="button" class="btn btn-link btn-sm" onclick="toggleCustomModelInput('primary')" style="padding:0;font-size:11px;font-weight:700;text-decoration:none;color:var(--color-primary);">
+                                            ✏️ Ввести вручну
+                                        </button>
+                                    </div>
+                                    <select id="primary_model_select" class="form-input" style="font-family:monospace;font-weight:700;font-size:13px;margin-bottom:6px;" onchange="syncModelSelect('primary')">
+                                        <optgroup label="⭐ Офіційні моделі Google Gemini">
+                                            <option value="gemini-3.6-flash" {% if ai_settings.model_name == 'gemini-3.6-flash' %}selected{% endif %}>gemini-3.6-flash (Google Gemini 3.6 Flash — Рекомендована)</option>
+                                            <option value="gemini-3.1-flash-lite" {% if ai_settings.model_name == 'gemini-3.1-flash-lite' %}selected{% endif %}>gemini-3.1-flash-lite (30 RPM, Ультрашвидка)</option>
+                                            <option value="gemini-3.8-flash" {% if ai_settings.model_name == 'gemini-3.8-flash' %}selected{% endif %}>gemini-3.8-flash (Gemini 3.8 Flash)</option>
+                                            <option value="gemini-3.7-flash" {% if ai_settings.model_name == 'gemini-3.7-flash' %}selected{% endif %}>gemini-3.7-flash (Thinking Mode)</option>
+                                            <option value="gemini-flash-latest" {% if ai_settings.model_name == 'gemini-flash-latest' %}selected{% endif %}>gemini-flash-latest (Автооновлення)</option>
+                                            <option value="gemini-3.1-pro-preview" {% if ai_settings.model_name == 'gemini-3.1-pro-preview' %}selected{% endif %}>gemini-3.1-pro-preview (Pro, 2M токенів)</option>
+                                            <option value="gemini-2.5-flash" {% if ai_settings.model_name == 'gemini-2.5-flash' %}selected{% endif %}>gemini-2.5-flash (Стабільна)</option>
+                                        </optgroup>
+                                        <optgroup label="🌐 OpenAI, DeepSeek, Groq">
+                                            <option value="gpt-4o-mini" {% if ai_settings.model_name == 'gpt-4o-mini' %}selected{% endif %}>gpt-4o-mini (OpenAI GPT-4o-mini)</option>
+                                            <option value="gpt-4o" {% if ai_settings.model_name == 'gpt-4o' %}selected{% endif %}>gpt-4o (OpenAI GPT-4o)</option>
+                                            <option value="deepseek-chat" {% if ai_settings.model_name == 'deepseek-chat' %}selected{% endif %}>deepseek-chat (DeepSeek V3)</option>
+                                            <option value="deepseek-reasoner" {% if ai_settings.model_name == 'deepseek-reasoner' %}selected{% endif %}>deepseek-reasoner (DeepSeek R1)</option>
+                                            <option value="llama-3.3-70b-versatile" {% if ai_settings.model_name == 'llama-3.3-70b-versatile' %}selected{% endif %}>llama-3.3-70b-versatile (Groq Llama 3.3 70B)</option>
+                                        </optgroup>
+                                        {% if models_with_priority %}
+                                        <optgroup label="📋 Збережені в черзі пріоритетів">
+                                            {% for sm in models_with_priority %}
+                                            <option value="{{ sm.name }}" {% if ai_settings.model_name == sm.name %}selected{% endif %}>{{ sm.name }} (Пріоритет #{{ sm.priority }})</option>
+                                            {% endfor %}
+                                        </optgroup>
+                                        {% endif %}
+                                        <option value="__custom__">✏️ Ввести іншу назву моделі вручну...</option>
+                                    </select>
+                                    <div id="primary_model_input_wrap" style="display:none;">
+                                        <input type="text" name="model_name" id="model_name" value="{{ ai_settings.model_name|default:'gemini-3.6-flash' }}"
+                                               placeholder="Введіть назву моделі..." class="form-input" style="font-family:monospace;font-weight:700;font-size:13px;" oninput="syncModelInput('primary')">
+                                    </div>
                                 </div>
 
                                 <div class="form-group mb-0" id="primary-url-group" style="{% if ai_settings.ai_provider != 'custom' %}display:none;{% endif %}">
@@ -349,17 +371,43 @@
                                 </div>
 
                                 <div class="form-group mb-3">
-                                    <label for="backup_model_name" class="form-label" style="font-weight:700;font-size:12.5px;">Резервна модель:</label>
-                                    <input type="text" name="backup_model_name" id="backup_model_name" value="{{ ai_settings.backup_model_name }}"
-                                           placeholder="Залиште порожнім або вкажіть..." list="backup-models-datalist" class="form-input" style="font-family:monospace;font-weight:700;font-size:13px;">
-                                    <datalist id="backup-models-datalist">
-                                        <option value="gemini-3.6-flash">Google Gemini 3.6 Flash</option>
-                                        <option value="gemini-flash-latest">Google Gemini Flash Latest</option>
-                                        <option value="gemini-3.1-flash-lite-preview">Google Gemini 3.1 Flash Lite</option>
-                                        <option value="gpt-4o-mini">OpenAI GPT-4o-mini</option>
-                                        <option value="deepseek-chat">DeepSeek Chat</option>
-                                        <option value="llama-3.3-70b-versatile">Groq Llama 3.3 70B</option>
-                                    </datalist>
+                                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+                                        <label for="backup_model_select" class="form-label" style="font-weight:700;font-size:12.5px;margin:0;">Резервна модель:</label>
+                                        <button type="button" class="btn btn-link btn-sm" onclick="toggleCustomModelInput('backup')" style="padding:0;font-size:11px;font-weight:700;text-decoration:none;color:var(--color-primary);">
+                                            ✏️ Ввести вручну
+                                        </button>
+                                    </div>
+                                    <select id="backup_model_select" class="form-input" style="font-family:monospace;font-weight:700;font-size:13px;margin-bottom:6px;" onchange="syncModelSelect('backup')">
+                                        <option value="" {% if not ai_settings.backup_model_name %}selected{% endif %}>-- Залишити порожнім (використовувати резерв черги) --</option>
+                                        <optgroup label="⭐ Офіційні моделі Google Gemini">
+                                            <option value="gemini-3.6-flash" {% if ai_settings.backup_model_name == 'gemini-3.6-flash' %}selected{% endif %}>gemini-3.6-flash (Google Gemini 3.6 Flash — Рекомендована)</option>
+                                            <option value="gemini-3.1-flash-lite" {% if ai_settings.backup_model_name == 'gemini-3.1-flash-lite' %}selected{% endif %}>gemini-3.1-flash-lite (30 RPM, Ультрашвидка)</option>
+                                            <option value="gemini-3.8-flash" {% if ai_settings.backup_model_name == 'gemini-3.8-flash' %}selected{% endif %}>gemini-3.8-flash (Gemini 3.8 Flash)</option>
+                                            <option value="gemini-3.7-flash" {% if ai_settings.backup_model_name == 'gemini-3.7-flash' %}selected{% endif %}>gemini-3.7-flash (Thinking Mode)</option>
+                                            <option value="gemini-flash-latest" {% if ai_settings.backup_model_name == 'gemini-flash-latest' %}selected{% endif %}>gemini-flash-latest (Автооновлення)</option>
+                                            <option value="gemini-3.1-pro-preview" {% if ai_settings.backup_model_name == 'gemini-3.1-pro-preview' %}selected{% endif %}>gemini-3.1-pro-preview (Pro, 2M токенів)</option>
+                                            <option value="gemini-2.5-flash" {% if ai_settings.backup_model_name == 'gemini-2.5-flash' %}selected{% endif %}>gemini-2.5-flash (Стабільна)</option>
+                                        </optgroup>
+                                        <optgroup label="🌐 OpenAI, DeepSeek, Groq">
+                                            <option value="gpt-4o-mini" {% if ai_settings.backup_model_name == 'gpt-4o-mini' %}selected{% endif %}>gpt-4o-mini (OpenAI GPT-4o-mini)</option>
+                                            <option value="gpt-4o" {% if ai_settings.backup_model_name == 'gpt-4o' %}selected{% endif %}>gpt-4o (OpenAI GPT-4o)</option>
+                                            <option value="deepseek-chat" {% if ai_settings.backup_model_name == 'deepseek-chat' %}selected{% endif %}>deepseek-chat (DeepSeek V3)</option>
+                                            <option value="deepseek-reasoner" {% if ai_settings.backup_model_name == 'deepseek-reasoner' %}selected{% endif %}>deepseek-reasoner (DeepSeek R1)</option>
+                                            <option value="llama-3.3-70b-versatile" {% if ai_settings.backup_model_name == 'llama-3.3-70b-versatile' %}selected{% endif %}>llama-3.3-70b-versatile (Groq Llama 3.3 70B)</option>
+                                        </optgroup>
+                                        {% if models_with_priority %}
+                                        <optgroup label="📋 Збережені в черзі пріоритетів">
+                                            {% for sm in models_with_priority %}
+                                            <option value="{{ sm.name }}" {% if ai_settings.backup_model_name == sm.name %}selected{% endif %}>{{ sm.name }} (Пріоритет #{{ sm.priority }})</option>
+                                            {% endfor %}
+                                        </optgroup>
+                                        {% endif %}
+                                        <option value="__custom__">✏️ Ввести іншу назву моделі вручну...</option>
+                                    </select>
+                                    <div id="backup_model_input_wrap" style="display:none;">
+                                        <input type="text" name="backup_model_name" id="backup_model_name" value="{{ ai_settings.backup_model_name }}"
+                                               placeholder="Введіть назву резервної моделі..." class="form-input" style="font-family:monospace;font-weight:700;font-size:13px;" oninput="syncModelInput('backup')">
+                                    </div>
                                 </div>
 
                                 <div class="form-group mb-0" id="backup-url-group" style="{% if ai_settings.backup_ai_provider != 'custom' %}display:none;{% endif %}">
@@ -491,6 +539,77 @@ function toggleKeyVisibility(inputId) {
     if (!inp) return;
     inp.type = (inp.type === 'password') ? 'text' : 'password';
 }
+
+function syncModelSelect(target) {
+    var isBackup = (target === 'backup');
+    var selectEl = document.getElementById(isBackup ? 'backup_model_select' : 'primary_model_select');
+    var inputWrap = document.getElementById(isBackup ? 'backup_model_input_wrap' : 'primary_model_input_wrap');
+    var inputEl = document.getElementById(isBackup ? 'backup_model_name' : 'model_name');
+    if (!selectEl || !inputEl) return;
+
+    var val = selectEl.value;
+    if (val === '__custom__') {
+        if (inputWrap) inputWrap.style.display = 'block';
+        inputEl.focus();
+    } else {
+        if (inputWrap) inputWrap.style.display = 'none';
+        inputEl.value = val;
+    }
+}
+
+function toggleCustomModelInput(target) {
+    var isBackup = (target === 'backup');
+    var selectEl = document.getElementById(isBackup ? 'backup_model_select' : 'primary_model_select');
+    var inputWrap = document.getElementById(isBackup ? 'backup_model_input_wrap' : 'primary_model_input_wrap');
+    var inputEl = document.getElementById(isBackup ? 'backup_model_name' : 'model_name');
+    if (!inputWrap) return;
+
+    var isHidden = (inputWrap.style.display === 'none' || inputWrap.style.display === '');
+    if (isHidden) {
+        inputWrap.style.display = 'block';
+        if (selectEl) selectEl.value = '__custom__';
+        if (inputEl) inputEl.focus();
+    } else {
+        inputWrap.style.display = 'none';
+        if (selectEl && inputEl) {
+            selectEl.value = inputEl.value;
+            if (selectEl.value !== inputEl.value) {
+                selectEl.value = '__custom__';
+            }
+        }
+    }
+}
+
+function syncModelInput(target) {
+    var isBackup = (target === 'backup');
+    var selectEl = document.getElementById(isBackup ? 'backup_model_select' : 'primary_model_select');
+    var inputWrap = document.getElementById(isBackup ? 'backup_model_input_wrap' : 'primary_model_input_wrap');
+    var inputEl = document.getElementById(isBackup ? 'backup_model_name' : 'model_name');
+    if (!selectEl || !inputEl) return;
+
+    var val = inputEl.value.trim();
+    if (!val && isBackup) {
+        selectEl.value = '';
+        return;
+    }
+    var found = false;
+    for (var i = 0; i < selectEl.options.length; i++) {
+        if (selectEl.options[i].value === val) {
+            selectEl.selectedIndex = i;
+            found = true;
+            break;
+        }
+    }
+    if (!found) {
+        selectEl.value = '__custom__';
+        if (inputWrap) inputWrap.style.display = 'block';
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    syncModelInput('primary');
+    syncModelInput('backup');
+});
 
 function updateProviderHints(target) {
     var isBackup = (target === 'backup');

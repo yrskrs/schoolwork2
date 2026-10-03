@@ -6868,6 +6868,227 @@ def teacher_settings_view(request):
         'db_size': _get_database_size_display(),
     }
 
+    # ── 3.3.1. КАТАЛОГ ОФІЦІЙНИХ МОДЕЛЕЙ GOOGLE GEMINI ТА ЇХ КВОТ ────────────
+    gemini_catalog_raw = [
+        {
+            'name': 'gemini-3.6-flash',
+            'title': 'Gemini 3.6 Flash',
+            'tag': 'Рекомендована',
+            'tag_color': '#10b981',
+            'description': 'Найновіша швидка збалансована Flash-модель. Ідеальна для щоденної перевірки робіт учнів.',
+            'rpm': '15',
+            'rpd': '1 500',
+            'tpm': '1 000 000',
+            'context': '1M токенів',
+            'speed': '~1-3 сек',
+            'thinking_support': True,
+        },
+        {
+            'name': 'gemini-3.1-flash-lite',
+            'title': 'Gemini 3.1 Flash Lite',
+            'tag': 'Надвисока швидкість (30 RPM)',
+            'tag_color': '#06b6d4',
+            'description': 'Ультрашвидка генерація з подвоєним лімітом запитів на хвилину. Оптимальна для великих шкіл та масової перевірки.',
+            'rpm': '30',
+            'rpd': '1 500',
+            'tpm': '2 000 000',
+            'context': '1M токенів',
+            'speed': '<1.5 сек',
+            'thinking_support': False,
+        },
+        {
+            'name': 'gemini-3.8-flash',
+            'title': 'Gemini 3.8 Flash',
+            'tag': 'Нове покоління',
+            'tag_color': '#6366f1',
+            'description': 'Флагманська Flash-модель нового покоління. Потужний мультимодальний аналіз (можливі тимчасові піки попиту).',
+            'rpm': '15',
+            'rpd': '1 500',
+            'tpm': '1 000 000',
+            'context': '1M токенів',
+            'speed': '~2-4 сек',
+            'thinking_support': True,
+        },
+        {
+            'name': 'gemini-3.7-flash',
+            'title': 'Gemini 3.7 Flash',
+            'tag': 'Thinking Mode',
+            'tag_color': '#8b5cf6',
+            'description': 'Гібридна модель із розширеними можливостями покрокового розмірковування для складних завдань.',
+            'rpm': '15',
+            'rpd': '1 500',
+            'tpm': '1 000 000',
+            'context': '1M токенів',
+            'speed': '~3-6 сек',
+            'thinking_support': True,
+        },
+        {
+            'name': 'gemini-flash-latest',
+            'title': 'Gemini Flash Latest',
+            'tag': 'Автооновлення',
+            'tag_color': '#f59e0b',
+            'description': 'Динамічний системний псевдонім (аліас), який автоматично вказує на найсвіжішу стабільну Flash-версію.',
+            'rpm': '15',
+            'rpd': '1 500',
+            'tpm': '1 000 000',
+            'context': '1M токенів',
+            'speed': '~2-3 сек',
+            'thinking_support': True,
+        },
+        {
+            'name': 'gemini-3.1-pro-preview',
+            'title': 'Gemini 3.1 Pro Preview',
+            'tag': 'Глибокий аналіз (Pro)',
+            'tag_color': '#ec4899',
+            'description': 'Максимальна глибина педагогічного аналізу, величезне контекстне вікно для великих творів та проєктів.',
+            'rpm': '5',
+            'rpd': '300',
+            'tpm': '500 000',
+            'context': '2M токенів',
+            'speed': '~5-10 сек',
+            'thinking_support': True,
+        },
+        {
+            'name': 'gemini-2.5-flash',
+            'title': 'Gemini 2.5 Flash',
+            'tag': 'Стабільна класика',
+            'tag_color': '#64748b',
+            'description': 'Попередня стабільна Flash-модель. Перевірена надійність для сумісності.',
+            'rpm': '15',
+            'rpd': '1 500',
+            'tpm': '1 000 000',
+            'context': '1M токенів',
+            'speed': '~2-4 сек',
+            'thinking_support': False,
+        },
+    ]
+
+    gemini_catalog_models = []
+    for g_item in gemini_catalog_raw:
+        g_name = g_item['name']
+        p_info = next((item for item in models_with_priority if item['name'] == g_name), None)
+        gemini_catalog_models.append({
+            **g_item,
+            'is_active': (g_name == ai_settings.model_name),
+            'is_saved': (g_name in saved_models),
+            'priority': p_info['priority'] if p_info else None,
+            'enabled': p_info['enabled'] if p_info else False,
+        })
+
+    # ── 3.3.2. СТАТИСТИКА ЗАПИТІВ ТА ТОКЕНІВ ДЛЯ ВИКОРИСТАНИХ МОДЕЛЕЙ ──────
+    stats_days_param = request.GET.get('stats_days', '7').strip()
+    now = timezone.now()
+    one_minute_ago = now - timedelta(minutes=1)
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    if stats_days_param == '1':
+        start_date = now - timedelta(days=1)
+        period_days_count = 1
+        stats_days_label = '1 день (останні 24 години)'
+    elif stats_days_param == '3':
+        start_date = now - timedelta(days=3)
+        period_days_count = 3
+        stats_days_label = 'Останні 3 дні'
+    elif stats_days_param == '14':
+        start_date = now - timedelta(days=14)
+        period_days_count = 14
+        stats_days_label = 'Останні 14 днів'
+    elif stats_days_param == '30':
+        start_date = now - timedelta(days=30)
+        period_days_count = 30
+        stats_days_label = 'Останній місяць (30 днів)'
+    elif stats_days_param == 'all':
+        start_date = None
+        period_days_count = None
+        stats_days_label = 'Весь час'
+    else:
+        stats_days_param = '7'
+        start_date = now - timedelta(days=7)
+        period_days_count = 7
+        stats_days_label = 'Останні 7 днів'
+
+    from feed.models import AIRequestLog
+
+    # Беремо тільки ті моделі, які фактично використовувалися
+    used_models_names = list(
+        AIRequestLog.objects.exclude(model_name='').values_list('model_name', flat=True).distinct()
+    )
+
+    used_model_usage_stats = []
+    for m_name in used_models_names:
+        qs_all_time = AIRequestLog.objects.filter(model_name=m_name)
+        if not qs_all_time.exists():
+            continue
+
+        # RPM за останню хвилину
+        current_rpm = qs_all_time.filter(created_at__gte=one_minute_ago).count()
+
+        # RPD за сьогодні (від 00:00)
+        requests_today = qs_all_time.filter(created_at__gte=today_start).count()
+
+        # Вибірка за обраний період
+        if start_date:
+            qs_period = qs_all_time.filter(created_at__gte=start_date)
+        else:
+            qs_period = qs_all_time
+
+        period_total_reqs = qs_period.count()
+        period_success_reqs = qs_period.filter(is_success=True).count()
+        period_failed_reqs = qs_period.filter(is_success=False).count()
+
+        token_aggr = qs_period.aggregate(
+            p_tokens=Sum('prompt_tokens'),
+            c_tokens=Sum('completion_tokens'),
+            t_tokens=Sum('total_tokens')
+        )
+        prompt_tokens = token_aggr['p_tokens'] or 0
+        completion_tokens = token_aggr['c_tokens'] or 0
+        total_tokens = token_aggr['t_tokens'] or 0
+
+        if period_days_count:
+            avg_rpd = round(period_total_reqs / max(1, period_days_count), 1)
+        else:
+            first_req = qs_all_time.order_by('created_at').first()
+            days_span = max(1, (now - first_req.created_at).days) if first_req else 1
+            avg_rpd = round(period_total_reqs / days_span, 1)
+
+        # Піковий RPM за період (максимальна кількість запитів в одну хвилину)
+        peak_rpm = current_rpm
+        try:
+            from django.db.models.functions import TruncMinute
+            minute_peaks = qs_period.annotate(minute_slot=TruncMinute('created_at')).values('minute_slot').annotate(cnt=Count('id')).order_by('-cnt').first()
+            if minute_peaks and minute_peaks.get('cnt'):
+                peak_rpm = max(peak_rpm, minute_peaks['cnt'])
+        except Exception:
+            pass
+
+        last_req = qs_all_time.order_by('-created_at').first()
+        last_used = last_req.created_at if last_req else None
+        provider = last_req.provider if last_req else 'gemini'
+
+        success_rate = round((period_success_reqs / max(1, period_total_reqs)) * 100, 1) if period_total_reqs > 0 else 100.0
+
+        used_model_usage_stats.append({
+            'name': m_name,
+            'provider': provider,
+            'is_active': (m_name == ai_settings.model_name),
+            'current_rpm': current_rpm,
+            'peak_rpm': peak_rpm,
+            'requests_today': requests_today,
+            'avg_rpd': avg_rpd,
+            'period_total_reqs': period_total_reqs,
+            'period_success_reqs': period_success_reqs,
+            'period_failed_reqs': period_failed_reqs,
+            'success_rate': success_rate,
+            'prompt_tokens': prompt_tokens,
+            'completion_tokens': completion_tokens,
+            'total_tokens': total_tokens,
+            'last_used': last_used,
+        })
+
+    # Сортуємо: спочатку активна модель, далі за спаданням кількості запитів
+    used_model_usage_stats.sort(key=lambda x: (not x['is_active'], -x['period_total_reqs']))
+
     context = {
         'active_tab': tab,
         'teacher': teacher,
@@ -6891,6 +7112,10 @@ def teacher_settings_view(request):
         'models_with_priority': models_with_priority,
         'active_fallback_chain': active_fallback_chain,
         'model_stats': model_stats,
+        'gemini_catalog_models': gemini_catalog_models,
+        'used_model_usage_stats': used_model_usage_stats,
+        'stats_days': stats_days_param,
+        'stats_days_label': stats_days_label,
         'default_prompt': DEFAULT_NUS_SYSTEM_PROMPT,
         'default_nus_gr_prompt': DEFAULT_NUS_GR_SYSTEM_PROMPT,
         'default_traditional_prompt': DEFAULT_TRADITIONAL_SYSTEM_PROMPT,

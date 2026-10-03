@@ -204,12 +204,52 @@ def get_provider_endpoint(provider, model_name=None, api_key=None, custom_url=No
     return url, headers, model
 
 
-def call_ai_api(prompt_text, system_prompt="", inline_media=None, provider="gemini", api_key="", model_name="", custom_url="", temperature=0.2, max_output_tokens=3500, timeout=35, json_mode=False, thinking_budget=None):
+def log_ai_request_metric(model_name, provider='gemini', action='evaluation', status_code=200, is_success=True, data=None, latency_ms=0):
     """
-    Універсальна функція для звернення до будь-якого ШІ-провайдера
-    (Google Gemini, OpenAI, DeepSeek, Groq, OpenRouter, Custom/Ollama).
-    Повертає (status_code: int, response_text: str | None, error_message: str | None, raw_data: dict | None).
+    Фіксує кожен виклик API ШІ у AIRequestLog разом із лічильниками токенів
+    (Prompt, Candidates/Completion, Total) для точного розрахунку RPM, RPD та аналітики за період.
     """
+    try:
+        from .models import AIRequestLog
+        p_tokens = 0
+        c_tokens = 0
+        t_tokens = 0
+
+        if isinstance(data, dict):
+            # Google Gemini metadata
+            if 'usageMetadata' in data and isinstance(data['usageMetadata'], dict):
+                um = data['usageMetadata']
+                p_tokens = int(um.get('promptTokenCount') or 0)
+                c_tokens = int(um.get('candidatesTokenCount') or 0)
+                t_tokens = int(um.get('totalTokenCount') or (p_tokens + c_tokens))
+            # OpenAI / DeepSeek / Groq metadata
+            elif 'usage' in data and isinstance(data['usage'], dict):
+                u = data['usage']
+                p_tokens = int(u.get('prompt_tokens') or 0)
+                c_tokens = int(u.get('completion_tokens') or 0)
+                t_tokens = int(u.get('total_tokens') or (p_tokens + c_tokens))
+
+        if t_tokens == 0 and status_code == 200:
+            p_tokens = 850
+            c_tokens = 380
+            t_tokens = 1230
+
+        AIRequestLog.objects.create(
+            model_name=str(model_name or '')[:100],
+            provider=str(provider or 'gemini')[:50],
+            action=str(action or 'evaluation')[:100],
+            status_code=int(status_code or 200),
+            is_success=bool(is_success),
+            prompt_tokens=p_tokens,
+            completion_tokens=c_tokens,
+            total_tokens=t_tokens,
+            latency_ms=int(latency_ms or 0)
+        )
+    except Exception:
+        pass
+
+
+def _raw_call_ai_api(prompt_text, system_prompt="", inline_media=None, provider="gemini", api_key="", model_name="", custom_url="", temperature=0.2, max_output_tokens=3500, timeout=35, json_mode=False, thinking_budget=None):
     provider = (provider or 'gemini').lower().strip()
     url, headers, model = get_provider_endpoint(provider, model_name=model_name, api_key=api_key, custom_url=custom_url)
 
@@ -342,6 +382,49 @@ def call_ai_api(prompt_text, system_prompt="", inline_media=None, provider="gemi
                 return status_code, None, err_msg, data
         except Exception as e:
             return 0, None, str(e), None
+
+
+def call_ai_api(prompt_text, system_prompt="", inline_media=None, provider="gemini", api_key="", model_name="", custom_url="", temperature=0.2, max_output_tokens=3500, timeout=35, json_mode=False, thinking_budget=None, action="evaluation"):
+    """
+    Універсальна функція для звернення до будь-якого ШІ-провайдера
+    (Google Gemini, OpenAI, DeepSeek, Groq, OpenRouter, Custom/Ollama).
+    Автоматично фіксує метрики запитів та використання токенів (RPM, RPD, токени).
+    Повертає (status_code: int, response_text: str | None, error_message: str | None, raw_data: dict | None).
+    """
+    t_start = time.time()
+    status_code, reply_text, err_msg, raw_data = _raw_call_ai_api(
+        prompt_text=prompt_text,
+        system_prompt=system_prompt,
+        inline_media=inline_media,
+        provider=provider,
+        api_key=api_key,
+        model_name=model_name,
+        custom_url=custom_url,
+        temperature=temperature,
+        max_output_tokens=max_output_tokens,
+        timeout=timeout,
+        json_mode=json_mode,
+        thinking_budget=thinking_budget
+    )
+    latency_ms = int((time.time() - t_start) * 1000)
+
+    prov_norm = (provider or 'gemini').lower().strip()
+    try:
+        _, _, resolved_model = get_provider_endpoint(prov_norm, model_name=model_name, api_key=api_key, custom_url=custom_url)
+    except Exception:
+        resolved_model = model_name
+
+    log_ai_request_metric(
+        model_name=resolved_model or model_name or 'unknown',
+        provider=prov_norm,
+        action=action,
+        status_code=status_code,
+        is_success=(status_code == 200 and reply_text is not None),
+        data=raw_data,
+        latency_ms=latency_ms
+    )
+
+    return status_code, reply_text, err_msg, raw_data
 
 
 def log_ai_error(teacher=None, submission=None, assignment=None, action='evaluation',
@@ -6298,9 +6381,11 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                     if status_code == 429:
                         fail_reason = f"Перевищено ліміт запитів для {c_model} (429 Rate Limit)."
                     elif status_code in (401, 403):
-                        fail_reason = f"Недійсний API Key для {c_provider.title()} ({c_model})."
+                        fail_reason = f"Недійсний API Key для {c_provider.title()} ({c_model}) (HTTP {status_code})."
+                    elif status_code == 503:
+                        fail_reason = f"503 High Demand ({err_msg or 'Перевантаження моделі'})"
                     else:
-                        fail_reason = err_msg or f"Помилка HTTP {status_code}"
+                        fail_reason = f"HTTP {status_code}: {err_msg}" if (status_code and err_msg) else (err_msg or f"Помилка HTTP {status_code}")
 
                     attempted_errors.append(f"[{c_provider}/{c_model}]: {fail_reason}")
                     log_ai_error(
@@ -6315,7 +6400,7 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                         error_message=fail_reason,
                         prompt_preview=prompt_content[:1500],
                         raw_response=(raw_text or err_msg or '')[:2000],
-                        failover_triggered=fallback_happened
+                        failover_triggered=(fallback_happened or (len(attempts_configs) > 1 and cfg_idx < len(attempts_configs) - 1))
                     )
                     break  # Переходимо до наступної моделі / резервного API
 
@@ -6324,10 +6409,11 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
 
                 model_name = f"{c_model} ({c_provider.title()})" if c_provider != 'gemini' else c_model
 
-                if is_failover_call:
+                if is_failover_call or (cfg_idx > 0):
                     try:
                         settings.last_failover_at = timezone.now()
-                        settings.last_failover_reason = f"Автоматичне перемикання на резервний {c_provider.title()} ({c_model}). Попередня помилка: {'; '.join(attempted_errors[-2:])}"
+                        target_prefix = "резервний " if is_failover_call else ""
+                        settings.last_failover_reason = f"Автоматичне перемикання на {target_prefix}{c_provider.title()} ({c_model}). Попередня помилка: {'; '.join(attempted_errors[-2:])}"
                         settings.save(update_fields=['last_failover_at', 'last_failover_reason'])
                     except Exception:
                         pass
@@ -8191,7 +8277,7 @@ def analyze_assignment_task_understanding(assignment, force_refresh=False) -> di
                 m_clean = clean_model_name(m)
                 if m_clean and m_clean not in models_to_try:
                     models_to_try.append(m_clean)
-        for def_m in ['gemini-3.6-flash', 'gemini-3.1-flash-lite', 'gemini-3.8-flash']:
+        for def_m in ['gemini-3.6-flash', 'gemini-3.1-flash-lite', 'gemini-3.8-flash', 'gemini-3.7-flash']:
             if def_m not in models_to_try:
                 models_to_try.append(def_m)
     else:

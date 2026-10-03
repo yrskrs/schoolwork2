@@ -680,23 +680,45 @@
 
                                     <!-- Модель -->
                                     <div class="form-group mb-3">
-                                        <label for="model_name" class="form-label" style="font-weight:700;font-size:13px;">
-                                            Основна модель:
-                                        </label>
-                                        <input type="text" name="model_name" id="model_name" value="{{ ai_settings.model_name|default:'gemini-3.6-flash' }}"
-                                               list="primary-models-datalist" class="form-input" style="font-family:monospace;font-weight:700;font-size:13px;">
-                                        <datalist id="primary-models-datalist">
-                                            <option value="gemini-3.6-flash">Google Gemini 3.6 Flash (Рекомендована)</option>
-                                            <option value="gemini-flash-latest">Google Gemini Flash Latest</option>
-                                            <option value="gemini-3-flash-preview">Google Gemini 3 Flash Preview</option>
-                                            <option value="gemini-3.1-flash-lite-preview">Google Gemini 3.1 Flash Lite</option>
-                                            <option value="gemini-3.1-pro-preview">Google Gemini 3.1 Pro Preview</option>
-                                            <option value="gpt-4o-mini">OpenAI GPT-4o-mini</option>
-                                            <option value="gpt-4o">OpenAI GPT-4o</option>
-                                            <option value="deepseek-chat">DeepSeek Chat (V3)</option>
-                                            <option value="deepseek-reasoner">DeepSeek Reasoner (R1)</option>
-                                            <option value="llama-3.3-70b-versatile">Groq Llama 3.3 70B</option>
-                                        </datalist>
+                                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+                                            <label for="primary_model_select" class="form-label" style="font-weight:700;font-size:13px;margin:0;">
+                                                Основна модель:
+                                            </label>
+                                            <button type="button" class="btn btn-link btn-sm" onclick="toggleCustomModelInput('primary')" style="padding:0;font-size:11.5px;font-weight:700;text-decoration:none;color:var(--color-primary);">
+                                                ✏️ Ввести вручну
+                                            </button>
+                                        </div>
+                                        <select id="primary_model_select" class="form-input" style="font-family:monospace;font-weight:700;font-size:13px;margin-bottom:6px;" onchange="syncModelSelect('primary')">
+                                            <optgroup label="⭐ Офіційні моделі Google Gemini">
+                                                <option value="gemini-3.6-flash" {% if ai_settings.model_name == 'gemini-3.6-flash' %}selected{% endif %}>gemini-3.6-flash (Google Gemini 3.6 Flash — Рекомендована)</option>
+                                                <option value="gemini-3.1-flash-lite" {% if ai_settings.model_name == 'gemini-3.1-flash-lite' %}selected{% endif %}>gemini-3.1-flash-lite (30 RPM, Ультрашвидка)</option>
+                                                <option value="gemini-3.8-flash" {% if ai_settings.model_name == 'gemini-3.8-flash' %}selected{% endif %}>gemini-3.8-flash (Gemini 3.8 Flash)</option>
+                                                <option value="gemini-3.7-flash" {% if ai_settings.model_name == 'gemini-3.7-flash' %}selected{% endif %}>gemini-3.7-flash (Thinking Mode)</option>
+                                                <option value="gemini-flash-latest" {% if ai_settings.model_name == 'gemini-flash-latest' %}selected{% endif %}>gemini-flash-latest (Автооновлення)</option>
+                                                <option value="gemini-3.1-pro-preview" {% if ai_settings.model_name == 'gemini-3.1-pro-preview' %}selected{% endif %}>gemini-3.1-pro-preview (Pro, 2M токенів)</option>
+                                                <option value="gemini-2.5-flash" {% if ai_settings.model_name == 'gemini-2.5-flash' %}selected{% endif %}>gemini-2.5-flash (Стабільна)</option>
+                                            </optgroup>
+                                            <optgroup label="🌐 OpenAI, DeepSeek, Groq">
+                                                <option value="gpt-4o-mini" {% if ai_settings.model_name == 'gpt-4o-mini' %}selected{% endif %}>gpt-4o-mini (OpenAI GPT-4o-mini)</option>
+                                                <option value="gpt-4o" {% if ai_settings.model_name == 'gpt-4o' %}selected{% endif %}>gpt-4o (OpenAI GPT-4o)</option>
+                                                <option value="deepseek-chat" {% if ai_settings.model_name == 'deepseek-chat' %}selected{% endif %}>deepseek-chat (DeepSeek V3)</option>
+                                                <option value="deepseek-reasoner" {% if ai_settings.model_name == 'deepseek-reasoner' %}selected{% endif %}>deepseek-reasoner (DeepSeek R1)</option>
+                                                <option value="llama-3.3-70b-versatile" {% if ai_settings.model_name == 'llama-3.3-70b-versatile' %}selected{% endif %}>llama-3.3-70b-versatile (Groq Llama 3.3 70B)</option>
+                                            </optgroup>
+                                            {% if models_with_priority %}
+                                            <optgroup label="📋 Збережені в черзі пріоритетів">
+                                                {% for sm in models_with_priority %}
+                                                <option value="{{ sm.name }}" {% if ai_settings.model_name == sm.name %}selected{% endif %}>{{ sm.name }} (Пріоритет #{{ sm.priority }})</option>
+                                                {% endfor %}
+                                            </optgroup>
+                                            {% endif %}
+                                            <option value="__custom__">✏️ Ввести іншу назву моделі вручну...</option>
+                                        </select>
+                                        <div id="primary_model_input_wrap" style="display:none;">
+                                            <input type="text" name="model_name" id="model_name" value="{{ ai_settings.model_name|default:'gemini-3.6-flash' }}"
+                                                   placeholder="Введіть точну назву моделі..." class="form-input" style="font-family:monospace;font-weight:700;font-size:13px;" oninput="syncModelInput('primary')">
+                                            <div style="font-size:11px;color:var(--color-text-muted);margin-top:2px;">Вкажіть назву моделі вручну або оберіть зі списку вище.</div>
+                                        </div>
                                     </div>
 
                                     <!-- Custom Base URL (для Custom/Ollama) -->
@@ -765,20 +787,46 @@
 
                                     <!-- Резервна модель -->
                                     <div class="form-group mb-3">
-                                        <label for="backup_model_name" class="form-label" style="font-weight:700;font-size:13px;">
-                                            Резервна модель:
-                                        </label>
-                                        <input type="text" name="backup_model_name" id="backup_model_name" value="{{ ai_settings.backup_model_name }}"
-                                               placeholder="Залиште порожнім або вкажіть модель..." list="backup-models-datalist" class="form-input" style="font-family:monospace;font-weight:700;font-size:13px;">
-                                        <datalist id="backup-models-datalist">
-                                            <option value="gemini-3.6-flash">Google Gemini 3.6 Flash</option>
-                                            <option value="gemini-flash-latest">Google Gemini Flash Latest</option>
-                                            <option value="gemini-3.1-flash-lite-preview">Google Gemini 3.1 Flash Lite</option>
-                                            <option value="gemini-3.1-pro-preview">Google Gemini 3.1 Pro Preview</option>
-                                            <option value="gpt-4o-mini">OpenAI GPT-4o-mini</option>
-                                            <option value="deepseek-chat">DeepSeek Chat</option>
-                                            <option value="llama-3.3-70b-versatile">Groq Llama 3.3 70B</option>
-                                        </datalist>
+                                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+                                            <label for="backup_model_select" class="form-label" style="font-weight:700;font-size:13px;margin:0;">
+                                                Резервна модель:
+                                            </label>
+                                            <button type="button" class="btn btn-link btn-sm" onclick="toggleCustomModelInput('backup')" style="padding:0;font-size:11.5px;font-weight:700;text-decoration:none;color:var(--color-primary);">
+                                                ✏️ Ввести вручну
+                                            </button>
+                                        </div>
+                                        <select id="backup_model_select" class="form-input" style="font-family:monospace;font-weight:700;font-size:13px;margin-bottom:6px;" onchange="syncModelSelect('backup')">
+                                            <option value="" {% if not ai_settings.backup_model_name %}selected{% endif %}>-- Залишити порожнім (використовувати резерв черги) --</option>
+                                            <optgroup label="⭐ Офіційні моделі Google Gemini">
+                                                <option value="gemini-3.6-flash" {% if ai_settings.backup_model_name == 'gemini-3.6-flash' %}selected{% endif %}>gemini-3.6-flash (Google Gemini 3.6 Flash — Рекомендована)</option>
+                                                <option value="gemini-3.1-flash-lite" {% if ai_settings.backup_model_name == 'gemini-3.1-flash-lite' %}selected{% endif %}>gemini-3.1-flash-lite (30 RPM, Ультрашвидка)</option>
+                                                <option value="gemini-3.8-flash" {% if ai_settings.backup_model_name == 'gemini-3.8-flash' %}selected{% endif %}>gemini-3.8-flash (Gemini 3.8 Flash)</option>
+                                                <option value="gemini-3.7-flash" {% if ai_settings.backup_model_name == 'gemini-3.7-flash' %}selected{% endif %}>gemini-3.7-flash (Thinking Mode)</option>
+                                                <option value="gemini-flash-latest" {% if ai_settings.backup_model_name == 'gemini-flash-latest' %}selected{% endif %}>gemini-flash-latest (Автооновлення)</option>
+                                                <option value="gemini-3.1-pro-preview" {% if ai_settings.backup_model_name == 'gemini-3.1-pro-preview' %}selected{% endif %}>gemini-3.1-pro-preview (Pro, 2M токенів)</option>
+                                                <option value="gemini-2.5-flash" {% if ai_settings.backup_model_name == 'gemini-2.5-flash' %}selected{% endif %}>gemini-2.5-flash (Стабільна)</option>
+                                            </optgroup>
+                                            <optgroup label="🌐 OpenAI, DeepSeek, Groq">
+                                                <option value="gpt-4o-mini" {% if ai_settings.backup_model_name == 'gpt-4o-mini' %}selected{% endif %}>gpt-4o-mini (OpenAI GPT-4o-mini)</option>
+                                                <option value="gpt-4o" {% if ai_settings.backup_model_name == 'gpt-4o' %}selected{% endif %}>gpt-4o (OpenAI GPT-4o)</option>
+                                                <option value="deepseek-chat" {% if ai_settings.backup_model_name == 'deepseek-chat' %}selected{% endif %}>deepseek-chat (DeepSeek V3)</option>
+                                                <option value="deepseek-reasoner" {% if ai_settings.backup_model_name == 'deepseek-reasoner' %}selected{% endif %}>deepseek-reasoner (DeepSeek R1)</option>
+                                                <option value="llama-3.3-70b-versatile" {% if ai_settings.backup_model_name == 'llama-3.3-70b-versatile' %}selected{% endif %}>llama-3.3-70b-versatile (Groq Llama 3.3 70B)</option>
+                                            </optgroup>
+                                            {% if models_with_priority %}
+                                            <optgroup label="📋 Збережені в черзі пріоритетів">
+                                                {% for sm in models_with_priority %}
+                                                <option value="{{ sm.name }}" {% if ai_settings.backup_model_name == sm.name %}selected{% endif %}>{{ sm.name }} (Пріоритет #{{ sm.priority }})</option>
+                                                {% endfor %}
+                                            </optgroup>
+                                            {% endif %}
+                                            <option value="__custom__">✏️ Ввести іншу назву моделі вручну...</option>
+                                        </select>
+                                        <div id="backup_model_input_wrap" style="display:none;">
+                                            <input type="text" name="backup_model_name" id="backup_model_name" value="{{ ai_settings.backup_model_name }}"
+                                                   placeholder="Введіть назву резервної моделі..." class="form-input" style="font-family:monospace;font-weight:700;font-size:13px;" oninput="syncModelInput('backup')">
+                                            <div style="font-size:11px;color:var(--color-text-muted);margin-top:2px;">Вкажіть резервну модель вручну або оберіть зі списку вище.</div>
+                                        </div>
                                     </div>
 
                                     <!-- Резервний Custom Base URL -->
@@ -1298,6 +1346,71 @@
                                     </button>
                                 </div>
                             </form>
+
+                            <!-- Список офіційних моделей Gemini з квотами (RPM, RPD, токени) для швидкого додавання в проект -->
+                            <div style="margin-top:16px;padding-top:14px;border-top:1px dashed var(--color-border);">
+                                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+                                    <div style="font-size:13px;font-weight:800;color:var(--color-text-primary);display:flex;align-items:center;gap:6px;">
+                                        <span>📚</span> <span>Каталог рекомендованих моделей Google Gemini (квоти RPM / RPD / токени):</span>
+                                    </div>
+                                    <span style="font-size:11.5px;color:var(--color-text-muted);">Натисніть кнопку під моделлю, щоб миттєво додати її до проекту</span>
+                                </div>
+
+                                <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(290px, 1fr));gap:12px;">
+                                    {% for cat_m in gemini_catalog_models %}
+                                    <div class="sidebar-card" style="padding:14px;display:flex;flex-direction:column;justify-content:space-between;border:1.5px solid {% if cat_m.is_recommended %}var(--color-primary){% else %}var(--color-border){% endif %};background:var(--color-surface);border-radius:var(--radius-md);box-shadow:0 1px 4px rgba(0,0,0,0.03);">
+                                        <div>
+                                            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px;margin-bottom:8px;">
+                                                <div>
+                                                    <div style="font-weight:800;font-size:13.5px;color:var(--color-text-primary);display:flex;align-items:center;gap:6px;">
+                                                        <code style="background:var(--color-bg-secondary);padding:2px 7px;border-radius:4px;font-size:12.5px;color:var(--color-text-primary);">{{ cat_m.name }}</code>
+                                                    </div>
+                                                    <div style="font-size:11.5px;color:var(--color-text-secondary);font-weight:600;margin-top:2px;">
+                                                        {{ cat_m.title }}
+                                                    </div>
+                                                </div>
+                                                <span class="badge" style="font-size:10.5px;font-weight:800;padding:2px 7px;{% if cat_m.is_recommended %}background:rgba(99,102,241,0.15);color:var(--color-primary);{% else %}background:var(--color-bg-secondary);color:var(--color-text-secondary);{% endif %}">
+                                                    {{ cat_m.badge }}
+                                                </span>
+                                            </div>
+
+                                            <!-- Ліміти запитів і токенів -->
+                                            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;background:var(--color-bg-secondary);padding:8px;border-radius:var(--radius-sm);margin:8px 0;font-size:11px;text-align:center;">
+                                                <div>
+                                                    <div style="color:var(--color-text-muted);font-size:9.5px;font-weight:800;text-transform:uppercase;">Хвилина</div>
+                                                    <div style="font-weight:800;color:var(--color-primary);font-size:12px;margin-top:1px;">⚡ {{ cat_m.rpm }} RPM</div>
+                                                </div>
+                                                <div>
+                                                    <div style="color:var(--color-text-muted);font-size:9.5px;font-weight:800;text-transform:uppercase;">День</div>
+                                                    <div style="font-weight:800;color:#059669;font-size:12px;margin-top:1px;">📅 {{ cat_m.rpd }} RPD</div>
+                                                </div>
+                                                <div>
+                                                    <div style="color:var(--color-text-muted);font-size:9.5px;font-weight:800;text-transform:uppercase;">Токени</div>
+                                                    <div style="font-weight:800;color:#8b5cf6;font-size:12px;margin-top:1px;">🧠 {{ cat_m.context }}</div>
+                                                </div>
+                                            </div>
+
+                                            <div style="font-size:11.5px;color:var(--color-text-secondary);line-height:1.4;margin-bottom:10px;">
+                                                {{ cat_m.description }}
+                                            </div>
+                                        </div>
+
+                                        <!-- Дії: вставити у форму додавання або встановити як основну/резервну -->
+                                        <div style="display:flex;gap:6px;margin-top:auto;flex-wrap:wrap;border-top:1px solid var(--color-border);padding-top:8px;">
+                                            <button type="button" class="btn btn-primary btn-sm" onclick="selectModelToInput('{{ cat_m.name }}', 'queue')" style="flex:1;font-size:11.5px;padding:4px 8px;font-weight:700;" title="Вставити назву моделі у форму додавання в чергу пріоритетів">
+                                                ➕ Додати в чергу
+                                            </button>
+                                            <button type="button" class="btn btn-secondary btn-sm" onclick="selectModelToInput('{{ cat_m.name }}', 'primary')" style="font-size:11px;padding:4px 8px;font-weight:700;" title="Встановити як основну модель">
+                                                ⭐ Як основну
+                                            </button>
+                                            <button type="button" class="btn btn-secondary btn-sm" onclick="selectModelToInput('{{ cat_m.name }}', 'backup')" style="font-size:11px;padding:4px 8px;font-weight:700;" title="Встановити як резервну модель">
+                                                🛡️ Резерв
+                                            </button>
+                                        </div>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
                         </div>
 
                     </div>
@@ -1375,6 +1488,178 @@
                             </div>
                         </div>
 
+                    </div>
+                </div>
+
+                <!-- 3.3.1. Статистика запитів (RPM, RPD) та токенів використаних моделей -->
+                <div class="form-card mb-4" id="used-models-stats-section">
+                    <div class="form-card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+                        <div>
+                            <h2 class="form-card-title" style="display:flex;align-items:center;gap:8px;">
+                                <span>📈</span>
+                                <span>Статистика запитів (RPM, RPD) та токенів використаних моделей</span>
+                                <span class="badge" style="background:rgba(99,102,241,0.15);color:var(--color-primary);font-size:12px;font-weight:800;padding:2px 8px;border-radius:12px;">
+                                    {{ used_model_usage_stats|length }}
+                                </span>
+                            </h2>
+                            <div style="font-size:12px;color:var(--color-text-muted);margin-top:2px;">
+                                Відображаються виключно моделі, якими реально надсилались запити в системі. Враховуються запити за обраний період ({{ stats_days_label }}).
+                            </div>
+                        </div>
+
+                        <!-- Фільтр за кількістю днів -->
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            <label for="stats_days_select" style="font-size:12.5px;font-weight:700;margin:0;color:var(--color-text-secondary);white-space:nowrap;">
+                                📅 Фільтр днів:
+                            </label>
+                            <select id="stats_days_select" class="form-input" style="font-size:12.5px;font-weight:700;padding:5px 10px;width:auto;min-width:180px;" onchange="changeStatsDays(this.value)">
+                                <option value="1" {% if stats_days == '1' %}selected{% endif %}>Останній 1 день (24 год)</option>
+                                <option value="3" {% if stats_days == '3' %}selected{% endif %}>Останні 3 дні</option>
+                                <option value="7" {% if stats_days == '7' %}selected{% endif %}>Останні 7 днів (Тиждень)</option>
+                                <option value="14" {% if stats_days == '14' %}selected{% endif %}>Останні 14 днів (2 тижні)</option>
+                                <option value="30" {% if stats_days == '30' %}selected{% endif %}>Останні 30 днів (Місяць)</option>
+                                <option value="all" {% if stats_days == 'all' %}selected{% endif %}>Увесь час</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-card-body" style="padding:0;">
+                        {% if used_model_usage_stats %}
+                        <div style="overflow-x:auto;">
+                            <table class="table" style="margin:0;width:100%;font-size:13px;border-collapse:collapse;">
+                                <thead>
+                                    <tr style="background:var(--color-bg-secondary);border-bottom:1px solid var(--color-border);text-align:left;">
+                                        <th style="padding:12px 16px;font-weight:800;">Модель</th>
+                                        <th style="padding:12px 14px;font-weight:800;text-align:center;">
+                                            RPM (Хвилина)
+                                            <div style="font-size:10px;font-weight:600;color:var(--color-text-muted);">поточний / піковий</div>
+                                        </th>
+                                        <th style="padding:12px 14px;font-weight:800;text-align:center;">
+                                            RPD (День)
+                                            <div style="font-size:10px;font-weight:600;color:var(--color-text-muted);">сьогодні / сер. за період</div>
+                                        </th>
+                                        <th style="padding:12px 14px;font-weight:800;text-align:center;">Запитів</th>
+                                        <th style="padding:12px 14px;font-weight:800;text-align:center;">Успішність</th>
+                                        <th style="padding:12px 16px;font-weight:800;">
+                                            Використано токенів
+                                            <div style="font-size:10px;font-weight:600;color:var(--color-text-muted);">prompt + compl = разом</div>
+                                        </th>
+                                        <th style="padding:12px 14px;font-weight:800;">Останній запит</th>
+                                        <th style="padding:12px 14px;font-weight:800;text-align:center;">Дія</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for stat in used_model_usage_stats %}
+                                    <tr style="border-bottom:1px solid var(--color-border);{% if stat.is_active %}background:rgba(99,102,241,0.03);{% endif %}">
+                                        <td style="padding:12px 16px;vertical-align:middle;">
+                                            <div style="display:flex;align-items:center;gap:8px;">
+                                                <code style="font-weight:800;font-size:13px;background:var(--color-bg-secondary);padding:3px 7px;border-radius:4px;color:var(--color-text-primary);">
+                                                    {{ stat.name }}
+                                                </code>
+                                                {% if stat.is_active %}
+                                                <span class="badge" style="background:#10b981;color:#fff;font-size:10.5px;font-weight:800;padding:2px 7px;">
+                                                    🟢 Активна
+                                                </span>
+                                                {% endif %}
+                                            </div>
+                                            <div style="font-size:11px;color:var(--color-text-muted);margin-top:3px;">
+                                                Провайдер: <span style="text-transform:uppercase;font-weight:700;">{{ stat.provider }}</span>
+                                            </div>
+                                        </td>
+
+                                        <!-- RPM -->
+                                        <td style="padding:12px 14px;text-align:center;vertical-align:middle;">
+                                            <div style="display:inline-flex;flex-direction:column;align-items:center;">
+                                                <span style="font-size:14px;font-weight:800;color:{% if stat.current_rpm > 0 %}var(--color-primary){% else %}var(--color-text-muted){% endif %};">
+                                                    {{ stat.current_rpm }} RPM
+                                                </span>
+                                                <span style="font-size:11px;color:var(--color-text-secondary);font-weight:600;">
+                                                    пік: <strong>{{ stat.peak_rpm }}</strong>
+                                                </span>
+                                            </div>
+                                        </td>
+
+                                        <!-- RPD -->
+                                        <td style="padding:12px 14px;text-align:center;vertical-align:middle;">
+                                            <div style="display:inline-flex;flex-direction:column;align-items:center;">
+                                                <span style="font-size:14px;font-weight:800;color:{% if stat.requests_today > 0 %}#059669{% else %}var(--color-text-muted){% endif %};">
+                                                    {{ stat.requests_today }} RPD
+                                                </span>
+                                                <span style="font-size:11px;color:var(--color-text-secondary);font-weight:600;">
+                                                    сер.: <strong>{{ stat.avg_rpd }}</strong>/день
+                                                </span>
+                                            </div>
+                                        </td>
+
+                                        <!-- Всього запитів -->
+                                        <td style="padding:12px 14px;text-align:center;vertical-align:middle;">
+                                            <span style="font-size:15px;font-weight:800;color:var(--color-text-primary);">
+                                                {{ stat.period_total_reqs }}
+                                            </span>
+                                            <div style="font-size:10.5px;color:var(--color-text-muted);">
+                                                {% if stat.period_failed_reqs %}
+                                                <span style="color:#ef4444;">{{ stat.period_failed_reqs }} помилок</span>
+                                                {% else %}
+                                                <span style="color:#10b981;">0 збоїв</span>
+                                                {% endif %}
+                                            </div>
+                                        </td>
+
+                                        <!-- Успішність -->
+                                        <td style="padding:12px 14px;text-align:center;vertical-align:middle;">
+                                            <span class="badge" style="font-size:11.5px;font-weight:800;padding:3px 8px;{% if stat.success_rate >= 95 %}background:rgba(16,185,129,0.15);color:#059669;{% elif stat.success_rate >= 70 %}background:rgba(245,158,11,0.15);color:#d97706;{% else %}background:rgba(239,68,68,0.15);color:#dc2626;{% endif %}">
+                                                {{ stat.success_rate }}%
+                                            </span>
+                                        </td>
+
+                                        <!-- Токени -->
+                                        <td style="padding:12px 16px;vertical-align:middle;">
+                                            <div style="font-size:13px;font-weight:800;color:#7c3aed;">
+                                                Σ {{ stat.total_tokens }}
+                                            </div>
+                                            <div style="font-size:10.5px;color:var(--color-text-muted);margin-top:2px;">
+                                                вхідні: {{ stat.prompt_tokens }} · вихідні: {{ stat.completion_tokens }}
+                                            </div>
+                                        </td>
+
+                                        <!-- Останній запит -->
+                                        <td style="padding:12px 14px;vertical-align:middle;font-size:12px;color:var(--color-text-secondary);white-space:nowrap;">
+                                            {% if stat.last_used %}
+                                                {{ stat.last_used|date:"d.m.Y H:i" }}
+                                            {% else %}
+                                                <span class="text-muted">—</span>
+                                            {% endif %}
+                                        </td>
+
+                                        <!-- Дія -->
+                                        <td style="padding:12px 14px;text-align:center;vertical-align:middle;white-space:nowrap;">
+                                            <div style="display:flex;gap:4px;justify-content:center;">
+                                                {% if not stat.is_active %}
+                                                <button type="button" class="btn btn-secondary btn-sm" onclick="selectModelToInput('{{ stat.name }}', 'primary')" style="font-size:11px;padding:3px 7px;font-weight:700;" title="Зробити основною моделлю">
+                                                    ⭐ Основна
+                                                </button>
+                                                {% endif %}
+                                                <button type="button" class="btn btn-secondary btn-sm" onclick="testModelDirect('{{ stat.name }}', this)" style="font-size:11px;padding:3px 7px;font-weight:700;" title="Перевірити з'єднання з цією моделлю">
+                                                    🧪 Тест
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        {% else %}
+                        <div style="padding:28px 20px;text-align:center;color:var(--color-text-muted);">
+                            <div style="font-size:28px;margin-bottom:8px;">📊</div>
+                            <div style="font-weight:700;font-size:14px;color:var(--color-text-primary);margin-bottom:4px;">
+                                Немає запитів до ШІ за обраний період ({{ stats_days_label }})
+                            </div>
+                            <div style="font-size:12.5px;max-width:540px;margin:0 auto;">
+                                У цьому розділі з'являться виключно моделі, до яких реально виконувалися виклики. Спробуйте змінити період фільтру на «Увесь час» або надішліть роботу на перевірку.
+                            </div>
+                        </div>
+                        {% endif %}
                     </div>
                 </div>
 
@@ -1853,6 +2138,159 @@ function toggleKeyVisibility(inputId) {
     if (!inp) return;
     inp.type = (inp.type === 'password') ? 'text' : 'password';
 }
+
+// Синхронізація вибору моделі з випадаючого списку або ручного вводу
+function syncModelSelect(target) {
+    var isBackup = (target === 'backup');
+    var selectEl = document.getElementById(isBackup ? 'backup_model_select' : 'primary_model_select');
+    var inputWrap = document.getElementById(isBackup ? 'backup_model_input_wrap' : 'primary_model_input_wrap');
+    var inputEl = document.getElementById(isBackup ? 'backup_model_name' : 'model_name');
+    if (!selectEl || !inputEl) return;
+
+    var val = selectEl.value;
+    if (val === '__custom__') {
+        if (inputWrap) inputWrap.style.display = 'block';
+        inputEl.focus();
+    } else {
+        if (inputWrap) inputWrap.style.display = 'none';
+        inputEl.value = val;
+    }
+}
+
+function toggleCustomModelInput(target) {
+    var isBackup = (target === 'backup');
+    var selectEl = document.getElementById(isBackup ? 'backup_model_select' : 'primary_model_select');
+    var inputWrap = document.getElementById(isBackup ? 'backup_model_input_wrap' : 'primary_model_input_wrap');
+    var inputEl = document.getElementById(isBackup ? 'backup_model_name' : 'model_name');
+    if (!inputWrap) return;
+
+    var isHidden = (inputWrap.style.display === 'none' || inputWrap.style.display === '');
+    if (isHidden) {
+        inputWrap.style.display = 'block';
+        if (selectEl) selectEl.value = '__custom__';
+        if (inputEl) inputEl.focus();
+    } else {
+        inputWrap.style.display = 'none';
+        if (selectEl && inputEl) {
+            selectEl.value = inputEl.value;
+            if (selectEl.value !== inputEl.value) {
+                selectEl.value = '__custom__';
+            }
+        }
+    }
+}
+
+function syncModelInput(target) {
+    var isBackup = (target === 'backup');
+    var selectEl = document.getElementById(isBackup ? 'backup_model_select' : 'primary_model_select');
+    var inputWrap = document.getElementById(isBackup ? 'backup_model_input_wrap' : 'primary_model_input_wrap');
+    var inputEl = document.getElementById(isBackup ? 'backup_model_name' : 'model_name');
+    if (!selectEl || !inputEl) return;
+
+    var val = inputEl.value.trim();
+    if (!val && isBackup) {
+        selectEl.value = '';
+        return;
+    }
+    var found = false;
+    for (var i = 0; i < selectEl.options.length; i++) {
+        if (selectEl.options[i].value === val) {
+            selectEl.selectedIndex = i;
+            found = true;
+            break;
+        }
+    }
+    if (!found) {
+        selectEl.value = '__custom__';
+        if (inputWrap) inputWrap.style.display = 'block';
+    }
+}
+
+function selectModelToInput(modelName, target) {
+    if (!modelName) return;
+    if (target === 'queue') {
+        var inputQueue = document.getElementById('new_model_name');
+        if (inputQueue) {
+            inputQueue.value = modelName;
+            inputQueue.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            inputQueue.focus();
+            inputQueue.style.transition = 'all 0.3s ease';
+            inputQueue.style.boxShadow = '0 0 0 3px rgba(99, 102, 241, 0.4)';
+            setTimeout(function() {
+                inputQueue.style.boxShadow = '';
+            }, 1800);
+        }
+    } else if (target === 'primary') {
+        var selectEl = document.getElementById('primary_model_select');
+        var inputEl = document.getElementById('model_name');
+        var inputWrap = document.getElementById('primary_model_input_wrap');
+        if (inputEl) inputEl.value = modelName;
+        if (selectEl) {
+            var found = false;
+            for (var i = 0; i < selectEl.options.length; i++) {
+                if (selectEl.options[i].value === modelName) {
+                    selectEl.selectedIndex = i;
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                selectEl.value = '__custom__';
+                if (inputWrap) inputWrap.style.display = 'block';
+            } else {
+                if (inputWrap) inputWrap.style.display = 'none';
+            }
+        }
+        var card = document.getElementById('primary_model_select');
+        if (card) {
+            card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            card.style.transition = 'all 0.3s ease';
+            card.style.boxShadow = '0 0 0 3px rgba(99, 102, 241, 0.4)';
+            setTimeout(function() { card.style.boxShadow = ''; }, 1800);
+        }
+    } else if (target === 'backup') {
+        var bSelectEl = document.getElementById('backup_model_select');
+        var bInputEl = document.getElementById('backup_model_name');
+        var bInputWrap = document.getElementById('backup_model_input_wrap');
+        if (bInputEl) bInputEl.value = modelName;
+        if (bSelectEl) {
+            var bFound = false;
+            for (var j = 0; j < bSelectEl.options.length; j++) {
+                if (bSelectEl.options[j].value === modelName) {
+                    bSelectEl.selectedIndex = j;
+                    bFound = true;
+                    break;
+                }
+            }
+            if (!bFound) {
+                bSelectEl.value = '__custom__';
+                if (bInputWrap) bInputWrap.style.display = 'block';
+            } else {
+                if (bInputWrap) bInputWrap.style.display = 'none';
+            }
+        }
+        if (bSelectEl) {
+            bSelectEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            bSelectEl.style.transition = 'all 0.3s ease';
+            bSelectEl.style.boxShadow = '0 0 0 3px rgba(245, 158, 11, 0.4)';
+            setTimeout(function() { bSelectEl.style.boxShadow = ''; }, 1800);
+        }
+    }
+}
+
+function changeStatsDays(days) {
+    var url = new URL(window.location.href);
+    url.searchParams.set('tab', 'ai');
+    url.searchParams.set('stats_days', days);
+    url.hash = 'used-models-stats-section';
+    window.location.href = url.toString();
+}
+
+// Ініціалізація вибору моделей при завантаженні
+document.addEventListener('DOMContentLoaded', function() {
+    syncModelInput('primary');
+    syncModelInput('backup');
+});
 
 // Оновлення підказок та посилань на отримання ключів
 function updateProviderHints(target) {
