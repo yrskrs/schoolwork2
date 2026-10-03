@@ -1,0 +1,17 @@
+<section class="assignment-detail-help-card" id="assignment-help-card" aria-labelledby="assignment-help-title">
+    <h2 id="assignment-help-title">Як працювати із завданням</h2>
+    <ol class="assignment-detail-route">
+        <li><a href="#assignment-instructions-card">Прочитай вказівки вчителя.</a></li>
+        {% if has_assignment_materials %}<li><a href="#assignment-materials-section">Відкрий матеріали нижче.</a></li>{% endif %}
+        <li>{% if assignment.no_submission_required %}Виконай вказівки вчителя.{% elif is_archived or assignment.is_archived %}Переглянь завдання. Прийом робіт закрито.{% else %}Виконай завдання та здай результат.{% endif %}</li>
+    </ol>
+    {% if not assignment.no_submission_required and not is_archived and not assignment.is_archived %}
+    <a href="{{ assignment_submit_url }}" class="btn btn-primary btn-block">📤 Здати роботу</a>
+    {% endif %}
+    <div class="assignment-detail-help-actions">
+        <button type="button" onclick="openCriteriaModal()" class="btn btn-secondary btn-block">📋 Критерії оцінювання</button>
+        {% if assignment.allow_student_ai_understanding %}
+        <button type="button" onclick="openAiUnderstandingModal({{ assignment.pk }})" class="btn btn-secondary btn-block">💡 Пояснення завдання від ШІ</button>
+        {% endif %}
+    </div>
+</section>

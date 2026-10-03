@@ -1782,10 +1782,10 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
         )
         indiv_assignment.classes.add(self.class_group)
 
-        # 2. Перевіряємо заголовок 'Опис завдання' на сторінці деталей
+        # 2. Перевіряємо зрозумілий заголовок інструкції на сторінці деталей
         resp_detail = self.client.get(reverse('assignment_detail', kwargs={'pk': indiv_assignment.pk}))
         self.assertEqual(resp_detail.status_code, 200)
-        self.assertContains(resp_detail, 'Опис завдання')
+        self.assertContains(resp_detail, 'Що потрібно зробити')
         self.assertNotContains(resp_detail, 'Детальний опис та інструкція для учнів')
 
         # 3. Перевіряємо автозаповнення форми здачі роботи
@@ -8469,4 +8469,3 @@ class TeacherIntentAndTaskUnderstandingTests(TestCase):
         t_intent = result.get('teacher_intent') or {}
         self.assertEqual(t_intent.get('task_type'), 'presentation')
         self.assertNotIn("вправа 4", t_intent.get('what_teacher_asks', '').lower())
-

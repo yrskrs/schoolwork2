@@ -712,6 +712,14 @@ def assignment_detail(request, pk):
             'pdf_preview_url': pdf_preview_url,
         })
 
+    assigned_classes = list(assignment.classes.all())
+    selected_class = next((group for group in assigned_classes if str(group.pk) == request.GET.get('class')), None)
+    if selected_class is None and len(assigned_classes) == 1:
+        selected_class = assigned_classes[0]
+    assignment_submit_url = reverse('submit_assignment', args=[assignment.pk])
+    if selected_class:
+        assignment_submit_url += f'?class={selected_class.pk}'
+
     context = {
         'assignment': assignment,
         'is_archived': is_archived,
@@ -721,6 +729,8 @@ def assignment_detail(request, pk):
         'submissions_count': submissions_count,
         'all_classes': ClassGroup.objects.all().order_by('grade', 'letter'),
         'files_with_preview': files_with_preview,
+        'has_assignment_materials': bool(files_with_preview or assignment.link_url or assignment.additional_links.all() or assignment.all_youtube_videos),
+        'assignment_submit_url': assignment_submit_url,
     }
     return render(request, 'feed/assignment_detail.html', context)
 

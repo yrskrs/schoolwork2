@@ -1,0 +1,18 @@
+<section class="assignment-detail-completion" id="assignment-submit-section" aria-labelledby="assignment-completion-title">
+    {% if is_archived or assignment.is_archived %}
+    <h2 id="assignment-completion-title">Прийом робіт закрито</h2>
+    <p>Ти можеш перечитати завдання й матеріали. Якщо потрібно здати роботу, звернися до вчителя.</p>
+    {% elif assignment.no_submission_required %}
+    <h2 id="assignment-completion-title">Без здачі роботи на сайті</h2>
+    <p>Опрацюй матеріал і виконай вказівки вчителя. Надсилати файли або відповідь на сайті не потрібно.</p>
+    {% else %}
+    <h2 id="assignment-completion-title">Як здати роботу</h2>
+    <ol>
+        <li>Натисни «Здати роботу».</li>
+        <li>Перевір тему й клас, укажи своє прізвище та ім’я.</li>
+        <li>Прикріпи файли або додай посилання чи текстову відповідь.</li>
+        <li>Надішли роботу й дочекайся повідомлення про успішну здачу.</li>
+    </ol>
+    <a href="{{ assignment_submit_url }}" class="btn btn-primary">📤 Здати роботу</a>
+    {% endif %}
+</section>

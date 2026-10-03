@@ -1,0 +1,95 @@
+<header class="assignment-detail-overview">
+{% if is_teacher %}
+                    <!-- Верхні теги та кнопка швидкого редагування для вчителя -->
+                    <div class="assignment-detail-tags">
+                        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+                            {% if assignment.subject %}
+                            <span class="subject-tag" style="background-color:{{ assignment.subject.color }}22;color:{{ assignment.subject.color }};font-size:13px;padding:4px 12px;font-weight:700;">
+                                {{ assignment.subject.icon }} {{ assignment.subject.name }}
+                            </span>
+                            {% endif %}
+
+                            {% with targets=assignment.get_all_targets_info %}
+                            {% if targets %}
+                                {% for tgt in targets %}
+                                <span class="class-prominent-badge {{ tgt.badge_class }}" style="font-size:12px;" title="{{ tgt.summary }}">
+                                    {% if tgt.status == 'now' %}
+                                    <span class="live-dot-pulse"></span>
+                                    <span class="class-text">{{ tgt.class_name }}</span>
+                                    <span class="class-time-hint">⚡ Зараз{% if tgt.slot_info %} ({{ tgt.slot_info }}){% endif %}</span>
+                                    {% elif tgt.status == 'today' %}
+                                    <span class="class-dot-today"></span>
+                                    <span class="class-text">{{ tgt.class_name }}</span>
+                                    <span class="class-time-hint">Сьогодні{% if tgt.slot_info %} ({{ tgt.slot_info }}){% endif %}</span>
+                                    {% elif tgt.status == 'upcoming' %}
+                                    <span class="class-icon">📅</span>
+                                    <span class="class-text">{{ tgt.class_name }}</span>
+                                    <span class="class-time-hint">{% if tgt.day_name %}{{ tgt.day_name|slice:":2" }}{% elif tgt.date_str %}{{ tgt.date_str }}{% endif %}{% if tgt.slot_info %} ({{ tgt.slot_info }}){% endif %}</span>
+                                    {% elif tgt.status == 'past' %}
+                                    <span class="class-icon">✓</span>
+                                    <span class="class-text">{{ tgt.class_name }}</span>
+                                    <span class="class-time-hint">{% if tgt.slot_info %}{{ tgt.slot_info }} • {% endif %}пройдено</span>
+                                    {% else %}
+                                    <span class="class-icon">🏫</span>
+                                    <span class="class-text">{{ tgt.class_name }}</span>
+                                    {% endif %}
+                                </span>
+                                {% endfor %}
+                            {% else %}
+                                {% for class in assignment.classes.all %}
+                                <span class="class-prominent-badge" style="font-size:12px;">
+                                    <span class="class-icon">🏫</span>
+                                    <span class="class-text">{{ class.name }}</span>
+                                </span>
+                                {% endfor %}
+                            {% endif %}
+                            {% endwith %}
+
+                            {% if assignment.is_individual %}
+                            <span class="individual-tag">👤 {{ assignment.student_display }}</span>
+                            {% endif %}
+                        </div>
+
+                        {% if can_edit %}
+                        <div class="teacher-quick-edit-wrap" style="display:inline-flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                            <a href="{% url 'assignment_edit' assignment.pk %}" class="btn btn-warning btn-sm" id="btn-quick-edit-top" style="display:inline-flex;align-items:center;gap:6px;font-weight:750;font-size:13px;padding:7px 14px;border-radius:var(--radius-sm);box-shadow:0 2px 8px rgba(245,158,11,0.25);text-decoration:none;">
+                                <span>✏️</span>
+                                <span>Відредагувати завдання</span>
+                            </a>
+                            <button type="button" class="btn btn-secondary btn-sm" id="btn-quick-duplicate-top" style="display:inline-flex;align-items:center;gap:6px;font-weight:750;font-size:13px;padding:7px 14px;border-radius:var(--radius-sm);cursor:pointer;" onclick="openDuplicateModal({{ assignment.pk }}, '{{ assignment.title|escapejs }}', [{% for c in assignment.classes.all %}{{ c.id }}{% if not forloop.last %},{% endif %}{% endfor %}], '{{ assignment.subject.name|default:""|escapejs }}')">
+                                <span>📋</span>
+                                <span>Копіювати завдання</span>
+                            </button>
+                            <button type="button" class="btn btn-secondary btn-sm" id="btn-ai-understanding-top" style="display:inline-flex;align-items:center;gap:6px;font-weight:750;font-size:13px;padding:7px 14px;border-radius:var(--radius-sm);cursor:pointer;border:1.5px solid var(--color-primary);color:var(--color-primary);background:rgba(var(--color-primary-rgb, 79, 70, 229), 0.06);" onclick="openAiUnderstandingModal({{ assignment.pk }})" title="Перевірити, як штучний інтелект сприймає це завдання та презентації">
+                                <span>🤖</span>
+                                <span>Як ШІ розуміє завдання</span>
+                            </button>
+                        </div>
+                        {% endif %}
+                    </div>
+
+
+{% else %}
+<div class="assignment-detail-tags">
+{% if assignment.subject %}<span class="subject-tag">{{ assignment.subject.icon }} {{ assignment.subject.name }}</span>{% endif %}
+{% for group in assignment.classes.all %}<span class="class-prominent-badge">🏫 {{ group.name }}</span>{% empty %}<span class="class-prominent-badge">Усі класи</span>{% endfor %}
+{% if assignment.is_individual %}<span class="individual-tag">👤 {{ assignment.student_display }}</span>{% endif %}
+</div>
+{% endif %}
+<h1 id="assignment-topic">{{ assignment.title }}</h1>
+<div class="assignment-detail-overview-meta">
+<span>Вчитель: {{ assignment.teacher.full_name }}</span>
+{% if assignment.due_date %}<strong>Здати до {{ assignment.due_date|date:"d.m.Y" }}</strong>{% elif not assignment.no_submission_required %}<span>Без обмежень за часом</span>{% endif %}
+</div>
+{% if is_archived or assignment.is_archived %}
+<p class="assignment-detail-status" role="status">🔒 Прийом робіт закрито. Завдання можна переглядати. Якщо потрібно здати роботу, звернися до вчителя.</p>
+{% elif assignment.no_submission_required %}
+<p class="assignment-detail-status">📖 Без здачі. Це завдання не вимагає здачі робіт на сайті: опрацюй матеріал за вказівками вчителя.</p>
+{% endif %}
+<nav class="assignment-detail-jumps" aria-label="Розділи завдання">
+<a href="#assignment-instructions-card">📝 Завдання</a>
+{% if has_assignment_materials %}<a href="#assignment-materials-section">📎 Матеріали</a>{% endif %}
+{% if not is_teacher %}<a href="#assignment-submit-section">{% if assignment.no_submission_required or is_archived or assignment.is_archived %}✅ Завершення{% else %}📤 Як здати{% endif %}</a>{% endif %}
+{% if not is_teacher %}<a href="#assignment-help-card">💡 Допомога</a>{% endif %}
+</nav>
+</header>
