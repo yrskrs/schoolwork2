@@ -322,8 +322,12 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
         for url in urls_to_test:
             resp = self.client.get(url)
             self.assertEqual(resp.status_code, 200, f"Failed on URL {url}")
-            self.assertContains(resp, 'feed-layout')
-            self.assertContains(resp, 'feed-main-content')
+            if url == reverse('assignment_create'):
+                self.assertContains(resp, 'assignment-editor-layout')
+                self.assertNotContains(resp, 'id="teacher-main-sidebar"')
+            else:
+                self.assertContains(resp, 'feed-layout')
+                self.assertContains(resp, 'feed-main-content')
             self.assertContains(resp, 'sidebar')
 
     def test_student_name_normalization_and_diminutives(self):

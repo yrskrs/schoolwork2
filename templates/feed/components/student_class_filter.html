@@ -1,0 +1,21 @@
+<div class="sidebar-card student-class-filter">
+    <div class="sidebar-header">🏫 Класи</div>
+    <div class="sidebar-classes-container">
+        <div class="class-grid-all-btn {% if not selected_class_id %}active{% endif %}" id="filter-class-all">
+            <a href="{% if class_filter_ajax %}{% url 'index' %}?class=all{% else %}{% url 'student_submissions_portal' %}{% if search_query %}?search={{ search_query|urlencode }}{% endif %}{% endif %}" {% if class_filter_ajax %}onclick="return applyFilter('all', null)"{% endif %}>
+                <span>📋</span><span>Всі класи</span>
+            </a>
+        </div>
+        <div class="sidebar-class-grid" role="group" aria-label="Вибір класу">
+            {% for group in class_filter_groups %}
+            <div class="class-grid-item {% if selected_class_id|stringformat:'s' == group.pk|stringformat:'s' %}active{% endif %}" id="filter-class-{{ group.pk }}">
+                <a href="{% if class_filter_ajax %}{% url 'index' %}{% else %}{% url 'student_submissions_portal' %}{% endif %}?class={{ group.pk }}{% if not class_filter_ajax and search_query %}&amp;search={{ search_query|urlencode }}{% endif %}" {% if class_filter_ajax %}onclick="return applyFilter('{{ group.pk }}', null)"{% endif %} title="{{ group.name }}">
+                    <span>{{ group.name }}</span>
+                </a>
+            </div>
+            {% empty %}
+            <div class="text-muted" style="grid-column:1/-1;padding:8px;font-size:12px;text-align:center;">Класи ще не додані</div>
+            {% endfor %}
+        </div>
+    </div>
+</div>

@@ -39,37 +39,12 @@
 
                 <!-- Кнопки дій -->
                 <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-                    <a href="{% url 'assignment_detail' assignment.pk %}" class="btn btn-secondary btn-sm" target="_blank" rel="noopener noreferrer" title="Відкрити завдання так, як його бачить учень у новій вкладці">
-                        👁️ Як бачить учень ↗
-                    </a>
-                    {% if not assignment.no_submission_required %}
-                    <a href="{% url 'download_assignment_submissions_zip' assignment.pk %}{% if selected_class_id %}?class_group={{ selected_class_id }}{% endif %}" class="btn btn-success btn-sm" style="font-weight:700;">
-                        📥 Завантажити ZIP
-                    </a>
-                    {% if not assignment.is_archived and assignment.status != 'archived' %}
-                    <a href="{% url 'submit_assignment' assignment.pk %}" class="btn btn-secondary btn-sm" target="_blank" title="Відкрити форму для учнів">
-                        🔗 Лінк для учнів ↗
-                    </a>
-                    {% else %}
-                    <span class="badge" style="background:rgba(245,158,11,0.15);color:var(--color-warning);border:1px solid rgba(245,158,11,0.3);font-size:12px;font-weight:700;padding:6px 12px;border-radius:var(--radius-sm);">
-                        🔒 Прийом закрито (Архів)
-                    </span>
+                    <a href="{% url 'assignment_detail' assignment.pk %}{% if selected_class_id %}?class={{ selected_class_id }}{% endif %}" class="btn btn-secondary btn-sm" target="_blank" rel="noopener noreferrer">👁️ Як бачить учень ↗</a>
+                    {% if assignment.no_submission_required %}
+                    <span class="badge">📖 Без здачі робіт</span>
+                    {% elif assignment.is_archived or assignment.status == 'archived' %}
+                    <span class="badge">🔒 Прийом закрито (Архів)</span>
                     {% endif %}
-                    {% else %}
-                    <span class="badge" style="background:var(--color-bg-secondary);border:1px solid var(--color-border);color:var(--color-primary);font-size:12px;font-weight:700;padding:6px 12px;border-radius:var(--radius-sm);">
-                        📖 Без здачі робіт
-                    </span>
-                    {% endif %}
-                    <button type="button" class="btn btn-outline-primary btn-sm" onclick="openAiUnderstandingModal({{ assignment.pk }})" style="display:inline-flex;align-items:center;gap:6px;font-weight:750;border:1.5px solid var(--color-primary);color:var(--color-primary);background:rgba(var(--color-primary-rgb, 79, 70, 229), 0.06);" title="Перевірити, як штучний інтелект сприймає завдання та презентації">
-                        <span>🤖</span>
-                        <span>Розуміння ШІ</span>
-                    </button>
-                    <a href="{% url 'assignment_edit' assignment.pk %}" class="btn btn-secondary btn-sm">
-                        ✏️ Редагувати
-                    </a>
-                    <a href="{% url 'all_submissions_dashboard' %}" class="btn btn-secondary btn-sm">
-                        📥 Всі здачі
-                    </a>
                 </div>
             </div>
 

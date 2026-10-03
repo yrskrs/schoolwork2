@@ -766,14 +766,6 @@ def student_submissions_portal(request):
     if search_query:
         submissions_qs = fuzzy_search_submissions(submissions_qs, search_query)
 
-    if isinstance(submissions_qs, list):
-        current = [item for item in submissions_qs if item.is_latest_attempt]
-        submitted_count = len(current)
-        checked_count = sum(bool(item.grade) for item in current)
-    else:
-        current = submissions_qs.filter(is_latest_attempt=True)
-        submitted_count = current.count()
-        checked_count = current.exclude(grade__isnull=True).exclude(grade='').count()
     paginator = Paginator(submissions_qs, 15)
     page_obj = paginator.get_page(request.GET.get('page'))
 
@@ -782,9 +774,6 @@ def student_submissions_portal(request):
         'class_groups': class_groups,
         'selected_class_id': selected_class_id,
         'search_query': search_query,
-        'submitted_count': submitted_count,
-        'checked_count': checked_count,
-        'waiting_count': submitted_count - checked_count,
     })
 
 

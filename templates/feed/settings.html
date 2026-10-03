@@ -27,6 +27,12 @@
             </div>
 
 
+            <nav class="tabs settings-mobile-tabs" id="settings-main-tabs" aria-label="Розділи налаштувань">
+                <a href="{% url 'teacher_settings' %}?tab=profile" class="tab-btn {% if active_tab == 'profile' %}active{% endif %}" onclick="return switchSettingsTab('profile', this)">👤 Профіль</a>
+                <a href="{% url 'teacher_settings' %}?tab=environment" class="tab-btn {% if active_tab == 'environment' %}active{% endif %}" onclick="return switchSettingsTab('environment', this)">🏫 Середовище</a>
+                <a href="{% url 'teacher_settings' %}?tab=ai" class="tab-btn {% if active_tab == 'ai' %}active{% endif %}" onclick="return switchSettingsTab('ai', this)">🤖 ШІ</a>
+            </nav>
+
             <!-- ═══════════════════════════════════════════════════════════════════ -->
             <!-- 1. ВКЛАДКА: ПРОФІЛЬ ВЧИТЕЛЯ                                         -->
             <!-- ═══════════════════════════════════════════════════════════════════ -->
@@ -36,9 +42,6 @@
                 <div class="form-card mb-4">
                     <div class="form-card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
                         <h2 class="form-card-title">✏️ Особисті дані та аватар</h2>
-                        <button type="button" onclick="openGuideModal('teacher_settings')" class="btn btn-secondary btn-sm" style="font-size:12px;font-weight:700;">
-                            📖 Довідка налаштувань
-                        </button>
                     </div>
 
                     <div class="form-card-body">
@@ -285,17 +288,7 @@
                 <div class="form-card mb-4">
                     <div class="form-card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
                         <h2 class="form-card-title">🏫 Параметри закладу освіти</h2>
-                        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-                            <button type="button" onclick="openGuideModal('teacher_settings')" class="btn btn-secondary btn-sm" style="font-weight:700;">
-                                📖 Довідка
-                            </button>
-                            <a href="{% url 'activity_log' %}" class="btn btn-secondary btn-sm" style="font-weight:700;">
-                                🕒 Журнал дій (Логи)
-                            </a>
-                            <a href="{% url 'download_database_backup' %}" class="btn btn-secondary btn-sm" style="font-weight:700;color:var(--color-primary);">
-                                💾 Резервна копія БД
-                            </a>
-                        </div>
+
                     </div>
 
                     <div class="form-card-body">
@@ -585,9 +578,6 @@
                         </div>
 
                         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-                            <button type="button" onclick="openGuideModal('teacher_ai_settings')" class="btn btn-secondary btn-sm" style="font-weight:700;">
-                                📖 Довідка розділу
-                            </button>
                             <!-- Швидкий перемикач активного API -->
                             <div style="display:flex;align-items:center;gap:10px;background:var(--color-surface);padding:6px 14px;border-radius:var(--radius-md);border:1px solid var(--color-border);box-shadow:0 1px 3px rgba(0,0,0,0.05);">
                             <span style="font-size:12px;font-weight:700;color:var(--color-text-secondary);">Активний API:</span>

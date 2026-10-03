@@ -154,9 +154,11 @@
             </button>
 
             <!-- ➕ Створити нове завдання (компактна дія) -->
+            {% if request.resolver_match.url_name != 'assignment_create' and request.resolver_match.url_name != 'assignment_edit' %}
             <a href="{% url 'assignment_create' %}" class="btn btn-primary btn-sm nav-btn-create" style="font-weight:700;display:inline-flex;align-items:center;gap:5px;padding:5px 11px;border-radius:var(--radius-md);text-decoration:none;" title="Створити нове навчальне завдання">
                 <span>➕</span> <span class="nav-btn-text nav-btn-text-full">Завдання</span>
             </a>
+            {% endif %}
 
             <!-- 📋 Перехід до кабінету вчителя -->
             <a href="{% url 'teacher_dashboard' %}" class="nav-link-quiet nav-btn-dashboard" title="Панель вчителя">
@@ -396,6 +398,7 @@
 </div>
 
 <script src="{% static 'js/main.js' %}"></script>
+<script src="{% static 'js/teacher_tools.js' %}"></script>
 <script src="{% static 'js/ai_jobs.js' %}"></script>
 <script src="{% static 'js/upload_progress.js' %}"></script>
 {% block extra_scripts %}{% endblock %}

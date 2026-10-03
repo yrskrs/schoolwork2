@@ -1,26 +1,9 @@
 {% load static %}
-<aside class="sidebar" id="teacher-main-sidebar" aria-label="Меню вчителя">
+<aside class="sidebar teacher-work-sidebar" id="teacher-main-sidebar" aria-label="Меню вчителя">
 
-    <div class="sidebar-card" style="padding:14px;">
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
-            {% if request.user.teacher_profile.avatar_image %}
-            <img src="{{ request.user.teacher_profile.avatar_image.url }}" alt="" class="avatar-mini-img" style="width:40px;height:40px;border-radius:50%;object-fit:cover;">
-            {% else %}
-            <div class="avatar-mini" style="background:{{ request.user.teacher_profile.avatar_color|default:'#6366f1' }};width:40px;height:40px;font-size:15px;font-weight:700;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;">
-                {{ request.user.teacher_profile.get_initials|default:"В" }}
-            </div>
-            {% endif %}
-            <div style="overflow:hidden;">
-                <div style="font-weight:700;font-size:14px;line-height:1.2;text-overflow:ellipsis;overflow:hidden;white-space:nowrap;">
-                    {{ request.user.teacher_profile.full_name|default:request.user.username }}
-                </div>
-                <div style="font-size:11px;color:var(--color-text-muted);margin-top:2px;">
-                    {% if is_superadmin_mode %}Супер-адміністратор{% else %}Вчитель{% endif %}
-                </div>
-            </div>
-        </div>
-        <a href="{% url 'assignment_create' %}" class="btn btn-primary btn-block">＋ Нове завдання</a>
-    </div>
+
+
+    {% include 'feed/components/teacher_page_tools.html' %}
 
     <div class="sidebar-card">
         <div class="sidebar-header">Робота</div>

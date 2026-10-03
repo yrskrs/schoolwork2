@@ -21,35 +21,11 @@
                     <div class="page-hero-kicker">Перевірка робіт</div>
                     <h1>Здані роботи учнів</h1>
                 </div>
-                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-                    <button type="button" onclick="openGuideModal('teacher_submissions')" class="btn btn-secondary btn-sm" style="font-weight:700;">
-                        📖 Інструкція розділу
-                    </button>
-                    <a href="{% url 'export_grades' %}" class="btn btn-secondary btn-sm">Експорт CSV</a>
-                </div>
+
             </div>
 
             <!-- ── Статистика здач ───────────────────────────────────────────── -->
-            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:20px;">
-                <a href="?grade_filter=all" style="text-decoration:none;">
-                    <div class="sidebar-card" style="padding:14px;text-align:center;border-top:3px solid var(--color-primary);transition:transform 0.15s;cursor:pointer;">
-                        <div style="font-size:24px;font-weight:800;color:var(--color-primary);">{{ total_count }}</div>
-                        <div class="text-muted text-sm" style="font-weight:600;">Всього здач</div>
-                    </div>
-                </a>
-                <a href="?grade_filter=ungraded" style="text-decoration:none;">
-                    <div class="sidebar-card" style="padding:14px;text-align:center;border-top:3px solid var(--color-warning);transition:transform 0.15s;cursor:pointer;">
-                        <div style="font-size:24px;font-weight:800;color:var(--color-warning);">{{ ungraded_count }}</div>
-                        <div class="text-muted text-sm" style="font-weight:600;">⏳ Очікують перевірки</div>
-                    </div>
-                </a>
-                <a href="?grade_filter=graded" style="text-decoration:none;">
-                    <div class="sidebar-card" style="padding:14px;text-align:center;border-top:3px solid var(--color-success);transition:transform 0.15s;cursor:pointer;">
-                        <div style="font-size:24px;font-weight:800;color:var(--color-success);">{{ graded_count }}</div>
-                        <div class="text-muted text-sm" style="font-weight:600;">✅ Оцінено</div>
-                    </div>
-                </a>
-            </div>
+
 
             <!-- ── Оптимізована панель фільтрації та пошуку ──────────────────── -->
             <div class="submissions-filters" style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:18px 20px;margin-bottom:20px;box-shadow:0 2px 8px rgba(0,0,0,0.02);">

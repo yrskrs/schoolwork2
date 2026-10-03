@@ -8,70 +8,55 @@
 {% endblock %}
 
 {% block content %}
-<div class="page-wrapper">
-
-    <!-- ── Двоколонковий layout сайту ────────────────────────────────────── -->
-    <div class="feed-layout">
-
-        <!-- ════ ЛІВИЙ САЙДБАР ВЧИТЕЛЯ ════════════════════════════════════════ -->
-        {% include 'feed/components/teacher_sidebar.html' %}
-
-        <!-- ════ ЦЕНТРАЛЬНА ЧАСТИНА (ФОРМА СТВОРЕННЯ / РЕДАГУВАННЯ) ═══════════ -->
-        <div class="feed-main-content">
-
-            <!-- ── Верхня панель / Хлібні крихти ───────────────────────────────── -->
-            <div class="page-hero">
-                <div class="page-hero-kicker">Кабінет викладача</div>
-                <h1>{% if is_edit %}Редагування завдання{% else %}Нове завдання{% endif %}</h1>
-            </div>
-
-            <!-- ── Головна картка форми ──────────────────────────────────────── -->
-            <form method="POST" enctype="multipart/form-data" novalidate id="assignment-form" autocomplete="off">
-                {% csrf_token %}
-
-                <div class="assignment-editor-layout">
-                    <div class="assignment-editor-main">
-                        <section class="form-card" aria-labelledby="assignment-content-title">
-                            <div class="form-card-header"><h2 class="form-card-title" id="assignment-content-title">📋 Зміст завдання</h2></div>
-                            <div class="form-card-body">{% include 'feed/components/assignment_editor/basic.html' %}</div>
-                        </section>
-                        <section class="form-card" aria-labelledby="assignment-materials-title">
-                            <div class="form-card-header"><h2 class="form-card-title" id="assignment-materials-title">📎 Матеріали та посилання</h2></div>
-                            <div class="form-card-body">{% include 'feed/components/assignment_editor/materials.html' %}</div>
-                        </section>
-                        <details class="form-card assignment-editor-disclosure" id="assignment-custom-criteria" {% if form.errors or form.custom_criteria.value %}open{% endif %}>
-                            <summary>📝 Власні критерії оцінювання <span>За потреби</span></summary>
-                            <div class="form-card-body">{% include 'feed/components/assignment_editor/criteria.html' %}</div>
-                        </details>
-                    </div>
-                    <aside class="assignment-editor-sidebar" aria-label="Класи та параметри завдання">
-                        <section class="form-card" aria-labelledby="assignment-recipients-title">
-                            <div class="form-card-header"><h2 class="form-card-title" id="assignment-recipients-title">🏫 Кому призначено</h2></div>
-                            <div class="form-card-body">{% include 'feed/components/assignment_editor/recipients.html' %}</div>
-                        </section>
-                        <section class="form-card" aria-labelledby="assignment-publication-title">
-                            <div class="form-card-header"><h2 class="form-card-title" id="assignment-publication-title">🚀 Публікація та терміни</h2></div>
-                            <div class="form-card-body">{% include 'feed/components/assignment_editor/publication.html' %}</div>
-                        </section>
-                        <details class="form-card assignment-editor-disclosure" id="assignment-ai-options" {% if form.errors %}open{% endif %}>
-                            <summary>🤖 Параметри ШІ <span>Шаблон, ГР і дозволи</span></summary>
-                            <div class="form-card-body">{% include 'feed/components/assignment_editor/ai_options.html' %}</div>
-                        </details>
-                    </aside>
-                </div>
-                <div class="assignment-editor-actions">
-                    <span id="draft-autosave-status" style="font-size:12px;color:var(--color-text-muted);"></span>
-                    <div class="assignment-editor-action-buttons">
-                        <a href="{% url 'teacher_dashboard' %}" class="btn btn-secondary">✕ Скасувати</a>
-                        <button type="submit" id="assignment-save-button" data-is-edit="{{ is_edit|yesno:'true,false' }}" class="btn btn-primary">
-                            {% if is_edit %}💾 Зберегти зміни{% elif form.publish_choice.value == 'draft' %}📝 Зберегти чернетку{% elif form.publish_choice.value == 'scheduled' %}⏰ Запланувати публікацію{% else %}✅ Опублікувати завдання{% endif %}
-                        </button>
-                    </div>
-                </div>
-
-            </form>
-        </div>
+<div class="page-wrapper assignment-editor-page">
+    <div class="page-hero">
+        <div class="page-hero-kicker">Кабінет викладача</div>
+        <h1>{% if is_edit %}Редагування завдання{% else %}Нове завдання{% endif %}</h1>
     </div>
+    <form method="POST" enctype="multipart/form-data" novalidate id="assignment-form" autocomplete="off">
+        {% csrf_token %}
+
+        <div class="assignment-editor-layout">
+            <div class="assignment-editor-main">
+                <section class="form-card assignment-editor-basic" aria-labelledby="assignment-content-title">
+                    <div class="form-card-header"><h2 class="form-card-title" id="assignment-content-title">📋 Зміст завдання</h2></div>
+                    <div class="form-card-body">{% include 'feed/components/assignment_editor/basic.html' %}</div>
+                </section>
+                <section class="form-card assignment-editor-materials" aria-labelledby="assignment-materials-title">
+                    <div class="form-card-header"><h2 class="form-card-title" id="assignment-materials-title">📎 Матеріали та посилання</h2></div>
+                    <div class="form-card-body">{% include 'feed/components/assignment_editor/materials.html' %}</div>
+                </section>
+                <details class="form-card assignment-editor-disclosure" id="assignment-custom-criteria" {% if form.errors or form.custom_criteria.value %}open{% endif %}>
+                    <summary>📝 Власні критерії оцінювання <span>За потреби</span></summary>
+                    <div class="form-card-body">{% include 'feed/components/assignment_editor/criteria.html' %}</div>
+                </details>
+            </div>
+            <aside class="assignment-editor-sidebar" aria-label="Класи та параметри завдання">
+                <section class="form-card assignment-editor-recipients" aria-labelledby="assignment-recipients-title">
+                    <div class="form-card-header"><h2 class="form-card-title" id="assignment-recipients-title">🏫 Кому призначено</h2></div>
+                    <div class="form-card-body">{% include 'feed/components/assignment_editor/recipients.html' %}</div>
+                </section>
+                <section class="form-card assignment-editor-publication" aria-labelledby="assignment-publication-title">
+                    <div class="form-card-header"><h2 class="form-card-title" id="assignment-publication-title">🚀 Публікація та терміни</h2></div>
+                    <div class="form-card-body">{% include 'feed/components/assignment_editor/publication.html' %}</div>
+                </section>
+                <details class="form-card assignment-editor-disclosure" id="assignment-ai-options" {% if form.errors %}open{% endif %}>
+                    <summary>🤖 Параметри ШІ <span>Шаблон, ГР і дозволи</span></summary>
+                    <div class="form-card-body">{% include 'feed/components/assignment_editor/ai_options.html' %}</div>
+                </details>
+            </aside>
+        </div>
+        <div class="assignment-editor-actions">
+            <span id="draft-autosave-status" style="font-size:12px;color:var(--color-text-muted);"></span>
+            <div class="assignment-editor-action-buttons">
+                <a href="{% url 'teacher_dashboard' %}" class="btn btn-secondary">✕ Скасувати</a>
+                <button type="submit" id="assignment-save-button" data-is-edit="{{ is_edit|yesno:'true,false' }}" class="btn btn-primary">
+                    {% if is_edit %}💾 Зберегти зміни{% elif form.publish_choice.value == 'draft' %}📝 Зберегти чернетку{% elif form.publish_choice.value == 'scheduled' %}⏰ Запланувати публікацію{% else %}✅ Опублікувати завдання{% endif %}
+                </button>
+            </div>
+        </div>
+
+    </form>
 </div>
 {% endblock %}
 

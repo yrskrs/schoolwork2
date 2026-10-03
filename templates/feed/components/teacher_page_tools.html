@@ -1,0 +1,77 @@
+{% with current_page=request.resolver_match.url_name %}
+<details class="sidebar-card teacher-tools-card" id="teacher-page-tools" open>
+    <summary>🧰 Додаткові дії</summary>
+    <div class="teacher-tools-content">
+        {% if current_page == 'teacher_dashboard' %}
+        <a href="{% url 'teacher_rescheduled_calendar' %}" class="btn btn-secondary btn-sm">📅 Календар перенесень</a>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="openImportZipModal()">📥 Імпорт завдань (ZIP)</button>
+        <a href="{% url 'export_assignments_day_zip' %}" class="btn btn-secondary btn-sm">💾 Експорт завдань (ZIP)</a>
+        {% elif current_page == 'all_submissions_dashboard' %}
+        <a href="{% url 'export_grades' %}" class="btn btn-secondary btn-sm">📥 Експорт оцінок (CSV)</a>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="openGuideModal('teacher_submissions')">📖 Інструкція розділу</button>
+        {% elif current_page == 'assignment_submissions' %}
+        {% if not assignment.no_submission_required %}
+        <a href="{% url 'download_assignment_submissions_zip' assignment.pk %}{% if selected_class_id %}?class_group={{ selected_class_id }}{% endif %}" class="btn btn-secondary btn-sm">📥 Завантажити роботи (ZIP)</a>
+        {% if not assignment.is_archived and assignment.status != 'archived' %}
+        <a href="{% url 'submit_assignment' assignment.pk %}{% if selected_class_id %}?class={{ selected_class_id }}{% endif %}" class="btn btn-secondary btn-sm" target="_blank" rel="noopener noreferrer">🔗 Форма здачі для учнів ↗</a>
+        {% endif %}
+        {% endif %}
+        <button type="button" class="btn btn-secondary btn-sm" onclick="openAiUnderstandingModal({{ assignment.pk }})">🤖 Розуміння завдання ШІ</button>
+        <a href="{% url 'assignment_edit' assignment.pk %}" class="btn btn-secondary btn-sm">✏️ Редагувати завдання</a>
+        {% elif current_page == 'gradebook' %}
+        {% if request.GET.view == 'all_grades' %}
+        <a href="{% url 'export_grades' %}" class="btn btn-secondary btn-sm">📥 Експорт усіх оцінок (CSV)</a>
+        {% else %}
+        <a href="{% url 'gradebook' %}?view=all_grades" class="btn btn-secondary btn-sm">📊 Усі виставлені оцінки</a>
+        {% if selected_class %}
+        <a href="{% url 'export_grades' %}?class_group={{ selected_class.pk }}" class="btn btn-secondary btn-sm">📥 Експорт оцінок класу (CSV)</a>
+        <a href="{% url 'teacher_reports' %}?class_id={{ selected_class.pk }}" class="btn btn-secondary btn-sm">📑 Звіти класу {{ selected_class.name }}</a>
+        <a href="{% url 'teacher_students' %}?class_group={{ selected_class.pk }}" class="btn btn-secondary btn-sm">👥 Учні класу {{ selected_class.name }}</a>
+        {% endif %}
+        {% endif %}
+        {% elif current_page == 'teacher_reports' %}
+        <a href="{% url 'export_grades' %}" class="btn btn-secondary btn-sm">📥 Експорт оцінок (CSV)</a>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="downloadReportPdf('detailed')">📄 Детальний звіт (PDF)</button>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="openGuideModal('teacher_reports')">📖 Довідка звітів</button>
+        {% elif current_page == 'teacher_students' %}
+        {% if current_tab == 'schedule' %}
+        <a href="{% url 'teacher_settings' %}?tab=environment#bell-schedule-section" class="btn btn-secondary btn-sm">⚙️ Час уроків / дзвінки</a>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="window.print()">🖨️ Друкувати розклад</button>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="openConductedLessonsModal()">✏️ Кількість проведених уроків</button>
+        <a href="{% url 'teacher_rescheduled_calendar' %}" class="btn btn-secondary btn-sm">📅 Календар перенесень</a>
+        {% else %}
+        <button type="button" class="btn btn-secondary btn-sm" onclick="openImportModal()">📥 Імпорт списку учнів</button>
+        <a href="{% url 'teacher_students_export' %}{% if selected_class %}?class_group={{ selected_class.pk }}{% endif %}" class="btn btn-secondary btn-sm">📤 Експорт списку (CSV)</a>
+        {% endif %}
+        {% elif current_page == 'ai_batch_check' %}
+        <div class="form-group" style="margin:0;">
+            <label for="batch-delay" class="form-label">⏱️ Пауза між запитами</label>
+            <select id="batch-delay" class="form-input">
+                <option value="4000" selected>4 секунди (рекомендовано)</option>
+                <option value="5000">5 секунд (надійний режим)</option>
+                <option value="3000">3 секунди</option>
+                <option value="1500">1,5 секунди (платні ключі)</option>
+                <option value="0">Без паузи</option>
+            </select>
+        </div>
+        <button type="button" class="btn btn-secondary btn-sm" id="btn-reload-queue" onclick="loadQueuePreview()">🔄 Оновити список робіт</button>
+        {% elif tools_area == 'settings' %}
+        <button type="button" class="btn btn-secondary btn-sm" onclick="openGuideModal(document.getElementById('tab-section-ai') &amp;&amp; document.getElementById('tab-section-ai').style.display !== 'none' ? 'teacher_ai_settings' : 'teacher_settings')">📖 Довідка налаштувань</button>
+        <a href="{% url 'activity_log' %}" class="btn btn-secondary btn-sm">🕒 Журнал дій</a>
+        <a href="{% url 'download_database_backup' %}" class="btn btn-secondary btn-sm">💾 Резервна копія БД</a>
+        {% if request.user.is_superuser %}
+        <div class="teacher-tools-admin">
+            <p class="form-hint">{% if is_superadmin_mode %}Дозволено змінювати системні дані.{% else %}Безпечний режим вчителя.{% endif %}</p>
+            {% if is_superadmin_mode %}
+            <a href="{% url 'exit_superadmin_mode' %}" class="btn btn-danger btn-sm">Вийти з Адміна</a>
+            {% else %}
+            <a href="{% url 'enter_superadmin_mode' %}" class="btn btn-secondary btn-sm">Увійти як Адмін</a>
+            {% endif %}
+        </div>
+        {% endif %}
+        {% else %}
+        <button type="button" class="btn btn-secondary btn-sm" onclick="openGuideModal()">📖 Довідка платформи</button>
+        {% endif %}
+    </div>
+</details>
+{% endwith %}

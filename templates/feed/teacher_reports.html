@@ -26,17 +26,7 @@
                         Формування структурованих відомостей оцінок за датами та класами для перенесення в журнал, замін або звіту батькам.
                     </p>
                 </div>
-                <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                    <a href="{% url 'gradebook' %}" class="btn btn-secondary btn-sm" style="display:inline-flex;align-items:center;gap:6px;">
-                        <span>📊</span> <span>Електронний журнал</span>
-                    </a>
-                    <a href="{% url 'export_grades' %}" class="btn btn-secondary btn-sm" style="display:inline-flex;align-items:center;gap:6px;">
-                        <span>📥</span> <span>Експорт CSV</span>
-                    </a>
-                    <button type="button" onclick="openGuideModal('teacher_reports')" class="btn btn-secondary btn-sm" style="display:inline-flex;align-items:center;gap:6px;font-weight:700;" title="Як користуватися звітами">
-                        <span>📖</span> <span>Довідка</span>
-                    </button>
-                </div>
+
             </div>
 
             <!-- ── Форма фільтрації та налаштування звіту ──────────────────────── -->
@@ -184,9 +174,6 @@
                         <div style="display:flex;gap:8px;flex-wrap:wrap;">
                             <button type="button" onclick="downloadReportPdf('grades_only')" class="btn btn-success" style="font-weight:800;padding:8px 16px;background:linear-gradient(135deg,#059669,#047857);border:none;box-shadow:0 3px 10px rgba(5,150,105,0.25);display:inline-flex;align-items:center;gap:6px;cursor:pointer;" title="Завантажити зведену таблицю оцінок з датами та класами для журналу">
                                 <span>📥</span> <span>Завантажити PDF (Тільки оцінки)</span>
-                            </button>
-                            <button type="button" onclick="downloadReportPdf('detailed')" class="btn btn-primary" style="font-weight:800;padding:8px 16px;box-shadow:0 3px 10px rgba(99,102,241,0.25);display:inline-flex;align-items:center;gap:6px;cursor:pointer;" title="Завантажити розширений звіт з текстами робіт учнів, файлами, відгуками та аналізом ШІ">
-                                <span>📑</span> <span>PDF з роботами та звітами</span>
                             </button>
                         </div>
                     </div>

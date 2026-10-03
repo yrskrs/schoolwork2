@@ -278,12 +278,6 @@
                     <button type="button" class="btn btn-primary" onclick="openAddStudentModal()" style="font-weight:700;">
                         ➕ Додати учня
                     </button>
-                    <button type="button" class="btn btn-secondary" onclick="openImportModal()" style="font-weight:700;">
-                        📥 Імпорт списку
-                    </button>
-                    <a href="{% url 'teacher_students_export' %}{% if selected_class %}?class_group={{ selected_class.id }}{% endif %}" class="btn btn-secondary" title="Завантажити список у CSV для Excel">
-                        📤 Експорт CSV
-                    </a>
                 </div>
                 {% endif %}
             </div>
@@ -301,13 +295,6 @@
                         {% endif %}
                     </a>
                 </div>
-                {% if current_tab == 'schedule' %}
-                <div style="display:flex;gap:8px;">
-                    <a href="{% url 'teacher_settings' %}?tab=environment#bell-schedule-section" class="btn btn-secondary btn-sm" style="font-size:12.5px;">
-                        ⚙️ Розклад дзвінків (час уроків)
-                    </a>
-                </div>
-                {% endif %}
             </div>
 
             {% if current_tab != 'schedule' %}
@@ -560,14 +547,7 @@
                         </div>
                     </div>
 
-                    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-                        <button type="button" class="btn btn-secondary btn-sm" onclick="openConductedLessonsModal()" style="font-weight:700;">
-                            ✏️ Змінити число вручну
-                        </button>
-                        <a href="{% url 'teacher_rescheduled_calendar' %}" class="btn btn-secondary btn-sm" style="font-weight:700;">
-                            📅 30-денний календар перенесень
-                        </a>
-                    </div>
+
                 </div>
 
                 <!-- 2. Шапка розкладу та перемикач режимів (Перегляд vs Редагування) -->
@@ -596,10 +576,6 @@
                                 ✏️ Режим редагування
                             </button>
                         </div>
-
-                        <button type="button" class="btn btn-secondary btn-sm" onclick="window.print()" style="font-weight:700;" title="Роздрукувати тижневий розклад">
-                            🖨️ Друкувати
-                        </button>
 
                         <button type="submit" form="schedule-form" id="save-schedule-top-btn" class="btn btn-primary btn-sm" style="font-weight:700;display:none;box-shadow:0 4px 12px rgba(99,102,241,0.35);">
                             💾 Зберегти зміни

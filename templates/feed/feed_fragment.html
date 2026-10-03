@@ -7,7 +7,7 @@
 <div class="d-flex align-center justify-between mb-4 flex-wrap gap-2" id="feed-header">
     <div>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-            <h2 style="font-size:1.25rem;font-weight:700;color:var(--color-text-primary);margin:0;">
+            <h1 style="font-size:1.25rem;font-weight:700;color:var(--color-text-primary);margin:0;">
                 {% if selected_class and selected_date_display %}
                     📋 {{ selected_class.name }} &bull; 📅 {{ selected_date_display }}
                 {% elif selected_class %}
@@ -19,7 +19,7 @@
                 {% else %}
                     📋 Всі завдання
                 {% endif %}
-            </h2>
+            </h1>
             <span style="font-size:11px;background:rgba(16,185,129,0.12);color:var(--color-success);border:1px solid rgba(16,185,129,0.25);border-radius:20px;padding:2px 8px;display:inline-flex;align-items:center;gap:4px;" title="Стрічка автоматично оновлюється при появі нових завдань">
                 <span class="live-dot-pulse"></span>
                 Наживо
@@ -29,6 +29,7 @@
             Знайдено: {{ assignments|length }} завдань
         </p>
     </div>
+    <button type="button" class="btn btn-secondary btn-sm home-mobile-class-button" onclick="document.getElementById('mobile-menu-btn').click()" aria-controls="main-sidebar">🏫 Обрати клас</button>
     {% if selected_class_id or selected_subject_id or selected_date or query %}
     <button type="button" class="btn btn-secondary btn-sm" onclick="applyFilter('all', 'all', 'all', '')">
         ✕ Скинути всі фільтри
@@ -114,7 +115,7 @@
                 {% endif %}
             </div>
 
-            <h3 class="card-title"><a href="{% url 'assignment_detail' assignment.id %}{% if selected_class_id %}?class={{ selected_class_id }}{% endif %}" onclick="event.stopPropagation();">{{ assignment.title }}</a></h3>
+            <h2 class="card-title"><a href="{% url 'assignment_detail' assignment.id %}{% if selected_class_id %}?class={{ selected_class_id }}{% endif %}" onclick="event.stopPropagation();">{{ assignment.title }}</a></h2>
 
             {% if assignment.description %}
             <div class="card-description">{{ assignment.get_card_description|safe }}</div>

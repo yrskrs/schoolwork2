@@ -7,21 +7,6 @@
 {% block content %}
 <div class="page-wrapper home-page">
 
-    <header class="home-overview">
-        <div>
-            <h1>Навчальні завдання</h1>
-            <p>Обери свій клас, відкрий завдання та прочитай вказівки вчителя.</p>
-        </div>
-        <form class="home-class-form" id="home-class-form" method="GET" action="{% url 'index' %}" onsubmit="applyFilter(document.getElementById('home-class-select').value, null); return false;">
-            <label for="home-class-select">🏫 Твій клас</label>
-            <select class="form-input" name="class" id="home-class-select" onchange="applyFilter(this.value, null)">
-                <option value="all">Усі класи</option>
-                {% for group in all_classes %}<option value="{{ group.pk }}" {% if selected_class_id == group.pk %}selected{% endif %}>{{ group.name }}</option>{% endfor %}
-            </select>
-            <noscript><button class="btn btn-primary" type="submit">Показати завдання</button></noscript>
-        </form>
-    </header>
-
     <!-- ── Двоколонковий layout ──────────────────────────────────────────── -->
     <div class="feed-layout">
 
@@ -42,33 +27,9 @@
 
         </section>
 
-        <aside class="sidebar" id="main-sidebar" aria-label="Фільтри">
+        <aside class="sidebar student-filter-sidebar" id="main-sidebar" aria-label="Фільтри">
 
-            <!-- Фільтр по класах (сітка для компактності на HD Ready) -->
-            <div class="sidebar-card">
-                <div class="sidebar-header">🏫 Класи</div>
-                <div class="sidebar-classes-container">
-                    <div class="class-grid-all-btn {% if not selected_class_id %}active{% endif %}" id="filter-class-all">
-                        <a href="#" onclick="return applyFilter('all', null)">
-                            <span>📋</span>
-                            <span>Всі класи</span>
-                        </a>
-                    </div>
-                    <div class="sidebar-class-grid" role="group" aria-label="Вибір класу">
-                        {% for class in all_classes %}
-                        <div class="class-grid-item {% if selected_class_id == class.id %}active{% endif %}" id="filter-class-{{ class.id }}">
-                            <a href="#" onclick="return applyFilter('{{ class.id }}', null)" title="{{ class.name }}">
-                                <span>{{ class.name }}</span>
-                            </a>
-                        </div>
-                        {% empty %}
-                        <div style="grid-column:1/-1;padding:8px;color:var(--color-text-muted);font-size:12px;text-align:center;">
-                            Класи ще не додані
-                        </div>
-                        {% endfor %}
-                    </div>
-                </div>
-            </div>
+            {% include 'feed/components/student_class_filter.html' with class_filter_groups=all_classes class_filter_ajax=True %}
 
             <!-- 2. Календар завдань (Google Calendar стиль) -->
             <details class="home-filter-disclosure"><summary>📅 Календар завдань</summary><div class="sidebar-card calendar-card" id="calendar-widget">{% include 'feed/calendar_widget.html' %}</div></details>
@@ -138,9 +99,6 @@ function applyFilter(classVal, subjectVal, dateVal, queryVal) {
         if (searchInput && document.activeElement !== searchInput) searchInput.value = '';
     }
     _currentPage = 1;
-
-    var homeClassSelect = document.getElementById('home-class-select');
-    if (homeClassSelect) homeClassSelect.value = _currentClass || 'all';
 
     /* — Оновити стан активності у сайдбарі — */
     document.querySelectorAll('[id^="filter-class-"]').forEach(function(li) {
