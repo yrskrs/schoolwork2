@@ -1,0 +1,23 @@
+<div class="ai-settings-intro">
+    <div>
+        <h2>Налаштування ШІ</h2>
+        <p>Оберіть розділ. Додаткові параметри можна розгорнути за потреби.</p>
+    </div>
+    <span class="ai-settings-state {% if ai_settings.is_enabled %}is-enabled{% endif %}">
+        {% if ai_settings.is_enabled %}Модуль увімкнено{% else %}Модуль вимкнено{% endif %}
+    </span>
+</div>
+<nav class="ai-settings-tabs" role="tablist" aria-label="Розділи налаштувань ШІ">
+    {% for section in ai_settings_sections %}
+    <a id="ai-tab-{{ section.slug }}" class="ai-settings-tab" role="tab"
+       href="{% url 'teacher_settings' %}?tab=ai&amp;ai_section={{ section.slug }}{% if stats_days %}&amp;stats_days={{ stats_days|urlencode }}{% endif %}"
+       data-ai-tab="{{ section.slug }}" aria-controls="ai-panel-{{ section.slug }}"
+       aria-selected="{% if ai_section == section.slug %}true{% else %}false{% endif %}"
+       tabindex="0">
+        <span aria-hidden="true">{{ section.icon }}</span> {{ section.label }}
+        {% if section.slug == 'errors' and total_ai_errors_count %}
+        <span class="ai-settings-error-count">{{ total_ai_errors_count }}</span>
+        {% endif %}
+    </a>
+    {% endfor %}
+</nav>

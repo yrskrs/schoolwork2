@@ -3,6 +3,10 @@
 
 {% block title %}Центр налаштувань — Шкільні Завдання{% endblock %}
 
+{% block extra_head %}
+<link rel="stylesheet" href="{% static 'css/ai_settings.css' %}">
+{% endblock %}
+
 {% block content %}
 <div class="page-wrapper">
 
@@ -565,8 +569,11 @@
             <!-- ═══════════════════════════════════════════════════════════════════ -->
             <!-- 3. ВКЛАДКА: НАЛАШТУВАННЯ ШІ (GEMINI AI & ПРІОРИТЕТИ МОДЕЛЕЙ)        -->
             <!-- ═══════════════════════════════════════════════════════════════════ -->
-            <div id="tab-section-ai" class="settings-tab-pane" style="{% if active_tab != 'ai' %}display:none;{% endif %}">
+            <div id="tab-section-ai" class="settings-tab-pane" data-ai-settings data-ai-section="{{ ai_section }}" style="{% if active_tab != 'ai' %}display:none;{% endif %}">
 
+                {% include 'feed/components/ai_settings_tabs.html' %}
+
+                <section id="ai-panel-connection" class="ai-settings-panel" data-ai-panel="connection" role="tabpanel" aria-labelledby="ai-tab-connection" tabindex="0" {% if ai_section != 'connection' %}hidden{% endif %}>
                 <!-- 3.1. Параметри підключення API та глобальне ввімкнення -->
                 <div class="form-card mb-4">
                     <div class="form-card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
@@ -627,7 +634,7 @@
                             </div>
 
                             <!-- СІТКА З ДВОХ КАРТОК: ОСНОВНИЙ API ТА РЕЗЕРВНИЙ API -->
-                            <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(360px, 1fr));gap:20px;margin-bottom:24px;">
+                            <div class="ai-settings-api-grid" style="display:grid;grid-template-columns:repeat(auto-fit, minmax(360px, 1fr));gap:20px;margin-bottom:24px;">
 
                                 <!-- КАРТКА 1: ОСНОВНИЙ API -->
                                 <div style="background:var(--color-surface);border:2px solid {% if ai_settings.active_api_type == 'primary' %}var(--color-primary){% else %}var(--color-border){% endif %};border-radius:var(--radius-lg);padding:18px 20px;box-shadow:0 2px 8px rgba(0,0,0,0.03);position:relative;">
@@ -874,8 +881,11 @@
                                 </div>
                             </div>
 
+                            <details class="ai-settings-disclosure" id="ai-advanced-settings">
+                                <summary>Додаткові параметри оцінювання та системний промт</summary>
+                                <div class="ai-settings-disclosure-body">
                             <!-- Вибір креативності та поріг детектора -->
-                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
+                            <div class="ai-settings-advanced-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
                                 <div class="form-group" style="margin:0;">
                                     <label for="temperature" class="form-label" style="font-weight:700;">
                                         Креативність (Temperature: <span id="temp-val">{{ ai_settings.temperature_dot }}</span>):
@@ -935,6 +945,9 @@
                                           style="font-family:monospace;font-size:12px;line-height:1.4;resize:vertical;">{{ ai_settings.system_prompt }}</textarea>
                             </div>
 
+                                </div>
+                            </details>
+
                             <div style="display:flex;justify-content:flex-end;">
                                 <button type="submit" class="btn btn-primary" style="font-weight:800;padding:10px 24px;">
                                     💾 Зберегти налаштування ШІ та резервного API
@@ -943,7 +956,9 @@
                         </form>
                     </div>
                 </div>
+                </section>
 
+                <section id="ai-panel-criteria" class="ai-settings-panel" data-ai-panel="criteria" role="tabpanel" aria-labelledby="ai-tab-criteria" tabindex="0" {% if ai_section != 'criteria' %}hidden{% endif %}>
                 <!-- 3.2. Шаблони критеріїв оцінювання та документи МОН (Word / PDF / TXT) -->
                 <div class="form-card mb-4" style="border-color:var(--color-primary);">
                     <div class="form-card-header" style="background:var(--color-primary-light);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
@@ -1032,7 +1047,7 @@
                                     <!-- Кнопки дій -->
                                     <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
                                         {% if not p.is_default %}
-                                        <form method="POST" action="{% url 'teacher_settings' %}?tab=ai" style="display:inline;margin:0;">
+                                        <form method="POST" style="display:inline;margin:0;">
                                             {% csrf_token %}
                                             <input type="hidden" name="action" value="set_default_criteria_preset">
                                             <input type="hidden" name="preset_id" value="{{ p.id }}">
@@ -1177,7 +1192,9 @@
 
                     </div>
                 </div>
+                </section>
 
+                <section id="ai-panel-models" class="ai-settings-panel" data-ai-panel="models" role="tabpanel" aria-labelledby="ai-tab-models" tabindex="0" {% if ai_section != 'models' %}hidden{% endif %}>
                 <!-- 3.3. Черга пріоритетів моделей та автоматичний Fallback -->
                 <div class="form-card mb-4">
                     <div class="form-card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
@@ -1191,7 +1208,7 @@
 
                     <div class="form-card-body">
                         <!-- Таблиця моделей з пріоритетами -->
-                        <div style="overflow-x:auto;">
+                        <div class="ai-settings-table" style="overflow-x:auto;" tabindex="0" role="region" aria-label="Пріоритети моделей">
                             <table class="submissions-table" style="width:100%;font-size:13px;">
                                 <thead>
                                     <tr>
@@ -1348,7 +1365,9 @@
                             </form>
 
                             <!-- Список офіційних моделей Gemini з квотами (RPM, RPD, токени) для швидкого додавання в проект -->
-                            <div style="margin-top:16px;padding-top:14px;border-top:1px dashed var(--color-border);">
+                            <details class="ai-settings-disclosure" id="ai-model-catalog">
+                                <summary>Каталог моделей та орієнтовні квоти</summary>
+                                <div class="ai-settings-disclosure-body">
                                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
                                     <div style="font-size:13px;font-weight:800;color:var(--color-text-primary);display:flex;align-items:center;gap:6px;">
                                         <span>📚</span> <span>Каталог рекомендованих моделей Google Gemini (квоти RPM / RPD / токени):</span>
@@ -1356,7 +1375,7 @@
                                     <span style="font-size:11.5px;color:var(--color-text-muted);">Натисніть кнопку під моделлю, щоб миттєво додати її до проекту</span>
                                 </div>
 
-                                <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(290px, 1fr));gap:12px;">
+                                <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(min(100%, 290px), 1fr));gap:12px;">
                                     {% for cat_m in gemini_catalog_models %}
                                     <div class="sidebar-card" style="padding:14px;display:flex;flex-direction:column;justify-content:space-between;border:1.5px solid {% if cat_m.is_recommended %}var(--color-primary){% else %}var(--color-border){% endif %};background:var(--color-surface);border-radius:var(--radius-md);box-shadow:0 1px 4px rgba(0,0,0,0.03);">
                                         <div>
@@ -1410,12 +1429,15 @@
                                     </div>
                                     {% endfor %}
                                 </div>
-                            </div>
+                                </div>
+                            </details>
                         </div>
 
                     </div>
                 </div>
+                </section>
 
+                <section id="ai-panel-statistics" class="ai-settings-panel" data-ai-panel="statistics" role="tabpanel" aria-labelledby="ai-tab-statistics" tabindex="0" {% if ai_section != 'statistics' %}hidden{% endif %}>
                 <!-- 3.3. Аналітика та статистика використання -->
                 <div class="form-card mb-4">
                     <div class="form-card-header">
@@ -1525,7 +1547,7 @@
 
                     <div class="form-card-body" style="padding:0;">
                         {% if used_model_usage_stats %}
-                        <div style="overflow-x:auto;">
+                        <div class="ai-settings-table" style="overflow-x:auto;" tabindex="0" role="region" aria-label="Статистика використання моделей">
                             <table class="table" style="margin:0;width:100%;font-size:13px;border-collapse:collapse;">
                                 <thead>
                                     <tr style="background:var(--color-bg-secondary);border-bottom:1px solid var(--color-border);text-align:left;">
@@ -1662,7 +1684,9 @@
                         {% endif %}
                     </div>
                 </div>
+                </section>
 
+                <section id="ai-panel-errors" class="ai-settings-panel" data-ai-panel="errors" role="tabpanel" aria-labelledby="ai-tab-errors" tabindex="0" {% if ai_section != 'errors' %}hidden{% endif %}>
                 <!-- 3.4. Журнал помилок та збоїв ШІ (AI Error Log) -->
                 <div class="form-card mb-4" id="ai-error-logs-section" style="border-color:{% if total_ai_errors_count %}rgba(239,68,68,0.4){% else %}var(--color-border){% endif %};">
                     <div class="form-card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;background:{% if total_ai_errors_count %}rgba(239,68,68,0.06){% else %}var(--color-bg-secondary){% endif %};">
@@ -1692,7 +1716,7 @@
 
                     <div class="form-card-body" style="padding:0;">
                         {% if ai_error_logs %}
-                        <div style="overflow-x:auto;">
+                        <div class="ai-settings-table" style="overflow-x:auto;" tabindex="0" role="region" aria-label="Журнал помилок ШІ">
                             <table class="table" style="margin:0;font-size:12.5px;width:100%;border-collapse:collapse;">
                                 <thead>
                                     <tr style="background:var(--color-bg-secondary);border-bottom:1px solid var(--color-border);color:var(--color-text-secondary);font-size:11.5px;text-transform:uppercase;">
@@ -1765,6 +1789,7 @@
                         {% endif %}
                     </div>
                 </div>
+                </section>
 
             </div>
 
@@ -1886,6 +1911,7 @@
 {% endblock %}
 
 {% block extra_scripts %}
+<script src="{% static 'js/ai_settings.js' %}"></script>
 <script>
 // Видалення шаблону критеріїв (як зі списку, так і з модального вікна)
 function deleteCriteriaPreset(id, name) {
@@ -1896,7 +1922,11 @@ function deleteCriteriaPreset(id, name) {
     }
     var form = document.createElement('form');
     form.method = 'POST';
-    form.action = '{% url "teacher_settings" %}?tab=ai';
+    var targetUrl = new URL(window.location.href);
+    targetUrl.searchParams.set('tab', 'ai');
+    targetUrl.searchParams.set('ai_section', 'criteria');
+    targetUrl.hash = '';
+    form.action = targetUrl.href;
     var csrf = document.createElement('input');
     csrf.type = 'hidden';
     csrf.name = 'csrfmiddlewaretoken';
@@ -2093,7 +2123,7 @@ document.addEventListener('click', function(e) {
 });
 
 // Перемикання вкладок
-function switchSettingsTab(tabName, linkEl) {
+function switchSettingsTab(tabName, linkEl, updateHistory) {
     // Оновлюємо кнопки вкладок
     var tabs = document.querySelectorAll('#settings-main-tabs .tab-btn');
     tabs.forEach(function(t) { t.classList.remove('active'); });
@@ -2120,8 +2150,13 @@ function switchSettingsTab(tabName, linkEl) {
     if (target) target.style.display = 'block';
 
     // Оновлюємо URL без перезавантаження
-    if (history.pushState) {
-        var newUrl = window.location.pathname + '?tab=' + tabName;
+    if (history.pushState && updateHistory !== false) {
+        var newUrl = new URL(window.location.href);
+        newUrl.searchParams.set('tab', tabName);
+        if (tabName === 'ai' && window.SchoolNetAISettings) {
+            newUrl.searchParams.set('ai_section', SchoolNetAISettings.getActive());
+        }
+        newUrl.hash = '';
         history.pushState(null, '', newUrl);
     }
     return false;
@@ -2208,6 +2243,9 @@ function syncModelInput(target) {
 
 function selectModelToInput(modelName, target) {
     if (!modelName) return;
+    if (window.SchoolNetAISettings) {
+        SchoolNetAISettings.select(target === 'queue' ? 'models' : 'connection');
+    }
     if (target === 'queue') {
         var inputQueue = document.getElementById('new_model_name');
         if (inputQueue) {
@@ -2282,6 +2320,7 @@ function changeStatsDays(days) {
     var url = new URL(window.location.href);
     url.searchParams.set('tab', 'ai');
     url.searchParams.set('stats_days', days);
+    url.searchParams.set('ai_section', 'statistics');
     url.hash = 'used-models-stats-section';
     window.location.href = url.toString();
 }

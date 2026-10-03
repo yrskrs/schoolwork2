@@ -1,0 +1,29 @@
+/* Scoped layout for the five AI settings sections. */
+[data-ai-settings] [data-ai-panel][hidden] { display: none !important; }
+.ai-settings-intro { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; }
+.ai-settings-intro h2 { margin: 0 0 6px; font-size: 22px; color: var(--color-text-primary); }
+.ai-settings-intro p { margin: 0; font-size: 14px; line-height: 1.5; color: var(--color-text-secondary); }
+.ai-settings-state { padding: 6px 10px; border-radius: var(--radius-full); border: 1px solid var(--color-border); background: var(--color-bg-secondary); color: var(--color-text-secondary); font-size: 12px; font-weight: 700; }
+.ai-settings-state.is-enabled { color: var(--color-success); background: var(--color-success-light); }
+.ai-settings-tabs { display: flex; gap: 6px; max-width: 100%; padding: 6px; margin-bottom: 20px; overflow-x: auto; scrollbar-width: thin; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface); position: sticky; top: 76px; z-index: 15; }
+.ai-settings-tab { display: flex; align-items: center; justify-content: center; gap: 7px; flex: 1 0 auto; padding: 10px 14px; border-radius: var(--radius-sm); color: var(--color-text-secondary); font-size: 14px; font-weight: 700; text-decoration: none; white-space: nowrap; }
+.ai-settings-tab:hover { background: var(--color-surface-hover); color: var(--color-primary-text); }
+.ai-settings-tab[aria-selected="true"] { background: var(--color-primary-light); color: var(--color-primary-text); box-shadow: inset 0 0 0 1px var(--color-border); }
+.ai-settings-error-count { padding: 1px 6px; background: var(--color-danger-light); color: var(--color-danger); border-radius: var(--radius-full); font-size: 11px; }
+.ai-settings-panel { min-width: 0; }
+.ai-settings-panel > .form-card:last-child { margin-bottom: 0; }
+.ai-settings-disclosure { margin-bottom: 20px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface); }
+.ai-settings-disclosure > summary { padding: 14px 16px; cursor: pointer; font-size: 14px; font-weight: 700; color: var(--color-text-primary); }
+.ai-settings-disclosure[open] > summary { border-bottom: 1px solid var(--color-border); }
+.ai-settings-disclosure-body { padding: 16px; }
+.ai-settings-panel .ai-settings-table { max-height: 520px; overflow: auto; }
+.ai-settings-table thead { position: sticky; top: 0; z-index: 1; }
+.ai-settings-api-grid { grid-template-columns: repeat(2,minmax(0,1fr)) !important; }
+.ai-settings-api-grid > div { min-width: 0; }
+@media (max-width: 800px) {
+    .ai-settings-api-grid, .ai-settings-advanced-grid { grid-template-columns: minmax(0,1fr) !important; }
+    .ai-settings-tabs { top: 68px; }
+    .ai-settings-tab { padding: 10px 12px; font-size: 13px; }
+    .ai-settings-disclosure-body { padding: 12px; }
+    .ai-settings-panel .form-card-header, .ai-settings-panel .form-card-body { padding-left: 14px; padding-right: 14px; }
+}

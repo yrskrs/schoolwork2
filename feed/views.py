@@ -99,6 +99,7 @@ from .duplicate_detector import check_submission_duplicates
 from .access_utils import convert_access_to_html
 from .permissions import teacher_submissions, can_manage_submission, require_assignment_access
 from .grading import validate_grade, member_grades
+from .settings_navigation import AI_SETTINGS_SECTIONS, ai_settings_section, ai_settings_url
 from .file_serving import file_response
 from .pagination import AssignmentChain
 
@@ -6632,7 +6633,7 @@ def teacher_settings_view(request):
             messages.success(request, "Параметри модуля ШІ (включаючи резервний API та провайдерів) успішно збережено! 🤖")
             if request.path == reverse('ai_settings'):
                 return redirect('ai_settings')
-            return redirect(f"{reverse('teacher_settings')}?tab=ai")
+            return redirect(ai_settings_url(request))
 
         elif action == 'switch_active_api':
             target_api = request.POST.get('target_api', '').strip()
@@ -6645,7 +6646,7 @@ def teacher_settings_view(request):
             messages.success(request, f"Активний API успішно перемкнуто на: {target_title}! 🔄")
             if request.path == reverse('ai_settings'):
                 return redirect('ai_settings')
-            return redirect(f"{reverse('teacher_settings')}?tab=ai")
+            return redirect(ai_settings_url(request))
 
         elif action == 'add_custom_model':
             new_model = request.POST.get('new_model_name', '').strip()
@@ -6661,7 +6662,7 @@ def teacher_settings_view(request):
                     ai_settings.model_name = new_model
                     ai_settings.save(update_fields=['model_name', 'updated_at'])
                 messages.success(request, f"Модель «{new_model}» успішно додано з пріоритетом #{p_int or 'черги'}! 🚀")
-            return redirect(f"{reverse('teacher_settings')}?tab=ai")
+            return redirect(ai_settings_url(request))
 
         elif action == 'move_model_priority':
             m_name = request.POST.get('model_name', '').strip()
@@ -6669,21 +6670,21 @@ def teacher_settings_view(request):
             if m_name and direction in ['up', 'down']:
                 ai_settings.move_model_priority(m_name, direction)
                 messages.info(request, f"Порядок моделі «{m_name}» оновлено.")
-            return redirect(f"{reverse('teacher_settings')}?tab=ai")
+            return redirect(ai_settings_url(request))
 
         elif action == 'toggle_model_enabled':
             m_name = request.POST.get('model_name', '').strip()
             if m_name:
                 ai_settings.toggle_model_enabled(m_name)
                 messages.info(request, f"Статус активності моделі «{m_name}» змінено.")
-            return redirect(f"{reverse('teacher_settings')}?tab=ai")
+            return redirect(ai_settings_url(request))
 
         elif action == 'delete_model':
             del_model = request.POST.get('model_to_delete', '').strip()
             if del_model:
                 ai_settings.remove_saved_model(del_model)
                 messages.warning(request, f"Модель «{del_model}» видалено зі списку.")
-            return redirect(f"{reverse('teacher_settings')}?tab=ai")
+            return redirect(ai_settings_url(request))
 
         elif action == 'switch_model':
             switch_to = request.POST.get('switch_to_model', '').strip()
@@ -6691,13 +6692,13 @@ def teacher_settings_view(request):
                 ai_settings.model_name = switch_to
                 ai_settings.add_saved_model(switch_to, priority=1)
                 messages.success(request, f"Активну модель змінено на «{switch_to}» (Пріоритет #1)!")
-            return redirect(f"{reverse('teacher_settings')}?tab=ai")
+            return redirect(ai_settings_url(request))
 
         elif action == 'reset_prompt':
             ai_settings.system_prompt = DEFAULT_NUS_SYSTEM_PROMPT
             ai_settings.save(update_fields=['system_prompt', 'updated_at'])
             messages.success(request, "Системний промт успішно скинуто до офіційного стандарту НУШ! 🔄")
-            return redirect(f"{reverse('teacher_settings')}?tab=ai")
+            return redirect(ai_settings_url(request))
 
         # ── 4. ШАБЛОНИ КРИТЕРІЇВ ОЦІНЮВАННЯ ТА ФАЙЛИ МОН ─────────────────────
         elif action == 'create_criteria_preset':
@@ -6727,7 +6728,7 @@ def teacher_settings_view(request):
                 messages.success(request, f"Шаблон критеріїв «{p_name}» успішно створено!")
             else:
                 messages.error(request, "Вкажіть назву шаблону критеріїв.")
-            return redirect(f"{reverse('teacher_settings')}?tab=ai")
+            return redirect(ai_settings_url(request))
 
         elif action == 'update_criteria_preset':
             preset_id = request.POST.get('preset_id')
@@ -6766,7 +6767,7 @@ def teacher_settings_view(request):
 
                 preset.save()
                 messages.success(request, f"Шаблон критеріїв «{p_name}» оновлено!")
-            return redirect(f"{reverse('teacher_settings')}?tab=ai")
+            return redirect(ai_settings_url(request))
 
         elif action == 'delete_criteria_preset':
             preset_id = request.POST.get('preset_id')
@@ -6791,12 +6792,12 @@ def teacher_settings_view(request):
                     AICriteriaPreset.ensure_default_presets()
 
             messages.warning(request, f"Шаблон критеріїв «{p_name}» успішно видалено.")
-            return redirect(f"{reverse('teacher_settings')}?tab=ai")
+            return redirect(ai_settings_url(request))
 
         elif action == 'restore_default_presets':
             AICriteriaPreset.ensure_default_presets(force_recreate=True)
             messages.success(request, "Стандартні галузеві шаблони критеріїв МОН України відновлено та оновлено! ⭐")
-            return redirect(f"{reverse('teacher_settings')}?tab=ai")
+            return redirect(ai_settings_url(request))
 
         elif action == 'set_default_criteria_preset':
             preset_id = request.POST.get('preset_id')
@@ -6804,12 +6805,12 @@ def teacher_settings_view(request):
             preset.is_default = True
             preset.save()
             messages.success(request, f"Шаблон «{preset.name}» встановлено як активний за замовчуванням ⭐")
-            return redirect(f"{reverse('teacher_settings')}?tab=ai")
+            return redirect(ai_settings_url(request))
 
         elif action == 'clear_ai_error_logs':
             AIErrorLog.objects.all().delete()
             messages.success(request, "Журнал помилок та збоїв ШІ успішно очищено! 🗑️")
-            return redirect(f"{reverse('teacher_settings')}?tab=ai")
+            return redirect(ai_settings_url(request))
 
     # Підготовка даних контексту для сторінки налаштувань
     teacher_subjects = teacher.subjects.all().order_by('name')
@@ -7123,6 +7124,8 @@ def teacher_settings_view(request):
 
     context = {
         'active_tab': tab,
+        'ai_section': ai_settings_section(request),
+        'ai_settings_sections': AI_SETTINGS_SECTIONS,
         'teacher': teacher,
         'school': school,
         'profile_form': profile_form,
