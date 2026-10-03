@@ -453,7 +453,7 @@
                                 </td>
                                 <td>
                                     {% if student.subs_count > 0 %}
-                                    <a href="{% url 'student_detail' student.get_full_name %}" class="badge-tag" style="background:rgba(16,185,129,0.12);color:#059669;border:1px solid rgba(16,185,129,0.3);text-decoration:none;padding:3px 8px;border-radius:12px;font-size:12px;font-weight:700;">
+                                    <a href="{% url 'student_detail' student.get_full_name %}" class="badge-tag" style="background:rgba(16,185,129,0.12);color:var(--color-success);border:1px solid rgba(16,185,129,0.3);text-decoration:none;padding:3px 8px;border-radius:12px;font-size:12px;font-weight:700;">
                                         📥 {{ student.subs_count }} робіт ({{ student.graded_count }} оцінено)
                                     </a>
                                     {% else %}
@@ -483,7 +483,7 @@
                                         </a>
                                         <form method="POST" action="{% url 'teacher_student_delete' student.id %}" style="display:inline;" onsubmit="return confirm('Видалити учня «{{ student.get_full_name|escapejs }}» зі списку класу? Його здані роботи збережуться.');">
                                             {% csrf_token %}
-                                            <button type="submit" class="btn btn-sm" style="background:rgba(239,68,68,0.1);color:#ef4444;border:1px solid rgba(239,68,68,0.25);padding:4px 8px;font-size:12px;" title="Видалити зі списку">
+                                            <button type="submit" class="btn btn-sm" style="background:rgba(239,68,68,0.1);color:var(--color-danger);border:1px solid rgba(239,68,68,0.25);padding:4px 8px;font-size:12px;" title="Видалити зі списку">
                                                 🗑️
                                             </button>
                                         </form>
@@ -553,7 +553,7 @@
                                 <span style="font-size:13.5px;font-weight:700;color:var(--color-text-primary);">
                                     проведених уроків
                                 </span>
-                                <span class="badge" style="font-size:11px;padding:2px 8px;border-radius:10px;background:{% if teacher_conducted_lessons.is_manual %}rgba(245,158,11,0.15);color:#d97706;border:1px solid rgba(245,158,11,0.3);{% else %}rgba(16,185,129,0.15);color:#059669;border:1px solid rgba(16,185,129,0.3);{% endif %};">
+                                <span class="badge" style="font-size:11px;padding:2px 8px;border-radius:10px;background:{% if teacher_conducted_lessons.is_manual %}rgba(245,158,11,0.15);color:var(--color-warning);border:1px solid rgba(245,158,11,0.3);{% else %}rgba(16,185,129,0.15);color:var(--color-success);border:1px solid rgba(16,185,129,0.3);{% endif %};">
                                     {% if teacher_conducted_lessons.is_manual %}✏️ Встановлено вручну{% else %}🤖 Розраховано системою (з 1 вересня){% endif %}
                                 </span>
                             </div>
@@ -589,7 +589,7 @@
                     <!-- Перемикач режимів: Перегляд vs Редагування -->
                     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
                         <div style="display:flex;gap:2px;background:var(--color-bg-secondary);padding:3px;border-radius:var(--radius-md);border:1px solid var(--color-border);">
-                            <button type="button" id="btn-mode-view" class="btn btn-sm" onclick="setScheduleViewMode('view')" style="font-weight:700;padding:6px 14px;border-radius:4px;border:none;background:var(--color-primary);color:#fff;cursor:pointer;transition:all 0.15s ease;">
+                            <button type="button" id="btn-mode-view" class="btn btn-sm" onclick="setScheduleViewMode('view')" style="font-weight:700;padding:6px 14px;border-radius:4px;border:none;background:var(--action-primary-bg);color:#fff;cursor:pointer;transition:all 0.15s ease;">
                                 👀 Режим перегляду
                             </button>
                             <button type="button" id="btn-mode-edit" class="btn btn-sm" onclick="setScheduleViewMode('edit')" style="font-weight:700;padding:6px 14px;border-radius:4px;border:none;background:transparent;color:var(--color-text-secondary);cursor:pointer;transition:all 0.15s ease;">
@@ -610,7 +610,7 @@
                 {% if not bell_slots %}
                 <div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);border-radius:var(--radius-md);padding:24px;text-align:center;">
                     <div style="font-size:36px;margin-bottom:8px;">🔔</div>
-                    <h4 style="margin:0 0 6px;color:#dc2626;font-weight:700;">Розклад дзвінків ще не налаштовано</h4>
+                    <h4 style="margin:0 0 6px;color:var(--color-danger);font-weight:700;">Розклад дзвінків ще не налаштовано</h4>
                     <p style="font-size:13px;color:var(--color-text-muted);margin:0 0 16px;">
                         Щоб вказати розклад уроків по класах, спершу додайте розклад шкільних дзвінків у розділі «Середовище та заклад».
                     </p>
@@ -665,7 +665,7 @@
                                             </span>
                                         </div>
                                         {% if day.entry.subject %}
-                                        <div style="font-size:12px;color:{{ day.entry.subject.color|default:'var(--color-primary)' }};font-weight:700;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                                        <div style="font-size:12px;color:var(--color-primary-text);font-weight:700;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
                                             {{ day.entry.subject.icon }} {{ day.entry.subject.name }}
                                         </div>
                                         {% endif %}
@@ -774,7 +774,7 @@
                                 💡 <em>Підказка: після збереження розкладу на головній сторінці автоматично показуватиметься поточний урок, час до закінчення уроку або перерви.</em>
                             </div>
                             <div style="display:flex;gap:10px;">
-                                <button type="button" class="btn btn-secondary" onclick="confirmClearSchedule()" style="color:#ef4444;">
+                                <button type="button" class="btn btn-secondary" onclick="confirmClearSchedule()" style="color:var(--color-danger);">
                                     🗑️ Очистити весь розклад
                                 </button>
                                 <button type="submit" class="btn btn-primary" style="font-weight:700;padding:10px 24px;">
@@ -816,17 +816,17 @@
                 <input type="hidden" name="action" value="add_student">
 
                 <div class="form-group" style="margin-bottom:14px;">
-                    <label class="form-label" style="font-weight:700;font-size:13px;">Прізвище учня <span style="color:#ef4444">*</span></label>
+                    <label class="form-label" style="font-weight:700;font-size:13px;">Прізвище учня <span style="color:var(--color-danger)">*</span></label>
                     {{ add_form.last_name }}
                 </div>
 
                 <div class="form-group" style="margin-bottom:14px;">
-                    <label class="form-label" style="font-weight:700;font-size:13px;">Ім'я учня <span style="color:#ef4444">*</span></label>
+                    <label class="form-label" style="font-weight:700;font-size:13px;">Ім'я учня <span style="color:var(--color-danger)">*</span></label>
                     {{ add_form.first_name }}
                 </div>
 
                 <div class="form-group" style="margin-bottom:14px;">
-                    <label class="form-label" style="font-weight:700;font-size:13px;">Клас <span style="color:#ef4444">*</span></label>
+                    <label class="form-label" style="font-weight:700;font-size:13px;">Клас <span style="color:var(--color-danger)">*</span></label>
                     {{ add_form.class_group }}
                 </div>
 
@@ -865,17 +865,17 @@
                 {% csrf_token %}
 
                 <div class="form-group" style="margin-bottom:14px;">
-                    <label class="form-label" style="font-weight:700;font-size:13px;">Прізвище учня <span style="color:#ef4444">*</span></label>
+                    <label class="form-label" style="font-weight:700;font-size:13px;">Прізвище учня <span style="color:var(--color-danger)">*</span></label>
                     <input type="text" id="edit_modal_last_name" name="last_name" class="form-input" required placeholder="Наприклад: Шевченко">
                 </div>
 
                 <div class="form-group" style="margin-bottom:14px;">
-                    <label class="form-label" style="font-weight:700;font-size:13px;">Ім'я учня <span style="color:#ef4444">*</span></label>
+                    <label class="form-label" style="font-weight:700;font-size:13px;">Ім'я учня <span style="color:var(--color-danger)">*</span></label>
                     <input type="text" id="edit_modal_first_name" name="first_name" class="form-input" required placeholder="Наприклад: Тарас">
                 </div>
 
                 <div class="form-group" style="margin-bottom:14px;">
-                    <label class="form-label" style="font-weight:700;font-size:13px;">Клас учня <span style="color:#ef4444">*</span></label>
+                    <label class="form-label" style="font-weight:700;font-size:13px;">Клас учня <span style="color:var(--color-danger)">*</span></label>
                     <select id="edit_modal_class_group" name="class_group" class="form-input" required>
                         {% for cg in class_groups %}
                         <option value="{{ cg.id }}">{{ cg.name }}</option>
@@ -1099,7 +1099,7 @@ function setScheduleViewMode(mode) {
         if (viewContainer) viewContainer.style.display = 'none';
         if (editContainer) editContainer.style.display = 'block';
         if (btnEdit) {
-            btnEdit.style.background = 'var(--color-primary)';
+            btnEdit.style.background = 'var(--action-primary-bg)';
             btnEdit.style.color = '#fff';
         }
         if (btnView) {
@@ -1111,7 +1111,7 @@ function setScheduleViewMode(mode) {
         if (viewContainer) viewContainer.style.display = 'block';
         if (editContainer) editContainer.style.display = 'none';
         if (btnView) {
-            btnView.style.background = 'var(--color-primary)';
+            btnView.style.background = 'var(--action-primary-bg)';
             btnView.style.color = '#fff';
         }
         if (btnEdit) {

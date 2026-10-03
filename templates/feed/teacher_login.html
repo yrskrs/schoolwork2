@@ -27,7 +27,7 @@
                         <label class="form-label required" for="{{ form.username.id_for_label }}">Логін</label>
                         {{ form.username }}
                         {% if form.username.errors %}
-                        <p class="form-error" style="color:#ef4444;font-size:12px;margin-top:4px;">{{ form.username.errors.0 }}</p>
+                        <p class="form-error" style="color:var(--color-danger);font-size:12px;margin-top:4px;">{{ form.username.errors.0 }}</p>
                         {% endif %}
                     </div>
 
@@ -35,12 +35,12 @@
                         <label class="form-label required" for="{{ form.password.id_for_label }}">Пароль</label>
                         {{ form.password }}
                         {% if form.password.errors %}
-                        <p class="form-error" style="color:#ef4444;font-size:12px;margin-top:4px;">{{ form.password.errors.0 }}</p>
+                        <p class="form-error" style="color:var(--color-danger);font-size:12px;margin-top:4px;">{{ form.password.errors.0 }}</p>
                         {% endif %}
                     </div>
 
                     {% if form.non_field_errors %}
-                    <div class="alert alert-error" style="margin-bottom:16px;padding:12px;border-radius:var(--radius-sm);background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);color:#ef4444;">
+                    <div class="alert alert-error" style="margin-bottom:16px;padding:12px;border-radius:var(--radius-sm);background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);color:var(--color-danger);">
                         {{ form.non_field_errors.0 }}
                     </div>
                     {% endif %}

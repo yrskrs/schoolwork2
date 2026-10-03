@@ -4,7 +4,7 @@
                     <div class="assignment-detail-tags">
                         <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
                             {% if assignment.subject %}
-                            <span class="subject-tag" style="background-color:{{ assignment.subject.color }}22;color:{{ assignment.subject.color }};font-size:13px;padding:4px 12px;font-weight:700;">
+                            <span class="subject-tag" style="background-color:{{ assignment.subject.color }}22;color:var(--color-primary-text);font-size:13px;padding:4px 12px;font-weight:700;">
                                 {{ assignment.subject.icon }} {{ assignment.subject.name }}
                             </span>
                             {% endif %}

@@ -63,8 +63,8 @@
                     <!-- Високий рівень -->
                     <div style="display:flex;gap:12px;align-items:flex-start;padding:10px 12px;background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.25);border-radius:var(--radius-sm);">
                         <div style="flex-shrink:0;text-align:center;min-width:64px;">
-                            <div style="font-weight:800;font-size:14px;color:#059669;">10–12</div>
-                            <div style="font-size:10.5px;color:#047857;font-weight:700;">Високий</div>
+                            <div style="font-weight:800;font-size:14px;color:var(--color-success);">10–12</div>
+                            <div style="font-size:10.5px;color:var(--color-success);font-weight:700;">Високий</div>
                         </div>
                         <div style="font-size:12.5px;line-height:1.45;color:var(--color-text-primary);">
                             <strong>Повне, вичерпне та самостійне виконання.</strong> Завдання розв'язано правильно, робота структурована, продемонстровано глибоке розуміння матеріалу та аргументованість висновків.
@@ -74,8 +74,8 @@
                     <!-- Достатній рівень -->
                     <div style="display:flex;gap:12px;align-items:flex-start;padding:10px 12px;background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.25);border-radius:var(--radius-sm);">
                         <div style="flex-shrink:0;text-align:center;min-width:64px;">
-                            <div style="font-weight:800;font-size:14px;color:#2563eb;">7–9</div>
-                            <div style="font-size:10.5px;color:#1d4ed8;font-weight:700;">Достатній</div>
+                            <div style="font-weight:800;font-size:14px;color:var(--color-info);">7–9</div>
+                            <div style="font-size:10.5px;color:var(--color-info);font-weight:700;">Достатній</div>
                         </div>
                         <div style="font-size:12.5px;line-height:1.45;color:var(--color-text-primary);">
                             <strong>Завдання виконано в основному правильно.</strong> Учень володіє матеріалом, але присутні незначні неточності, пропуски другорядних деталей або незначні зауваження до оформлення.
@@ -85,8 +85,8 @@
                     <!-- Середній рівень -->
                     <div style="display:flex;gap:12px;align-items:flex-start;padding:10px 12px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);border-radius:var(--radius-sm);">
                         <div style="flex-shrink:0;text-align:center;min-width:64px;">
-                            <div style="font-weight:800;font-size:14px;color:#d97706;">4–6</div>
-                            <div style="font-size:10.5px;color:#b45309;font-weight:700;">Середній</div>
+                            <div style="font-weight:800;font-size:14px;color:var(--color-warning);">4–6</div>
+                            <div style="font-size:10.5px;color:var(--color-warning);font-weight:700;">Середній</div>
                         </div>
                         <div style="font-size:12.5px;line-height:1.45;color:var(--color-text-primary);">
                             <strong>Фрагментарне або поверхневе виконання.</strong> Відповідає вимогам лише частково, наявні суттєві помилки у розв'язку або виконано лише малу частину потрібного обсягу.
@@ -96,8 +96,8 @@
                     <!-- Початковий рівень / Доопрацювати -->
                     <div style="display:flex;gap:12px;align-items:flex-start;padding:10px 12px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);border-radius:var(--radius-sm);">
                         <div style="flex-shrink:0;text-align:center;min-width:64px;">
-                            <div style="font-weight:800;font-size:13px;color:#dc2626;">1–3 / ↩</div>
-                            <div style="font-size:10px;color:#b91c1c;font-weight:700;">Початковий</div>
+                            <div style="font-weight:800;font-size:13px;color:var(--color-danger);">1–3 / ↩</div>
+                            <div style="font-size:10px;color:var(--color-danger);font-weight:700;">Початковий</div>
                         </div>
                         <div style="font-size:12.5px;line-height:1.45;color:var(--color-text-primary);">
                             <strong>Завдання не виконано або виконано неправильно.</strong> Зміст не відповідає темі, виявлено списування/плагіат або заборонене використання ШІ. Робота повертається на доопрацювання.
@@ -133,7 +133,7 @@
                         Політика використання штучного інтелекту (ШІ):
                     </strong>
                     {% if assignment.allow_ai_usage %}
-                    <span class="badge" style="background:#10b981;color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;">
+                    <span class="badge" style="background:var(--action-success-bg);color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;">
                         ШІ Дозволено
                     </span>
                     {% else %}

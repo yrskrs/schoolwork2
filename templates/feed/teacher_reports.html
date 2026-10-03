@@ -207,13 +207,13 @@
                 </div>
                 <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:12px;text-align:center;">
                     <div style="font-size:11.5px;color:var(--color-text-muted);font-weight:700;margin-bottom:2px;">Середній бал</div>
-                    <div style="font-size:1.4rem;font-weight:900;color:#10b981;">
+                    <div style="font-size:1.4rem;font-weight:900;color:var(--color-success);">
                         {% if stats.avg_grade %}{{ stats.avg_grade }}{% else %}—{% endif %}
                     </div>
                 </div>
                 <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:12px;text-align:center;">
                     <div style="font-size:11.5px;color:var(--color-text-muted);font-weight:700;margin-bottom:2px;">Високий (10-12)</div>
-                    <div style="font-size:1.4rem;font-weight:900;color:#059669;">{{ stats.high_cnt }}</div>
+                    <div style="font-size:1.4rem;font-weight:900;color:var(--color-success);">{{ stats.high_cnt }}</div>
                 </div>
                 <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:12px;text-align:center;">
                     <div style="font-size:11.5px;color:var(--color-text-muted);font-weight:700;margin-bottom:2px;">Достатній (7-9)</div>
@@ -221,7 +221,7 @@
                 </div>
                 <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:12px;text-align:center;">
                     <div style="font-size:11.5px;color:var(--color-text-muted);font-weight:700;margin-bottom:2px;">Середній (4-6)</div>
-                    <div style="font-size:1.4rem;font-weight:900;color:#f59e0b;">{{ stats.avg_cnt }}</div>
+                    <div style="font-size:1.4rem;font-weight:900;color:var(--color-warning);">{{ stats.avg_cnt }}</div>
                 </div>
             </div>
 
@@ -291,7 +291,7 @@
                                     <div style="font-weight:750;color:var(--color-text-primary);">
                                         {{ sub.get_student_full_name }}
                                         {% if sub.is_collective_work %}
-                                        <span class="badge" style="background:#e0e7ff;color:#3730a3;font-size:10px;padding:1px 5px;margin-left:4px;">Група</span>
+                                        <span class="badge" style="background:var(--color-primary-light);color:var(--color-primary);font-size:10px;padding:1px 5px;margin-left:4px;">Група</span>
                                         {% endif %}
                                     </div>
                                     {% if sub.files.exists or sub.file %}
@@ -305,7 +305,7 @@
                                     {% if sub.assignment %}
                                     <div style="font-weight:600;color:var(--color-text-primary);line-height:1.3;">
                                         {% if sub.assignment.subject %}
-                                        <span style="color:{{ sub.assignment.subject.color|default:'#4f46e5' }};font-weight:700;">
+                                        <span style="color:var(--color-primary-text);font-weight:700;">
                                             {{ sub.assignment.subject.name }}:
                                         </span>
                                         {% endif %}
@@ -318,7 +318,7 @@
                                 <!-- Оцінка -->
                                 <td style="padding:10px 12px;text-align:center;">
                                     {% if sub.grade %}
-                                    <span style="display:inline-block;padding:3px 10px;border-radius:var(--radius-sm);background:rgba(16,185,129,0.12);color:#059669;border:1.5px solid rgba(16,185,129,0.3);font-size:14px;font-weight:850;">
+                                    <span style="display:inline-block;padding:3px 10px;border-radius:var(--radius-sm);background:rgba(16,185,129,0.12);color:var(--color-success);border:1.5px solid rgba(16,185,129,0.3);font-size:14px;font-weight:850;">
                                         {{ sub.grade }}
                                     </span>
                                     {% else %}
@@ -329,11 +329,11 @@
                                 <td style="padding:10px 12px;font-size:11.5px;">
                                     {% if sub.ai_generated_detected %}
                                         {% if sub.assignment and sub.assignment.allow_ai %}
-                                        <span class="badge" style="background:rgba(16,185,129,0.1);color:#059669;border:1px solid rgba(16,185,129,0.25);font-weight:700;padding:2px 6px;">
+                                        <span class="badge" style="background:rgba(16,185,129,0.1);color:var(--color-success);border:1px solid rgba(16,185,129,0.25);font-weight:700;padding:2px 6px;">
                                             🤖 ШІ (дозв.)
                                         </span>
                                         {% else %}
-                                        <span class="badge" style="background:rgba(239,68,68,0.1);color:#dc2626;border:1px solid rgba(239,68,68,0.25);font-weight:700;padding:2px 6px;">
+                                        <span class="badge" style="background:rgba(239,68,68,0.1);color:var(--color-danger);border:1px solid rgba(239,68,68,0.25);font-weight:700;padding:2px 6px;">
                                             🤖 Виявлено ШІ!
                                         </span>
                                         {% endif %}

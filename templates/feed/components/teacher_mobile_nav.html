@@ -1,0 +1,19 @@
+<nav class="platform-teacher-mobile-nav" aria-label="Розділи кабінету вчителя">
+    <details>
+        <summary>🧭 Розділи кабінету вчителя</summary>
+        <div class="platform-teacher-mobile-links">
+            <a href="{% url 'teacher_dashboard' %}">📋 Завдання</a>
+            <a href="{% url 'assignment_create' %}">＋ Нове завдання</a>
+            <a href="{% url 'all_submissions_dashboard' %}">📥 Здані роботи</a>
+            <a href="{% url 'gradebook' %}">📊 Журнал</a>
+            <a href="{% url 'teacher_reports' %}">📑 Звіти</a>
+            <a href="{% url 'teacher_students' %}">👥 Учні та класи</a>
+            <a href="{% url 'ai_batch_check' %}">⚡ ШІ-перевірка</a>
+            <a href="{% url 'teacher_rescheduled_calendar' %}">📅 Перенесення</a>
+            <a href="{% url 'teacher_settings' %}">⚙️ Налаштування</a>
+            <a href="{% url 'teacher_settings' %}?tab=ai">🤖 Параметри ШІ</a>
+            <a href="{% url 'activity_log' %}">🕒 Журнал дій</a>
+            <a href="{% url 'index' %}">🏠 Стрічка учнів</a>
+        </div>
+    </details>
+</nav>

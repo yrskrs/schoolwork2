@@ -40,7 +40,7 @@
             </div>
 
             <!-- Стан помилки -->
-            <div id="ai-und-error" style="display:none;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);border-radius:var(--radius-md);padding:16px;color:#dc2626;font-size:13.5px;">
+            <div id="ai-und-error" style="display:none;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);border-radius:var(--radius-md);padding:16px;color:var(--color-danger);font-size:13.5px;">
                 <div style="display:flex;align-items:center;gap:8px;font-weight:750;margin-bottom:4px;">
                     <span>⚠️</span>
                     <span>Не вдалося завершити аналіз завдання</span>
@@ -75,11 +75,11 @@
                     <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
                         <div style="display:flex;align-items:center;gap:8px;">
                             <span style="font-size:18px;">💡</span>
-                            <span id="ai-und-student-guide-title" style="font-weight:800;font-size:13px;color:#059669;text-transform:uppercase;letter-spacing:0.04em;">
+                            <span id="ai-und-student-guide-title" style="font-weight:800;font-size:13px;color:var(--color-success);text-transform:uppercase;letter-spacing:0.04em;">
                                 Що вимагається від учнів (простими словами)
                             </span>
                         </div>
-                        <span id="ai-und-target-audience-badge" class="badge" style="background:rgba(16,185,129,0.15);color:#047857;border:1px solid rgba(16,185,129,0.3);font-size:11.5px;font-weight:750;padding:2px 8px;border-radius:6px;"></span>
+                        <span id="ai-und-target-audience-badge" class="badge" style="background:rgba(16,185,129,0.15);color:var(--color-success);border:1px solid rgba(16,185,129,0.3);font-size:11.5px;font-weight:750;padding:2px 8px;border-radius:6px;"></span>
                     </div>
                     <div id="ai-und-student-explanation" style="font-size:13.5px;line-height:1.6;color:var(--color-text-primary);"></div>
                 </div>
@@ -115,15 +115,15 @@
 
                     <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(210px, 1fr));gap:10px;margin-bottom:12px;">
                         <div style="background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.25);border-radius:var(--radius-sm);padding:10px 12px;">
-                            <div style="font-weight:800;font-size:13px;color:#059669;margin-bottom:4px;">10–12 б. (Високий)</div>
+                            <div style="font-weight:800;font-size:13px;color:var(--color-success);margin-bottom:4px;">10–12 б. (Високий)</div>
                             <div id="ai-und-grade-full" style="font-size:12px;line-height:1.4;color:var(--color-text-primary);"></div>
                         </div>
                         <div style="background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.25);border-radius:var(--radius-sm);padding:10px 12px;">
-                            <div style="font-weight:800;font-size:13px;color:#2563eb;margin-bottom:4px;">7–8 б. (Достатній)</div>
+                            <div style="font-weight:800;font-size:13px;color:var(--color-info);margin-bottom:4px;">7–8 б. (Достатній)</div>
                             <div id="ai-und-grade-partial-2" style="font-size:12px;line-height:1.4;color:var(--color-text-primary);"></div>
                         </div>
                         <div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);border-radius:var(--radius-sm);padding:10px 12px;">
-                            <div style="font-weight:800;font-size:13px;color:#d97706;margin-bottom:4px;">4–5 б. (Середній)</div>
+                            <div style="font-weight:800;font-size:13px;color:var(--color-warning);margin-bottom:4px;">4–5 б. (Середній)</div>
                             <div id="ai-und-grade-partial-1" style="font-size:12px;line-height:1.4;color:var(--color-text-primary);"></div>
                         </div>
                     </div>
@@ -138,7 +138,7 @@
 
                 <!-- 5. ПОРАДИ ВЧИТЕЛЮ -->
                 <div id="ai-und-tips-card" style="background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.25);border-radius:var(--radius-md);padding:12px 16px;">
-                    <div style="font-weight:750;font-size:13px;color:#b45309;margin-bottom:6px;display:flex;align-items:center;gap:6px;">
+                    <div style="font-weight:750;font-size:13px;color:var(--color-warning);margin-bottom:6px;display:flex;align-items:center;gap:6px;">
                         <span>💡</span>
                         <span>Поради ШІ для вчителя:</span>
                     </div>
@@ -370,7 +370,7 @@ function renderStudentExplanationHtml(rawText) {
         if (bulletMatch) {
             var itemBody = bulletMatch[1];
             html += '<div style="display:flex;gap:8px;align-items:flex-start;margin-top:5px;margin-left:4px;font-size:12.8px;line-height:1.5;color:var(--color-text-primary);">';
-            html += '<span style="color:#10b981;font-weight:bold;margin-top:1px;">✔</span>';
+            html += '<span style="color:var(--color-success);font-weight:bold;margin-top:1px;">✔</span>';
             html += '<span style="flex:1;">' + escapeHtml(itemBody) + '</span>';
             html += '</div>';
             return;

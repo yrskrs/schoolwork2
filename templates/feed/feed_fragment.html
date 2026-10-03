@@ -7,7 +7,7 @@
 <div class="d-flex align-center justify-between mb-4 flex-wrap gap-2" id="feed-header">
     <div>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-            <h1 style="font-size:1.25rem;font-weight:700;color:var(--color-text-primary);margin:0;">
+            <h2 style="font-size:1.25rem;font-weight:700;color:var(--color-text-primary);margin:0;">
                 {% if selected_class and selected_date_display %}
                     📋 {{ selected_class.name }} &bull; 📅 {{ selected_date_display }}
                 {% elif selected_class %}
@@ -19,8 +19,8 @@
                 {% else %}
                     📋 Всі завдання
                 {% endif %}
-            </h1>
-            <span style="font-size:11px;background:rgba(16,185,129,0.12);color:#059669;border:1px solid rgba(16,185,129,0.25);border-radius:20px;padding:2px 8px;display:inline-flex;align-items:center;gap:4px;" title="Стрічка автоматично оновлюється при появі нових завдань">
+            </h2>
+            <span style="font-size:11px;background:rgba(16,185,129,0.12);color:var(--color-success);border:1px solid rgba(16,185,129,0.25);border-radius:20px;padding:2px 8px;display:inline-flex;align-items:center;gap:4px;" title="Стрічка автоматично оновлюється при появі нових завдань">
                 <span class="live-dot-pulse"></span>
                 Наживо
             </span>
@@ -41,10 +41,8 @@
     {% for assignment in assignments %}
     <article class="assignment-card {{ assignment.age_card_class }}"
              onclick="openAssignment({{ assignment.id }})"
-             role="button"
-             tabindex="0"
              aria-label="Відкрити завдання: {{ assignment.title }}"
-             onkeydown="if(event.key==='Enter'){openAssignment({{ assignment.id }})}">
+>
 
         <div class="card-accent"
              style="background:linear-gradient(90deg,{{ assignment.subject.color|default:'#6366f1' }},#8b5cf6)">
@@ -98,7 +96,7 @@
                     <!-- Предмет (показується тільки якщо в системі більше ніж 1 предмет) -->
                     {% if has_multiple_subjects and assignment.subject %}
                     <span class="subject-tag"
-                          style="background-color:{{ assignment.subject.color }}22;color:{{ assignment.subject.color }}">
+                          style="background-color:{{ assignment.subject.color }}22;color:var(--color-primary-text)">
                         {{ assignment.subject.icon }} {{ assignment.subject.name }}
                     </span>
                     {% endif %}
@@ -116,7 +114,7 @@
                 {% endif %}
             </div>
 
-            <h2 class="card-title">{{ assignment.title }}</h2>
+            <h3 class="card-title"><a href="{% url 'assignment_detail' assignment.id %}{% if selected_class_id %}?class={{ selected_class_id }}{% endif %}" onclick="event.stopPropagation();">{{ assignment.title }}</a></h3>
 
             {% if assignment.description %}
             <div class="card-description">{{ assignment.get_card_description|safe }}</div>
@@ -173,16 +171,16 @@
             </div>
 
             <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
-                <a href="{% url 'assignment_detail' assignment.id %}" class="btn btn-secondary btn-sm" onclick="event.stopPropagation();" title="Відкрити завдання">
+                <a href="{% url 'assignment_detail' assignment.id %}{% if selected_class_id %}?class={{ selected_class_id }}{% endif %}" class="btn btn-primary btn-sm" onclick="event.stopPropagation();" title="Відкрити завдання">
                     📖 Переглянути
                 </a>
                 {% if not user.is_authenticated or not user.teacher_profile %}
                     {% if assignment.is_archived or assignment.status == 'archived' %}
-                    <span class="badge" style="background: rgba(245, 158, 11, 0.15); color: #b45309; border: 1px solid rgba(245, 158, 11, 0.3); font-size: 12px; font-weight: 700; padding: 5px 10px; border-radius: var(--radius-sm);" title="Прийом робіт закрито (архів)">
+                    <span class="badge" style="background: rgba(245, 158, 11, 0.15); color:var(--color-warning); border: 1px solid rgba(245, 158, 11, 0.3); font-size: 12px; font-weight: 700; padding: 5px 10px; border-radius: var(--radius-sm);" title="Прийом робіт закрито (архів)">
                         🔒 Прийом закрито
                     </span>
                     {% elif not assignment.no_submission_required %}
-                    <a href="{% url 'submit_assignment' assignment.id %}" class="btn btn-primary btn-sm" onclick="event.stopPropagation();" style="font-weight:700;" title="Здати виконану роботу">
+                    <a href="{% url 'submit_assignment' assignment.id %}{% if selected_class_id %}?class={{ selected_class_id }}{% endif %}" class="btn btn-submit-work btn-sm" onclick="event.stopPropagation();" style="font-weight:700;" title="Здати виконану роботу">
                         📤 Здати роботу
                     </a>
                     {% else %}

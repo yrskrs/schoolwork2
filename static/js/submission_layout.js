@@ -18,7 +18,7 @@
         syncSelectedClass();
 
         const moreOptions = form.querySelector('.submission-more-options');
-        if (moreOptions && window.matchMedia('(max-width: 760px)').matches) moreOptions.open = false;
+        if (moreOptions && window.matchMedia('(max-width: 960px)').matches) moreOptions.open = false;
 
         const optionalFields = document.getElementById('submission-optional-fields');
         if (optionalFields) {

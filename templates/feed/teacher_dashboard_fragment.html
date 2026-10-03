@@ -44,7 +44,7 @@
                     {% if tgt.has_target %}
                     <span class="class-tag"
                           title="{% if tgt.date %}{{ tgt.date|date:'d.m.Y' }}{% if tgt.time_str %} о {{ tgt.time_str }}{% endif %}{% elif tgt.time_str %}{{ tgt.time_str }}{% endif %}"
-                          style="{% if tgt.is_today %}background:rgba(34,197,94,0.15);border-color:rgba(34,197,94,0.4);color:#16a34a;{% elif tgt.is_upcoming %}background:rgba(99,102,241,0.1);border-color:rgba(99,102,241,0.3);{% endif %}">
+                          style="{% if tgt.is_today %}background:rgba(34,197,94,0.15);border-color:rgba(34,197,94,0.4);color:var(--color-success);{% elif tgt.is_upcoming %}background:rgba(99,102,241,0.1);border-color:rgba(99,102,241,0.3);{% endif %}">
                         {{ tgt.class_name }}{% if tgt.date %} <span style="font-weight:500;opacity:0.85;font-size:11px;">{{ tgt.date|date:"d.m" }}{% if tgt.slot_info %} ({{ tgt.slot_info }}){% endif %}</span>{% elif tgt.slot_info %} <span style="font-weight:500;opacity:0.8;font-size:11px;">({{ tgt.slot_info }})</span>{% endif %}{% if tgt.is_today %} <span style="font-size:10px;">🟢</span>{% endif %}
                     </span>
                     {% else %}
@@ -73,7 +73,7 @@
                 <!-- Відмітка про перенесення уроку -->
                 {% if assignment.reschedule_logs.first %}
                 {% with last_resched=assignment.reschedule_logs.first %}
-                <span class="due-badge" style="background:rgba(239,68,68,0.1);color:#dc2626;border:1px solid rgba(239,68,68,0.25);" title="Перенесено з {{ last_resched.original_date|date:'d.m' }} на {{ last_resched.new_date|date:'d.m' }}. Причина: {{ last_resched.get_reason_type_display }}{% if last_resched.reason_comment %} ({{ last_resched.reason_comment }}){% endif %}">
+                <span class="due-badge" style="background:rgba(239,68,68,0.1);color:var(--color-danger);border:1px solid rgba(239,68,68,0.25);" title="Перенесено з {{ last_resched.original_date|date:'d.m' }} на {{ last_resched.new_date|date:'d.m' }}. Причина: {{ last_resched.get_reason_type_display }}{% if last_resched.reason_comment %} ({{ last_resched.reason_comment }}){% endif %}">
                     {{ last_resched.reason_icon }} Перенесено на {{ last_resched.new_date|date:'d.m' }}
                 </span>
                 {% endwith %}

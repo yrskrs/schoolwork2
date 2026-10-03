@@ -97,10 +97,10 @@
                                 </td>
                                 <td>
                                     <span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:12px;
-                                        {% if log.action_type == 'submission' %}background:rgba(16,185,129,0.15);color:#059669;
-                                        {% elif log.action_type == 'grading' %}background:rgba(99,102,241,0.15);color:#4f46e5;
-                                        {% elif log.action_type == 'comment' %}background:rgba(14,165,233,0.15);color:#0284c7;
-                                        {% elif log.action_type == 'delete' %}background:rgba(239,68,68,0.15);color:#dc2626;
+                                        {% if log.action_type == 'submission' %}background:rgba(16,185,129,0.15);color:var(--color-success);
+                                        {% elif log.action_type == 'grading' %}background:rgba(99,102,241,0.15);color:var(--color-primary);
+                                        {% elif log.action_type == 'comment' %}background:rgba(14,165,233,0.15);color:var(--color-info);
+                                        {% elif log.action_type == 'delete' %}background:rgba(239,68,68,0.15);color:var(--color-danger);
                                         {% else %}background:var(--color-bg-secondary);color:var(--color-text-muted);{% endif %}">
                                         {{ log.get_action_type_display }}
                                     </span>

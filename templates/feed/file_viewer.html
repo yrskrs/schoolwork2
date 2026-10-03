@@ -281,7 +281,7 @@
                         <div class="fv-filter-badge" style="display:inline-flex;align-items:center;gap:6px;background:rgba(99,102,241,0.12);border:1px solid rgba(99,102,241,0.3);color:var(--color-primary);padding:3px 10px;border-radius:20px;font-size:11.5px;font-weight:700;" title="Активна фільтрація черги перевірки">
                             <span>🎯 {{ queue_filter_desc|default:"Фільтр" }}</span>
                             {% if queue_pos and queue_total %}
-                            <span style="background:var(--color-primary);color:#fff;padding:1px 7px;border-radius:10px;font-size:10.5px;font-weight:800;">{{ queue_pos }} / {{ queue_total }}</span>
+                            <span style="background:var(--action-primary-bg);color:#fff;padding:1px 7px;border-radius:10px;font-size:10.5px;font-weight:800;">{{ queue_pos }} / {{ queue_total }}</span>
                             {% endif %}
                         </div>
                         {% endif %}
@@ -438,7 +438,7 @@
                     {% elif file_type == 'office_preview' %}
                     <div class="file-preview-stage" style="margin:20px;border-radius:var(--radius-lg);">
                         {% if error_message %}
-                        <div class="alert alert-warning" style="margin-bottom:16px;padding:12px;border-radius:var(--radius-sm);background:rgba(234,179,8,0.1);border:1px solid rgba(234,179,8,0.3);color:#b45309;">
+                        <div class="alert alert-warning" style="margin-bottom:16px;padding:12px;border-radius:var(--radius-sm);background:rgba(234,179,8,0.1);border:1px solid rgba(234,179,8,0.3);color:var(--color-warning);">
                             ⚠️ {{ error_message }}
                         </div>
                         {% endif %}
@@ -541,7 +541,7 @@
 
                         <!-- Нижня міні-стрічка мініатюр для швидкого вибору фото зошита -->
                         <div id="image-thumbnails-strip" style="display:flex;gap:8px;padding:12px 18px;background:rgba(15,23,42,0.95);border-top:1px solid rgba(255,255,255,0.1);overflow-x:auto;align-items:center;justify-content:center;">
-                            <span style="font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;margin-right:4px;">
+                            <span style="font-size:11px;font-weight:800;color:#cbd5e1;text-transform:uppercase;margin-right:4px;">
                                 Сторінки:
                             </span>
                             {% for img_sf in all_image_files %}
@@ -740,7 +740,7 @@
                         </div>
                         <div style="flex-shrink:0;">
                             {% if submission.grade == 'Доопрацювати' or submission.grade == 'доопрацювання' or submission.grade == 'д' or submission.grade == 'Д' %}
-                            <span class="badge" style="font-size:11px;padding:3px 8px;font-weight:800;background:#fef3c7;color:#b45309;border:1px solid #fcd34d;">
+                            <span class="badge" style="font-size:11px;padding:3px 8px;font-weight:800;background:var(--color-warning-light);color:var(--color-warning);border:1px solid #fcd34d;">
                                 🔄 Доопрацювати
                             </span>
                             {% elif submission.grade %}
@@ -804,7 +804,7 @@
                         {% if submission.is_resubmission or submission.resubmission_attempt > 1 %}
                         <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:2px;">
                             <span style="color:var(--color-text-muted);">🔄 Спроба:</span>
-                            <span class="badge" style="background:#d1fae5;color:#065f46;border:1px solid #a7f3d0;font-size:11px;font-weight:800;padding:2px 7px;">
+                            <span class="badge" style="background:var(--color-success-light);color:var(--color-success);border:1px solid #a7f3d0;font-size:11px;font-weight:800;padding:2px 7px;">
                                 Спроба #{{ submission.resubmission_attempt }} (Робота над помилками)
                             </span>
                         </div>
@@ -814,11 +814,11 @@
                         <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:2px;">
                             <span style="color:var(--color-text-muted);">🤖 Використання ШІ:</span>
                             {% if submission.assignment.allow_ai_usage %}
-                            <span class="badge" style="background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0;font-size:10.5px;font-weight:700;">
+                            <span class="badge" style="background:var(--color-success-light);color:var(--color-success);border:1px solid #a7f3d0;font-size:10.5px;font-weight:700;">
                                 💡 Дозволено вчителем
                             </span>
                             {% else %}
-                            <span class="badge" style="background:#f1f5f9;color:#475569;border:1px solid #cbd5e1;font-size:10.5px;font-weight:600;">
+                            <span class="badge" style="background:var(--color-bg-secondary);color:var(--color-text-secondary);border:1px solid #cbd5e1;font-size:10.5px;font-weight:600;">
                                 🚫 Не дозволено
                             </span>
                             {% endif %}
@@ -827,7 +827,7 @@
                         <!-- Ознаки використання ШІ у роботі (якщо виявлено) -->
                         {% if submission.ai_generated_detected %}
                         <div style="background:{% if submission.is_ai_allowed %}rgba(16,185,129,0.08){% else %}rgba(239,68,68,0.08){% endif %};border:1.5px solid {% if submission.is_ai_allowed %}#10b981{% else %}#ef4444{% endif %};border-radius:var(--radius-sm);padding:8px 10px;font-size:11.5px;margin-top:6px;">
-                            <div style="font-weight:800;color:{% if submission.is_ai_allowed %}#065f46{% else %}#dc2626{% endif %};display:flex;align-items:center;gap:6px;margin-bottom:3px;">
+                            <div style="font-weight:800;color:{% if submission.is_ai_allowed %}#065f46{% else %}var(--color-danger){% endif %};display:flex;align-items:center;gap:6px;margin-bottom:3px;">
                                 <span>🤖</span>
                                 <span>Виявлено ознаки використання ШІ{% if submission.ai_generated_percent is not None %}: {{ submission.ai_generated_percent }}%{% endif %} ({{ submission.get_ai_generated_confidence_display|default:submission.ai_generated_confidence }})</span>
                             </div>
@@ -847,8 +847,8 @@
 
                     <!-- Попередження, якщо вчитель відкрив застарілу версію роботи, а учень здав новішу -->
                     {% if not submission.is_latest_attempt %}
-                    <div style="background:#fffbeb;border:1.5px solid #fde68a;border-radius:var(--radius-sm);padding:8px 10px;font-size:11.5px;color:#92400e;">
-                        <strong style="display:block;margin-bottom:2px;color:#b45309;">⚠️ Це попередня версія роботи (Спроба #{{ submission.resubmission_attempt }})!</strong>
+                    <div style="background:var(--color-warning-light);border:1.5px solid #fde68a;border-radius:var(--radius-sm);padding:8px 10px;font-size:11.5px;color:var(--color-warning);">
+                        <strong style="display:block;margin-bottom:2px;color:var(--color-warning);">⚠️ Це попередня версія роботи (Спроба #{{ submission.resubmission_attempt }})!</strong>
                         <div>Учень здав оновлену роботу (роботу над помилками). Цю спробу оцінювати не потрібно.</div>
                         {% if submission.subsequent_submissions.all %}
                         {% for subseq in submission.subsequent_submissions.all %}
@@ -866,7 +866,7 @@
                     {% if submission.previous_submission %}
                     <div style="background:var(--color-surface);border:1px solid rgba(16,185,129,0.35);border-radius:var(--radius-sm);padding:8px 10px;font-size:11.5px;">
                         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
-                            <strong style="color:#059669;display:flex;align-items:center;gap:4px;">
+                            <strong style="color:var(--color-success);display:flex;align-items:center;gap:4px;">
                                 <span>📜</span> <span>Попередня спроба #{{ submission.previous_submission.resubmission_attempt|default:"1" }}</span>
                             </strong>
                             <a href="{% url 'view_file' submission.previous_submission.id %}{% if nav_query_string %}?{{ nav_query_string }}{% endif %}" style="font-size:11px;font-weight:700;color:var(--color-primary);text-decoration:none;">
@@ -896,7 +896,7 @@
                     <!-- Попередження про плагіат / дублікат або спільну роботу -->
                     {% if dup_info.is_duplicate %}
                     <div id="duplicate-warning-card" style="background:{% if dup_info.type == 'teacher_duplicate' %}rgba(239,68,68,0.08){% else %}rgba(245,158,11,0.08){% endif %};border:1.5px solid {% if dup_info.type == 'teacher_duplicate' %}#ef4444{% else %}#f59e0b{% endif %};border-radius:6px;padding:10px 12px;font-size:12px;">
-                        <strong style="color:{% if dup_info.type == 'teacher_duplicate' %}#dc2626{% else %}#b45309{% endif %};display:flex;align-items:center;gap:6px;margin-bottom:4px;font-size:12.5px;">
+                        <strong style="color:{% if dup_info.type == 'teacher_duplicate' %}var(--color-danger){% else %}var(--color-warning){% endif %};display:flex;align-items:center;gap:6px;margin-bottom:4px;font-size:12.5px;">
                             {% if dup_info.type == 'teacher_duplicate' %}<span>🚫</span> <span>Файл без виконання (копія завдання)</span>{% else %}<span>⚠️</span> <span>Схожість робіт / Збіг файлів</span>{% endif %}
                         </strong>
                         {% if dup_info.type == 'student_duplicate' %}
@@ -942,7 +942,7 @@
                     </div>
                     {% elif submission.ignore_plagiarism or dup_info.plagiarism_ignored %}
                     <div id="collaboration-plagiarism-ignored-card" style="background:rgba(16,185,129,0.08);border:1.5px solid #10b981;border-radius:6px;padding:10px 12px;font-size:12px;">
-                        <strong style="color:#047857;display:flex;align-items:center;gap:6px;margin-bottom:4px;font-size:12.5px;">
+                        <strong style="color:var(--color-success);display:flex;align-items:center;gap:6px;margin-bottom:4px;font-size:12.5px;">
                             <span>👥</span> <span>Спільна робота / Плагіат проігноровано</span>
                         </strong>
                         <div style="color:var(--color-text-secondary);line-height:1.45;">
@@ -957,7 +957,7 @@
                             {% endif %}
                             <span class="class-prominent-badge" style="font-size:10px;padding:1px 5px;margin-left:2px;">{{ dup_info.duplicate_class }}</span>
                             {% endif %}
-                            <div style="margin-top:3px;color:#047857;font-weight:700;">
+                            <div style="margin-top:3px;color:var(--color-success);font-weight:700;">
                                 ✓ Підтверджено спільне виконання вчителем або системою. ШІ та система оцінюють проект по суті без штрафу за дублікат.
                             </div>
                         </div>
@@ -1045,7 +1045,7 @@
 
                                 {% for vid in submission.assignment.all_youtube_videos %}
                                 <a href="{{ vid.watch_url }}" target="_blank" rel="noopener noreferrer"
-                                   style="font-size:11.5px;color:#ef4444;text-decoration:none;display:inline-flex;align-items:center;gap:4px;padding:4px 0;">
+                                   style="font-size:11.5px;color:var(--color-danger);text-decoration:none;display:inline-flex;align-items:center;gap:4px;padding:4px 0;">
                                     <span>▶</span>
                                     <span>{{ vid.title }} ↗</span>
                                 </a>
@@ -1133,7 +1133,7 @@
                 <!-- 🤖 УЧЕНЬ СКОРИСТАВСЯ САМОПЕРЕВІРКОЮ ШІ (чернова оцінка) -->
                 {% if submission.student_ai_checked %}
                 <div id="student-ai-draft-block" style="margin-bottom:16px;background:{% if submission.student_ai_accepted %}rgba(16,185,129,0.07){% else %}rgba(245,158,11,0.07){% endif %};border:2px solid {% if submission.student_ai_accepted %}#10b981{% else %}#f59e0b{% endif %};border-radius:var(--radius-lg);padding:14px 16px;overflow:hidden;">
-                    <div style="font-weight:800;font-size:13px;color:{% if submission.student_ai_accepted %}#059669{% else %}#b45309{% endif %};margin-bottom:8px;display:flex;align-items:center;gap:6px;">
+                    <div style="font-weight:800;font-size:13px;color:{% if submission.student_ai_accepted %}var(--color-success){% else %}var(--color-warning){% endif %};margin-bottom:8px;display:flex;align-items:center;gap:6px;">
                         <span>🤖</span>
                         <span>{% if submission.student_ai_accepted %}Учнівська самоперевірка прийнята{% else %}Учень(-иця) перевірив(-ла) роботу самостійно{% endif %}</span>
                     </div>
@@ -1145,9 +1145,9 @@
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
                         <span style="font-size:12px;color:var(--color-text-secondary);font-weight:700;">Чернова оцінка ШІ:</span>
                         {% if submission.student_ai_grade == 'Доопрацювати' %}
-                        <span class="badge" style="font-size:12px;font-weight:800;background:#fef3c7;color:#d97706;border:1px solid #fcd34d;">🔄 Доопрацювати</span>
+                        <span class="badge" style="font-size:12px;font-weight:800;background:var(--color-warning-light);color:var(--color-warning);border:1px solid #fcd34d;">🔄 Доопрацювати</span>
                         {% else %}
-                        <span class="badge" style="font-size:13px;font-weight:800;background:rgba(16,185,129,0.15);color:#059669;">
+                        <span class="badge" style="font-size:13px;font-weight:800;background:rgba(16,185,129,0.15);color:var(--color-success);">
                             {{ submission.student_ai_grade }}{% if submission.student_ai_level %} ({{ submission.student_ai_level }}){% endif %}
                         </span>
                         {% endif %}
@@ -1191,7 +1191,7 @@
                         </button>
                     </div>
                     {% elif submission.student_ai_accepted %}
-                    <div style="font-size:12px;color:#059669;font-weight:700;text-align:center;padding:6px 0;">✅ Оцінка вже прийнята і записана в журнал</div>
+                    <div style="font-size:12px;color:var(--color-success);font-weight:700;text-align:center;padding:6px 0;">✅ Оцінка вже прийнята і записана в журнал</div>
                     {% endif %}
                 </div>
                 {% endif %}
@@ -1263,11 +1263,11 @@
                             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
                                 <span style="font-size:11px;font-weight:700;color:var(--color-text-muted);text-transform:uppercase;">Попередня оцінка:</span>
                                 {% if submission.ai_suggested_grade == 'Доопрацювати' %}
-                                <span class="badge" style="font-size:12px;font-weight:700;background:#fef3c7;color:#d97706;border:1px solid #fcd34d;">
+                                <span class="badge" style="font-size:12px;font-weight:700;background:var(--color-warning-light);color:var(--color-warning);border:1px solid #fcd34d;">
                                     🔄 Доопрацювати
                                 </span>
                                 {% else %}
-                                <span class="badge" style="font-size:13px;font-weight:800;background:rgba(16,185,129,0.15);color:#059669;">
+                                <span class="badge" style="font-size:13px;font-weight:800;background:rgba(16,185,129,0.15);color:var(--color-success);">
                                     🤖 {{ submission.ai_suggested_grade|default:"Оцінено" }}{% if submission.ai_score_level %} ({{ submission.ai_score_level }}){% endif %}
                                 </span>
                                 {% endif %}
@@ -1281,7 +1281,7 @@
                                         <span>📊</span> <span>Оцінки за групами результатів (ГР):</span>
                                     </div>
                                     {% if submission.get_ai_gr_average %}
-                                    <span class="badge" style="background:#10b981;color:#fff;font-size:11px;font-weight:800;" title="Середній бал за оціненими групами результатів">
+                                    <span class="badge" style="background:var(--action-success-bg);color:#fff;font-size:11px;font-weight:800;" title="Середній бал за оціненими групами результатів">
                                         Сер. бал ГР: {{ submission.get_ai_gr_average_display }}
                                     </span>
                                     {% endif %}
@@ -1305,10 +1305,10 @@
                             {% endif %}
 
                             {% if 'Зауваження до формату файлу' in submission.ai_feedback %}
-                            <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:8px 10px;margin-bottom:8px;font-size:12px;color:#92400e;display:flex;align-items:flex-start;gap:6px;">
+                            <div style="background:var(--color-warning-light);border:1px solid #fde68a;border-radius:6px;padding:8px 10px;margin-bottom:8px;font-size:12px;color:var(--color-warning);display:flex;align-items:flex-start;gap:6px;">
                                 <span style="font-size:14px;">⚠️</span>
                                 <div>
-                                    <strong style="color:#b45309;">Невідповідний формат файлу:</strong>
+                                    <strong style="color:var(--color-warning);">Невідповідний формат файлу:</strong>
                                     <div style="margin-top:2px;font-size:11.5px;color:#78350f;">Файл здано без належного розширення або не у тому форматі (оцінку знижено).</div>
                                 </div>
                             </div>
@@ -1316,7 +1316,7 @@
 
                             {% if submission.ai_generated_detected %}
                             <div style="background:{% if submission.is_ai_allowed %}rgba(16,185,129,0.08){% else %}rgba(239,68,68,0.08){% endif %};border:1px solid {% if submission.is_ai_allowed %}#10b981{% else %}#ef4444{% endif %};border-radius:6px;padding:8px 10px;margin-bottom:8px;font-size:11.5px;">
-                                <div style="font-weight:800;color:{% if submission.is_ai_allowed %}#065f46{% else %}#dc2626{% endif %};display:flex;align-items:center;gap:5px;margin-bottom:3px;">
+                                <div style="font-weight:800;color:{% if submission.is_ai_allowed %}#065f46{% else %}var(--color-danger){% endif %};display:flex;align-items:center;gap:5px;margin-bottom:3px;">
                                     <span>🤖</span>
                                     <span>Виявлено ознаки використання ШІ{% if submission.ai_generated_percent is not None %}: {{ submission.ai_generated_percent }}%{% endif %} ({{ submission.get_ai_generated_confidence_display|default:submission.ai_generated_confidence }})</span>
                                 </div>
@@ -1340,7 +1340,7 @@
                         </button>
 
                         {% elif submission.ai_status == 'failed' or submission.ai_status == 'unsupported' %}
-                        <div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);border-radius:var(--radius-sm);padding:8px 10px;font-size:12px;color:#ef4444;margin-bottom:6px;">
+                        <div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);border-radius:var(--radius-sm);padding:8px 10px;font-size:12px;color:var(--color-danger);margin-bottom:6px;">
                             <strong>⚠️ {% if submission.ai_status == 'unsupported' %}Не підтримується:{% else %}Помилка ШІ:{% endif %}</strong>
                             <div style="margin-top:2px;">{{ submission.ai_error_reason }}</div>
                         </div>
@@ -1392,7 +1392,7 @@
                         <button type="button" class="fv-preset-btn" onclick="setPresetGrade('10')">10</button>
                         <button type="button" class="fv-preset-btn" onclick="setPresetGrade('11')">11</button>
                         <button type="button" class="fv-preset-btn" onclick="setPresetGrade('12')">12</button>
-                        <button type="button" class="fv-preset-btn" style="grid-column:span 6;margin-top:4px;background:rgba(245,158,11,0.12);color:#d97706;border-color:rgba(245,158,11,0.35);font-size:12px;" onclick="setPresetGrade('Доопрацювати')">
+                        <button type="button" class="fv-preset-btn" style="grid-column:span 6;margin-top:4px;background:rgba(245,158,11,0.12);color:var(--color-warning);border-color:rgba(245,158,11,0.35);font-size:12px;" onclick="setPresetGrade('Доопрацювати')">
                             🔄 Повернути на доопрацювання
                         </button>
                     </div>
@@ -1418,7 +1418,7 @@
                                     {% if m.id == submission.id and not m.primary_submission_id %}
                                     <span class="badge" style="font-size:10px;background:rgba(99,102,241,0.15);color:var(--color-primary);padding:1px 5px;border-radius:4px;">Автор</span>
                                     {% else %}
-                                    <span class="badge" style="font-size:10px;background:rgba(16,185,129,0.15);color:#059669;padding:1px 5px;border-radius:4px;">Співавтор</span>
+                                    <span class="badge" style="font-size:10px;background:rgba(16,185,129,0.15);color:var(--color-success);padding:1px 5px;border-radius:4px;">Співавтор</span>
                                     {% endif %}
                                 </div>
                                 <div style="display:flex;align-items:center;gap:6px;">
@@ -1459,7 +1459,7 @@
                             <div style="display:flex;align-items:center;gap:6px;">
                                 <span style="font-size:11px;color:var(--color-text-muted);">{{ comment.created_at|date:"d.m H:i" }}</span>
                                 {% if comment.author == user or user.is_superuser %}
-                                <button type="button" onclick="deleteViewerComment({{ comment.id }})" style="background:none;border:none;color:#ef4444;cursor:pointer;padding:0;font-size:12px;" title="Видалити">✕</button>
+                                <button type="button" onclick="deleteViewerComment({{ comment.id }})" style="background:none;border:none;color:var(--color-danger);cursor:pointer;padding:0;font-size:12px;" title="Видалити">✕</button>
                                 {% endif %}
                             </div>
                         </div>
@@ -1671,7 +1671,7 @@ function sendViewerComment() {
                         <span style="font-weight:700;color:var(--color-primary);">${c.author}</span>
                         <div style="display:flex;align-items:center;gap:6px;">
                             <span style="font-size:11px;color:var(--color-text-muted);">${c.created_at}</span>
-                            <button type="button" onclick="deleteViewerComment(${c.id})" style="background:none;border:none;color:#ef4444;cursor:pointer;padding:0;font-size:12px;">✕</button>
+                            <button type="button" onclick="deleteViewerComment(${c.id})" style="background:none;border:none;color:var(--color-danger);cursor:pointer;padding:0;font-size:12px;">✕</button>
                         </div>
                     </div>
                     <div style="white-space:pre-wrap;line-height:1.5;">${c.text.replace(/</g, '&lt;')}</div>
@@ -1958,23 +1958,23 @@ function runSingleAICheck(subId) {
             var gradeVal = data.suggested_grade || 'Оцінено';
             var gradeBadge = '';
             if (gradeVal === 'Доопрацювати') {
-                gradeBadge = '<span class="badge" style="font-size:12px;font-weight:700;background:#fef3c7;color:#d97706;border:1px solid #fcd34d;">🔄 Доопрацювати</span>';
+                gradeBadge = '<span class="badge" style="font-size:12px;font-weight:700;background:var(--color-warning-light);color:var(--color-warning);border:1px solid #fcd34d;">🔄 Доопрацювати</span>';
             } else {
-                gradeBadge = '<span class="badge" style="font-size:13px;font-weight:800;background:rgba(16,185,129,0.15);color:#059669;">🤖 ' + gradeVal + (data.level ? ' (' + data.level + ')' : '') + '</span>';
+                gradeBadge = '<span class="badge" style="font-size:13px;font-weight:800;background:rgba(16,185,129,0.15);color:var(--color-success);">🤖 ' + gradeVal + (data.level ? ' (' + data.level + ')' : '') + '</span>';
             }
 
             var formatWarningBanner = '';
             if (data.format_warning || (data.feedback && data.feedback.indexOf('Зауваження до формату файлу') !== -1)) {
                 var warnMsg = data.format_warning || 'Файл здано без належного розширення або не у тому форматі (оцінку знижено).';
-                formatWarningBanner = '<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:8px 10px;margin-bottom:8px;font-size:12px;color:#92400e;display:flex;align-items:flex-start;gap:6px;">' +
+                formatWarningBanner = '<div style="background:var(--color-warning-light);border:1px solid #fde68a;border-radius:6px;padding:8px 10px;margin-bottom:8px;font-size:12px;color:var(--color-warning);display:flex;align-items:flex-start;gap:6px;">' +
                     '<span style="font-size:14px;">⚠️</span>' +
-                    '<div><strong style="color:#b45309;">Невідповідний формат файлу:</strong><div style="margin-top:2px;font-size:11.5px;color:#78350f;">' + warnMsg + '</div></div>' +
+                    '<div><strong style="color:var(--color-warning);">Невідповідний формат файлу:</strong><div style="margin-top:2px;font-size:11.5px;color:#78350f;">' + warnMsg + '</div></div>' +
                 '</div>';
             }
 
             var grHtml = '';
             if (!data.is_traditional && data.gr_results && Array.isArray(data.gr_results) && data.gr_results.length > 0) {
-                var avgHeader = data.gr_avg ? '<span class="badge" style="background:#10b981;color:#fff;font-size:11px;font-weight:800;" title="Середній бал за обраними групами результатів">Сер. бал ГР: ' + data.gr_avg + '</span>' : '';
+                var avgHeader = data.gr_avg ? '<span class="badge" style="background:var(--action-success-bg);color:#fff;font-size:11px;font-weight:800;" title="Середній бал за обраними групами результатів">Сер. бал ГР: ' + data.gr_avg + '</span>' : '';
                 grHtml = '<div style="margin:8px 0 6px;padding:6px 0;border-top:1px dashed var(--color-border);border-bottom:1px dashed var(--color-border);">' +
                     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">' +
                         '<div style="font-size:11px;font-weight:800;color:var(--color-primary);text-transform:uppercase;display:flex;align-items:center;gap:4px;">' +
@@ -2028,7 +2028,7 @@ function runSingleAICheck(subId) {
             '</div>' +
             '<button type="button" class="btn btn-primary btn-sm" onclick="applyAIEvaluation(' + subId + ')" style="width:100%;font-size:12px;font-weight:700;padding:6px;">✓ Прийняти оцінку та відгук ШІ</button>';
         } else {
-            box.innerHTML = '<div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);border-radius:var(--radius-sm);padding:8px 10px;font-size:12px;color:#ef4444;">' +
+            box.innerHTML = '<div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);border-radius:var(--radius-sm);padding:8px 10px;font-size:12px;color:var(--color-danger);">' +
                 '<strong>⚠️ ' + (data.status === 'unsupported' ? 'Формат не підтримується' : 'Помилка ШІ') + ':</strong> ' + (data.error || 'Не вдалося перевірити') +
             '</div>';
         }
@@ -2039,7 +2039,7 @@ function runSingleAICheck(subId) {
             btn.innerHTML = '<span style="font-size:16px;">⚡</span> <span>Перевірити роботу ШІ</span>';
         }
         if (box) {
-            box.innerHTML = '<div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);border-radius:var(--radius-sm);padding:8px 10px;font-size:12px;color:#ef4444;">' +
+            box.innerHTML = '<div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);border-radius:var(--radius-sm);padding:8px 10px;font-size:12px;color:var(--color-danger);">' +
                 '<strong>⚠️ Помилка:</strong> ' + err.message +
             '</div>';
         }
@@ -2177,13 +2177,13 @@ function openAssignmentFileModal(fileId, fileName, fileExt, fileUrl) {
                     contentEl.innerHTML = '<iframe src="' + data.url + '" style="width:100%;height:70vh;border:none;border-radius:var(--radius-md);"></iframe>';
                 }
             } else if (data.type === 'error') {
-                contentEl.innerHTML = '<div class="alert alert-warning" style="padding:14px;background:rgba(234,179,8,0.1);border:1px solid rgba(234,179,8,0.3);color:#b45309;border-radius:var(--radius-md);">⚠️ ' + escapeHtmlForViewer(data.message) + '</div>';
+                contentEl.innerHTML = '<div class="alert alert-warning" style="padding:14px;background:rgba(234,179,8,0.1);border:1px solid rgba(234,179,8,0.3);color:var(--color-warning);border-radius:var(--radius-md);">⚠️ ' + escapeHtmlForViewer(data.message) + '</div>';
             }
         })
         .catch(function(err) {
             spinnerEl.style.display = 'none';
             contentEl.style.display = 'block';
-            contentEl.innerHTML = '<div class="alert alert-error" style="padding:14px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);color:#ef4444;border-radius:var(--radius-md);">⚠️ Помилка завантаження файлу: ' + escapeHtmlForViewer(err.message) + '</div>';
+            contentEl.innerHTML = '<div class="alert alert-error" style="padding:14px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);color:var(--color-danger);border-radius:var(--radius-md);">⚠️ Помилка завантаження файлу: ' + escapeHtmlForViewer(err.message) + '</div>';
         });
 }
 
@@ -2365,7 +2365,7 @@ function acceptStudentAIGrade(subId) {
                 block.style.background = 'rgba(16,185,129,0.07)';
                 block.style.borderColor = '#10b981';
                 var titleEl = block.querySelector('[data-student-title]') || block.querySelector('span:last-child');
-                block.innerHTML = '<div style="font-weight:800;font-size:13px;color:#059669;text-align:center;padding:8px 0;">✅ Оцінку прийнято та записано в журнал!</div>';
+                block.innerHTML = '<div style="font-weight:800;font-size:13px;color:var(--color-success);text-align:center;padding:8px 0;">✅ Оцінку прийнято та записано в журнал!</div>';
             }
             // Оновити значок оцінки у верхній панелі
             setTimeout(function() { window.location.reload(); }, 800);
@@ -2424,5 +2424,4 @@ function toggleViewerIgnorePlagiarism(isChecked) {
 }
 </script>
 {% endblock %}
-
 

@@ -4193,8 +4193,6 @@ def all_submissions_dashboard(request):
     if request.user.is_superuser:
         all_classes = ClassGroup.objects.all().order_by('grade', 'letter')
         all_assignments = Assignment.objects.all().order_by('-published_at')
-    if not request.user.is_superuser:
-        all_assignments = all_assignments.filter(teacher=request.user.teacher_profile)[:100]
     else:
         teacher_class_ids = teacher.classes.values_list('id', flat=True)
         all_classes = ClassGroup.objects.filter(id__in=teacher_class_ids).order_by('grade', 'letter')

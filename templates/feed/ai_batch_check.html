@@ -22,7 +22,7 @@
             </div>
 
             {% if not ai_settings.api_key %}
-            <div class="alert alert-warning" style="margin-bottom:20px;padding:16px 20px;border-radius:var(--radius-md);background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.3);color:#d97706;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+            <div class="alert alert-warning" style="margin-bottom:20px;padding:16px 20px;border-radius:var(--radius-md);background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.3);color:var(--color-warning);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
                 <div>
                     <strong>⚠️ Google Gemini API Key не налаштовано.</strong>
                     <div style="font-size:13px;margin-top:2px;">Введіть ваш безкоштовний ключ у налаштуваннях для активації автоматичного оцінювання.</div>
@@ -32,7 +32,7 @@
                 </a>
             </div>
             {% elif not ai_settings.is_enabled %}
-            <div class="alert alert-warning" style="margin-bottom:20px;padding:16px 20px;border-radius:var(--radius-md);background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.3);color:#d97706;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+            <div class="alert alert-warning" style="margin-bottom:20px;padding:16px 20px;border-radius:var(--radius-md);background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.3);color:var(--color-warning);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
                 <div>
                     <strong>⚠️ Модуль ШІ вимкнено в налаштуваннях.</strong>
                     <div style="font-size:13px;margin-top:2px;">API ключ налаштовано, але галочку «Увімкнути модуль» знято.</div>
@@ -55,7 +55,7 @@
                     <div class="text-muted text-sm" style="font-weight:600;">⏳ Очікують перевірки</div>
                 </div>
                 <div class="sidebar-card" style="padding:14px;text-align:center;border-top:3px solid #10b981;">
-                    <div style="font-size:24px;font-weight:800;color:#10b981;">{{ ai_evaluated_submissions }}</div>
+                    <div style="font-size:24px;font-weight:800;color:var(--color-success);">{{ ai_evaluated_submissions }}</div>
                     <div class="text-muted text-sm" style="font-weight:600;">🤖 Перевірено ШІ</div>
                 </div>
             </div>
@@ -130,7 +130,7 @@
                         <span>Тільки роботи, які ще не оцінював ШІ</span>
                     </label>
 
-                    <div style="margin-left:auto;display:flex;align-items:center;gap:8px;">
+                    <div class="batch-delay-control" style="margin-left:auto;display:flex;align-items:center;gap:8px;">
                         <label for="batch-delay" style="font-size:13px;font-weight:700;margin:0;color:var(--color-text-primary);white-space:nowrap;">
                             ⏱️ Пауза між запитами:
                         </label>
@@ -151,7 +151,7 @@
                         Знайдено для обробки: <span id="queue-count" style="color:var(--color-primary);font-size:16px;">0</span> робіт
                     </div>
 
-                    <div style="display:flex;gap:10px;">
+                    <div style="display:flex;gap:10px;flex-wrap:wrap;">
                         <button type="button" class="btn btn-secondary" id="btn-reload-queue" onclick="loadQueuePreview()">
                             🔄 Оновити список
                         </button>
@@ -178,8 +178,8 @@
 
                 <div style="display:flex;gap:16px;font-size:13px;flex-wrap:wrap;">
                     <span>Всього: <strong id="stat-total">0</strong></span>
-                    <span style="color:#059669;">✅ Оцінено ШІ: <strong id="stat-success">0</strong></span>
-                    <span style="color:#ef4444;">❌ Помилок / Не підтримується: <strong id="stat-errors">0</strong></span>
+                    <span style="color:var(--color-success);">✅ Оцінено ШІ: <strong id="stat-success">0</strong></span>
+                    <span style="color:var(--color-danger);">❌ Помилок / Не підтримується: <strong id="stat-errors">0</strong></span>
                 </div>
             </div>
 
@@ -379,7 +379,7 @@ function loadQueuePreview() {
         renderQueueTable();
     })
     .catch(function(err) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:30px;color:#ef4444;">Помилка завантаження черги: ' + err + '</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:30px;color:var(--color-danger);">Помилка завантаження черги: ' + err + '</td></tr>';
     });
 }
 
@@ -404,7 +404,7 @@ function renderQueueTable() {
         item = SchoolNetAI.escapeResult(item);
         var globalIdx = startIdx + i + 1;
         var statusBadge = '';
-        var formatBadge = item.has_format_warning ? '<div style="margin-top:2px;"><span class="badge" style="background:#fffbeb;color:#b45309;border:1px solid #fde68a;font-size:10px;font-weight:700;">⚠️ Не той формат</span></div>' : '';
+        var formatBadge = item.has_format_warning ? '<div style="margin-top:2px;"><span class="badge" style="background:var(--color-warning-light);color:var(--color-warning);border:1px solid #fde68a;font-size:10px;font-weight:700;">⚠️ Не той формат</span></div>' : '';
 
         var grPills = '';
         if (item.gr_results && Array.isArray(item.gr_results) && item.gr_results.length > 0) {
@@ -419,14 +419,14 @@ function renderQueueTable() {
 
         if (item.ai_status === 'success') {
             if (item.ai_grade === 'Доопрацювати') {
-                statusBadge = '<span class="badge" style="background:#fef3c7;color:#d97706;border:1px solid #fcd34d;font-weight:700;font-size:11px;">🔄 Доопрацювати</span>' + formatBadge + grPills;
+                statusBadge = '<span class="badge" style="background:var(--color-warning-light);color:var(--color-warning);border:1px solid #fcd34d;font-weight:700;font-size:11px;">🔄 Доопрацювати</span>' + formatBadge + grPills;
             } else {
-                statusBadge = '<span class="badge" style="background:rgba(16,185,129,0.15);color:#059669;font-weight:800;font-size:13px;">🤖 ' + item.ai_grade + '</span>' + formatBadge + grPills;
+                statusBadge = '<span class="badge" style="background:rgba(16,185,129,0.15);color:var(--color-success);font-weight:800;font-size:13px;">🤖 ' + item.ai_grade + '</span>' + formatBadge + grPills;
             }
         } else if (item.ai_status === 'failed') {
-            statusBadge = '<span class="badge" style="background:rgba(239,68,68,0.15);color:#ef4444;font-size:11px;">❌ Помилка</span>';
+            statusBadge = '<span class="badge" style="background:rgba(239,68,68,0.15);color:var(--color-danger);font-size:11px;">❌ Помилка</span>';
         } else if (item.ai_status === 'unsupported') {
-            statusBadge = '<span class="badge" style="background:rgba(245,158,11,0.15);color:#d97706;font-size:11px;">⚠️ Формат</span>';
+            statusBadge = '<span class="badge" style="background:rgba(245,158,11,0.15);color:var(--color-warning);font-size:11px;">⚠️ Формат</span>';
         } else if (item.ai_status === 'processing') {
             statusBadge = '<span style="font-size:12px;color:var(--color-primary);font-weight:700;">⏳ Аналіз...</span>';
         } else {
@@ -435,7 +435,7 @@ function renderQueueTable() {
 
         var feedbackDisplay = item.ai_feedback ?
             '<span title="' + item.ai_feedback.replace(/"/g, '&quot;') + '">' + item.ai_feedback.substring(0, 110) + '...</span>' :
-            (item.ai_error ? '<span style="color:#ef4444;font-size:12px;">' + item.ai_error + '</span>' : '—');
+            (item.ai_error ? '<span style="color:var(--color-danger);font-size:12px;">' + item.ai_error + '</span>' : '—');
 
         var isProcessingRow = (item.ai_status === 'processing');
         var rowBg = isProcessingRow ? 'background:rgba(99,102,241,0.06);' : '';
@@ -542,10 +542,10 @@ function processQueueIndex(idx) {
             var gradeCell = document.getElementById('cell-grade-' + item.id);
             var feedbackCell = document.getElementById('cell-feedback-' + item.id);
             if (gradeCell) {
-                gradeCell.innerHTML = '<span class="badge" style="background:#fef3c7;color:#d97706;border:1px solid #fcd34d;font-size:11px;">⏳ Ліміт API (чекаємо 10 сек)...</span>';
+                gradeCell.innerHTML = '<span class="badge" style="background:var(--color-warning-light);color:var(--color-warning);border:1px solid #fcd34d;font-size:11px;">⏳ Ліміт API (чекаємо 10 сек)...</span>';
             }
             if (feedbackCell) {
-                feedbackCell.innerHTML = '<span style="color:#d97706;font-size:12px;">Тимчасовий ліміт запитів Gemini Free. Автоматичний повтор через 10 секунд...</span>';
+                feedbackCell.innerHTML = '<span style="color:var(--color-warning);font-size:12px;">Тимчасовий ліміт запитів Gemini Free. Автоматичний повтор через 10 секунд...</span>';
             }
             document.getElementById('progress-status-text').textContent = '⏳ Пауза 10 секунд через ліміт запитів Gemini Free Tier...';
             setTimeout(function() {

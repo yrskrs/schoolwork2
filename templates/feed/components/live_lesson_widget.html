@@ -15,9 +15,9 @@
             <div style="display: flex; align-items: center; gap: 14px; padding-left: 6px;">
                 <!-- Іконка статусу з пульсацією -->
                 <div class="status-icon-bubble" style="width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0;
-                    {% if live_lesson_status.status_type == 'in_lesson' %}background: rgba(16, 185, 129, 0.15); color: #059669;
-                    {% elif live_lesson_status.status_type == 'in_break' %}background: rgba(245, 158, 11, 0.15); color: #d97706;
-                    {% elif live_lesson_status.status_type == 'before_school' %}background: rgba(59, 130, 246, 0.15); color: #2563eb;
+                    {% if live_lesson_status.status_type == 'in_lesson' %}background: rgba(16, 185, 129, 0.15); color:var(--color-success);
+                    {% elif live_lesson_status.status_type == 'in_break' %}background: rgba(245, 158, 11, 0.15); color:var(--color-warning);
+                    {% elif live_lesson_status.status_type == 'before_school' %}background: rgba(59, 130, 246, 0.15); color:var(--color-info);
                     {% else %}background: var(--color-bg-secondary); color: var(--color-text-secondary);{% endif %}">
                     {% if live_lesson_status.status_type == 'in_lesson' %}🔔
                     {% elif live_lesson_status.status_type == 'in_break' %}☕
@@ -28,9 +28,9 @@
                 <div>
                     <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
                         <span class="badge" style="font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 12px;
-                            {% if live_lesson_status.status_type == 'in_lesson' %}background: rgba(16, 185, 129, 0.15); color: #059669; border: 1px solid rgba(16, 185, 129, 0.3);
-                            {% elif live_lesson_status.status_type == 'in_break' %}background: rgba(245, 158, 11, 0.15); color: #d97706; border: 1px solid rgba(245, 158, 11, 0.3);
-                            {% elif live_lesson_status.status_type == 'before_school' %}background: rgba(59, 130, 246, 0.15); color: #2563eb; border: 1px solid rgba(59, 130, 246, 0.3);
+                            {% if live_lesson_status.status_type == 'in_lesson' %}background: rgba(16, 185, 129, 0.15); color:var(--color-success); border: 1px solid rgba(16, 185, 129, 0.3);
+                            {% elif live_lesson_status.status_type == 'in_break' %}background: rgba(245, 158, 11, 0.15); color:var(--color-warning); border: 1px solid rgba(245, 158, 11, 0.3);
+                            {% elif live_lesson_status.status_type == 'before_school' %}background: rgba(59, 130, 246, 0.15); color:var(--color-info); border: 1px solid rgba(59, 130, 246, 0.3);
                             {% else %}background: var(--color-bg-secondary); color: var(--color-text-secondary); border: 1px solid var(--color-border);{% endif %}">
                             {{ live_lesson_status.badge_text }}
                         </span>

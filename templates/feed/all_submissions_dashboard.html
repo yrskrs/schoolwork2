@@ -114,7 +114,7 @@
                                    style="font-size:12px;padding:5px 8px;max-width:140px;" onchange="this.form.submit()" title="Фільтр за конкретною датою">
 
                             {% if search_query or selected_class_id or selected_assignment_id or grade_filter != 'all' or date_filter %}
-                            <a href="{% url 'all_submissions_dashboard' %}" class="btn btn-secondary btn-sm" style="font-size:12px;padding:6px 10px;color:#ef4444;" title="Скинути всі фільтри">
+                            <a href="{% url 'all_submissions_dashboard' %}" class="btn btn-secondary btn-sm" style="font-size:12px;padding:6px 10px;color:var(--color-danger);" title="Скинути всі фільтри">
                                 ✕ Скинути
                             </a>
                             {% endif %}
@@ -144,7 +144,7 @@
                             <button type="button" class="btn btn-secondary btn-sm" style="padding:4px 8px;font-size:11px;font-weight:700;" onclick="setMassGradeValue('11')">11</button>
                             <button type="button" class="btn btn-secondary btn-sm" style="padding:4px 8px;font-size:11px;font-weight:700;" onclick="setMassGradeValue('10')">10</button>
                             <button type="button" class="btn btn-secondary btn-sm" style="padding:4px 8px;font-size:11px;font-weight:700;" onclick="setMassGradeValue('Зараховано')">Зараховано</button>
-                            <button type="button" class="btn btn-secondary btn-sm" style="padding:4px 8px;font-size:11px;font-weight:700;color:#d97706;" onclick="setMassGradeValue('Доопрацювати')">Доопрацювати</button>
+                            <button type="button" class="btn btn-secondary btn-sm" style="padding:4px 8px;font-size:11px;font-weight:700;color:var(--color-warning);" onclick="setMassGradeValue('Доопрацювати')">Доопрацювати</button>
                         </div>
                         <button type="button" class="btn btn-success btn-sm" id="btn-apply-mass-grade" style="font-weight:800;padding:6px 14px;font-size:12px;display:inline-flex;align-items:center;gap:4px;" onclick="applyMassGrade()">
                             <span>✓</span> Застосувати
@@ -214,16 +214,16 @@
                                     </a>
                                     {% if submission.is_resubmission or submission.resubmission_attempt > 1 %}
                                         {% if submission.is_latest_attempt %}
-                                        <span class="badge" style="background:#d1fae5;color:#065f46;border:1px solid #a7f3d0;font-size:9.5px;padding:1px 4px;font-weight:800;" title="Повторна здача (робота над помилками, спроба #{{ submission.resubmission_attempt }})">🔄 Спроба #{{ submission.resubmission_attempt }}</span>
+                                        <span class="badge" style="background:var(--color-success-light);color:var(--color-success);border:1px solid #a7f3d0;font-size:9.5px;padding:1px 4px;font-weight:800;" title="Повторна здача (робота над помилками, спроба #{{ submission.resubmission_attempt }})">🔄 Спроба #{{ submission.resubmission_attempt }}</span>
                                         {% else %}
-                                        <span class="badge" style="background:#fef3c7;color:#92400e;border:1px solid #fde68a;font-size:9px;padding:1px 4px;font-weight:700;" title="Попередня спроба #{{ submission.resubmission_attempt }} (є новіша здача)">📦 Спроба #{{ submission.resubmission_attempt }}</span>
+                                        <span class="badge" style="background:var(--color-warning-light);color:var(--color-warning);border:1px solid #fde68a;font-size:9px;padding:1px 4px;font-weight:700;" title="Попередня спроба #{{ submission.resubmission_attempt }} (є новіша здача)">📦 Спроба #{{ submission.resubmission_attempt }}</span>
                                         {% endif %}
                                     {% endif %}
                                     {% if submission.ai_generated_detected %}
-                                    <span class="badge" style="background:{% if submission.is_ai_allowed %}#ecfdf5;color:#065f46;border:1px solid #a7f3d0;{% else %}#fef2f2;color:#991b1b;border:1px solid #fecaca;{% endif %}font-size:9.5px;padding:1px 4px;font-weight:700;" title="{% if submission.is_ai_allowed %}Ознаки ШІ (дозволено вчителем){% else %}Ознаки ШІ (самостійна робота, заборонено){% endif %}: {{ submission.ai_generated_details }}">🤖 ШІ</span>
+                                    <span class="badge" style="background:{% if submission.is_ai_allowed %}#ecfdf5;color:var(--color-success);border:1px solid #a7f3d0;{% else %}#fef2f2;color:var(--color-danger);border:1px solid #fecaca;{% endif %}font-size:9.5px;padding:1px 4px;font-weight:700;" title="{% if submission.is_ai_allowed %}Ознаки ШІ (дозволено вчителем){% else %}Ознаки ШІ (самостійна робота, заборонено){% endif %}: {{ submission.ai_generated_details }}">🤖 ШІ</span>
                                     {% endif %}
                                     {% if submission.is_collective_work %}
-                                    <span class="badge" style="background:#e0e7ff;color:#3730a3;border:1px solid #c7d2fe;font-size:9.5px;padding:1px 4px;font-weight:700;" title="Колективна робота. Учасники: {{ submission.get_group_members_display|join:', ' }}">
+                                    <span class="badge" style="background:var(--color-primary-light);color:var(--color-primary);border:1px solid #c7d2fe;font-size:9.5px;padding:1px 4px;font-weight:700;" title="Колективна робота. Учасники: {{ submission.get_group_members_display|join:', ' }}">
                                         👥 Колективна робота
                                     </span>
                                     {% endif %}
@@ -278,7 +278,7 @@
                             <td style="padding:6px 6px;white-space:nowrap;">
                                 {% if not submission.is_latest_attempt and not submission.grade %}
                                 <div style="display:inline-flex;flex-direction:column;align-items:flex-start;gap:1px;">
-                                    <span class="badge" style="background:#f3f4f6;color:#6b7280;font-size:9.5px;padding:2px 5px;font-weight:700;" title="Учень здав нову версію роботи, цю спробу оцінювати не потрібно">
+                                    <span class="badge" style="background:var(--color-bg-secondary);color:var(--color-text-secondary);font-size:9.5px;padding:2px 5px;font-weight:700;" title="Учень здав нову версію роботи, цю спробу оцінювати не потрібно">
                                         📦 Замінено
                                     </span>
                                     <span style="font-size:9px;color:var(--color-text-muted);">є новіша здача</span>
@@ -286,7 +286,7 @@
                                 {% else %}
                                 <div style="display:flex;align-items:center;gap:3px;">
                                     {% if submission.grade == 'Доопрацювати' %}
-                                    <span id="grade-disp-{{ submission.id }}" class="grade-badge" style="background:#fef3c7;color:#d97706;border:1px solid #fcd34d;font-size:10px;padding:1px 4px;font-weight:700;" title="Повернуто на доопрацювання">
+                                    <span id="grade-disp-{{ submission.id }}" class="grade-badge" style="background:var(--color-warning-light);color:var(--color-warning);border:1px solid #fcd34d;font-size:10px;padding:1px 4px;font-weight:700;" title="Повернуто на доопрацювання">
                                         🔄
                                     </span>
                                     {% else %}
@@ -309,11 +309,11 @@
                                 </div>
                                 {% endif %}
                                 {% if submission.ai_status == 'success' %}
-                                <div style="margin-top:2px;font-size:10px;color:#059669;display:flex;align-items:center;gap:2px;" title="Оцінка ШІ: {{ submission.ai_suggested_grade }}">
+                                <div style="margin-top:2px;font-size:10px;color:var(--color-success);display:flex;align-items:center;gap:2px;" title="Оцінка ШІ: {{ submission.ai_suggested_grade }}">
                                     <span>🤖</span> <strong>{{ submission.ai_suggested_grade }}</strong>
                                 </div>
                                 {% elif submission.ai_status == 'failed' or submission.ai_status == 'unsupported' %}
-                                <div style="margin-top:2px;font-size:9.5px;color:#ef4444;" title="{{ submission.ai_error_reason }}">
+                                <div style="margin-top:2px;font-size:9.5px;color:var(--color-danger);" title="{{ submission.ai_error_reason }}">
                                     <span>⚠️ ШІ</span>
                                 </div>
                                 {% endif %}

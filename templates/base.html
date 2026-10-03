@@ -30,8 +30,9 @@
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📚</text></svg>">
 
     {% block extra_head %}{% endblock %}
+    <link rel="stylesheet" href="{% static 'css/platform_layout.css' %}">
 </head>
-<body class="{% block body_class %}{% endblock %}">
+<body class="{% block body_class %}{% endblock %}" data-page-area="{% if request.path|slice:':9' == '/teacher/' %}teacher{% else %}student{% endif %}">
 <div id="global-progress-bar"></div>
 <div id="global-loading-indicator" class="global-loading-indicator" aria-hidden="true">
     <span class="loading-spinner-ring"></span>
@@ -372,6 +373,7 @@
 {% endif %}
 
 <main>
+    {% if request.path|slice:':9' == '/teacher/' and user.is_authenticated %}{% include 'feed/components/teacher_mobile_nav.html' %}{% endif %}
     {% block content %}{% endblock %}
 </main>
 

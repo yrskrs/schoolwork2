@@ -1,0 +1,114 @@
+/* Shared geometry and theme tokens for the complete platform. */
+:root {
+    --layout-page-width: 1200px;
+    --layout-sidebar-width: 280px;
+    --layout-gap: 20px;
+    --layout-page-gutter: 16px;
+    --action-primary-bg: #4f46e5;
+    --action-primary-hover: #4338ca;
+    --action-success-bg: #047857;
+    --action-success-hover: #065f46;
+    --action-danger-bg: #b91c1c;
+    --action-warning-bg: #92400e;
+    --action-text: #ffffff;
+    --color-info: #1d4ed8;
+    --color-success: #065f46;
+}
+[data-theme="dark"] { --color-info: #60a5fa; --color-success: #34d399; }
+body .page-wrapper { width: 100%; max-width: var(--layout-page-width) !important; padding: 16px var(--layout-page-gutter) 24px !important; }
+.navbar-inner { max-width: var(--layout-page-width); }
+.page-wrapper .feed-layout { grid-template-columns: minmax(0, 1fr) var(--layout-sidebar-width); gap: var(--layout-gap); }
+.page-wrapper .feed-layout > .sidebar { grid-column: 2; grid-row: 1; }
+.page-wrapper .feed-layout > :not(.sidebar) { grid-column: 1; grid-row: 1; min-width: 0; }
+.page-wrapper :is(.assignment-detail-layout, .submission-page-layout) { grid-template-columns: minmax(0, 1fr) var(--layout-sidebar-width); gap: var(--layout-gap); }
+.page-wrapper :is(.feed-main-content, .home-feed-main, .assignment-detail-main, .submission-form-card, .form-group) { min-width: 0; }
+.page-wrapper .page-hero { margin-bottom: 16px; gap: 12px; }
+.page-wrapper .page-hero h1 { font-size: 24px !important; line-height: 1.4; overflow-wrap: anywhere; }
+.page-wrapper :is(.page-hero, .form-card-header, .card-header) > * { min-width: 0; }
+.page-wrapper :is(.sidebar-card, .form-card, .card, .assignment-card, .submission-side-card, .submission-form-card, .assignment-detail-help-card, .assignment-detail-info) { border-color: var(--color-border); border-radius: var(--radius-lg); }
+.page-wrapper .sidebar { padding-right: 0; top: 76px; }
+.page-wrapper .sidebar-card { margin-bottom: 14px; }
+.page-wrapper :is(.form-card-header, .form-card-body) { padding: 18px; }
+.page-wrapper .form-input, .page-wrapper .form-select { min-width: 0; max-width: 100%; color: var(--color-text-primary); background: var(--color-surface); border-color: var(--color-border); }
+.page-wrapper input::placeholder, .page-wrapper textarea::placeholder { color: var(--color-text-muted); opacity: 1; }
+.page-wrapper :is(.form-row, .stat-grid, .tabs) { gap: 12px; }
+.page-wrapper .tabs { flex-wrap: wrap; }
+.page-wrapper .btn { min-height: 38px; white-space: normal; }
+body .btn-primary { background: var(--action-primary-bg) !important; border-color: var(--action-primary-bg) !important; color: var(--action-text) !important; }
+body .btn-primary:hover { background: var(--action-primary-hover) !important; border-color: var(--action-primary-hover) !important; }
+.page-wrapper .btn-secondary { background: var(--color-bg-secondary); color: var(--color-text-primary); border-color: var(--color-border); }
+.page-wrapper .btn-warning { background: var(--color-warning-light) !important; color: var(--color-warning) !important; border-color: var(--color-border); }
+.page-wrapper .btn-danger { background: var(--action-danger-bg); color: var(--action-text); }
+.page-wrapper :is(.btn-submit-work, #submission-send-button, .assignment-detail-send-bar .btn, .assignment-detail-help-card > .btn-primary, .assignment-detail-completion > .btn-primary) { background: var(--action-success-bg) !important; border-color: var(--action-success-bg) !important; color: var(--action-text) !important; }
+.page-wrapper :is(.btn-submit-work, #submission-send-button, .assignment-detail-send-bar .btn, .assignment-detail-help-card > .btn-primary, .assignment-detail-completion > .btn-primary):hover { background: var(--action-success-hover) !important; border-color: var(--action-success-hover) !important; }
+.page-wrapper :is(.table-responsive, .table-container, .gradebook-table-container) { max-width: 100%; overflow-x: auto; }
+.page-wrapper .feed-main-content > div:has(> table) { max-width: 100%; overflow-x: auto; }
+.page-wrapper :is(.card-description, .rich-text-content) :is(p, span, strong, b) { color: inherit; }
+[data-theme="dark"] .card-description :is(p, span, strong, b) { color: var(--color-text-primary) !important; }
+.page-wrapper .subject-tag { color: var(--color-primary-text) !important; background: var(--color-primary-light) !important; }
+.page-wrapper :is(.class-grid-item.active a, .class-grid-all-btn.active a, .class-tab-pill.active, .cal-task-badge, .badge-today-mini) { background: var(--action-primary-bg); color: var(--action-text); border-color: var(--action-primary-bg); }
+.page-wrapper .class-tab-pill.active .class-tab-badge { background: rgba(0, 0, 0, .18); color: var(--action-text); }
+.page-wrapper .publish-date-badge.badge-relevance-today { color: var(--color-success); }
+.page-wrapper .btn-submissions { background: var(--action-primary-bg); color: var(--action-text); }
+.page-wrapper .alert { animation: none; }
+.batch-delay-control { max-width: 100%; min-width: 0; flex-wrap: wrap; }
+.batch-delay-control select { flex: 1 1 230px; min-width: 0; max-width: 100%; }
+.ai-overview-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 18px; }
+.ai-overview-grid .sidebar-card { margin-bottom: 0; }
+.page-wrapper :is(a, button, summary, input, select, textarea):focus-visible { outline: 3px solid var(--color-primary); outline-offset: 3px; }
+.home-overview { display: flex; gap: 20px; align-items: center; justify-content: space-between; padding: 18px 20px; margin-bottom: 18px; border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-surface); }
+.home-overview h1 { margin: 0 0 8px; font-size: 24px; line-height: 1.35; color: var(--color-text-primary); }
+.home-overview p { margin: 0; color: var(--color-text-secondary); font-size: 14px; line-height: 1.6; }
+.home-class-form { flex: 0 0 260px; display: flex; flex-direction: column; gap: 6px; }
+.home-class-form label { font-size: 14px; font-weight: 750; color: var(--color-text-primary); }
+.home-class-form select { width: 100%; min-height: 44px; }
+.home-filter-disclosure { margin-bottom: 14px; border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-surface); }
+.home-filter-disclosure > summary { padding: 14px 16px; cursor: pointer; color: var(--color-text-primary); font-size: 14px; font-weight: 700; }
+.home-filter-disclosure .sidebar-card { border: none; box-shadow: none; margin-bottom: 0; }
+.home-page .assignment-card .card-title { font-size: 20px; line-height: 1.45; }
+.home-page .assignment-card .card-title a { color: var(--color-text-primary); text-decoration: none; }
+.home-page .assignment-card .card-title a:hover { color: var(--color-primary); }
+.home-page .card-body { padding: 18px; }
+.home-page .card-footer { padding: 12px 18px; gap: 12px; }
+.home-page .card-description { font-size: 14px; line-height: 1.65; }
+.home-page .assignments-feed { gap: 16px; }
+.home-page #feed-header { scroll-margin-top: 80px; }
+.platform-teacher-mobile-nav { display: none; }
+.page-wrapper .fv-container { max-width: 100%; padding: 0; }
+.page-wrapper .fv-grid { grid-template-columns: minmax(0, 1fr) 320px; gap: var(--layout-gap); }
+@media (max-width: 1100px) {
+    .page-wrapper .fv-grid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 960px) {
+    .page-wrapper .feed-layout, .page-wrapper :is(.assignment-detail-layout, .submission-page-layout) { grid-template-columns: minmax(0, 1fr); }
+    .page-wrapper .feed-layout > :not(.sidebar) { grid-column: 1; }
+    .page-wrapper .sidebar { display: none; }
+    .page-wrapper .sidebar.mobile-open { display: block; position: fixed !important; top: 56px !important; right: 0 !important; left: auto !important; width: min(320px, 90vw) !important; max-height: calc(100vh - 56px) !important; padding: 12px; background: var(--color-bg); z-index: 90; box-shadow: var(--shadow-lg); overflow-y: auto; }
+    #mobile-menu-btn { display: inline-flex; }
+    [data-page-area="teacher"] #mobile-menu-btn { display: none !important; }
+    .platform-teacher-mobile-nav { display: block; width: 100%; max-width: var(--layout-page-width); margin: 12px auto 0; padding: 0 var(--layout-page-gutter); }
+    .platform-teacher-mobile-nav details { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); }
+    .platform-teacher-mobile-nav summary { padding: 12px 14px; cursor: pointer; color: var(--color-text-primary); font-size: 14px; font-weight: 750; }
+    .platform-teacher-mobile-links { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 0 12px 12px; }
+    .platform-teacher-mobile-links a { padding: 10px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-bg-secondary); color: var(--color-text-primary); font-size: 13px; text-decoration: none; }
+}
+@media (max-width: 600px) {
+    :root { --layout-page-gutter: 12px; --layout-gap: 14px; }
+    .home-overview { flex-direction: column; align-items: stretch; padding: 14px; gap: 14px; }
+    .home-overview h1, .page-wrapper .page-hero h1 { font-size: 21px !important; }
+    .home-class-form { flex-basis: auto; }
+    .page-wrapper .form-row { grid-template-columns: minmax(0, 1fr); }
+    .page-wrapper .stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .page-wrapper :is(.form-card-header, .form-card-body) { padding: 14px; }
+    .home-page .card-body { padding: 14px; }
+    .home-page .card-footer { padding: 12px 14px; }
+    .home-page .assignment-card .card-title { font-size: 18px; }
+    .ai-overview-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .page-wrapper .dashboard-card { flex-wrap: wrap; }
+    .page-wrapper .dashboard-card-actions { width: 100%; max-width: 100%; margin-left: 0 !important; align-items: stretch !important; }
+    .page-wrapper .dashboard-card-actions > div { flex-wrap: wrap; justify-content: flex-start; max-width: 100%; }
+    .navbar-inner { padding: 0 12px; gap: 8px; }
+    .navbar-brand > span { display: none; }
+    .navbar-actions { gap: 6px; min-width: 0; }
+    .changelog-version-tag { display: none; }
+}

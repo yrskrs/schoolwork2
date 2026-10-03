@@ -329,19 +329,19 @@
                                 <div class="text-muted text-xs" style="font-weight:700;">👥 Вчителів</div>
                             </div>
                             <div class="sidebar-card" style="padding:12px;text-align:center;">
-                                <div style="font-size:22px;font-weight:900;color:#059669;">{{ env_stats.total_classes }}</div>
+                                <div style="font-size:22px;font-weight:900;color:var(--color-success);">{{ env_stats.total_classes }}</div>
                                 <div class="text-muted text-xs" style="font-weight:700;">🏫 Класів</div>
                             </div>
                             <div class="sidebar-card" style="padding:12px;text-align:center;">
-                                <div style="font-size:22px;font-weight:900;color:#2563eb;">{{ env_stats.total_subjects }}</div>
+                                <div style="font-size:22px;font-weight:900;color:var(--color-info);">{{ env_stats.total_subjects }}</div>
                                 <div class="text-muted text-xs" style="font-weight:700;">📚 Предметів</div>
                             </div>
                             <div class="sidebar-card" style="padding:12px;text-align:center;">
-                                <div style="font-size:22px;font-weight:900;color:#7c3aed;">{{ env_stats.total_assignments }}</div>
+                                <div style="font-size:22px;font-weight:900;color:var(--color-primary);">{{ env_stats.total_assignments }}</div>
                                 <div class="text-muted text-xs" style="font-weight:700;">📋 Завдань</div>
                             </div>
                             <div class="sidebar-card" style="padding:12px;text-align:center;">
-                                <div style="font-size:22px;font-weight:900;color:#d97706;">{{ env_stats.total_submissions }}</div>
+                                <div style="font-size:22px;font-weight:900;color:var(--color-warning);">{{ env_stats.total_submissions }}</div>
                                 <div class="text-muted text-xs" style="font-weight:700;">📥 Зданих робіт</div>
                             </div>
                             <div class="sidebar-card" style="padding:12px;text-align:center;">
@@ -407,7 +407,7 @@
                                         </td>
                                         <td style="padding:12px;">
                                             {% if slot.get_break_after is not None %}
-                                            <span style="display:inline-flex;align-items:center;gap:6px;padding:3px 10px;background:rgba(16,185,129,0.12);color:#059669;border-radius:12px;font-weight:700;font-size:12px;border:1px solid rgba(16,185,129,0.25);">
+                                            <span style="display:inline-flex;align-items:center;gap:6px;padding:3px 10px;background:rgba(16,185,129,0.12);color:var(--color-success);border-radius:12px;font-weight:700;font-size:12px;border:1px solid rgba(16,185,129,0.25);">
                                                 ☕ {{ slot.get_break_after }} хв перерви
                                             </span>
                                             {% else %}
@@ -425,7 +425,7 @@
                                                     {% csrf_token %}
                                                     <input type="hidden" name="action" value="delete_bell_slot">
                                                     <input type="hidden" name="slot_id" value="{{ slot.id }}">
-                                                    <button type="submit" class="btn btn-secondary btn-sm" style="padding:4px 9px;font-size:12px;color:#ef4444;"
+                                                    <button type="submit" class="btn btn-secondary btn-sm" style="padding:4px 9px;font-size:12px;color:var(--color-danger);"
                                                             title="Видалити урок з розкладу"
                                                             data-confirm="Видалити {{ slot.lesson_number }}-й урок з розкладу дзвінків?">
                                                         🗑️
@@ -592,9 +592,9 @@
                             <div style="display:flex;align-items:center;gap:10px;background:var(--color-surface);padding:6px 14px;border-radius:var(--radius-md);border:1px solid var(--color-border);box-shadow:0 1px 3px rgba(0,0,0,0.05);">
                             <span style="font-size:12px;font-weight:700;color:var(--color-text-secondary);">Активний API:</span>
                             {% if ai_settings.active_api_type == 'backup' %}
-                                <span class="badge" style="background:#f59e0b;color:#fff;font-weight:800;font-size:12px;padding:3px 9px;">🛡️ Резервний API</span>
+                                <span class="badge" style="background:var(--action-warning-bg);color:#fff;font-weight:800;font-size:12px;padding:3px 9px;">🛡️ Резервний API</span>
                             {% else %}
-                                <span class="badge" style="background:#10b981;color:#fff;font-weight:800;font-size:12px;padding:3px 9px;">⚡ Основний API</span>
+                                <span class="badge" style="background:var(--action-success-bg);color:#fff;font-weight:800;font-size:12px;padding:3px 9px;">⚡ Основний API</span>
                             {% endif %}
                             <form method="POST" style="margin:0;display:inline;">
                                 {% csrf_token %}
@@ -610,7 +610,7 @@
                     <div class="form-card-body">
                         <!-- Інформаційне повідомлення про останнє перемикання (якщо відбувалося) -->
                         {% if ai_settings.last_failover_at %}
-                        <div style="background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);border-radius:var(--radius-md);padding:10px 14px;margin-bottom:18px;display:flex;align-items:center;gap:10px;font-size:13px;color:#b45309;">
+                        <div style="background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);border-radius:var(--radius-md);padding:10px 14px;margin-bottom:18px;display:flex;align-items:center;gap:10px;font-size:13px;color:var(--color-warning);">
                             <span style="font-size:18px;">⚡</span>
                             <div style="flex:1;">
                                 <strong>Останнє автоматичне перемикання:</strong> {{ ai_settings.last_failover_at|date:"d.m.Y H:i" }}
@@ -643,7 +643,7 @@
                                             <span>⚡</span> <span>Основний API</span>
                                         </h3>
                                         {% if ai_settings.active_api_type == 'primary' %}
-                                        <span class="badge" style="background:#10b981;color:#fff;font-weight:800;font-size:11px;">🟢 Зараз активний</span>
+                                        <span class="badge" style="background:var(--action-success-bg);color:#fff;font-weight:800;font-size:11px;">🟢 Зараз активний</span>
                                         {% endif %}
                                     </div>
 
@@ -746,9 +746,9 @@
                                             <span>🛡️</span> <span>Резервний API (Failover)</span>
                                         </h3>
                                         {% if ai_settings.active_api_type == 'backup' %}
-                                        <span class="badge" style="background:#f59e0b;color:#fff;font-weight:800;font-size:11px;">🟢 Зараз активний</span>
+                                        <span class="badge" style="background:var(--action-warning-bg);color:#fff;font-weight:800;font-size:11px;">🟢 Зараз активний</span>
                                         {% elif ai_settings.backup_api_key %}
-                                        <span class="badge" style="background:rgba(16,185,129,0.15);color:#059669;font-weight:800;font-size:11px;">✓ Налаштовано</span>
+                                        <span class="badge" style="background:rgba(16,185,129,0.15);color:var(--color-success);font-weight:800;font-size:11px;">✓ Налаштовано</span>
                                         {% else %}
                                         <span class="badge" style="background:var(--color-bg-secondary);color:var(--color-text-muted);font-weight:700;font-size:11px;">Не задано</span>
                                         {% endif %}
@@ -937,7 +937,7 @@
                                     <label for="system_prompt" class="form-label" style="font-weight:700;margin:0;">
                                         📜 Системний промт та критерії оцінювання (НУШ):
                                     </label>
-                                    <button type="button" class="btn btn-secondary btn-sm" onclick="resetDefaultPrompt()" style="font-size:11px;color:#d97706;padding:2px 8px;">
+                                    <button type="button" class="btn btn-secondary btn-sm" onclick="resetDefaultPrompt()" style="font-size:11px;color:var(--color-warning);padding:2px 8px;">
                                         🔄 Скинути до стандарту НУШ
                                     </button>
                                 </div>
@@ -994,12 +994,12 @@
                                         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
                                             <span style="font-weight:800;font-size:15px;color:var(--color-text-primary);">{{ p.name }}</span>
                                             {% if p.is_default %}
-                                             <span class="badge" style="background:#10b981;color:#fff;font-weight:800;font-size:11px;">⭐ Активний за замовчуванням</span>
+                                             <span class="badge" style="background:var(--action-success-bg);color:#fff;font-weight:800;font-size:11px;">⭐ Активний за замовчуванням</span>
                                             {% endif %}
                                             {% if p.evaluation_type == 'nus_gr' %}
                                             <span class="badge" style="background:rgba(99,102,241,0.15);color:var(--color-primary);font-weight:800;font-size:11px;">🌟 Групи результатів (ГР)</span>
                                             {% elif p.evaluation_type == 'traditional' %}
-                                            <span class="badge" style="background:rgba(245,158,11,0.15);color:#d97706;font-weight:800;font-size:11px;">📊 Традиційна 1-12</span>
+                                            <span class="badge" style="background:rgba(245,158,11,0.15);color:var(--color-warning);font-weight:800;font-size:11px;">📊 Традиційна 1-12</span>
                                             {% endif %}
                                             {% if p.is_system %}
                                             <span class="badge" style="background:var(--color-bg-secondary);color:var(--color-text-muted);font-size:10px;font-weight:700;">Базовий системний</span>
@@ -1051,7 +1051,7 @@
                                             {% csrf_token %}
                                             <input type="hidden" name="action" value="set_default_criteria_preset">
                                             <input type="hidden" name="preset_id" value="{{ p.id }}">
-                                            <button type="submit" class="btn btn-secondary btn-sm" style="font-size:11.5px;font-weight:700;color:#059669;" title="Зробити цей шаблон основним за замовчуванням">
+                                            <button type="submit" class="btn btn-secondary btn-sm" style="font-size:11.5px;font-weight:700;color:var(--color-success);" title="Зробити цей шаблон основним за замовчуванням">
                                                 ⭐ Обрати основним
                                             </button>
                                         </form>
@@ -1226,11 +1226,11 @@
                                         <!-- Пріоритетний бейдж -->
                                         <td style="text-align:center;">
                                             {% if ms.priority == 1 %}
-                                            <span class="badge" style="background:#10b981;color:#fff;font-weight:800;font-size:11px;">🥇 #1 Основна</span>
+                                            <span class="badge" style="background:var(--action-success-bg);color:#fff;font-weight:800;font-size:11px;">🥇 #1 Основна</span>
                                             {% elif ms.priority == 2 %}
                                             <span class="badge" style="background:#6366f1;color:#fff;font-weight:800;font-size:11px;">🥈 #2 Резерв 1</span>
                                             {% elif ms.priority == 3 %}
-                                            <span class="badge" style="background:#f59e0b;color:#fff;font-weight:800;font-size:11px;">🥉 #3 Резерв 2</span>
+                                            <span class="badge" style="background:var(--action-warning-bg);color:#fff;font-weight:800;font-size:11px;">🥉 #3 Резерв 2</span>
                                             {% else %}
                                             <span class="badge" style="background:var(--color-bg-secondary);color:var(--color-text-muted);font-weight:700;font-size:11px;">#{{ ms.priority }} Резерв</span>
                                             {% endif %}
@@ -1250,7 +1250,7 @@
                                                 {% csrf_token %}
                                                 <input type="hidden" name="action" value="toggle_model_enabled">
                                                 <input type="hidden" name="model_name" value="{{ ms.name }}">
-                                                <button type="submit" class="btn btn-secondary btn-sm" style="font-size:11px;padding:3px 8px;{% if ms.enabled %}color:#059669;font-weight:700;{% else %}color:var(--color-text-muted);{% endif %}" title="Увімкнути/вимкнути автоматичний перехід на цю модель">
+                                                <button type="submit" class="btn btn-secondary btn-sm" style="font-size:11px;padding:3px 8px;{% if ms.enabled %}color:var(--color-success);font-weight:700;{% else %}color:var(--color-text-muted);{% endif %}" title="Увімкнути/вимкнути автоматичний перехід на цю модель">
                                                     {% if ms.enabled %}✅ Увімкнено{% else %}⚪ Вимкнено{% endif %}
                                                 </button>
                                             </form>
@@ -1258,9 +1258,9 @@
 
                                         <!-- Статистика -->
                                         <td style="text-align:center;font-size:12px;">
-                                            <span style="color:#059669;font-weight:700;">{{ ms.success_checks }}</span>
+                                            <span style="color:var(--color-success);font-weight:700;">{{ ms.success_checks }}</span>
                                             <span style="color:var(--color-text-muted);">/</span>
-                                            <span style="color:#ef4444;font-weight:700;">{{ ms.failed_checks }}</span>
+                                            <span style="color:var(--color-danger);font-weight:700;">{{ ms.failed_checks }}</span>
                                         </td>
 
                                         <!-- Кнопки вгору / вниз -->
@@ -1401,11 +1401,11 @@
                                                 </div>
                                                 <div>
                                                     <div style="color:var(--color-text-muted);font-size:9.5px;font-weight:800;text-transform:uppercase;">День</div>
-                                                    <div style="font-weight:800;color:#059669;font-size:12px;margin-top:1px;">📅 {{ cat_m.rpd }} RPD</div>
+                                                    <div style="font-weight:800;color:var(--color-success);font-size:12px;margin-top:1px;">📅 {{ cat_m.rpd }} RPD</div>
                                                 </div>
                                                 <div>
                                                     <div style="color:var(--color-text-muted);font-size:9.5px;font-weight:800;text-transform:uppercase;">Токени</div>
-                                                    <div style="font-weight:800;color:#8b5cf6;font-size:12px;margin-top:1px;">🧠 {{ cat_m.context }}</div>
+                                                    <div style="font-weight:800;color:var(--color-primary);font-size:12px;margin-top:1px;">🧠 {{ cat_m.context }}</div>
                                                 </div>
                                             </div>
 
@@ -1445,7 +1445,7 @@
                     </div>
                     <div class="form-card-body">
                         <!-- 6 карток метрик -->
-                        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:18px;">
+                        <div class="ai-overview-grid">
                             <div class="sidebar-card" style="padding:14px;text-align:center;border-top:3px solid var(--color-primary);">
                                 <div style="font-size:24px;font-weight:900;color:var(--color-primary);">{{ total_ai_checks }}</div>
                                 <div class="text-muted text-xs" style="font-weight:700;margin-top:2px;">Всього перевірок</div>
@@ -1457,22 +1457,22 @@
                             </div>
 
                             <div class="sidebar-card" style="padding:14px;text-align:center;border-top:3px solid #10b981;">
-                                <div style="font-size:24px;font-weight:900;color:#059669;">{{ total_ai_success }}</div>
+                                <div style="font-size:24px;font-weight:900;color:var(--color-success);">{{ total_ai_success }}</div>
                                 <div class="text-muted text-xs" style="font-weight:700;margin-top:2px;">Успішно оцінено</div>
                             </div>
 
                             <div class="sidebar-card" style="padding:14px;text-align:center;border-top:3px solid #8b5cf6;">
-                                <div style="font-size:24px;font-weight:900;color:#7c3aed;">{{ total_applied_grades }}</div>
+                                <div style="font-size:24px;font-weight:900;color:var(--color-primary);">{{ total_applied_grades }}</div>
                                 <div class="text-muted text-xs" style="font-weight:700;margin-top:2px;">Прийнято в журнал</div>
                             </div>
 
                             <div class="sidebar-card" style="padding:14px;text-align:center;border-top:3px solid #f59e0b;">
-                                <div style="font-size:24px;font-weight:900;color:#d97706;">{{ level_rework }}</div>
+                                <div style="font-size:24px;font-weight:900;color:var(--color-warning);">{{ level_rework }}</div>
                                 <div class="text-muted text-xs" style="font-weight:700;margin-top:2px;">🔄 На доопрацюванні</div>
                             </div>
 
                             <div class="sidebar-card" style="padding:14px;text-align:center;border-top:3px solid #ef4444;">
-                                <div style="font-size:24px;font-weight:900;color:#dc2626;">{{ total_ai_detected }}</div>
+                                <div style="font-size:24px;font-weight:900;color:var(--color-danger);">{{ total_ai_detected }}</div>
                                 <div class="text-muted text-xs" style="font-weight:700;margin-top:2px;">🤖 Підозра на ШІ</div>
                                 {% if avg_ai_percent %}
                                 <div style="font-size:10px;color:var(--color-text-muted);margin-top:4px;">середнє {{ avg_ai_percent }}%</div>
@@ -1492,19 +1492,19 @@
                             </div>
                             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;">
                                 <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:8px 12px;">
-                                    <div style="font-size:11px;font-weight:700;color:#059669;">⭐ Високий (10-12)</div>
+                                    <div style="font-size:11px;font-weight:700;color:var(--color-success);">⭐ Високий (10-12)</div>
                                     <div style="font-size:16px;font-weight:800;color:var(--color-text-primary);margin-top:2px;">{{ level_high }}</div>
                                 </div>
                                 <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:8px 12px;">
-                                    <div style="font-size:11px;font-weight:700;color:#2563eb;">🔷 Достатній (7-9)</div>
+                                    <div style="font-size:11px;font-weight:700;color:var(--color-info);">🔷 Достатній (7-9)</div>
                                     <div style="font-size:16px;font-weight:800;color:var(--color-text-primary);margin-top:2px;">{{ level_sufficient }}</div>
                                 </div>
                                 <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:8px 12px;">
-                                    <div style="font-size:11px;font-weight:700;color:#d97706;">🔶 Середній (4-6)</div>
+                                    <div style="font-size:11px;font-weight:700;color:var(--color-warning);">🔶 Середній (4-6)</div>
                                     <div style="font-size:16px;font-weight:800;color:var(--color-text-primary);margin-top:2px;">{{ level_medium }}</div>
                                 </div>
                                 <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:8px 12px;">
-                                    <div style="font-size:11px;font-weight:700;color:#dc2626;">🔻 Початковий (1-3)</div>
+                                    <div style="font-size:11px;font-weight:700;color:var(--color-danger);">🔻 Початковий (1-3)</div>
                                     <div style="font-size:16px;font-weight:800;color:var(--color-text-primary);margin-top:2px;">{{ level_initial }}</div>
                                 </div>
                             </div>
@@ -1579,7 +1579,7 @@
                                                     {{ stat.name }}
                                                 </code>
                                                 {% if stat.is_active %}
-                                                <span class="badge" style="background:#10b981;color:#fff;font-size:10.5px;font-weight:800;padding:2px 7px;">
+                                                <span class="badge" style="background:var(--action-success-bg);color:#fff;font-size:10.5px;font-weight:800;padding:2px 7px;">
                                                     🟢 Активна
                                                 </span>
                                                 {% endif %}
@@ -1604,7 +1604,7 @@
                                         <!-- RPD -->
                                         <td style="padding:12px 14px;text-align:center;vertical-align:middle;">
                                             <div style="display:inline-flex;flex-direction:column;align-items:center;">
-                                                <span style="font-size:14px;font-weight:800;color:{% if stat.requests_today > 0 %}#059669{% else %}var(--color-text-muted){% endif %};">
+                                                <span style="font-size:14px;font-weight:800;color:{% if stat.requests_today > 0 %}var(--color-success){% else %}var(--color-text-muted){% endif %};">
                                                     {{ stat.requests_today }} RPD
                                                 </span>
                                                 <span style="font-size:11px;color:var(--color-text-secondary);font-weight:600;">
@@ -1620,23 +1620,23 @@
                                             </span>
                                             <div style="font-size:10.5px;color:var(--color-text-muted);">
                                                 {% if stat.period_failed_reqs %}
-                                                <span style="color:#ef4444;">{{ stat.period_failed_reqs }} помилок</span>
+                                                <span style="color:var(--color-danger);">{{ stat.period_failed_reqs }} помилок</span>
                                                 {% else %}
-                                                <span style="color:#10b981;">0 збоїв</span>
+                                                <span style="color:var(--color-success);">0 збоїв</span>
                                                 {% endif %}
                                             </div>
                                         </td>
 
                                         <!-- Успішність -->
                                         <td style="padding:12px 14px;text-align:center;vertical-align:middle;">
-                                            <span class="badge" style="font-size:11.5px;font-weight:800;padding:3px 8px;{% if stat.success_rate >= 95 %}background:rgba(16,185,129,0.15);color:#059669;{% elif stat.success_rate >= 70 %}background:rgba(245,158,11,0.15);color:#d97706;{% else %}background:rgba(239,68,68,0.15);color:#dc2626;{% endif %}">
+                                            <span class="badge" style="font-size:11.5px;font-weight:800;padding:3px 8px;{% if stat.success_rate >= 95 %}background:rgba(16,185,129,0.15);color:var(--color-success);{% elif stat.success_rate >= 70 %}background:rgba(245,158,11,0.15);color:var(--color-warning);{% else %}background:rgba(239,68,68,0.15);color:var(--color-danger);{% endif %}">
                                                 {{ stat.success_rate }}%
                                             </span>
                                         </td>
 
                                         <!-- Токени -->
                                         <td style="padding:12px 16px;vertical-align:middle;">
-                                            <div style="font-size:13px;font-weight:800;color:#7c3aed;">
+                                            <div style="font-size:13px;font-weight:800;color:var(--color-primary);">
                                                 Σ {{ stat.total_tokens }}
                                             </div>
                                             <div style="font-size:10.5px;color:var(--color-text-muted);margin-top:2px;">
@@ -1691,7 +1691,7 @@
                 <div class="form-card mb-4" id="ai-error-logs-section" style="border-color:{% if total_ai_errors_count %}rgba(239,68,68,0.4){% else %}var(--color-border){% endif %};">
                     <div class="form-card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;background:{% if total_ai_errors_count %}rgba(239,68,68,0.06){% else %}var(--color-bg-secondary){% endif %};">
                         <div>
-                            <h2 class="form-card-title" style="display:flex;align-items:center;gap:8px;color:{% if total_ai_errors_count %}#dc2626{% else %}var(--color-text-primary){% endif %};">
+                            <h2 class="form-card-title" style="display:flex;align-items:center;gap:8px;color:{% if total_ai_errors_count %}var(--color-danger){% else %}var(--color-text-primary){% endif %};">
                                 <span>⚠️</span>
                                 <span>Журнал помилок та збоїв ШІ</span>
                                 <span class="badge" style="background:{% if total_ai_errors_count %}#ef4444{% else %}#6b7280{% endif %};color:#fff;font-size:12px;font-weight:800;padding:2px 8px;border-radius:12px;">
@@ -1707,7 +1707,7 @@
                         <form method="POST" style="margin:0;" onsubmit="return confirm('Ви дійсно бажаєте очистити весь журнал помилок ШІ?');">
                             {% csrf_token %}
                             <input type="hidden" name="action" value="clear_ai_error_logs">
-                            <button type="submit" class="btn btn-secondary btn-sm" style="color:#ef4444;font-weight:700;border-color:rgba(239,68,68,0.3);background:var(--color-surface);font-size:12px;padding:5px 12px;">
+                            <button type="submit" class="btn btn-secondary btn-sm" style="color:var(--color-danger);font-weight:700;border-color:rgba(239,68,68,0.3);background:var(--color-surface);font-size:12px;padding:5px 12px;">
                                 🗑️ Очистити журнал помилок
                             </button>
                         </form>
@@ -1753,12 +1753,12 @@
                                             {% endif %}
                                         </td>
                                         <td style="padding:10px 14px;white-space:nowrap;">
-                                            <span class="badge" style="background:rgba(239,68,68,0.12);color:#dc2626;border:1px solid rgba(239,68,68,0.25);font-size:11px;font-weight:700;">
+                                            <span class="badge" style="background:rgba(239,68,68,0.12);color:var(--color-danger);border:1px solid rgba(239,68,68,0.25);font-size:11px;font-weight:700;">
                                                 {% if log.status_code %}HTTP {{ log.status_code }}{% else %}{{ log.error_type|default:"Error" }}{% endif %}
                                             </span>
                                         </td>
                                         <td style="padding:10px 14px;color:var(--color-text-primary);max-width:380px;word-break:break-word;">
-                                            <div style="font-weight:600;color:#b91c1c;margin-bottom:3px;">{{ log.error_message }}</div>
+                                            <div style="font-weight:600;color:var(--color-danger);margin-bottom:3px;">{{ log.error_message }}</div>
                                             {% if log.raw_response %}
                                             <details style="margin-top:4px;font-size:11px;color:var(--color-text-muted);">
                                                 <summary style="cursor:pointer;color:var(--color-primary);font-weight:600;">Показати сиру відповідь API</summary>
@@ -1768,7 +1768,7 @@
                                         </td>
                                         <td style="padding:10px 14px;text-align:center;white-space:nowrap;">
                                             {% if log.failover_triggered %}
-                                            <span class="badge" style="background:#fef3c7;color:#b45309;border:1px solid #fcd34d;font-size:11px;font-weight:700;" title="Система перемкнулася на резервну модель або ключ">
+                                            <span class="badge" style="background:var(--color-warning-light);color:var(--color-warning);border:1px solid #fcd34d;font-size:11px;font-weight:700;" title="Система перемкнулася на резервну модель або ключ">
                                                 🔄 Резерв
                                             </span>
                                             {% else %}
@@ -1866,7 +1866,7 @@
                 <div id="edit-current-doc-info" style="font-size:12px;margin-bottom:8px;display:none;"></div>
                 <input type="file" name="document_file" accept=".docx,.doc,.pdf,.xlsx,.xls,.txt,.md,.rtf,.odt,.ods,.csv" class="form-input" style="padding:6px;">
                 <div id="edit-remove-doc-box" style="margin-top:6px;display:none;">
-                    <label style="font-size:12px;color:#ef4444;cursor:pointer;display:inline-flex;align-items:center;gap:4px;">
+                    <label style="font-size:12px;color:var(--color-danger);cursor:pointer;display:inline-flex;align-items:center;gap:4px;">
                         <input type="checkbox" name="remove_document" value="1"> 🗑️ Видалити поточний прикріплений файл
                     </label>
                 </div>

@@ -396,7 +396,7 @@ tr:target td {
                                         {{ log.assignment.title }}
                                     </a>
                                     {% if log.assignment.subject %}
-                                    <div style="font-size:11px;color:{{ log.assignment.subject.color|default:'var(--color-primary)' }};margin-top:2px;">
+                                    <div style="font-size:11px;color:var(--color-primary-text);margin-top:2px;">
                                         {{ log.assignment.subject.icon }} {{ log.assignment.subject.name }}
                                     </div>
                                     {% endif %}
@@ -409,7 +409,7 @@ tr:target td {
                                     {% endif %}
                                 </td>
                                 <td>
-                                    <span style="display:inline-flex;align-items:center;gap:5px;font-weight:700;font-size:12px;padding:3px 8px;border-radius:4px;background:rgba(239,68,68,0.08);color:#dc2626;border:1px solid rgba(239,68,68,0.2);">
+                                    <span style="display:inline-flex;align-items:center;gap:5px;font-weight:700;font-size:12px;padding:3px 8px;border-radius:4px;background:rgba(239,68,68,0.08);color:var(--color-danger);border:1px solid rgba(239,68,68,0.2);">
                                         {{ log.reason_icon }} {{ log.get_reason_type_display }}
                                     </span>
                                 </td>

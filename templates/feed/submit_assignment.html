@@ -253,7 +253,7 @@ function updateFilesUI() {
                 '</div>' +
                 '<span style="font-size:10px;color:var(--color-text-muted);white-space:nowrap;">(' + formatFileSize(f.size) + ')</span>' +
             '</div>' +
-            '<button type="button" onclick="removeFileByIndex(' + i + ')" style="background:none;border:none;color:#ef4444;font-size:13px;cursor:pointer;padding:1px 5px;margin-left:6px;border-radius:4px;font-weight:bold;" title="Видалити файл">' +
+            '<button type="button" onclick="removeFileByIndex(' + i + ')" style="background:none;border:none;color:var(--color-danger);font-size:13px;cursor:pointer;padding:1px 5px;margin-left:6px;border-radius:4px;font-weight:bold;" title="Видалити файл">' +
                 '✕' +
             '</button>' +
         '</div>';
@@ -607,7 +607,7 @@ window.addCoauthorField = function() {
                 '👥 Співавтор #' + (rows.length + 1) + ':' +
             '</span>' +
             '<button type="button" onclick="removeCoauthorField(' + rowId + ')" ' +
-                    'style="background:none;border:none;color:#ef4444;font-size:12px;font-weight:bold;cursor:pointer;padding:0 4px;line-height:1;" ' +
+                    'style="background:none;border:none;color:var(--color-danger);font-size:12px;font-weight:bold;cursor:pointer;padding:0 4px;line-height:1;" ' +
                     'title="Видалити цього співавтора">✕</button>' +
         '</div>' +
         '<div style="position:relative;">' +

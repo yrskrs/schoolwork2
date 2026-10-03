@@ -88,7 +88,11 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Відкриття детальної сторінки завдання
     window.openAssignment = function (id) {
-        window.location.href = '/assignment/' + id + '/';
+        const classId = typeof window._currentClass !== 'undefined'
+            ? String(window._currentClass)
+            : new URLSearchParams(window.location.search).get('class');
+        const classQuery = classId && /^\d+$/.test(classId) ? '?class=' + encodeURIComponent(classId) : '';
+        window.location.href = '/assignment/' + id + '/' + classQuery;
     };
 
 

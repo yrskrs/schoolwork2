@@ -5,28 +5,43 @@
 {% block meta_description %}Навчальні завдання школи — перегляд за класами та предметами{% endblock %}
 
 {% block content %}
-<div class="page-wrapper">
+<div class="page-wrapper home-page">
 
-    <!-- ── Мобільна смуга фільтрів ──────────────────────────────────────── -->
-    <div class="mobile-filter-bar" role="navigation" aria-label="Фільтр по класах">
-        <a href="#" data-class="all"
-           class="filter-chip {% if not selected_class_id %}active{% endif %}"
-           onclick="return applyFilter('all', null)">
-            🏠 Всі класи
-        </a>
-        {% for class in all_classes %}
-        <a href="#" data-class="{{ class.id }}"
-           class="filter-chip {% if selected_class_id == class.id %}active{% endif %}"
-           onclick="return applyFilter('{{ class.id }}', null)">
-            {{ class.name }}
-        </a>
-        {% endfor %}
-    </div>
+    <header class="home-overview">
+        <div>
+            <h1>Навчальні завдання</h1>
+            <p>Обери свій клас, відкрий завдання та прочитай вказівки вчителя.</p>
+        </div>
+        <form class="home-class-form" id="home-class-form" method="GET" action="{% url 'index' %}" onsubmit="applyFilter(document.getElementById('home-class-select').value, null); return false;">
+            <label for="home-class-select">🏫 Твій клас</label>
+            <select class="form-input" name="class" id="home-class-select" onchange="applyFilter(this.value, null)">
+                <option value="all">Усі класи</option>
+                {% for group in all_classes %}<option value="{{ group.pk }}" {% if selected_class_id == group.pk %}selected{% endif %}>{{ group.name }}</option>{% endfor %}
+            </select>
+            <noscript><button class="btn btn-primary" type="submit">Показати завдання</button></noscript>
+        </form>
+    </header>
 
     <!-- ── Двоколонковий layout ──────────────────────────────────────────── -->
     <div class="feed-layout">
 
         <!-- ════ САЙДБАР ════════════════════════════════════════════════════ -->
+
+
+        <!-- ════ СТРІЧКА ЗАВДАНЬ ═════════════════════════════════════════════ -->
+        <section class="home-feed-main" aria-label="Стрічка завдань">
+
+            <!-- Інформер поточного уроку для вчителя -->
+            {% include 'feed/components/live_lesson_widget.html' %}
+
+            <!-- Зона що оновлюється через AJAX -->
+            <div id="feed-zone">
+
+                {% include 'feed/feed_fragment.html' %}
+            </div><!-- /#feed-zone -->
+
+        </section>
+
         <aside class="sidebar" id="main-sidebar" aria-label="Фільтри">
 
             <!-- Фільтр по класах (сітка для компактності на HD Ready) -->
@@ -56,9 +71,7 @@
             </div>
 
             <!-- 2. Календар завдань (Google Calendar стиль) -->
-            <div class="sidebar-card calendar-card" id="calendar-widget">
-                {% include 'feed/calendar_widget.html' %}
-            </div>
+            <details class="home-filter-disclosure"><summary>📅 Календар завдань</summary><div class="sidebar-card calendar-card" id="calendar-widget">{% include 'feed/calendar_widget.html' %}</div></details>
 
             <!-- 3. Фільтр по предметах (відображається тільки якщо є більше ніж 1 предмет) -->
             {% if has_multiple_subjects and all_subjects|length > 1 %}
@@ -84,284 +97,6 @@
             {% endif %}
 
         </aside>
-
-        <!-- ════ СТРІЧКА ЗАВДАНЬ ═════════════════════════════════════════════ -->
-        <section aria-label="Стрічка завдань">
-
-            <!-- Інформер поточного уроку для вчителя -->
-            {% include 'feed/components/live_lesson_widget.html' %}
-
-            <!-- Зона що оновлюється через AJAX -->
-            <div id="feed-zone">
-
-                <!-- Заголовок стрічки -->
-                <div class="d-flex align-center justify-between mb-4 flex-wrap gap-2" id="feed-header">
-                    <div>
-                        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-                            <h1 style="font-size:1.25rem;font-weight:700;color:var(--color-text-primary);margin:0;">
-                                {% if selected_class and selected_date_display %}
-                                    📋 {{ selected_class.name }} &bull; 📅 {{ selected_date_display }}
-                                {% elif selected_class %}
-                                    📋 Завдання — {{ selected_class.name }}
-                                {% elif selected_date_display %}
-                                    📅 Завдання — {{ selected_date_display }}
-                                {% elif query %}
-                                    🔍 Результати: "{{ query }}"
-                                {% else %}
-                                    📋 Всі завдання
-                                {% endif %}
-                            </h1>
-                            <span style="font-size:11px;background:rgba(16,185,129,0.12);color:#059669;border:1px solid rgba(16,185,129,0.25);border-radius:20px;padding:2px 8px;display:inline-flex;align-items:center;gap:4px;" title="Стрічка автоматично оновлюється при появі нових завдань">
-                                <span class="live-dot-pulse"></span>
-                                Наживо
-                            </span>
-                        </div>
-                        <p class="text-muted text-sm mt-1">
-                            Знайдено: {{ assignments|length }} завдань
-                        </p>
-                    </div>
-                    {% if selected_class_id or selected_subject_id or selected_date or query %}
-                    <button type="button" class="btn btn-secondary btn-sm" onclick="applyFilter('all', 'all', 'all', '')">
-                        ✕ Скинути всі фільтри
-                    </button>
-                    {% endif %}
-                </div>
-
-                <!-- Картки завдань -->
-                <div class="assignments-feed" role="feed" aria-label="Стрічка навчальних завдань">
-
-                    {% for assignment in assignments %}
-                    <article class="assignment-card {{ assignment.age_card_class }}"
-                             onclick="openAssignment({{ assignment.id }})"
-                             role="button"
-                             tabindex="0"
-                             aria-label="Відкрити завдання: {{ assignment.title }}"
-                             onkeydown="if(event.key==='Enter'){openAssignment({{ assignment.id }})}">
-
-                        <div class="card-accent"
-                             style="background:linear-gradient(90deg,{{ assignment.subject.color|default:'#6366f1' }},#8b5cf6)">
-                        </div>
-
-                        <div class="card-body">
-                            <div class="card-meta">
-                                <div class="card-meta-tags">
-                                    <!-- Класи та розклад уроків з актуальністю -->
-                                    {% with targets=assignment.get_all_targets_info %}
-                                    {% if targets %}
-                                        {% for tgt in targets %}
-                                        <span class="class-prominent-badge {{ tgt.badge_class }}" title="{{ tgt.summary }}">
-                                            {% if tgt.status == 'now' %}
-                                            <span class="live-dot-pulse"></span>
-                                            <span class="class-text">{{ tgt.class_name }}</span>
-                                            <span class="class-time-hint">⚡ Зараз{% if tgt.slot_info %} ({{ tgt.slot_info }}){% endif %}</span>
-                                            {% elif tgt.status == 'today' %}
-                                            <span class="class-dot-today"></span>
-                                            <span class="class-text">{{ tgt.class_name }}</span>
-                                            <span class="class-time-hint">Сьогодні{% if tgt.slot_info %} ({{ tgt.slot_info }}){% endif %}{% if tgt.time_str %} {{ tgt.time_str }}{% endif %}</span>
-                                            {% elif tgt.status == 'upcoming' %}
-                                            <span class="class-icon">📅</span>
-                                            <span class="class-text">{{ tgt.class_name }}</span>
-                                            <span class="class-time-hint">{% if tgt.day_name %}{{ tgt.day_name|slice:":2" }}{% elif tgt.date_str %}{{ tgt.date_str }}{% endif %}{% if tgt.slot_info %} ({{ tgt.slot_info }}){% endif %}</span>
-                                            {% elif tgt.status == 'past' %}
-                                            <span class="class-icon">✓</span>
-                                            <span class="class-text">{{ tgt.class_name }}</span>
-                                            <span class="class-time-hint">{% if tgt.slot_info %}{{ tgt.slot_info }} • {% endif %}пройдено</span>
-                                            {% else %}
-                                            <span class="class-icon">🏫</span>
-                                            <span class="class-text">{{ tgt.class_name }}</span>
-                                            {% endif %}
-                                        </span>
-                                        {% endfor %}
-                                    {% else %}
-                                        {% for class in assignment.classes.all %}
-                                        <span class="class-prominent-badge">
-                                            <span class="class-icon">🏫</span>
-                                            <span class="class-text">{{ class.name }}</span>
-                                        </span>
-                                        {% empty %}
-                                        <span class="class-prominent-badge">
-                                            <span class="class-icon">🏫</span>
-                                            <span class="class-text">Всі класи</span>
-                                        </span>
-                                        {% endfor %}
-                                    {% endif %}
-                                    {% endwith %}
-
-                                    <!-- Предмет (показується тільки якщо в системі більше ніж 1 предмет) -->
-                                    {% if has_multiple_subjects and assignment.subject %}
-                                    <span class="subject-tag"
-                                          style="background-color:{{ assignment.subject.color }}22;color:{{ assignment.subject.color }}">
-                                        {{ assignment.subject.icon }} {{ assignment.subject.name }}
-                                    </span>
-                                    {% endif %}
-
-                                    {% if assignment.is_individual %}
-                                    <span class="individual-tag">👤 {{ assignment.student_display }}</span>
-                                    {% endif %}
-                                </div>
-
-                                <!-- Перегляди (зверху праворуч для вчителя) -->
-                                {% if user.is_authenticated and user.teacher_profile %}
-                                <span class="views-badge" title="Кількість переглядів учнями">
-                                    <span class="views-icon">👁️</span> {{ assignment.views_count }}
-                                </span>
-                                {% endif %}
-                            </div>
-
-                            <h2 class="card-title">{{ assignment.title }}</h2>
-
-                            {% if assignment.description %}
-                            <div class="card-description">{{ assignment.get_card_description|safe }}</div>
-                            {% endif %}
-                        </div>
-
-                        <div class="card-footer">
-                            <div class="card-footer-left">
-                                <div class="teacher-mini">
-                                    {% if assignment.teacher.avatar_image %}
-                                    <img src="{{ assignment.teacher.avatar_image.url }}" alt="{{ assignment.teacher.full_name }}" class="avatar-mini-img">
-                                    {% else %}
-                                    <div class="avatar-mini"
-                                         style="background:{{ assignment.teacher.avatar_color }}">
-                                        {{ assignment.teacher.get_initials }}
-                                    </div>
-                                    {% endif %}
-                                    <span>{{ assignment.teacher.full_name }}</span>
-                                </div>
-
-                                <!-- Актуальність завдання до уроку (для учнів) -->
-                                {% with rel_badge=assignment.get_relevance_badge %}
-                                <span class="publish-date-badge {{ rel_badge.badge_class }}" title="Технічна дата публікації: {{ assignment.published_at|date:'d.m.Y H:i' }}">
-                                    {% if rel_badge.is_now %}
-                                    <span class="live-dot-pulse"></span>
-                                    {% elif rel_badge.is_today %}
-                                    <span class="live-dot-pulse"></span>
-                                    {% endif %}
-                                    {{ rel_badge.badge_text }}
-                                </span>
-                                {% endwith %}
-
-                                {% if assignment.unarchived_at %}
-                                <span class="unarchive-badge" title="Завдання відновлено з архіву">
-                                    ♻️ Розархівовано {{ assignment.unarchived_at|date:"d.m" }}
-                                </span>
-                                {% endif %}
-
-                                {% if assignment.files.all %}
-                                <span class="attachment-count">
-                                    📎 {{ assignment.files.count }}
-                                </span>
-                                {% endif %}
-
-                                {% if assignment.no_submission_required %}
-                                <span class="badge" style="background:rgba(99,102,241,0.08);color:var(--color-primary);border:1px solid rgba(99,102,241,0.2);font-size:11.5px;padding:2px 7px;border-radius:4px;font-weight:600;" title="Завдання для опрацювання (без здачі робіт)">
-                                    📖 Без здачі
-                                </span>
-                                {% elif assignment.due_date %}
-                                <span class="due-badge">
-                                    ⏰ до {{ assignment.due_date|date:"d.m" }}
-                                </span>
-                                {% endif %}
-                            </div>
-
-                            <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
-                                <a href="{% url 'assignment_detail' assignment.id %}"
-                                   class="btn btn-secondary btn-sm"
-                                   onclick="event.stopPropagation();"
-                                   title="Відкрити завдання">
-                                    📖 Переглянути
-                                </a>
-                                {% if not user.is_authenticated or not user.teacher_profile %}
-                                    {% if assignment.is_archived or assignment.status == 'archived' %}
-                                    <span class="badge" style="background: rgba(245, 158, 11, 0.15); color: #b45309; border: 1px solid rgba(245, 158, 11, 0.3); font-size: 12px; font-weight: 700; padding: 5px 10px; border-radius: var(--radius-sm);" title="Прийом робіт закрито (архів)">
-                                        🔒 Прийом закрито
-                                    </span>
-                                    {% elif not assignment.no_submission_required %}
-                                    <a href="{% url 'submit_assignment' assignment.id %}"
-                                       class="btn btn-submit-work btn-sm"
-                                       onclick="event.stopPropagation();"
-                                       title="Здати виконану роботу">
-                                        📤 Здати роботу
-                                    </a>
-                                    {% else %}
-                                    <span class="badge" style="background:var(--color-bg-secondary);border:1px solid var(--color-border);color:var(--color-primary);font-size:12px;font-weight:700;padding:5px 10px;border-radius:var(--radius-sm);" title="Це завдання не вимагає здачі робіт">
-                                        📖 Без здачі
-                                    </span>
-                                    {% endif %}
-                                {% endif %}
-                                {% if user.is_authenticated and user.teacher_profile %}
-                                    {% if not assignment.no_submission_required %}
-                                    <a href="{% url 'assignment_submissions' assignment.id %}"
-                                       class="btn btn-submissions btn-sm"
-                                       onclick="event.stopPropagation();"
-                                       title="Переглянути здачі учнів">
-                                        📥 Здачі
-                                        {% if assignment.submissions_count %}
-                                        <span class="submissions-count-badge {% if assignment.ungraded_count %}badge-ungraded{% endif %}">
-                                            {{ assignment.submissions_count }}{% if assignment.ungraded_count %} ({{ assignment.ungraded_count }}!){% endif %}
-                                        </span>
-                                        {% endif %}
-                                    </a>
-                                    {% else %}
-                                    <span class="badge" style="background:var(--color-bg-secondary);border:1px solid var(--color-border);color:var(--color-text-muted);font-size:12px;font-weight:600;padding:5px 10px;border-radius:var(--radius-sm);" title="Завдання для опрацювання (без здачі робіт)">
-                                        📖 Без здачі
-                                    </span>
-                                    {% endif %}
-                                {% endif %}
-                            </div>
-                        </div>
-
-                    </article>
-                    {% empty %}
-                    <div class="sidebar-card">
-                        <div class="empty-state">
-                            <div class="empty-icon">📭</div>
-                            <h3>Завдань поки немає</h3>
-                            <p>
-                                {% if selected_class %}
-                                    Для класу {{ selected_class.name }} ще не опубліковано жодного завдання.
-                                {% elif query %}
-                                    Нічого не знайдено за запитом "{{ query }}".
-                                {% else %}
-                                    Вчитель ще не додав жодного завдання.
-                                {% endif %}
-                            </p>
-                            {% if selected_class_id or selected_subject_id or query %}
-                            <button type="button" class="btn btn-secondary" onclick="applyFilter('all', 'all', 'all', '')">Показати всі</button>
-                            {% endif %}
-                        </div>
-                    </div>
-                    {% endfor %}
-
-                </div><!-- /.assignments-feed -->
-
-                <!-- ── Пагінація ───────────────────────────────────────────── -->
-                {% if page_obj.has_other_pages %}
-                <div class="pagination-wrapper" style="margin-top:24px;display:flex;justify-content:center;align-items:center;gap:6px;flex-wrap:wrap">
-                    {% if page_obj.has_previous %}
-                    <button type="button" class="btn btn-secondary btn-sm"
-                            onclick="loadFeedPage({{ page_obj.previous_page_number }})">« Попередня</button>
-                    {% endif %}
-
-                    {% for i in page_obj.paginator.page_range %}
-                        {% if page_obj.number == i %}
-                        <span class="btn btn-primary btn-sm" style="pointer-events:none;font-weight:700">{{ i }}</span>
-                        {% elif i > page_obj.number|add:"-3" and i < page_obj.number|add:"3" %}
-                        <button type="button" class="btn btn-secondary btn-sm"
-                                onclick="loadFeedPage({{ i }})">{{ i }}</button>
-                        {% endif %}
-                    {% endfor %}
-
-                    {% if page_obj.has_next %}
-                    <button type="button" class="btn btn-secondary btn-sm"
-                            onclick="loadFeedPage({{ page_obj.next_page_number }})">Наступна »</button>
-                    {% endif %}
-                </div>
-                {% endif %}
-
-            </div><!-- /#feed-zone -->
-
-        </section>
 
     </div><!-- /.feed-layout -->
 </div><!-- /.page-wrapper -->
@@ -403,6 +138,9 @@ function applyFilter(classVal, subjectVal, dateVal, queryVal) {
         if (searchInput && document.activeElement !== searchInput) searchInput.value = '';
     }
     _currentPage = 1;
+
+    var homeClassSelect = document.getElementById('home-class-select');
+    if (homeClassSelect) homeClassSelect.value = _currentClass || 'all';
 
     /* — Оновити стан активності у сайдбарі — */
     document.querySelectorAll('[id^="filter-class-"]').forEach(function(li) {

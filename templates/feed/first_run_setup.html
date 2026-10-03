@@ -37,7 +37,7 @@
                 {% csrf_token %}
 
                 {% if form.non_field_errors %}
-                <div class="alert alert-error" style="margin-bottom: 20px; padding: 12px 16px; border-radius: 10px; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); color: #ef4444; font-size: 13px;">
+                <div class="alert alert-error" style="margin-bottom: 20px; padding: 12px 16px; border-radius: 10px; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); color:var(--color-danger); font-size: 13px;">
                     {{ form.non_field_errors.0 }}
                 </div>
                 {% endif %}
@@ -52,7 +52,7 @@
                         {{ form.username.help_text }}
                     </small>
                     {% if form.username.errors %}
-                    <p class="form-error" style="color: #ef4444; font-size: 12px; margin: 4px 0 0;">{{ form.username.errors.0 }}</p>
+                    <p class="form-error" style="color:var(--color-danger); font-size: 12px; margin: 4px 0 0;">{{ form.username.errors.0 }}</p>
                     {% endif %}
                 </div>
 
@@ -66,7 +66,7 @@
                         {{ form.full_name.help_text }}
                     </small>
                     {% if form.full_name.errors %}
-                    <p class="form-error" style="color: #ef4444; font-size: 12px; margin: 4px 0 0;">{{ form.full_name.errors.0 }}</p>
+                    <p class="form-error" style="color:var(--color-danger); font-size: 12px; margin: 4px 0 0;">{{ form.full_name.errors.0 }}</p>
                     {% endif %}
                 </div>
 
@@ -77,7 +77,7 @@
                     </label>
                     {{ form.email }}
                     {% if form.email.errors %}
-                    <p class="form-error" style="color: #ef4444; font-size: 12px; margin: 4px 0 0;">{{ form.email.errors.0 }}</p>
+                    <p class="form-error" style="color:var(--color-danger); font-size: 12px; margin: 4px 0 0;">{{ form.email.errors.0 }}</p>
                     {% endif %}
                 </div>
 
@@ -89,7 +89,7 @@
                         </label>
                         {{ form.password }}
                         {% if form.password.errors %}
-                        <p class="form-error" style="color: #ef4444; font-size: 12px; margin: 4px 0 0;">{{ form.password.errors.0 }}</p>
+                        <p class="form-error" style="color:var(--color-danger); font-size: 12px; margin: 4px 0 0;">{{ form.password.errors.0 }}</p>
                         {% endif %}
                     </div>
 
@@ -100,7 +100,7 @@
                         </label>
                         {{ form.password_confirm }}
                         {% if form.password_confirm.errors %}
-                        <p class="form-error" style="color: #ef4444; font-size: 12px; margin: 4px 0 0;">{{ form.password_confirm.errors.0 }}</p>
+                        <p class="form-error" style="color:var(--color-danger); font-size: 12px; margin: 4px 0 0;">{{ form.password_confirm.errors.0 }}</p>
                         {% endif %}
                     </div>
                 </div>
