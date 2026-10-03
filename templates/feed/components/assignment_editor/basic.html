@@ -1,0 +1,102 @@
+<!-- Предмет -->
+    <div class="form-group" style="margin-bottom:16px;">
+        <label class="form-label required" for="{{ form.subject.id_for_label }}">
+            📚 Предмет <span style="color:var(--color-danger)">*</span>
+        </label>
+        {{ form.subject }}
+        {% if form.subject.errors %}
+        <p class="form-error">{{ form.subject.errors.0 }}</p>
+        {% endif %}
+    </div>
+
+    <!-- Тема -->
+<div class="form-group" style="margin-bottom:16px;">
+    <label class="form-label required" for="{{ form.title.id_for_label }}">
+        📌 Тема / Заголовок завдання <span style="color:var(--color-danger)">*</span>
+    </label>
+    {{ form.title }}
+    {% if form.title.errors %}
+    <p class="form-error">{{ form.title.errors.0 }}</p>
+    {% endif %}
+    <p class="form-hint">Коротко і зрозуміло сформулюйте назву уроку або лабораторної роботи</p>
+</div>
+
+<!-- Опис завдання з форматуванням тексту -->
+<div class="form-group" style="margin:0;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+        <label class="form-label" for="{{ form.description.id_for_label }}" style="margin:0;font-weight:700;">
+            📝 Опис та вказівки до завдання
+        </label>
+        <button type="button" class="btn btn-secondary btn-sm" id="btn-toggle-editor-mode" onclick="toggleEditorSourceMode()" style="font-size:11px;padding:2px 8px;font-weight:600;" title="Перемкнути між візуальним редактором та HTML-кодом">
+            &lt;/&gt; HTML / Візуально
+        </button>
+    </div>
+
+    <!-- Панель інструментів форматування (WYSIWYG Toolbar) -->
+    <div class="wysiwyg-toolbar" id="wysiwyg-toolbar" style="display:flex;flex-wrap:wrap;gap:4px;background:var(--color-bg-secondary);border:1px solid var(--color-border);border-bottom:none;border-top-left-radius:var(--radius-md);border-top-right-radius:var(--radius-md);padding:6px 10px;align-items:center;">
+        <button type="button" class="editor-btn" data-cmd="bold" onclick="execEditorCommand('bold')" title="Жирний (Ctrl+B)" style="font-weight:900;padding:4px 8px;font-size:13px;border:1px solid var(--color-border);border-radius:4px;background:var(--color-surface);cursor:pointer;color:var(--color-text-primary);">
+            <strong>Ж</strong>
+        </button>
+        <button type="button" class="editor-btn" data-cmd="italic" onclick="execEditorCommand('italic')" title="Курсив (Ctrl+I)" style="font-style:italic;padding:4px 8px;font-size:13px;border:1px solid var(--color-border);border-radius:4px;background:var(--color-surface);cursor:pointer;color:var(--color-text-primary);">
+            <em>К</em>
+        </button>
+        <button type="button" class="editor-btn" data-cmd="underline" onclick="execEditorCommand('underline')" title="Підкреслений (Ctrl+U)" style="text-decoration:underline;padding:4px 8px;font-size:13px;border:1px solid var(--color-border);border-radius:4px;background:var(--color-surface);cursor:pointer;color:var(--color-text-primary);">
+            <u>Ч</u>
+        </button>
+        <button type="button" class="editor-btn" data-cmd="strikeThrough" onclick="execEditorCommand('strikeThrough')" title="Закреслений" style="text-decoration:line-through;padding:4px 8px;font-size:13px;border:1px solid var(--color-border);border-radius:4px;background:var(--color-surface);cursor:pointer;color:var(--color-text-primary);">
+            S
+        </button>
+        <span style="width:1px;height:20px;background:var(--color-border);margin:0 4px;"></span>
+
+        <!-- Маркер виділення -->
+        <button type="button" class="editor-btn" onclick="highlightSelectedText()" title="Виділити жовтим маркером" style="padding:4px 8px;font-size:12px;font-weight:700;border:1px solid var(--color-border);border-radius:4px;background:#fef08a;color:#854d0e;cursor:pointer;">
+            🖍️ Маркер
+        </button>
+
+        <!-- Заголовки та абзаци -->
+        <button type="button" class="editor-btn" data-block="h2" onclick="execEditorFormatBlock('h2')" title="Великий заголовок (H2)" style="padding:4px 8px;font-size:12px;font-weight:800;border:1px solid var(--color-border);border-radius:4px;background:var(--color-surface);cursor:pointer;color:var(--color-text-primary);">
+            H2
+        </button>
+        <button type="button" class="editor-btn" data-block="h3" onclick="execEditorFormatBlock('h3')" title="Середній заголовок (H3)" style="padding:4px 8px;font-size:12px;font-weight:700;border:1px solid var(--color-border);border-radius:4px;background:var(--color-surface);cursor:pointer;color:var(--color-text-primary);">
+            H3
+        </button>
+        <button type="button" class="editor-btn" data-block="p" onclick="execEditorFormatBlock('p')" title="Звичайний абзац" style="padding:4px 8px;font-size:12px;font-weight:600;border:1px solid var(--color-border);border-radius:4px;background:var(--color-surface);cursor:pointer;color:var(--color-text-primary);">
+            ¶ Абзац
+        </button>
+        <span style="width:1px;height:20px;background:var(--color-border);margin:0 4px;"></span>
+
+        <!-- Списки -->
+        <button type="button" class="editor-btn" data-cmd="insertUnorderedList" onclick="execEditorCommand('insertUnorderedList')" title="Маркований список" style="padding:4px 8px;font-size:13px;border:1px solid var(--color-border);border-radius:4px;background:var(--color-surface);cursor:pointer;color:var(--color-text-primary);">
+            • Список
+        </button>
+        <button type="button" class="editor-btn" data-cmd="insertOrderedList" onclick="execEditorCommand('insertOrderedList')" title="Нумерований список" style="padding:4px 8px;font-size:13px;border:1px solid var(--color-border);border-radius:4px;background:var(--color-surface);cursor:pointer;color:var(--color-text-primary);">
+            1. Список
+        </button>
+        <span style="width:1px;height:20px;background:var(--color-border);margin:0 4px;"></span>
+
+        <!-- Посилання -->
+        <button type="button" class="editor-btn" onclick="insertEditorLink()" title="Вставити посилання" style="padding:4px 8px;font-size:12px;font-weight:700;border:1px solid var(--color-border);border-radius:4px;background:var(--color-surface);cursor:pointer;color:var(--color-primary);">
+            🔗 Лінк
+        </button>
+        <!-- Очистити форматування -->
+        <button type="button" class="editor-btn" onclick="execEditorCommand('removeFormat')" title="Очистити форматування виділеного тексту" style="padding:4px 8px;font-size:12px;border:1px solid var(--color-border);border-radius:4px;background:var(--color-surface);cursor:pointer;color:var(--color-text-muted);">
+            🧹 Очистити
+        </button>
+    </div>
+
+    <!-- Візуальна робоча область редактора -->
+    <div id="rich-editor" contenteditable="true" role="textbox" aria-multiline="true"
+         style="min-height:180px;max-height:500px;overflow-y:auto;padding:14px 16px;border:1px solid var(--color-border);border-bottom-left-radius:var(--radius-md);border-bottom-right-radius:var(--radius-md);background:var(--color-surface);color:var(--color-text-primary);line-height:1.6;font-size:14px;outline:none;">
+    </div>
+
+    <!-- Сховане оригінальне поле форми для передачі даних на бекенд -->
+    <div style="display:none;" id="form-description-textarea-wrap">
+        {{ form.description }}
+    </div>
+    {% if form.description.errors %}
+    <p class="form-error">{{ form.description.errors.0 }}</p>
+    {% endif %}
+    <p class="form-hint" style="margin-top:6px;">
+        💡 Ви можете виділяти фрагменти тексту та застосовувати <strong>жирний шрифт</strong>, <em>курсив</em>, <u>підкреслення</u>, маркер, списки та посилання.
+    </p>
+</div>

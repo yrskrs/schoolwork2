@@ -18,6 +18,14 @@
 .ai-settings-disclosure-body { padding: 16px; }
 .ai-settings-panel .ai-settings-table { max-height: 520px; overflow: auto; }
 .ai-settings-table thead { position: sticky; top: 0; z-index: 1; }
+.ai-model-usage-table { min-width: 1120px; table-layout: auto; }
+.ai-model-usage-table th:first-child, .ai-model-usage-table td:first-child { min-width: 270px; }
+.ai-model-usage-table th:nth-child(6), .ai-model-usage-table td:nth-child(6) { min-width: 150px; }
+.ai-model-usage-table th:nth-child(7), .ai-model-usage-table td:nth-child(7) { min-width: 160px; }
+.ai-model-usage-table td:not(:first-child) { white-space: nowrap; }
+.ai-model-identity { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.ai-model-identity code { display: inline-block; flex: 0 0 auto; min-width: max-content; max-width: none; white-space: nowrap; word-break: normal; overflow-wrap: normal; }
+.ai-model-identity .badge { flex: 0 0 auto; white-space: nowrap; }
 .ai-settings-api-grid { grid-template-columns: repeat(2,minmax(0,1fr)) !important; }
 .ai-settings-api-grid > div { min-width: 0; }
 @media (max-width: 800px) {

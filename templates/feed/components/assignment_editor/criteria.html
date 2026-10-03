@@ -1,0 +1,76 @@
+<!-- Індивідуальні критерії оцінювання вчителя для завдання -->
+<div class="form-group" style="margin-bottom:18px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px;">
+        <label class="form-label" for="id_custom_criteria" style="display:flex;align-items:center;gap:6px;font-weight:700;margin-bottom:0;">
+            <span>📝</span>
+            <span>Індивідуальні критерії оцінювання для цього завдання (необов'язково)</span>
+        </label>
+        <button type="button" id="btn-toggle-ai-criteria-helper" class="btn btn-sm"
+                style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;padding:5px 13px;border-radius:20px;background:linear-gradient(135deg,#2563eb,#7c3aed);color:#fff;border:none;cursor:pointer;box-shadow:0 2px 8px rgba(37,99,235,0.25);transition:transform 0.15s ease,box-shadow 0.15s ease;">
+            <span>✨</span>
+            <span>Помічник ШІ: скласти критерії за описом</span>
+        </button>
+    </div>
+
+    <!-- Панель ШІ-помічника для генерації критеріїв -->
+    <div id="ai-criteria-assistant-panel" style="display:none;background:var(--color-bg-secondary, #f8fafc);border:1.5px solid #3b82f6;border-radius:12px;padding:16px;margin-bottom:14px;box-shadow:0 6px 20px rgba(59,130,246,0.12);">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px;">
+            <div style="display:flex;align-items:flex-start;gap:10px;">
+                <div style="font-size:24px;line-height:1;background:rgba(59,130,246,0.12);padding:8px;border-radius:10px;">🤖</div>
+                <div>
+                    <div style="font-weight:700;font-size:14.5px;color:var(--color-text-primary, #1e293b);">Помічник ШІ для формування критеріїв оцінювання</div>
+                    <div style="font-size:12px;color:var(--color-text-muted, #64748b);margin-top:2px;">Опишіть своїми словами звичайною мовою, що саме учень має зробити або які вимоги до роботи. ШІ перетворить ваші слова на структуровані критерії за 12-бальною шкалою НУШ.</div>
+                </div>
+            </div>
+            <button type="button" id="btn-close-ai-criteria-helper" style="background:none;border:none;font-size:18px;cursor:pointer;color:var(--color-text-muted, #64748b);padding:4px 8px;border-radius:6px;line-height:1;" title="Закрити панель">✕</button>
+        </div>
+
+        <div style="margin-bottom:10px;">
+            <label for="id_ai_criteria_notes" style="display:block;font-size:12.5px;font-weight:600;margin-bottom:5px;color:var(--color-text-secondary, #334155);">
+                Ваші побажання та вимоги (опишіть своїми словами):
+            </label>
+            <textarea id="id_ai_criteria_notes" class="form-textarea" rows="3" style="width:100%;font-size:13px;line-height:1.45;"
+                      placeholder="Наприклад: Хочу, щоб учень обов'язково розв'язав усі 3 задачі з повним записом 'Дано' і формулами. За правильну відповідь без формул — максимум 7 балів. Якщо все ідеально, з висновками та охайно — 12 балів."></textarea>
+        </div>
+
+        <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;">
+            <button type="button" id="btn-copy-from-assignment" class="btn btn-sm" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;background:var(--color-bg-primary, #fff);border:1px solid var(--color-border, #cbd5e1);color:var(--color-text-primary, #1e293b);padding:6px 11px;border-radius:6px;cursor:pointer;">
+                <span>📋</span>
+                <span>Взяти опис із цього завдання</span>
+            </button>
+            <div style="display:flex;gap:8px;">
+                <button type="button" id="btn-run-generate-criteria" class="btn btn-sm btn-primary" style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;padding:6px 15px;border-radius:6px;background:linear-gradient(135deg,#2563eb,#7c3aed);color:#fff;border:none;cursor:pointer;box-shadow:0 2px 6px rgba(37,99,235,0.3);">
+                    <span id="ai-criteria-spinner" style="display:none;width:14px;height:14px;border:2px solid #fff;border-top-color:transparent;border-radius:50%;animation:criteriaSpin 0.8s linear infinite;"></span>
+                    <span id="ai-criteria-btn-icon">✨</span>
+                    <span id="ai-criteria-btn-text">Згенерувати критерії (12 балів)</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Повідомлення про помилку -->
+        <div id="ai-criteria-error-box" style="display:none;margin-top:10px;padding:9px 13px;background:#fef2f2;border:1px solid #fecaca;color:#dc2626;border-radius:6px;font-size:12.5px;"></div>
+
+        <!-- Блок згенерованого результату -->
+        <div id="ai-criteria-result-box" style="display:none;margin-top:14px;background:var(--color-bg-primary, #fff);border:1.5px solid #93c5fd;border-radius:8px;padding:14px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+                <div style="font-weight:700;font-size:13.5px;color:#1d4ed8;display:flex;align-items:center;gap:6px;">
+                    <span>✅</span> Згенеровані критерії оцінювання:
+                </div>
+                <div style="font-size:11px;color:var(--color-text-muted, #64748b);" id="ai-criteria-model-badge"></div>
+            </div>
+            <textarea id="ai-criteria-preview-text" class="form-textarea" rows="6" style="width:100%;font-size:13px;background:var(--color-bg-secondary, #f8fafc);margin-bottom:10px;line-height:1.45;"></textarea>
+            <div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;">
+                <button type="button" id="btn-append-criteria" class="btn btn-sm" style="background:var(--color-bg-secondary, #f1f5f9);border:1px solid var(--color-border, #cbd5e1);font-size:12px;padding:6px 13px;border-radius:6px;cursor:pointer;">
+                    ➕ Додати до існуючого тексту
+                </button>
+                <button type="button" id="btn-apply-criteria" class="btn btn-sm btn-success" style="background:#16a34a;color:#fff;border:none;font-weight:600;font-size:12.5px;padding:6px 15px;border-radius:6px;cursor:pointer;">
+                    📥 Вставити в критерії завдання
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <textarea name="custom_criteria" id="id_custom_criteria" class="form-textarea" rows="4"
+              placeholder="Вкажіть специфічні критерії або розбаловку для цього конкретного завдання (наприклад: 1. Повнота списку дат — до 5 б., 2. Власний аналіз наслідків — до 4 б., 3. Грамотність та оформлення — до 3 б.). Ці вимоги будуть показані учням у вікні «Критерії оцінювання» та безпосередньо враховані ШІ при перевірці.">{{ form.custom_criteria.value|default_if_none:"" }}</textarea>
+    <p class="form-hint">Власні критерії мають найвищий пріоритет для ШІ та будуть доступні учням для ознайомлення перед виконанням роботи.</p>
+</div>

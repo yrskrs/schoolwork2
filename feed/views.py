@@ -1527,6 +1527,7 @@ def assignment_create(request):
         'criteria_presets': criteria_presets,
         'last_ai_preset_id': int(last_preset_id) if last_preset_id and str(last_preset_id).isdigit() else None,
         'last_ai_grs': last_grs_json,
+        'submitted_ai_grs': request.POST.getlist('default_ai_grs'),
         'teacher_lesson_schedules': teacher_lesson_schedules,
     }
     return render(request, 'feed/assignment_form.html', context)
@@ -1706,6 +1707,7 @@ def assignment_edit(request, pk):
         'criteria_presets': criteria_presets,
         'teacher_lesson_schedules': teacher_lesson_schedules,
         'existing_target_dates': existing_target_dates,
+        'submitted_ai_grs': request.POST.getlist('default_ai_grs'),
     }
     return render(request, 'feed/assignment_form.html', context)
 

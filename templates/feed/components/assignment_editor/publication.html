@@ -1,0 +1,59 @@
+<!-- Дедлайн -->
+    <div class="form-group" style="margin-bottom:16px;">
+        <label class="form-label" for="{{ form.due_date.id_for_label }}">
+            ⏰ Термін виконання (Дедлайн)
+        </label>
+        {{ form.due_date }}
+        {% if form.due_date.errors %}
+        <p class="form-error">{{ form.due_date.errors.0 }}</p>
+        {% endif %}
+    </div>
+<!-- Прапорець: Не вимагає здачі робіт (усне / для опрацювання) -->
+<div class="form-group" style="margin-bottom:16px;">
+    <label style="display:flex;align-items:flex-start;gap:12px;cursor:pointer;padding:12px 16px;background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:var(--radius-md);width:100%;box-sizing:border-box;transition:border-color 0.2s, background 0.2s;">
+        <input type="checkbox" name="no_submission_required" id="id_no_submission_required"
+               value="1"
+               {% if form.no_submission_required.value %}checked{% endif %}
+               style="width:18px;height:18px;accent-color:var(--color-primary);flex-shrink:0;margin-top:2px;cursor:pointer;">
+        <div>
+            <div style="font-weight:700;font-size:13.5px;color:var(--color-text-primary);display:flex;align-items:center;gap:6px;">
+                <span>📖</span>
+                <span>Без здачі робіт (усне / для опрацювання)</span>
+            </div>
+            <div style="font-size:12px;color:var(--color-text-muted);margin-top:3px;line-height:1.4;">
+                Учні читають матеріали без надсилання роботи.
+            </div>
+        </div>
+    </label>
+</div>
+
+
+<div class="form-group" style="margin:0;">
+    <div class="publish-radio-group" role="radiogroup" aria-label="Тип публікації" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;">
+        {% for radio in form.publish_choice %}
+        <label class="publish-option {% if form.publish_choice.value == radio.data.value %}selected{% endif %}" style="display:flex;align-items:center;gap:10px;padding:12px 16px;background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:var(--radius-md);cursor:pointer;">
+            {{ radio.tag }}
+            <div>
+                <div class="publish-option-label" style="font-weight:700;font-size:13px;color:var(--color-text-primary);">{{ radio.choice_label }}</div>
+            </div>
+        </label>
+        {% endfor %}
+    </div>
+    {% if form.publish_choice.errors %}
+    <p class="form-error">{{ form.publish_choice.errors.0 }}</p>
+    {% endif %}
+</div>
+
+<!-- Відкладена публікація (ховається/показується через JS) -->
+<div id="scheduled-section" style="{% if form.publish_choice.value != 'scheduled' %}display:none;{% endif %}margin-top:16px;">
+    <div class="form-group" style="margin:0;">
+        <label class="form-label required" for="{{ form.scheduled_at.id_for_label }}">
+            📅 Дата та час публікації
+        </label>
+        {{ form.scheduled_at }}
+        {% if form.scheduled_at.errors %}
+        <p class="form-error">{{ form.scheduled_at.errors.0 }}</p>
+        {% endif %}
+        <p class="form-hint">Завдання стане видимим для учнів автоматично у вказаний час.</p>
+    </div>
+</div>

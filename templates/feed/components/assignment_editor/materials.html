@@ -1,0 +1,137 @@
+<!-- Посилання -->
+<div class="form-row" style="margin-bottom:14px;">
+    <div class="form-group" style="margin:0;">
+        <label class="form-label" for="{{ form.link_url.id_for_label }}">
+            🔗 Основне посилання (URL)
+        </label>
+        {{ form.link_url }}
+        {% if form.link_url.errors %}
+        <p class="form-error">{{ form.link_url.errors.0 }}</p>
+        {% endif %}
+    </div>
+    <div class="form-group" style="margin:0;">
+        <label class="form-label" for="{{ form.link_label.id_for_label }}">
+            Текст кнопки посилання
+        </label>
+        {{ form.link_label }}
+        <p class="form-hint">Наприклад: «Відкрити онлайн-підручник»</p>
+    </div>
+</div>
+
+<!-- Додаткові посилання (динамічно) -->
+<div id="extra-links-container">
+    {% if is_edit and existing_links %}
+        {% for link in existing_links %}
+        <div class="form-row extra-link-row" style="margin-top:8px;">
+            <div class="form-group">
+                <label class="form-label">🔗 Додаткове посилання</label>
+                <input type="url" name="extra_link_url" value="{{ link.url }}" class="form-input" placeholder="https://...">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Текст посилання</label>
+                <input type="text" name="extra_link_label" value="{{ link.label }}" class="form-input" placeholder="Назва посилання">
+            </div>
+            <button type="button" onclick="this.closest('.extra-link-row').remove()" style="align-self:flex-end; background:none; border:1px solid var(--color-danger); color:var(--color-danger); border-radius:var(--radius-md); padding:6px 10px; cursor:pointer; margin-bottom:1px; flex-shrink:0;">✕</button>
+        </div>
+        {% endfor %}
+    {% endif %}
+</div>
+<div id="add-link-btn-container" style="margin-top:6px;margin-bottom:16px;">
+    <button type="button" id="add-extra-link-btn" onclick="addExtraLinkRow()" style="background:none; border:1px dashed var(--color-border); color:var(--color-text-muted); border-radius:var(--radius-md); padding:6px 14px; cursor:pointer; font-size:13px; display:none;">➕ Додати ще посилання</button>
+</div>
+
+<!-- YouTube відео -->
+<div style="margin-bottom:20px; padding:18px; background:var(--color-bg-secondary); border-radius:var(--radius-md); border:1px solid var(--color-border);">
+    <div class="form-group" style="margin-bottom:8px;">
+        <label class="form-label" for="{{ form.youtube_url.id_for_label }}" style="display:flex; align-items:center; gap:6px; font-weight:700;">
+            <span style="color:#ef4444;font-size:16px;">▶</span> YouTube відеоурок
+        </label>
+        {{ form.youtube_url }}
+        <p class="form-hint">Вставте посилання — відео можна буде переглядати прямо на сторінці уроку</p>
+        {% if form.youtube_url.errors %}
+        <p class="form-error">{{ form.youtube_url.errors.0 }}</p>
+        {% endif %}
+    </div>
+
+    <!-- Додаткові YouTube відео (динамічно) -->
+    <div id="extra-youtube-container">
+        {% if is_edit and existing_youtube_links %}
+            {% for ylink in existing_youtube_links %}
+            <div class="form-row extra-youtube-row" style="margin-top:10px; gap:8px;">
+                <div class="form-group" style="flex:2;">
+                    <label class="form-label">▶ Додаткове YouTube відео</label>
+                    <input type="url" name="extra_youtube_url" value="{{ ylink.url }}" class="form-input" placeholder="https://www.youtube.com/watch?v=...">
+                </div>
+                <div class="form-group" style="flex:1;">
+                    <label class="form-label">Підпис до відео (опціонально)</label>
+                    <input type="text" name="extra_youtube_title" value="{{ ylink.title }}" class="form-input" placeholder="Наприклад: Частина 2">
+                </div>
+                <button type="button" onclick="this.closest('.extra-youtube-row').remove(); updateAddYouTubeBtn();" style="align-self:flex-end; background:none; border:1px solid var(--color-danger); color:var(--color-danger); border-radius:var(--radius-md); padding:7px 11px; cursor:pointer; margin-bottom:1px; flex-shrink:0;" title="Видалити це відео">✕</button>
+            </div>
+            {% endfor %}
+        {% endif %}
+    </div>
+    <div id="add-youtube-btn-container" style="margin-top:10px;">
+        <button type="button" id="add-extra-youtube-btn" onclick="addExtraYouTubeRow()" style="background:none; border:1px dashed var(--color-border); color:var(--color-text-muted); border-radius:var(--radius-md); padding:6px 14px; cursor:pointer; font-size:13px; display:none;">➕ Додати ще одне відео</button>
+    </div>
+</div>
+
+<!-- Існуючі файли при редагуванні -->
+{% if is_edit and existing_files %}
+<div class="form-group" style="margin-bottom:16px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:6px;">
+        <label class="form-label" style="font-weight:700;margin:0;">Поточні прикріплені файли:</label>
+        <span style="font-size:12px;color:var(--color-text-muted);">🎯 Оберіть файл з умовою для ШІ (якщо потрібно)</span>
+    </div>
+    <div class="existing-files" style="display:flex;flex-direction:column;gap:6px;">
+        {% for file in existing_files %}
+        <div class="existing-file-item" style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:var(--radius-md);gap:8px;flex-wrap:wrap;">
+            <div style="display:flex;align-items:center;gap:8px;min-width:0;flex:1;">
+                <span>{{ file.get_file_icon }}</span>
+                <span class="file-name" style="font-weight:700;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ file.original_name }}</span>
+                <span class="text-muted text-sm">({{ file.get_size_display }})</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:12px;flex-shrink:0;">
+                <label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;font-size:11.5px;font-weight:700;color:var(--color-primary);background:rgba(99,102,241,0.08);padding:3px 8px;border-radius:4px;border:1px solid rgba(99,102,241,0.25);" title="Позначити цей файл як основну умову завдання для ШІ">
+                    <input type="radio" name="ai_task_file" value="existing:{{ file.id }}" {% if file.is_task_source_for_ai %}checked{% endif %} class="ai-task-radio" onchange="setAiTaskFileSelection(this.value)">
+                    <span>🎯 Умова для ШІ</span>
+                </label>
+                <label class="delete-file-label" style="color:var(--color-danger);font-weight:700;font-size:12px;cursor:pointer;display:flex;align-items:center;gap:4px;">
+                    <input type="checkbox" name="delete_files" value="{{ file.id }}" class="delete-file-checkbox">
+                    🗑 Видалити
+                </label>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<!-- Завантаження нових файлів (Накопичувальний вибір з різних папок) -->
+<div class="form-group" style="margin:0;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:6px;">
+        <label class="form-label" style="font-weight:700;margin:0;">
+            {% if is_edit %}Додати нові файли{% else %}Файли завдань (PDF, Word, Excel, презентації, фото, коди){% endif %}
+        </label>
+        <span style="font-size:12px;color:var(--color-text-muted);" id="files-summary-count">
+            💡 Можна додавати файли по одному або групами з різних папок
+        </span>
+    </div>
+    <div class="file-upload-area" id="upload-area" role="button" tabindex="0"
+         aria-label="Натисніть або перетягніть файли для завантаження"
+         style="border:2px dashed var(--color-border);border-radius:var(--radius-lg);padding:22px;text-align:center;background:var(--color-bg-secondary);cursor:pointer;transition:all 0.2s;">
+        <div class="upload-icon" style="font-size:36px;margin-bottom:6px;">📁</div>
+        <div class="upload-text" id="upload-text-label" style="font-weight:800;font-size:14px;color:var(--color-text-primary);">Натисніть або перетягніть файли сюди</div>
+        <div class="upload-hint" style="font-size:12px;color:var(--color-text-muted);margin-top:4px;">Будь-які формати: PDF, DOCX, XLSX, PPTX, JPG, PNG, ZIP, PY тощо. При додаванні файлів із різних папок попередні файли НЕ зникають!</div>
+        <input type="file" id="id_files" name="files" multiple class="form-file-input" style="display:none;">
+    </div>
+    <!-- Попередній перегляд доданих файлів із можливістю видалення кожного та вибору файлу для ШІ -->
+    <div id="upload-preview" class="upload-preview" style="margin-top:10px;"></div>
+</div>
+
+<!-- Загальна помилка валідації -->
+{% if form.non_field_errors %}
+<div class="alert alert-error" style="margin-top:16px;">
+    ❌ {{ form.non_field_errors.0 }}
+</div>
+{% endif %}

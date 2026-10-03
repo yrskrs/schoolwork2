@@ -1,0 +1,79 @@
+<!-- Чекбокс "Індивідуальне" -->
+<div class="form-group" style="padding:12px 16px; background:var(--color-bg-secondary); border-radius:var(--radius-md); border:1px solid var(--color-border); margin-bottom:14px;">
+    <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px;font-weight:700;color:var(--color-text-primary);margin:0;">
+        {{ form.is_individual }}
+        <span>👤 Індивідуальне завдання (для конкретного учня / учениці)</span>
+    </label>
+    <p class="form-hint" style="margin-top:4px; margin-bottom:0;">Укажіть учня та, за потреби, його клас.</p>
+</div>
+
+<!-- Ім'я учня (показується тільки при індивідуальному) -->
+<div id="student-name-section" style="{% if not form.is_individual.value %}display:none;{% endif %} margin-bottom:14px;">
+    <div class="form-group">
+        <label class="form-label required" for="{{ form.student_name.id_for_label }}">
+            👤 Прізвище та ім'я учня / учениці <span style="color:var(--color-danger)">*</span>
+        </label>
+        {{ form.student_name }}
+        {% if form.student_name.errors %}
+        <p class="form-error">{{ form.student_name.errors.0 }}</p>
+        {% endif %}
+        <p class="form-hint">Вкажіть кому саме призначено це завдання (наприклад: Шевченко Тарас). Це ім'я автоматично підставиться у форму здачі роботи.</p>
+    </div>
+</div>
+
+<!-- Вибір класів -->
+<div id="classes-section" class="form-group" style="margin:0;">
+    <label class="form-label" style="font-weight:700;">
+        🏫 Оберіть класи (або клас учня)
+    </label>
+    <div class="class-checkbox-group" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;">
+        {% for widget in form.classes %}
+        <label class="class-check-pill" style="cursor:pointer;">
+            {{ widget.tag }}
+            <span class="class-pill-text">{{ widget.choice_label }}</span>
+        </label>
+        {% endfor %}
+    </div>
+    {% if form.classes.errors %}
+    <p class="form-error">{{ form.classes.errors.0 }}</p>
+    {% endif %}
+    {% if not form.classes.field.queryset.count %}
+    <p class="form-hint">⚠️ Класи ще не створені. Ви можете додати їх у налаштуваннях профілю вчителя.</p>
+    {% endif %}
+</div>
+
+<!-- 📅 2.1. Цільовий урок за розкладом (необов'язково) -->
+{% if teacher_lesson_schedules %}
+<details id="schedule-targeting-block" class="assignment-schedule-details" {% if is_edit or form.errors %}open{% endif %}>
+<summary>📅 Прив’язка до розкладу</summary>
+<div class="assignment-schedule-body">
+<p class="form-hint">За потреби оберіть урок і дату для кожного класу.</p>
+<div id="schedule-targets-grid" style="display:flex;flex-direction:column;gap:8px;">
+        {% for class_obj in form.classes.field.queryset %}
+        <div class="schedule-target-row" id="target-row-class-{{ class_obj.id }}" style="display:none;align-items:center;gap:10px;padding:8px 12px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:6px;flex-wrap:wrap;">
+            <span style="font-weight:750;font-size:13px;min-width:65px;color:var(--color-text-primary);">
+                🏫 {{ class_obj.name }}:
+            </span>
+            <div style="flex:1 0 100%;min-width:0;">
+                <select name="class_schedule_target_{{ class_obj.id }}" class="form-select" style="font-size:12.5px;padding:5px 8px;width:100%;">
+                    <option value="auto">⚡ Автоматично (найближчий урок за розкладом)</option>
+                    {% for sch in teacher_lesson_schedules %}
+                        {% if sch.class_group_id == class_obj.id %}
+                        <option value="slot_{{ sch.day_of_week }}_{{ sch.bell_slot_id }}" {% if sch.is_selected_for_assignment %}selected{% endif %}>
+                            {{ sch.get_day_of_week_display }}, {{ sch.bell_slot.lesson_number }}-й урок ({{ sch.bell_slot.start_time|time:"H:i" }})
+                        </option>
+                        {% endif %}
+                    {% endfor %}
+                    <option value="none">🌐 Без прив'язки до дня розкладу</option>
+                </select>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;">
+                <span style="font-size:11.5px;color:var(--color-text-muted);white-space:nowrap;">📅 Дата:</span>
+                <input type="date" name="class_schedule_target_date_{{ class_obj.id }}" class="form-input" style="font-size:12px;padding:4px 8px;width:130px;" title="Конкретна дата уроку для {{ class_obj.name }}" value="{% for cid, dt in existing_target_dates.items %}{% if cid == class_obj.id %}{{ dt }}{% endif %}{% endfor %}">
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+</details>
+{% endif %}
