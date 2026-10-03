@@ -1,0 +1,25 @@
+{% if assignment.allow_ai_usage %}
+<div style="background:rgba(16,185,129,0.06);border:1px solid rgba(16,185,129,0.25);border-radius:var(--radius-sm);padding:6px 10px;display:flex;align-items:center;gap:8px;">
+    <span style="font-size:16px;flex-shrink:0;">🤖</span>
+    <div style="font-size:11.5px;color:var(--color-text-secondary);line-height:1.3;">
+        <strong style="color:#059669;">Використання ШІ дозволено:</strong> вчитель дозволив допомогу ШІ для цього завдання.
+    </div>
+</div>
+{% else %}
+<div style="background:rgba(239,68,68,0.05);border:1px solid rgba(239,68,68,0.2);border-radius:var(--radius-sm);padding:6px 10px;display:flex;align-items:center;gap:8px;">
+    <span style="font-size:16px;flex-shrink:0;">✍️</span>
+    <div style="font-size:11.5px;color:var(--color-text-secondary);line-height:1.3;">
+        <strong style="color:#dc2626;">Самостійна робота:</strong> вчитель не дозволив використання ШІ для виконання цього завдання.
+    </div>
+</div>
+{% endif %}
+
+{% if assignment.allow_student_ai_check %}
+<!-- 🤖 Інформаційний бейдж про доступну перевірку ШІ -->
+<div style="background:linear-gradient(135deg,rgba(99,102,241,0.08) 0%,rgba(139,92,246,0.08) 100%);border:1.5px dashed #818cf8;border-radius:var(--radius-sm);padding:6px 10px;display:flex;align-items:center;gap:8px;">
+    <span style="font-size:18px;flex-shrink:0;">🤖</span>
+    <div style="font-size:11.5px;color:var(--color-text-secondary);line-height:1.3;">
+        <strong style="color:var(--color-text-primary);">Після здачі доступна перевірка роботи через ШІ!</strong> Отримайте попередні результати та оцінку від ШІ одразу після надсилання.
+    </div>
+</div>
+{% endif %}

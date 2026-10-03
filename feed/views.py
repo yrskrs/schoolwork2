@@ -2808,6 +2808,22 @@ def client_disconnect(request):
 # ЗДАЧА РОБОТИ УЧНЕМ ТА ПУБЛІЧНИЙ ПЕРЕГЛЯД
 # ═══════════════════════════════════════════════════════════════════════════════
 
+def _submission_form_context(assignment, form):
+    selected_class = str(form['class_group'].value() or '')
+    selected_class_name = next(
+        (str(group) for group in form.fields['class_group'].queryset if str(group.pk) == selected_class),
+        'Клас не обрано',
+    )
+    if selected_class_name == 'Клас не обрано':
+        # Keep the rendered select consistent with the summary after an invalid choice.
+        form.fields['class_group'].empty_label = '— Оберіть клас —'
+    return {
+        'assignment': assignment,
+        'form': form,
+        'selected_submission_class_name': selected_class_name,
+    }
+
+
 def submit_assignment(request, pk):
     """
     Публічна сторінка для здачі роботи учнем.
@@ -2840,7 +2856,8 @@ def submit_assignment(request, pk):
     class_param = request.GET.get('class')
     if class_param:
         try:
-            initial_data['class_group'] = ClassGroup.objects.get(id=class_param)
+            available_classes = assignment.classes.all() if assignment.classes.exists() else ClassGroup.objects.all()
+            initial_data['class_group'] = available_classes.get(id=class_param)
         except (ClassGroup.DoesNotExist, ValueError):
             pass
     elif assignment.classes.exists():
@@ -2859,7 +2876,7 @@ def submit_assignment(request, pk):
                     "Помилка при читанні або збереженні файлу (файл заблокований іншою програмою або системою). "
                     "Будь ласка, збережіть та закрийте програму (наприклад, Word або Excel), де відкрито цей файл, та спробуйте ще раз."
                 )
-                return render(request, 'feed/submit_assignment.html', {'assignment': assignment, 'form': form})
+                return render(request, 'feed/submit_assignment.html', _submission_form_context(assignment, form))
 
             dup_info = check_submission_duplicates(submission)
             if dup_info['is_duplicate']:
@@ -2878,11 +2895,7 @@ def submit_assignment(request, pk):
             return redirect('submit_success', pk=assignment.pk)
 
 
-    context = {
-        'assignment': assignment,
-        'form': form,
-    }
-    return render(request, 'feed/submit_assignment.html', context)
+    return render(request, 'feed/submit_assignment.html', _submission_form_context(assignment, form))
 
 
 

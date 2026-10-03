@@ -281,8 +281,8 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
         # Форма здачі
         resp = self.client.get(reverse('submit_assignment', args=[self.assignment.id]))
         self.assertEqual(resp.status_code, 200)
-        self.assertContains(resp, 'Надіслати виконане завдання')
-        self.assertContains(resp, 'Як здавати роботу')
+        self.assertContains(resp, 'Надіслати виконану роботу')
+        self.assertContains(resp, 'Як здати роботу')
         # Перевірка автоматичного вибору класу завдання у формі
         self.assertEqual(resp.context['form'].initial.get('class_group'), self.class_group)
         self.assertContains(resp, f'value="{self.class_group.id}" selected')
@@ -3146,10 +3146,13 @@ class FirstRunSetupTests(TestCase):
         asg.classes.add(cg)
         resp_sub = self.client.get(reverse('submit_assignment', args=[asg.pk]))
         self.assertEqual(resp_sub.status_code, 200)
-        self.assertContains(resp_sub, 'id="submit-task-card"')
-        self.assertContains(resp_sub, 'display:none')
-        self.assertContains(resp_sub, 'id="toggle-condition-btn"')
-        self.assertContains(resp_sub, 'localStorage.removeItem(\'submit_show_condition\')')
+        from lxml import html
+        page = html.fromstring(resp_sub.content)
+        condition = page.get_element_by_id('submission-condition-details')
+        self.assertEqual(condition.tag, 'details')
+        self.assertNotIn('open', condition.attrib)
+        self.assertIn('Умова й матеріали', condition.xpath('./summary')[0].text_content())
+        self.assertEqual(page.get_element_by_id('submission-topic').text_content(), asg.title)
 
 
 class AIRawJSONProtectionTests(TestCase):
@@ -8466,5 +8469,4 @@ class TeacherIntentAndTaskUnderstandingTests(TestCase):
         t_intent = result.get('teacher_intent') or {}
         self.assertEqual(t_intent.get('task_type'), 'presentation')
         self.assertNotIn("вправа 4", t_intent.get('what_teacher_asks', '').lower())
-
 

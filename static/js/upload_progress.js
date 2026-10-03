@@ -12,7 +12,9 @@ window.SchoolNetUploads = {
         const text = document.createElement('p');
         text.textContent = 'Починаємо завантаження. Залишайте сторінку відкритою.';
         panel.append(progress, text);
-        form.append(panel);
+        const progressSlot = form.querySelector('[data-upload-progress-slot]');
+        if (progressSlot) progressSlot.replaceChildren(panel);
+        else form.append(panel);
         const request = new XMLHttpRequest();
         request.open('POST', form.action || window.location.href);
         request.upload.onprogress = function (event) {
