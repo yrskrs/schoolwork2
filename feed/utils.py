@@ -150,6 +150,9 @@ def _cache_doc_conversion(prefix: str):
                 cache_key = None
 
             res = func(file_path, *args, **kwargs)
+            if res and res[0]:
+                from .document_html import safe_document_html
+                res = (safe_document_html(res[0]), res[1])
 
             if cache_key and res and res[0]:
                 if len(_DOC_HTML_CONVERSION_CACHE) >= _MAX_DOC_CACHE:

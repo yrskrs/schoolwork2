@@ -4,6 +4,7 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
+    path("api/ai/jobs/<uuid:job_id>/", views.ai_job_status, name="ai_job_status"),
     # ── Публічна частина ──────────────────────────────────────────────────────
     path('', views.index, name='index'),
     path('feed/fragment/', views.feed_fragment, name='feed_fragment'),

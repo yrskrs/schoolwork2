@@ -1,0 +1,6 @@
+{% if active_ai_job %}
+<div class="ai-job-status" role="status" aria-live="polite" data-ai-job-status="{% url 'ai_job_status' active_ai_job.pk %}">
+    {% if active_ai_job.status == 'running' %}ШІ перевіряє роботу. Результат з’явиться автоматично.
+    {% else %}Робота в черзі на перевірку ШІ. Можна залишити сторінку й повернутися пізніше.{% endif %}
+</div>
+{% endif %}

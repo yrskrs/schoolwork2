@@ -258,6 +258,7 @@
 {% endblock %}
 
 {% block content %}
+{% include "feed/components/ai_job_status.html" %}
 <div class="page-wrapper" style="padding-top: 12px;">
 
     <div class="fv-container">
@@ -1911,7 +1912,7 @@ function runSingleAICheck(subId) {
         if (isThinking) {
             box.innerHTML = '<div style="text-align:center;padding:12px;font-size:12px;color:var(--color-primary);font-weight:600;">🧠 Thinking mode: ШІ виконує багатокроковий поглиблений аналіз роботи...</div>';
         } else {
-            box.innerHTML = '<div style="text-align:center;padding:12px;font-size:12px;color:var(--color-primary);font-weight:600;">🤖 Google Gemini аналізує завдання та роботу учня...</div>';
+            box.innerHTML = '<div style="text-align:center;padding:12px;font-size:12px;color:var(--color-primary);font-weight:600;">🤖 ШІ аналізує завдання та роботу учня...</div>';
         }
     }
 
@@ -1925,7 +1926,7 @@ function runSingleAICheck(subId) {
     }
     formData.append('force_thinking', isThinking ? '1' : '0');
 
-    fetch('/teacher/ai/check/' + subId + '/?format=json', {
+    SchoolNetAI.fetch('/teacher/ai/check/' + subId + '/?format=json', {
         method: 'POST',
         body: formData,
         headers: {
@@ -1946,12 +1947,14 @@ function runSingleAICheck(subId) {
         });
     })
     .then(function(data) {
+        var rawFeedback = data.clean_feedback || "";
+        data = SchoolNetAI.escapeResult(data);
         if (btn) {
             btn.disabled = false;
             btn.innerHTML = '<span style="font-size:16px;">⚡</span> <span>Перевірити роботу ШІ</span>';
         }
         if (data.status === 'success') {
-            windowLastAICleanFeedback = data.clean_feedback || '';
+            windowLastAICleanFeedback = rawFeedback;
             var gradeVal = data.suggested_grade || 'Оцінено';
             var gradeBadge = '';
             if (gradeVal === 'Доопрацювати') {

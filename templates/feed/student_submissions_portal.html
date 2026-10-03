@@ -2,7 +2,7 @@
 {% load static %}
 
 {% block title %}Мої здані роботи — Шкільні Завдання{% endblock %}
-{% block meta_description %}Перегляд зданих робіт учнів, оцінок та коментарів вчителя{% endblock %}
+{% block meta_description %}Кількість зданих робіт, статус перевірки та коментарі вчителя{% endblock %}
 
 {% block content %}
 <div class="page-wrapper">
@@ -64,7 +64,7 @@
                             <span style="font-weight:700;color:#b45309;">⏳ Очікує перевірки</span> — роботу збережено, вчитель незабаром її відкриє.
                         </div>
                         <div>
-                            <span style="font-weight:700;color:var(--color-success);">✅ Оцінено</span> — вчитель перевірив роботу і поставив оцінку.
+                            <span style="font-weight:700;color:var(--color-success);">✅ Перевірено</span> — вчитель завершив перевірку роботи.
                         </div>
                         <div>
                             <span style="font-weight:700;color:var(--color-primary);">💬 Коментарі</span> — поради або похвала від вчителя.
@@ -100,10 +100,16 @@
         <!-- ════ ЦЕНТРАЛЬНА ЧАСТИНА (СПИСОК ЗДАНИХ РОБІТ) ═════════════════════ -->
         <div class="feed-main-content">
 
+            <div class="submission-summary" aria-label="Підсумок робіт за обраними фільтрами">
+                <div><strong>{{ submitted_count }}</strong><span>Здано робіт</span></div>
+                <div><strong>{{ checked_count }}</strong><span>Перевірено</span></div>
+                <div><strong>{{ waiting_count }}</strong><span>Очікують перевірки</span></div>
+                <p>Кількість актуальних робіт за обраним класом та іменем. Перездачі не додають зайвих робіт до підсумку.</p>
+            </div>
             <!-- Заголовок та пошук -->
             <div class="page-hero">
-                <div class="page-hero-kicker">Кабінет учня</div>
-                <h1>Здані роботи та оцінки</h1>
+                <div class="page-hero-kicker">Навчальні роботи</div>
+                <h1>Мої здані роботи</h1>
                 <form method="GET" action="{% url 'student_submissions_portal' %}" style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px;">
                     {% if selected_class_id %}
                     <input type="hidden" name="class" value="{{ selected_class_id }}">
@@ -194,7 +200,7 @@
                             </span>
                             {% elif sub.grade %}
                             <span class="badge badge-success" style="font-size:12px;padding:6px 14px;font-weight:800;background:rgba(16,185,129,0.15);color:#059669;border:1px solid rgba(16,185,129,0.3);border-radius:20px;display:inline-flex;align-items:center;gap:4px;white-space:nowrap;">
-                                ✅ Оцінено
+                                ✅ Перевірено
                             </span>
                             {% elif not sub.is_latest_attempt %}
                             <span style="background:rgba(148,163,184,0.15);color:#64748b;border:1px solid rgba(148,163,184,0.3);border-radius:20px;padding:6px 14px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:4px;white-space:nowrap;" title="Замінено пізнішою спробою, не потребує оцінки">
@@ -328,7 +334,7 @@
                                             </span>
                                             {% elif prev.grade %}
                                             <span class="badge badge-success" style="font-size:10.5px;padding:2px 8px;border-radius:10px;font-weight:700;">
-                                                Оцінка: {{ prev.grade }}
+                                                ✅ Перевірено вчителем
                                             </span>
                                             {% else %}
                                             <span style="background:rgba(148,163,184,0.18);color:#64748b;border:1px solid rgba(148,163,184,0.3);border-radius:10px;padding:2px 8px;font-size:10.5px;font-weight:600;" title="Замінено новою версією, перевірка не потрібна">

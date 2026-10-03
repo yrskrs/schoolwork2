@@ -4,6 +4,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 from django.utils import timezone
 import os
+import glob
 import json
 import tempfile
 from unittest.mock import patch, MagicMock
@@ -752,8 +753,9 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
         self.assertEqual(inline_media[0]['mime_type'], 'image/png')
         self.assertTrue(len(inline_media[0]['data']) > 0)
 
-    @patch('feed.gemini_service.urllib.request.urlopen')
-    def test_ai_web_url_and_youtube_fetching(self, mock_urlopen):
+    @patch('feed.safe_http.validate_public_url')
+    @patch('feed.safe_http.public_urlopen')
+    def test_ai_web_url_and_youtube_fetching(self, mock_urlopen, mock_validate):
         """Тест видобування вмісту веб-посилань та YouTube."""
         from .gemini_service import extract_submission_content
 
@@ -2074,7 +2076,7 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
         self.assertEqual(zip_resp.status_code, 200)
         self.assertEqual(zip_resp['Content-Type'], 'application/zip')
 
-        with zipfile.ZipFile(io.BytesIO(zip_resp.content)) as zf:
+        with zipfile.ZipFile(io.BytesIO(b''.join(zip_resp.streaming_content))) as zf:
             zip_names = zf.namelist()
             self.assertIn('page1.png', zip_names)
             self.assertIn('solution.py', zip_names)
@@ -2083,7 +2085,7 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
         # 5. Перевірка масового експорту завдань у ZIP
         all_zip_resp = self.client.get(reverse('download_assignment_submissions_zip', args=[self.assignment.id]))
         self.assertEqual(all_zip_resp.status_code, 200)
-        with zipfile.ZipFile(io.BytesIO(all_zip_resp.content)) as zf:
+        with zipfile.ZipFile(io.BytesIO(b''.join(all_zip_resp.streaming_content))) as zf:
             names = zf.namelist()
             self.assertTrue(any('Григоренко_Максим' in n for n in names))
 

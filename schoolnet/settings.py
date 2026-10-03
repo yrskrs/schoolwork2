@@ -120,6 +120,13 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 SESSION_COOKIE_AGE = 86400 * 30  # 30 днів
 SESSION_SAVE_EVERY_REQUEST = True
 
-# ─── Максимальний розмір завантаження файлів (50 МБ) ───────────────────────────
+# ─── Завантаження без обмеження розміру файлів ────────────────────────────────
+# DATA_UPLOAD_MAX_MEMORY_SIZE limits non-file form fields only.
+# Larger uploads stream to temporary files instead of occupying RAM.
 DATA_UPLOAD_MAX_MEMORY_SIZE = 52428800
-FILE_UPLOAD_MAX_MEMORY_SIZE = 52428800
+FILE_UPLOAD_MAX_MEMORY_SIZE = 2 * 1024 * 1024
+
+
+# Durable AI jobs; unit tests use the same executor without an external worker.
+AI_JOBS_EAGER = os.environ.get('AI_JOBS_EAGER', 'True' if 'test' in sys.argv else 'False') == 'True'
+AI_JOB_TIMEOUT = int(os.environ.get('AI_JOB_TIMEOUT', '600'))

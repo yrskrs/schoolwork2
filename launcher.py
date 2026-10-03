@@ -227,6 +227,7 @@ class SchoolNetLauncher(QMainWindow):
         self.setMinimumSize(740, 540)
         
         self.process = None
+        self.ai_process = None
         self.settings = QSettings("SchoolNet", "Launcher")
         self.current_theme = self.settings.value("theme", "dark")
         self.current_server_url = ""
@@ -560,6 +561,17 @@ class SchoolNetLauncher(QMainWindow):
 
         manage_py = str(BASE_DIR / 'manage.py')
 
+        migration = QProcess(self)
+        migration.setWorkingDirectory(str(BASE_DIR))
+        migration.start(venv_python, [manage_py, 'migrate', '--noinput'])
+        if not migration.waitForFinished(30000):
+            migration.kill()
+            self.log_info('❌ Не вдалося завершити підготовку бази даних. Сервер не запущено.')
+            return
+        if migration.exitCode() != 0:
+            self.append_log(bytes(migration.readAllStandardError()).decode('utf-8', errors='replace'), is_err=True)
+            return
+
         self.log_info(f"🚀 Запуск сервера на {bind_addr}...")
         self.log_info(f"📂 Робоча директорія: {BASE_DIR}")
         self.log_info(f"🌐 Адреса сайту для учнів: {self.current_server_url}")
@@ -572,6 +584,11 @@ class SchoolNetLauncher(QMainWindow):
 
         args = [manage_py, 'runserver', bind_addr]
         self.process.start(venv_python, args)
+        self.ai_process = QProcess(self)
+        self.ai_process.setWorkingDirectory(str(BASE_DIR))
+        self.ai_process.readyReadStandardOutput.connect(lambda: self.append_log(bytes(self.ai_process.readAllStandardOutput()).decode("utf-8", errors="replace")))
+        self.ai_process.readyReadStandardError.connect(lambda: self.append_log(bytes(self.ai_process.readAllStandardError()).decode("utf-8", errors="replace"), is_err=True))
+        self.ai_process.start(venv_python, [manage_py, "process_ai_jobs"])
 
         # Оновлення інтерфейсу
         self.btn_start.setEnabled(False)
@@ -603,6 +620,11 @@ class SchoolNetLauncher(QMainWindow):
         """Зупиняє запущений сервер."""
         if not self.process:
             return
+
+        if self.ai_process and self.ai_process.state() != QProcess.ProcessState.NotRunning:
+            self.ai_process.terminate()
+            if not self.ai_process.waitForFinished(1500):
+                self.ai_process.kill()
 
         self.log_info("⏹ Зупинка сервера...")
         self.stats_timer.stop()

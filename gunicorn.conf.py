@@ -1,7 +1,9 @@
 # gunicorn.conf.py — Конфігурація Gunicorn для SchoolNet
 bind = "0.0.0.0:8000"
 workers = 3
-# Збільшено timeout для довгих запитів до AI API (Gemini, OpenAI тощо)
+worker_class = "gthread"
+threads = 4
+# Потоки дозволяють приймати великі файли без тайм-ауту sync-воркера.
 timeout = 120
 # Graceful timeout — скільки чекати воркера при перезапуску
 graceful_timeout = 30

@@ -261,7 +261,7 @@ function fetchAiUnderstanding(assignmentId, forceRefresh) {
             headers: headers
         };
 
-        fetch(url, opts)
+        SchoolNetAI.fetch(url, opts)
             .then(async res => {
                 let data = null;
                 try {

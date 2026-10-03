@@ -72,4 +72,22 @@ def teacher_stats_context(request):
         except Exception:
             pass
 
+    # Lightweight status survives navigation; student jobs remain public.
+    from .models import AIJob
+    match = getattr(request, 'resolver_match', None)
+    job_filter = None
+    if match and match.url_name in ('submission_detail', 'view_file'):
+        job_filter = {'submission_id': match.kwargs.get('submission_id')}
+    elif match and match.url_name == 'submit_success':
+        submission_id = request.session.get('last_submission_id')
+        if submission_id:
+            job_filter = {'submission_id': submission_id, 'submission__assignment_id': match.kwargs.get('pk')}
+    if job_filter:
+        jobs = AIJob.objects.filter(**job_filter, status__in=['queued', 'running'])
+        if not request.user.is_authenticated:
+            jobs = jobs.filter(kind='student_check')
+        else:
+            from .permissions import teacher_submissions
+            jobs = jobs.filter(Q(kind='student_check') | Q(submission__in=teacher_submissions(request, Submission.objects.all())))
+        context['active_ai_job'] = jobs.first()
     return context

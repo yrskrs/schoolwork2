@@ -779,7 +779,7 @@ class Assignment(models.Model):
         now = timezone.localtime(timezone.now())
         today = now.date()
 
-        targets = list(self.schedule_targets.select_related('bell_slot', 'class_group').all())
+        targets = self._targets_with_relations()
         lesson_dates = []
 
         if targets:
@@ -897,7 +897,7 @@ class Assignment(models.Model):
         import datetime
         from django.utils import timezone
 
-        targets = list(self.schedule_targets.select_related('bell_slot', 'class_group').all())
+        targets = self._targets_with_relations()
         if for_class:
             c_id = getattr(for_class, 'id', for_class)
             for t in targets:
@@ -911,9 +911,7 @@ class Assignment(models.Model):
                         return base_d + datetime.timedelta(days=diff)
             # Якщо для класу немає прив'язки в schedule_targets, перевіряємо TeacherLessonSchedule
             if self.teacher_id:
-                t_sch = TeacherLessonSchedule.objects.filter(
-                    teacher_id=self.teacher_id, class_group_id=c_id
-                ).first()
+                t_sch = self._class_lesson_schedule(c_id)
                 if t_sch and t_sch.day_of_week:
                     base_dt = self.published_at or self.created_at or timezone.now()
                     base_d = timezone.localtime(base_dt).date()
@@ -946,6 +944,17 @@ class Assignment(models.Model):
             return timezone.localtime(self.created_at).date()
         return timezone.localtime(timezone.now()).date()
 
+    def _targets_with_relations(self):
+        if 'schedule_targets' in getattr(self, '_prefetched_objects_cache', {}):
+            return list(self.schedule_targets.all())
+        return list(self.schedule_targets.select_related('bell_slot', 'class_group').all())
+
+    def _class_lesson_schedule(self, class_id):
+        teacher = self.teacher
+        if 'lesson_schedules' in getattr(teacher, '_prefetched_objects_cache', {}):
+            return next((slot for slot in teacher.lesson_schedules.all() if slot.class_group_id == class_id), None)
+        return TeacherLessonSchedule.objects.filter(teacher_id=self.teacher_id, class_group_id=class_id).first()
+
     def get_target_dates(self, for_class=None):
         """
         Повертає множину дат (set of date), до яких належить це завдання.
@@ -957,7 +966,7 @@ class Assignment(models.Model):
         import datetime
         from django.utils import timezone
         dates = set()
-        targets = list(self.schedule_targets.select_related('bell_slot', 'class_group').all())
+        targets = self._targets_with_relations()
 
         if for_class:
             c_id = getattr(for_class, 'id', for_class)
@@ -973,9 +982,7 @@ class Assignment(models.Model):
                     break
 
             if not dates and self.teacher_id:
-                t_sch = TeacherLessonSchedule.objects.filter(
-                    teacher_id=self.teacher_id, class_group_id=c_id
-                ).first()
+                t_sch = self._class_lesson_schedule(c_id)
                 if t_sch and t_sch.day_of_week:
                     base_dt = self.published_at or self.created_at or timezone.now()
                     base_d = timezone.localtime(base_dt).date()
@@ -1004,9 +1011,7 @@ class Assignment(models.Model):
             target_class_ids = {t.class_group_id for t in targets}
             for cls in self.classes.all():
                 if cls.id not in target_class_ids and self.teacher_id:
-                    t_sch = TeacherLessonSchedule.objects.filter(
-                        teacher_id=self.teacher_id, class_group=cls
-                    ).first()
+                    t_sch = self._class_lesson_schedule(cls.pk)
                     if t_sch and t_sch.day_of_week:
                         base_dt = self.published_at or self.created_at or timezone.now()
                         base_d = timezone.localtime(base_dt).date()
@@ -1037,7 +1042,7 @@ class Assignment(models.Model):
         current_time = now_dt.time()
 
         res = []
-        targets = {st.class_group_id: st for st in self.schedule_targets.select_related('bell_slot', 'class_group')}
+        targets = {st.class_group_id: st for st in self._targets_with_relations()}
         uk_weekdays = {1: 'Понеділок', 2: 'Вівторок', 3: 'Середа', 4: 'Четвер', 5: "П'ятниця", 6: 'Субота', 7: 'Неділя'}
 
         for cls in self.classes.all():
@@ -1064,9 +1069,7 @@ class Assignment(models.Model):
                     target_date = base_d + datetime.timedelta(days=diff)
                 date_str = target_date.strftime('%d.%m') if target_date else ''
             elif self.teacher:
-                t_sch = TeacherLessonSchedule.objects.filter(
-                    teacher=self.teacher, class_group=cls
-                ).select_related('bell_slot').first()
+                t_sch = self._class_lesson_schedule(cls.id)
                 if t_sch:
                     has_target = True
                     slot = t_sch.bell_slot
@@ -4307,3 +4310,6 @@ class AICriteriaPreset(models.Model):
 
 
 
+
+
+from .job_models import AIJob, StudentAICheckReservation  # noqa: E402, F401

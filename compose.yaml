@@ -1,5 +1,6 @@
 services:
   app:
+    image: schoolwork2-app:latest
     build:
       context: .
       dockerfile: Dockerfile
@@ -10,11 +11,43 @@ services:
         condition: service_healthy
     env_file:
       - .env
+    environment:
+      AI_JOBS_EAGER: 'False'
     ports:
       - "${APP_PORT:-8000}:8000"
     volumes:
       - app_media:/app/media
       - app_logs:/app/logs
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/teacher/login/', timeout=5)"]
+      interval: 15s
+      timeout: 6s
+      retries: 5
+      start_period: 45s
+
+  ai_worker:
+    image: schoolwork2-app:latest
+    container_name: schoolnet_ai_worker
+    restart: unless-stopped
+    command: ["python", "manage.py", "process_ai_jobs"]
+    env_file:
+      - .env
+    environment:
+      AI_JOBS_EAGER: 'False'
+    depends_on:
+      app:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    volumes:
+      - app_media:/app/media
+      - app_logs:/app/logs
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os,time; assert time.time()-os.path.getmtime('/tmp/schoolnet-ai-worker-heartbeat') < 60"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
 
   postgres:
     image: postgres:16
@@ -38,4 +71,3 @@ volumes:
   postgres_data:
   app_media:
   app_logs:
-

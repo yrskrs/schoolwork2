@@ -769,6 +769,24 @@ class SubmissionForm(forms.Form):
         return cleaned_data
 
     def save(self, assignment):
+        """Roll back both DB state and newly stored files if saving fails."""
+        from django.db import transaction
+        self._saved_uploads = []
+        try:
+            with transaction.atomic():
+                # Serialize attempt numbering and canonical student creation per class.
+                ClassGroup.objects.select_for_update().get(pk=self.cleaned_data['class_group'].pk)
+                return self._save_submission(assignment)
+        except Exception:
+            for storage, name in self._saved_uploads:
+                try:
+                    storage.delete(name)
+                except OSError:
+                    import logging
+                    logging.getLogger(__name__).exception('Could not clean up failed upload %s', name)
+            raise
+
+    def _save_submission(self, assignment):
         """Зберігає здачу роботи з кількома файлами, підтримкою колективної роботи (співавторів) та прив'язкою до учня."""
         from .models import Submission, SubmissionFile, Student
         from .student_matcher import resolve_canonical_student_name, is_same_student_identity
@@ -882,11 +900,10 @@ class SubmissionForm(forms.Form):
                     opt_f.seek(0)
             except Exception:
                 pass
-            sub_file = SubmissionFile.objects.create(
-                submission=submission,
-                file=opt_f,
-                original_name=orig_name
-            )
+            sub_file = SubmissionFile(submission=submission, original_name=orig_name)
+            sub_file.file.save(orig_name, opt_f, save=False)
+            self._saved_uploads.append((sub_file.file.storage, sub_file.file.name))
+            sub_file.save()
             saved_sub_files.append(sub_file)
 
         # Встановлюємо шлях до першого файлу для зворотної сумісності без збереження копії на диску

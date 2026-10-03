@@ -401,6 +401,7 @@ function renderQueueTable() {
 
     var html = '';
     pageItems.forEach(function(item, i) {
+        item = SchoolNetAI.escapeResult(item);
         var globalIdx = startIdx + i + 1;
         var statusBadge = '';
         var formatBadge = item.has_format_warning ? '<div style="margin-top:2px;"><span class="badge" style="background:#fffbeb;color:#b45309;border:1px solid #fde68a;font-size:10px;font-weight:700;">⚠️ Не той формат</span></div>' : '';
@@ -526,7 +527,7 @@ function processQueueIndex(idx) {
         formData.append('selected_gr_codes', JSON.stringify(checkedGrCodes));
     }
 
-    fetch('/api/ai/process-item/' + item.id + '/', {
+    SchoolNetAI.fetch('/api/ai/process-item/' + item.id + '/', {
         method: 'POST',
         body: formData,
         headers: {

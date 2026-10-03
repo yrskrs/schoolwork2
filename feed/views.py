@@ -43,6 +43,8 @@ import tempfile
 import glob
 import shutil
 import subprocess
+import logging
+from functools import wraps
 from datetime import datetime, timedelta
 
 # Concurrency control for background preview generation (LibreOffice & pdftoppm)
@@ -60,9 +62,11 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
 from django.contrib import messages
-from django.http import JsonResponse, HttpResponse, FileResponse
+from django.http import JsonResponse, HttpResponse, FileResponse, Http404
 from django.utils import timezone
-from django.db.models import Q
+from django.db.models import Q, Sum, Count
+from django.db import transaction
+from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 from django.views.decorators.http import require_POST
 from django.views.decorators.clickjacking import xframe_options_exempt
@@ -93,6 +97,12 @@ from .utils import (
 )
 from .duplicate_detector import check_submission_duplicates
 from .access_utils import convert_access_to_html
+from .permissions import teacher_submissions, can_manage_submission, require_assignment_access
+from .grading import validate_grade, member_grades
+from .file_serving import file_response
+from .pagination import AssignmentChain
+
+logger = logging.getLogger(__name__)
 
 
 
@@ -112,6 +122,7 @@ def get_teacher_or_none(request):
 
 def teacher_required(view_func):
     """Декоратор: перевіряє чи є активна сесія вчителя."""
+    @wraps(view_func)
     def wrapper(request, *args, **kwargs):
         teacher = get_teacher_or_none(request)
         if not teacher:
@@ -146,26 +157,16 @@ def auto_archive_expired_assignments():
 
 
 def _async_trigger_ai_task_understanding(assignment_id, force_refresh=False):
-    """
-    Фоновий потік для автоматичного аналізу завдання ШІ після публікації або редагування.
-    ШІ ознайомлюється із завданням, враховує вік і клас учнів та формує роз'яснення.
-    """
-    import threading
-    def _worker():
-        from django.db import connection
-        try:
-            from .models import Assignment
-            from .gemini_service import analyze_assignment_task_understanding
-            asg = Assignment.objects.prefetch_related('classes', 'files').filter(pk=assignment_id).first()
-            if asg and asg.status == Assignment.STATUS_PUBLISHED and asg.allow_student_ai_understanding:
-                analyze_assignment_task_understanding(asg, force_refresh=force_refresh)
-        except Exception as err:
-            logger.warning(f"Error in background AI task understanding for assignment {assignment_id}: {err}")
-        finally:
-            connection.close()
-
-    t = threading.Thread(target=_worker, daemon=True)
-    t.start()
+    """Persist automatic analysis so a server restart does not lose it."""
+    from .ai_jobs import enqueue_understanding_job
+    from django.conf import settings
+    # Test requests must not invoke a real provider implicitly.
+    if settings.AI_JOBS_EAGER:
+        return
+    assignment = Assignment.objects.filter(pk=assignment_id, status=Assignment.STATUS_PUBLISHED,
+                                            allow_student_ai_understanding=True).first()
+    if assignment:
+        enqueue_understanding_job(assignment, force_refresh=force_refresh, eager=False)
 
 
 def get_visible_assignments(class_group_id=None):
@@ -199,7 +200,8 @@ def get_visible_assignments(class_group_id=None):
     ).select_related(
         'teacher', 'subject'
     ).prefetch_related(
-        'classes', 'files'
+        'classes', 'files', 'schedule_targets__class_group',
+        'schedule_targets__bell_slot', 'teacher__lesson_schedules__bell_slot'
     )
 
     if class_group_id:
@@ -221,8 +223,8 @@ def get_visible_assignments(class_group_id=None):
 
     # Розділяємо на актуальні та неактуальні, потім з'єднуємо
     # Актуальні: є target_date і вона >= сьогодні
-    upcoming_qs = qs.filter(earliest_future_target__gte=today).order_by('earliest_future_target')
-    rest_qs = qs.filter(Q(earliest_future_target__lt=today) | Q(earliest_future_target__isnull=True)).order_by('-published_at')
+    upcoming_qs = qs.filter(earliest_future_target__gte=today).order_by('earliest_future_target', 'pk')
+    rest_qs = qs.filter(Q(earliest_future_target__lt=today) | Q(earliest_future_target__isnull=True)).order_by('-published_at', '-pk')
 
     # Повертаємо queryset через union для збереження структури
     from itertools import chain
@@ -438,7 +440,7 @@ def index(request):
         rest_qs = search_assignments(rest_qs, query)
 
     from itertools import chain as _ichain
-    assignments = list(_ichain(upcoming_qs, rest_qs))
+    assignments = AssignmentChain(upcoming_qs, rest_qs)
 
     # Пагінація (10 завдань на сторінку)
     paginator = Paginator(assignments, 10)
@@ -522,6 +524,7 @@ def assignment_detail(request, pk):
     if assignment.status == Assignment.STATUS_SCHEDULED and not is_teacher:
         raise Http404("Завдання ще не опубліковане")
 
+    require_assignment_access(request, assignment)
     is_archived = (assignment.status == Assignment.STATUS_ARCHIVED)
 
     # Фіксація перегляду завдання (1 раз на годину з 1 комп'ютера, перегляди вчителя не рахуються)
@@ -649,21 +652,23 @@ def assignment_detail(request, pk):
                 for enc in encs:
                     try:
                         with open(file_path, 'r', encoding=enc) as f_read:
-                            text_preview = f_read.read()
+                            text_preview = f_read.read(1024 * 1024)
+                            if len(text_preview) == 1024 * 1024:
+                                text_preview += "\n\n[Показано початок файлу. Завантажте файл, щоб переглянути його повністю.]"
                             break
                     except Exception:
                         continue
                 if text_preview is None:
                     try:
                         with open(file_path, 'r', encoding='utf-8', errors='replace') as f_read:
-                            text_preview = f_read.read()
+                            text_preview = f_read.read(1024 * 1024)
                     except Exception as e:
                         error_preview = str(e)
             elif ext in text_files:
                 preview_type = 'code'
                 try:
                     with open(file_path, 'r', encoding='utf-8', errors='replace') as f_read:
-                        text_preview = f_read.read()
+                        text_preview = f_read.read(1024 * 1024)
                 except Exception as e:
                     error_preview = str(e)
             elif ext in ['.pdf']:
@@ -750,6 +755,14 @@ def student_submissions_portal(request):
     if search_query:
         submissions_qs = fuzzy_search_submissions(submissions_qs, search_query)
 
+    if isinstance(submissions_qs, list):
+        current = [item for item in submissions_qs if item.is_latest_attempt]
+        submitted_count = len(current)
+        checked_count = sum(bool(item.grade) for item in current)
+    else:
+        current = submissions_qs.filter(is_latest_attempt=True)
+        submitted_count = current.count()
+        checked_count = current.exclude(grade__isnull=True).exclude(grade='').count()
     paginator = Paginator(submissions_qs, 15)
     page_obj = paginator.get_page(request.GET.get('page'))
 
@@ -758,6 +771,9 @@ def student_submissions_portal(request):
         'class_groups': class_groups,
         'selected_class_id': selected_class_id,
         'search_query': search_query,
+        'submitted_count': submitted_count,
+        'checked_count': checked_count,
+        'waiting_count': submitted_count - checked_count,
     })
 
 
@@ -795,7 +811,7 @@ def feed_fragment(request):
         rest_qs = search_assignments(rest_qs, query)
 
     from itertools import chain
-    combined = list(chain(upcoming_qs, rest_qs))
+    combined = AssignmentChain(upcoming_qs, rest_qs)
 
     paginator = Paginator(combined, 10)
     try:
@@ -1223,7 +1239,7 @@ def teacher_dashboard(request):
         upcoming = base_qs.filter(earliest_target__gte=today).order_by('earliest_target')
         rest = base_qs.filter(DbQ(earliest_target__lt=today) | DbQ(earliest_target__isnull=True)).order_by('-created_at')
         from itertools import chain
-        assignments = list(chain(upcoming, rest))
+        assignments = AssignmentChain(upcoming, rest)
     else:
         assignments = base_qs.order_by('-created_at')
 
@@ -2458,7 +2474,8 @@ def get_pdf_preview_url(file_obj, wait_if_missing=True):
 @xframe_options_exempt
 def file_view(request, file_id):
     """Служить файл безпосередньо у браузері з інлайновим Content-Disposition та правильним MIME-типом (зокрема для PDF)."""
-    file_obj = get_object_or_404(AssignmentFile, pk=file_id)
+    file_obj = get_object_or_404(AssignmentFile.objects.select_related("assignment"), pk=file_id)
+    require_assignment_access(request, file_obj.assignment)
     try:
         import mimetypes
         import os
@@ -2518,15 +2535,9 @@ def file_view(request, file_id):
                 if not mime_type:
                     mime_type = 'application/octet-stream'
                 
-        if os.path.exists(path):
-            with open(path, 'rb') as f:
-                response = HttpResponse(f.read(), content_type=mime_type)
-            
-            # Завжди передаємо чистий ASCII 'inline', щоб уникнути помилкового MIME-кодування заголовка
-            # з кириличними літерами (через що браузери сприймають це як 'attachment' і примусово завантажують файл)
-            response['Content-Disposition'] = 'inline'
-            response['X-Frame-Options'] = 'SAMEORIGIN'
-            return response
+        return file_response(request, path, content_type=mime_type)
+    except Http404:
+        raise
     except Exception as e:
         return HttpResponse(f"Помилка завантаження файлу: {str(e)}", status=500)
     return HttpResponse("Файл не знайдено", status=404)
@@ -2540,7 +2551,8 @@ def file_download(request, file_id):
     import os
     from django.http import FileResponse
 
-    file_obj = get_object_or_404(AssignmentFile, pk=file_id)
+    file_obj = get_object_or_404(AssignmentFile.objects.select_related("assignment"), pk=file_id)
+    require_assignment_access(request, file_obj.assignment)
     try:
         path = file_obj.file.path
         if not os.path.exists(path):
@@ -2564,7 +2576,8 @@ def file_download(request, file_id):
 
 def file_preview(request, file_id):
     """Служба для генерації інлайнового прев'ю файлу (docx, xlsx, pptx, python та інших код-файлів)."""
-    file_obj = get_object_or_404(AssignmentFile, pk=file_id)
+    file_obj = get_object_or_404(AssignmentFile.objects.select_related("assignment"), pk=file_id)
+    require_assignment_access(request, file_obj.assignment)
     ext = file_obj.get_extension()
 
     # Для презентацій: спочатку перевіряємо наявність слайдів (JPEG), потім PDF
@@ -2605,7 +2618,8 @@ def file_preview(request, file_id):
             import mammoth
             with open(file_obj.file.path, 'rb') as docx_file:
                 result = mammoth.convert_to_html(docx_file)
-                html = result.value
+                from .document_html import safe_document_html
+                html = safe_document_html(result.value)
                 styled_html = f"<div class='docx-preview-content' style='text-align:left; width:100%; color:var(--color-text-primary); line-height:1.6;'>{html}</div>"
                 return JsonResponse({
                     'type': 'html',
@@ -2683,14 +2697,16 @@ def file_preview(request, file_id):
                 for enc in encs:
                     try:
                         with open(file_obj.file.path, 'r', encoding=enc) as f:
-                            content = f.read()
+                            content = f.read(1024 * 1024)
                             break
                     except Exception:
                         continue
                 if content is None:
                     with open(file_obj.file.path, 'r', encoding='utf-8', errors='replace') as f:
-                        content = f.read()
+                        content = f.read(1024 * 1024)
 
+                if len(content) >= 1024 * 1024:
+                    content += '\n\n[Показано початок файлу. Завантажте файл для повного перегляду.]'
                 lang = ext[1:].lower() if ext.startswith('.') else ext.lower()
                 if ext == '.py':
                     lang = 'python'
@@ -2933,53 +2949,48 @@ def submit_success(request, pk):
 # САМОПЕРЕВІРКА УЧНЕМ (Student AI Self-Check — одноразова перевірка ШІ)
 # ═══════════════════════════════════════════════════════════════════════════════
 
+@require_POST
 def student_ai_self_check(request, submission_id):
-    """
-    Одноразова перевірка роботи ШІ самим учнем після здачі.
-    POST-запит (AJAX) → повертає JSON з результатом.
-    """
-    if request.method != 'POST':
-        return JsonResponse({'error': 'Метод не підтримується'}, status=405)
-
-    submission = get_object_or_404(
-        Submission.objects.select_related('assignment', 'assignment__default_ai_preset', 'class_group'),
-        id=submission_id
-    )
-    assignment = submission.assignment
-    if not assignment or not assignment.allow_student_ai_check:
+    """Public self-check: reserve one successful result across all attempts."""
+    from .ai_jobs import enqueue_submission_job, job_response, SelfCheckUnavailable
+    submission = get_object_or_404(Submission.objects.select_related('assignment', 'class_group'), pk=submission_id)
+    if not submission.assignment or not submission.assignment.allow_student_ai_check:
         return JsonResponse({'error': 'Самоперевірка не дозволена для цього завдання'}, status=403)
-
-    # Одноразова перевірка на завдання — якщо учень вже перевіряв у цій чи будь-якій іншій спробі, відмовляємо
-    if submission.has_used_student_ai_check_for_assignment():
-        return JsonResponse({'error': 'Ви вже скористалися своєю спробою самоперевірки ШІ для цього завдання (дозволено лише 1 раз).'}, status=403)
-
-    # Викликаємо Gemini AI
     try:
-        from .gemini_service import evaluate_submission_with_gemini
-        from .models import AISettings, AICriteriaPreset
-        ai_settings = AISettings.objects.first()
+        job = enqueue_submission_job(submission, 'student_check')
+    except SelfCheckUnavailable as exc:
+        return JsonResponse({'error': str(exc)}, status=exc.http_status)
+    return job_response(job)
 
-        # Визначаємо preset та ГР завдання
-        preset = assignment.default_ai_preset
-        selected_gr_codes = None
-        if assignment.default_ai_grs:
-            import json as _json
-            try:
-                selected_gr_codes = _json.loads(assignment.default_ai_grs)
-            except Exception:
-                selected_gr_codes = None
 
-        result = evaluate_submission_with_gemini(
-            submission,
-            ai_settings=ai_settings,
-            criteria_preset=preset,
-            selected_gr_codes=selected_gr_codes or [],
-        )
-    except Exception as e:
-        return JsonResponse({'error': f'Помилка ШІ: {str(e)}'}, status=500)
+def _evaluate_student_submission(submission):
+    assignment = submission.assignment
+    from .gemini_service import evaluate_submission_with_gemini
+    from .models import AISettings, AICriteriaPreset
+    ai_settings = AISettings.objects.first()
 
+    # Визначаємо preset та ГР завдання
+    preset = assignment.default_ai_preset
+    selected_gr_codes = None
+    if assignment.default_ai_grs:
+        import json as _json
+        try:
+            selected_gr_codes = _json.loads(assignment.default_ai_grs)
+        except Exception:
+            selected_gr_codes = None
+
+    return evaluate_submission_with_gemini(
+        submission,
+        ai_settings=ai_settings,
+        criteria_preset=preset,
+        selected_gr_codes=selected_gr_codes or [],
+    )
+
+
+def _perform_student_ai_check(submission, result):
+    assignment = submission.assignment
     if not result or result.get('status') not in ('success', 'ok'):
-        return JsonResponse({'error': result.get('error', 'ШІ не зміг перевірити роботу')}, status=500)
+        return JsonResponse({'error': 'ШІ не зміг завершити перевірку. Спробуйте ще раз; спробу не використано.'}, status=503)
 
     # Зберігаємо чернову оцінку
     import json as _json
@@ -3118,6 +3129,7 @@ def student_ai_self_check(request, submission_id):
 
 
 @teacher_required
+@transaction.atomic
 def accept_student_ai_grade(request, sub_id):
     """
     Вчитель приймає чернову оцінку, виставлену ШІ за самоперевіркою учня.
@@ -3136,7 +3148,10 @@ def accept_student_ai_grade(request, sub_id):
         return JsonResponse({'error': 'Чернова оцінка відсутня'}, status=400)
 
     # Копіюємо чернову оцінку учня до основних полів
-    submission.grade = submission.student_ai_grade
+    try:
+        submission.grade = validate_grade(submission.student_ai_grade)
+    except ValidationError as exc:
+        return JsonResponse({'error': exc.messages[0]}, status=400)
     submission.teacher_comment = submission.student_ai_feedback
     submission.ai_suggested_grade = submission.student_ai_grade
     submission.ai_score_level = submission.student_ai_level
@@ -3192,10 +3207,7 @@ def submission_detail(request, submission_id):
 
     dup_info = check_submission_duplicates(submission)
 
-    is_teacher = bool(
-        request.user.is_authenticated and
-        (hasattr(request.user, 'teacher_profile') or request.user.is_superuser)
-    )
+    is_teacher = request.user.is_authenticated and can_manage_submission(request, submission)
 
     return render(request, 'feed/submission_detail.html', {
         'submission': submission,
@@ -3212,6 +3224,7 @@ def submission_detail(request, submission_id):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 @teacher_required
+@transaction.atomic
 def view_file(request, submission_id):
     """
     Головний двоколонковий інтерактивний переглядач робіт:
@@ -3270,9 +3283,13 @@ def view_file(request, submission_id):
             grade = request.POST.get('grade', '').strip()
             group_members = submission.get_all_group_submissions() if (submission.is_group_work or submission.primary_submission_id or submission.coauthor_submissions.exists()) else [submission]
             graded_members = []
+            try:
+                validated_grades = member_grades(request.POST, group_members, grade)
+            except ValidationError as exc:
+                return JsonResponse({'status': 'error', 'message': exc.messages[0]}, status=400)
 
             for m in group_members:
-                m_grade = request.POST.get(f'member_grade_{m.id}', '').strip()
+                m_grade = validated_grades[m.id]
                 if not m_grade and grade:
                     m_grade = grade
 
@@ -3586,7 +3603,7 @@ def view_file(request, submission_id):
             for enc in encodings:
                 try:
                     with open(file_path, 'r', encoding=enc) as f:
-                        content = f.read()
+                        content = f.read(1024 * 1024)
                         read_success = True
                         break
                 except (UnicodeDecodeError, UnicodeError):
@@ -3599,9 +3616,12 @@ def view_file(request, submission_id):
             if not read_success:
                 try:
                     with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
-                        content = f.read()
+                        content = f.read(1024 * 1024)
                 except Exception as e:
                     content = f"Помилка відкриття файлу: {str(e)}"
+
+            if content and len(content) >= 1024 * 1024:
+                content += "\n\n[Показано початок файлу. Завантажте файл для повного перегляду.]"
 
         elif file_ext in office_preview:
             file_type = 'office_preview'
@@ -3805,16 +3825,9 @@ def view_submission_raw_file(request, submission_id):
                 else:
                     mime_type = 'application/octet-stream'
 
-        if os.path.exists(path):
-            with open(path, 'rb') as f:
-                response = HttpResponse(f.read(), content_type=mime_type)
-            filename = os.path.basename(target_file.name)
-            response['Content-Disposition'] = f'inline; filename="{filename}"'
-            response['X-Frame-Options'] = 'SAMEORIGIN'
-            response['Access-Control-Allow-Origin'] = '*'
-            response['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
-            response['Access-Control-Allow-Headers'] = '*'
-            return response
+        return file_response(request, path, content_type=mime_type)
+    except Http404:
+        raise
     except Exception as e:
         return HttpResponse(f'Помилка завантаження: {str(e)}', status=500)
 
@@ -3832,17 +3845,15 @@ def download_submission_files_zip(request, sub_id):
     sub_files = list(submission.files.all())
     if not sub_files and not submission.file:
         messages.warning(request, "У цій здачі немає завантажених файлів.")
-        return redirect('view_file', sub_id=sub_id)
+        return redirect('view_file', submission_id=sub_id)
 
     # Якщо прикріплено лише 1 файл — віддаємо його напряму
     if len(sub_files) == 1 and sub_files[0].file and os.path.exists(sub_files[0].file.path):
-        from django.http import FileResponse
         return FileResponse(open(sub_files[0].file.path, 'rb'), as_attachment=True, filename=sub_files[0].original_name)
     if not sub_files and submission.file and os.path.exists(submission.file.path):
-        from django.http import FileResponse
         return FileResponse(open(submission.file.path, 'rb'), as_attachment=True, filename=os.path.basename(submission.file.name))
 
-    zip_buffer = io.BytesIO()
+    zip_buffer = tempfile.TemporaryFile(mode='w+b')
     with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
         for sf in sub_files:
             if sf.file and os.path.exists(sf.file.path):
@@ -3852,8 +3863,7 @@ def download_submission_files_zip(request, sub_id):
     zip_buffer.seek(0)
     student_name = f"{submission.last_name}_{submission.first_name}"
     filename = f"Robota_{student_name}.zip"
-    response = HttpResponse(zip_buffer.getvalue(), content_type='application/zip')
-    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    response = FileResponse(zip_buffer, as_attachment=True, filename=filename, content_type='application/zip')
     return response
 
 
@@ -3912,9 +3922,18 @@ def assignment_ai_understanding(request, pk):
 
     try:
         from .gemini_service import analyze_assignment_task_understanding
-        result = analyze_assignment_task_understanding(assignment, force_refresh=force_refresh)
-        result['is_teacher'] = is_teacher
-        return JsonResponse(result)
+        from .ai_jobs import enqueue_understanding_job, job_response
+        import json
+        try:
+            cached = isinstance(json.loads(assignment.ai_task_understanding or 'null'), dict)
+        except ValueError:
+            cached = False
+        if cached and not force_refresh:
+            result = analyze_assignment_task_understanding(assignment, force_refresh=False)
+            result['is_teacher'] = is_teacher
+            return JsonResponse(result)
+        job = enqueue_understanding_job(assignment, request.user if is_teacher else None, force_refresh)
+        return job_response(job, is_teacher=is_teacher)
     except Exception as e:
         return JsonResponse({
             'status': 'error',
@@ -4147,7 +4166,9 @@ def all_submissions_dashboard(request):
 
     if request.user.is_superuser:
         all_classes = ClassGroup.objects.all().order_by('grade', 'letter')
-        all_assignments = Assignment.objects.all().order_by('-published_at')[:100]
+        all_assignments = Assignment.objects.all().order_by('-published_at')
+    if not request.user.is_superuser:
+        all_assignments = all_assignments.filter(teacher=request.user.teacher_profile)[:100]
     else:
         teacher_class_ids = teacher.classes.values_list('id', flat=True)
         all_classes = ClassGroup.objects.filter(id__in=teacher_class_ids).order_by('grade', 'letter')
@@ -4340,6 +4361,7 @@ def sync_grades_to_coauthors(submission, grade, graded_by_user):
 
 
 @teacher_required
+@transaction.atomic
 def grade_submission(request, sub_id):
     """AJAX: виставлення або зміна оцінки здачі роботи з підтримкою співавторів та індивідуальних оцінок."""
     if request.method != 'POST':
@@ -4354,9 +4376,13 @@ def grade_submission(request, sub_id):
     grade = request.POST.get('grade', '').strip()
     group_members = submission.get_all_group_submissions() if (submission.is_group_work or submission.primary_submission_id or submission.coauthor_submissions.exists()) else [submission]
     graded_members = []
+    try:
+        validated_grades = member_grades(request.POST, group_members, grade)
+    except ValidationError as exc:
+        return JsonResponse({'status': 'error', 'message': exc.messages[0]}, status=400)
 
     for m in group_members:
-        m_grade = request.POST.get(f'member_grade_{m.id}', '').strip()
+        m_grade = validated_grades[m.id]
         if not m_grade and grade:
             m_grade = grade
 
@@ -4501,6 +4527,7 @@ def toggle_submission_ignore_plagiarism(request, sub_id):
 
 
 @teacher_required
+@transaction.atomic
 def mass_grade_submissions(request):
     """
     AJAX / POST: Масове виставлення оцінок кільком здачам робіт одночасно.
@@ -4542,6 +4569,11 @@ def mass_grade_submissions(request):
 
     if not grade and action != 'clear':
         return JsonResponse({'status': 'error', 'message': 'Вкажіть оцінку для виставлення'}, status=400)
+
+    try:
+        grade = validate_grade(grade)
+    except ValidationError as exc:
+        return JsonResponse({'status': 'error', 'message': exc.messages[0]}, status=400)
 
     try:
         sub_int_ids = [int(i) for i in sub_ids]
@@ -5944,7 +5976,8 @@ def archive_submissions_to_master_zip(teacher_name, teacher_submissions):
             with zipfile.ZipFile(master_zip_path, 'r') as old_zip:
                 for item in old_zip.infolist():
                     if item.filename != "список_всіх_робіт.csv":
-                        new_zip.writestr(item, old_zip.read(item.filename))
+                        with old_zip.open(item) as source, new_zip.open(item, 'w', force_zip64=True) as target:
+                            shutil.copyfileobj(source, target, length=64 * 1024)
 
         for sub in teacher_submissions:
             comments_list = [f"{c.get_author_name()}: {c.text}" for c in sub.comments.all()]
@@ -6202,7 +6235,7 @@ def download_assignment_submissions_zip(request, pk):
     if class_id:
         submissions = submissions.filter(class_group_id=class_id)
 
-    zip_buffer = io.BytesIO()
+    zip_buffer = tempfile.TemporaryFile(mode='w+b')
     with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
         files_added = 0
         for sub in submissions:
@@ -6241,8 +6274,7 @@ def download_assignment_submissions_zip(request, pk):
     safe_title = re.sub(r'[^\w\-_\. ]', '_', assignment.title)[:30]
     filename = f"Roboty_{safe_title}.zip"
 
-    response = HttpResponse(zip_buffer.getvalue(), content_type='application/zip')
-    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    response = FileResponse(zip_buffer, as_attachment=True, filename=filename, content_type='application/zip')
     return response
 
 
@@ -7153,6 +7185,7 @@ def ai_settings_view(request):
     return teacher_settings_view(request)
 
 
+@teacher_required
 @require_POST
 def api_test_gemini_connection(request):
     """
@@ -7188,6 +7221,9 @@ def ai_check_single_submission(request, submission_id):
     from .gemini_service import evaluate_submission_with_gemini
     submission = get_object_or_404(Submission.objects.select_related('assignment', 'class_group'), id=submission_id)
 
+    if not can_manage_submission(request, submission):
+        return JsonResponse({'status': 'error', 'message': 'Немає доступу'}, status=403)
+
     custom_prompt = request.POST.get('custom_prompt', '').strip() or None
     preset_id = request.POST.get('preset_id') or request.GET.get('preset_id')
     selected_gr_codes_raw = request.POST.get('selected_gr_codes')
@@ -7205,33 +7241,15 @@ def ai_check_single_submission(request, submission_id):
     if force_thinking_raw is not None:
         force_thinking = str(force_thinking_raw).strip().lower() in ('1', 'true', 'yes', 'on')
 
-    teacher_obj = getattr(request.user, 'teacher_profile', None)
-
-    result = evaluate_submission_with_gemini(
-        submission,
-        custom_prompt=custom_prompt,
-        preset_id=preset_id,
-        selected_gr_codes=selected_gr_codes,
-        force_thinking=force_thinking,
-        teacher=teacher_obj
-    )
-
-    # Якщо запит із AJAX, fetch, або ?format=json — повертаємо чистий JSON
-    is_ajax = (
-        request.headers.get('x-requested-with', '').lower() == 'xmlhttprequest'
-        or request.GET.get('format') == 'json'
-        or 'application/json' in request.headers.get('accept', '').lower()
-        or request.content_type == 'application/json'
-    )
-    if is_ajax or request.method == 'POST':
-        return JsonResponse(result)
-
-    if result.get('status') == 'success':
-        messages.success(request, f"ШІ оцінив роботу учня {submission.get_student_full_name()} на «{submission.ai_suggested_grade}» ({submission.ai_score_level})!")
-    else:
-        messages.warning(request, f"ШІ не зміг перевірити роботу: {result.get('error')}")
-
-    return redirect('view_file', submission_id=submission.id)
+    from .ai_jobs import enqueue_submission_job, job_response, SelfCheckUnavailable
+    try:
+        job = enqueue_submission_job(submission, 'teacher_check', user=request.user, parameters={
+            'custom_prompt': custom_prompt, 'preset_id': preset_id,
+            'selected_gr_codes': selected_gr_codes, 'force_thinking': force_thinking,
+        })
+    except SelfCheckUnavailable as exc:
+        return JsonResponse({'status': 'error', 'error': str(exc)}, status=exc.http_status)
+    return job_response(job)
 
 
 @teacher_required
@@ -7352,9 +7370,10 @@ def ai_batch_check_view(request):
     default_preset = AICriteriaPreset.objects.filter(is_default=True).first() or criteria_presets.first()
 
     # Підрахунок доступних робіт
-    total_submissions = Submission.objects.count()
-    ungraded_submissions = Submission.objects.filter(is_latest_attempt=True).filter(Q(grade__isnull=True) | Q(grade='')).count()
-    ai_evaluated_submissions = Submission.objects.filter(ai_status='success').count()
+    accessible_submissions = teacher_submissions(request, Submission.objects.all())
+    total_submissions = accessible_submissions.count()
+    ungraded_submissions = accessible_submissions.filter(is_latest_attempt=True).filter(Q(grade__isnull=True) | Q(grade='')).count()
+    ai_evaluated_submissions = accessible_submissions.filter(ai_status='success').count()
 
     context = {
         'ai_settings': ai_settings,
@@ -7380,7 +7399,7 @@ def api_ai_get_batch_queue(request):
     only_ungraded = request.POST.get('only_ungraded') == 'true'
     only_unreviewed_ai = request.POST.get('only_unreviewed_ai') == 'true'
 
-    qs = Submission.objects.all().select_related('class_group', 'assignment')
+    qs = teacher_submissions(request, Submission.objects.all()).select_related('class_group', 'assignment')
 
     if class_id:
         qs = qs.filter(class_group_id=class_id)
@@ -7419,6 +7438,9 @@ def api_ai_process_item(request, submission_id):
     from .gemini_service import evaluate_submission_with_gemini
     submission = get_object_or_404(Submission.objects.select_related('assignment', 'class_group'), id=submission_id)
 
+    if not can_manage_submission(request, submission):
+        return JsonResponse({'status': 'error', 'message': 'Немає доступу'}, status=403)
+
     preset_id = request.POST.get('preset_id') or None
     selected_gr_codes_raw = request.POST.get('selected_gr_codes')
     selected_gr_codes = None
@@ -7428,24 +7450,19 @@ def api_ai_process_item(request, submission_id):
         except Exception:
             selected_gr_codes = [c.strip() for c in selected_gr_codes_raw.split(',') if c.strip()]
 
-    res = evaluate_submission_with_gemini(submission, preset_id=preset_id, selected_gr_codes=selected_gr_codes)
-    return JsonResponse({
-        'id': submission.id,
-        'student_name': submission.get_student_full_name(),
-        'status': res.get('status'),
-        'suggested_grade': submission.ai_suggested_grade or '—',
-        'level': submission.ai_score_level or '',
-        'feedback': submission.get_formatted_ai_feedback() or '',
-        'clean_feedback': submission.get_clean_ai_feedback_for_student(),
-        'gr_results': submission.get_ai_gr_results_list(),
-        'gr_avg': submission.get_ai_gr_average(),
-        'format_warning': res.get('format_warning') or '',
-        'error': submission.ai_error_reason or ''
-    })
+    from .ai_jobs import enqueue_submission_job, job_response, SelfCheckUnavailable
+    try:
+        job = enqueue_submission_job(submission, 'batch_check', user=request.user, parameters={
+            'preset_id': preset_id, 'selected_gr_codes': selected_gr_codes,
+        })
+    except SelfCheckUnavailable as exc:
+        return JsonResponse({'status': 'error', 'error': str(exc)}, status=exc.http_status)
+    return job_response(job)
 
 
 @teacher_required
 @require_POST
+@transaction.atomic
 def ai_apply_suggested_grade(request, submission_id):
     """
     Застосовує попередню оцінку та коментар ШІ як офіційну оцінку вчителя в 1 клік.
@@ -7454,15 +7471,19 @@ def ai_apply_suggested_grade(request, submission_id):
     """
     submission = get_object_or_404(Submission, id=submission_id)
 
+    if not can_manage_submission(request, submission):
+        return JsonResponse({'status': 'error', 'message': 'Немає доступу'}, status=403)
+
     if not submission.ai_suggested_grade:
         return JsonResponse({'status': 'error', 'message': 'У цієї роботи немає попередньої оцінки ШІ.'}, status=400)
 
     # Встановлюємо оцінку
-    submission.grade = submission.ai_suggested_grade
+    try:
+        submission.grade = validate_grade(submission.ai_suggested_grade)
+    except ValidationError as exc:
+        return JsonResponse({'status': 'error', 'message': exc.messages[0]}, status=400)
     submission.graded_by = request.user
     submission.graded_at = timezone.now()
-    if hasattr(request.user, 'teacher_profile'):
-        submission.teacher = request.user.teacher_profile
 
     # Додаємо або оновлюємо коментар ШІ у відгуках вчителя (використовуючи очищений від оцінок ГР відгук)
     clean_feedback = submission.get_clean_ai_feedback_for_student()
@@ -8048,7 +8069,7 @@ def export_assignment_zip(request, pk):
     else:
         assignment = get_object_or_404(Assignment, pk=pk, teacher=teacher)
 
-    zip_buffer = io.BytesIO()
+    zip_buffer = tempfile.TemporaryFile(mode='w+b')
     with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
         files_metadata = []
         for idx, af in enumerate(assignment.files.all()):
@@ -8110,8 +8131,7 @@ def export_assignment_zip(request, pk):
     safe_title = "".join(c for c in assignment.title if c.isalnum() or c in (' ', '_', '-')).strip()[:40] or "task"
     filename = f"schoolnet_task_{assignment.id}_{safe_title}.zip"
 
-    response = HttpResponse(zip_buffer.read(), content_type='application/zip')
-    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    response = FileResponse(zip_buffer, as_attachment=True, filename=filename, content_type='application/zip')
     return response
 
 
@@ -8152,7 +8172,7 @@ def export_assignments_day_zip(request):
         messages.warning(request, "Не знайдено завдань для експорту на цю дату.")
         return redirect('teacher_dashboard')
 
-    zip_buffer = io.BytesIO()
+    zip_buffer = tempfile.TemporaryFile(mode='w+b')
     with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
         assignments_meta = []
         for a_idx, assignment in enumerate(assignments):
@@ -8212,8 +8232,7 @@ def export_assignments_day_zip(request):
 
     zip_buffer.seek(0)
     filename = f"schoolnet_export_{target_date.strftime('%Y%m%d')}_{len(assignments)}_tasks.zip"
-    response = HttpResponse(zip_buffer.read(), content_type='application/zip')
-    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    response = FileResponse(zip_buffer, as_attachment=True, filename=filename, content_type='application/zip')
     return response
 
 
@@ -8381,3 +8400,21 @@ def import_assignments_zip(request):
 
 
 
+
+
+def ai_job_status(request, job_id):
+    from .models import AIJob
+    from .ai_jobs import job_response
+    job = get_object_or_404(AIJob.objects.select_related('submission__assignment', 'assignment'), pk=job_id)
+    if job.kind == 'understanding':
+        assignment = job.assignment
+        is_teacher = bool(request.user.is_authenticated and (request.user.is_superuser or
+            getattr(request.user, 'teacher_profile', None) == assignment.teacher))
+        if not is_teacher and not (assignment.allow_student_ai_understanding and
+                assignment.status in (Assignment.STATUS_PUBLISHED, Assignment.STATUS_ARCHIVED)):
+            return JsonResponse({'error': 'Немає доступу'}, status=403)
+        return job_response(job, is_teacher=is_teacher)
+    if job.kind != 'student_check':
+        if not request.user.is_authenticated or not job.submission or not can_manage_submission(request, job.submission):
+            return JsonResponse({'error': 'Немає доступу'}, status=403)
+    return job_response(job)

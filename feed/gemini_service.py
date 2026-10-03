@@ -1944,17 +1944,22 @@ def fetch_url_content(url, timeout=10, max_chars=20000):
     if not url:
         return None, None, "Посилання порожнє"
 
+    from .safe_http import public_urlopen, validate_public_url
     url = url.strip()
+    try:
+        validate_public_url(url)
+    except (ValueError, OSError) as error:
+        return None, None, str(error)
     parsed = urlparse(url)
     if not parsed.scheme or parsed.scheme not in ('http', 'https'):
         return None, None, f"Непідтримуваний протокол URL: {url}"
 
     # 1. Спеціальна обробка YouTube
-    if 'youtube.com' in parsed.netloc or 'youtu.be' in parsed.netloc:
+    if parsed.hostname in ('youtube.com', 'www.youtube.com', 'youtu.be', 'www.youtu.be'):
         try:
             oembed_url = f"https://www.youtube.com/oembed?url={urllib.parse.quote(url)}&format=json"
             req = urllib.request.Request(oembed_url, headers={'User-Agent': 'SchoolNet-AI/2.0'})
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
+            with public_urlopen(req, timeout=timeout) as resp:
                 data = json.loads(resp.read().decode('utf-8'))
                 title = data.get('title', 'YouTube Video')
                 author = data.get('author_name', '')
@@ -1965,7 +1970,7 @@ def fetch_url_content(url, timeout=10, max_chars=20000):
 
     # 2. Спеціальна обробка посилань на файли GitHub (blob -> raw)
     fetch_url = url
-    if 'github.com' in parsed.netloc and '/blob/' in parsed.path:
+    if parsed.hostname in ('github.com', 'www.github.com') and '/blob/' in parsed.path:
         fetch_url = url.replace('github.com', 'raw.githubusercontent.com').replace('/blob/', '/')
 
     # 3. Загальне завантаження веб-сторінки
@@ -1978,7 +1983,7 @@ def fetch_url_content(url, timeout=10, max_chars=20000):
                 'Accept-Language': 'uk-UA,uk;q=0.9,en;q=0.8'
             }
         )
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        with public_urlopen(req, timeout=timeout) as resp:
             content_type = resp.headers.get('Content-Type', '').lower()
             raw_bytes = resp.read(500 * 1024)  # до 500 КБ
 
@@ -5393,6 +5398,13 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
 
     # Визначаємо шаблон критеріїв оцінювання
     selected_preset = criteria_preset
+    if not selected_preset and not preset_id and asgn:
+        selected_preset = asgn.default_ai_preset
+    if selected_gr_codes is None and asgn and asgn.default_ai_grs:
+        try:
+            selected_gr_codes = json.loads(asgn.default_ai_grs)
+        except (ValueError, TypeError):
+            selected_gr_codes = None
     if not selected_preset and preset_id:
         try:
             selected_preset = AICriteriaPreset.objects.filter(id=preset_id).first()
@@ -6302,9 +6314,6 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                 models_to_try.append(m_clean)
         if not models_to_try:
             models_to_try = [clean_model_name(act_model or 'gemini-3.6-flash')]
-        for backup_m in ['gemini-3.6-flash', 'gemini-3.1-flash-lite', 'gemini-3.8-flash', 'gemini-3.7-flash']:
-            if backup_m not in models_to_try:
-                models_to_try.append(backup_m)
         for m in models_to_try:
             attempts_configs.append({
                 'provider': act_provider,
@@ -7566,9 +7575,6 @@ def generate_criteria_with_gemini(teacher_notes, assignment_title='', assignment
             m_clean = clean_model_name(settings.model_name)
             if m_clean not in models_to_try:
                 models_to_try.append(m_clean)
-        for fallback in ['gemini-3.6-flash', 'gemini-3.1-flash-lite', 'gemini-3.8-flash', 'gemini-3.7-flash']:
-            if fallback not in models_to_try:
-                models_to_try.append(fallback)
         for m in models_to_try:
             attempts_configs.append({
                 'provider': act_provider,
@@ -8277,9 +8283,6 @@ def analyze_assignment_task_understanding(assignment, force_refresh=False) -> di
                 m_clean = clean_model_name(m)
                 if m_clean and m_clean not in models_to_try:
                     models_to_try.append(m_clean)
-        for def_m in ['gemini-3.6-flash', 'gemini-3.1-flash-lite', 'gemini-3.8-flash', 'gemini-3.7-flash']:
-            if def_m not in models_to_try:
-                models_to_try.append(def_m)
     else:
         models_to_try = [act_model or get_default_model_for_provider(act_provider)]
 

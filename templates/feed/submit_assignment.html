@@ -1207,6 +1207,10 @@ if (submitForm) {
             submitBtn.style.opacity = '0.85';
             submitBtn.style.cursor = 'wait';
         }
+        if (window.SchoolNetUploads) {
+            e.preventDefault();
+            SchoolNetUploads.send(submitForm, submitBtn);
+        }
     });
 }
 
