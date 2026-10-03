@@ -266,7 +266,10 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
         resp = self.client.get(reverse('student_submissions_portal'))
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, 'Софія')
-        self.assertContains(resp, 'Оцінено')          # статус є
+        from lxml import html
+        cards = html.fromstring(resp.content).xpath('//article[@class="student-sub-card"]')
+        self.assertIn('Перевірено', cards[0].text_content())
+        self.assertFalse(cards[0].xpath('.//*[not(*) and normalize-space(text())="12"]'))
         self.assertNotContains(resp, '✅ Оцінено: 12')  # оцінка прихована
         self.assertContains(resp, 'Відмінно виконане практичне завдання!')
 

@@ -7024,7 +7024,7 @@ def teacher_settings_view(request):
     stats_days_param = request.GET.get('stats_days', '7').strip()
     now = timezone.now()
     one_minute_ago = now - timedelta(minutes=1)
-    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    today_start = timezone.localtime(now).replace(hour=0, minute=0, second=0, microsecond=0)
 
     if stats_days_param == '1':
         start_date = now - timedelta(days=1)
@@ -7134,6 +7134,9 @@ def teacher_settings_view(request):
     # Сортуємо: спочатку активна модель, далі за спаданням кількості запитів
     used_model_usage_stats.sort(key=lambda x: (not x['is_active'], -x['period_total_reqs']))
 
+    from .ai_usage_statistics import build_usage_chart
+    ai_usage_chart = build_usage_chart(AIRequestLog.objects.all(), now, start_date)
+
     context = {
         'active_tab': tab,
         'ai_section': ai_settings_section(request),
@@ -7161,6 +7164,7 @@ def teacher_settings_view(request):
         'model_stats': model_stats,
         'gemini_catalog_models': gemini_catalog_models,
         'used_model_usage_stats': used_model_usage_stats,
+        'ai_usage_chart': ai_usage_chart,
         'stats_days': stats_days_param,
         'stats_days_label': stats_days_label,
         'default_prompt': DEFAULT_NUS_SYSTEM_PROMPT,

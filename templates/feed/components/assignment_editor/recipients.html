@@ -1,3 +1,15 @@
+<!-- Предмет -->
+    <div class="form-group" style="margin-bottom:16px;">
+        <label class="form-label required" for="{{ form.subject.id_for_label }}">
+            📚 Предмет <span style="color:var(--color-danger)">*</span>
+        </label>
+        {{ form.subject }}
+        {% if form.subject.errors %}
+        <p class="form-error">{{ form.subject.errors.0 }}</p>
+        {% endif %}
+    </div>
+
+
 <!-- Чекбокс "Індивідуальне" -->
 <div class="form-group" style="padding:12px 16px; background:var(--color-bg-secondary); border-radius:var(--radius-md); border:1px solid var(--color-border); margin-bottom:14px;">
     <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px;font-weight:700;color:var(--color-text-primary);margin:0;">

@@ -68,11 +68,22 @@ class AssignmentEditorLayoutTests(TestCase):
         self.assertFalse(form.xpath('.//form'))
         identifiers = Counter(form.xpath('.//*[@id]/@id'))
         self.assertFalse([key for key, count in identifiers.items() if count > 1])
-        for field in ['classes', 'due_date', 'publish_choice', 'default_ai_preset', 'allow_student_ai_check', 'no_submission_required']:
+        for field in ['subject', 'classes', 'due_date', 'publish_choice', 'default_ai_preset', 'allow_student_ai_check', 'no_submission_required']:
             self.assertTrue(form.xpath('.//aside//*[@name=$name]', name=field), field)
         for field in ['subject', 'title', 'description', 'files', 'custom_criteria']:
             self.assertTrue(form.xpath('.//*[@name=$name]', name=field), field)
         self.assertEqual(len(page.get_element_by_id('assignment-save-button').xpath('ancestor::form')), 1)
+
+    def test_subject_is_in_recipients_and_single_subject_is_preselected(self):
+        page = self.page(reverse('assignment_create'))
+        field = page.get_element_by_id('id_subject')
+        self.assertTrue(field.xpath('ancestor::section[@aria-labelledby="assignment-recipients-title"]'))
+        self.assertEqual(field.xpath('./option[@selected]/@value'), [str(self.subject.pk)])
+        self.assertFalse(page.xpath('//section[@aria-labelledby="assignment-content-title"]//*[@name="subject"]'))
+        other = Subject.objects.create(name='Математика')
+        self.teacher.subjects.add(other)
+        field = self.page(reverse('assignment_create')).get_element_by_id('id_subject')
+        self.assertEqual(set(field.xpath('./option/@value')), {'', str(self.subject.pk), str(other.pk)})
 
     @patch('feed.views.prewarm_assignment_files_preview')
     def test_actual_form_submits_sidebar_and_collapsed_fields_with_files(self, _prewarm):
@@ -158,8 +169,9 @@ class AssignmentEditorLayoutTests(TestCase):
         config.save()
         AIRequestLog.objects.create(model_name=model_name, prompt_tokens=500, total_tokens=500)
         page = self.page(reverse('teacher_settings') + '?tab=ai&ai_section=statistics')
-        table = page.xpath('//table[contains(@class, "ai-model-usage-table")]')[0]
-        identity = table.xpath('.//td[1]/div[@class="ai-model-identity"]')[0]
+        card = page.xpath('//article[@class="ai-model-stat-card"]')[0]
+        identity = card.xpath('.//div[@class="ai-model-identity"]')[0]
         self.assertEqual(identity.xpath('./code')[0].text_content().strip(), model_name)
         self.assertIn('Активна', identity.text_content())
-        self.assertEqual(len(table.xpath('.//tbody/tr[1]/td')), 8)
+        self.assertEqual(len(card.xpath('.//dl/div')), 6)
+        self.assertFalse(page.xpath('//table[contains(@class, "ai-model-usage-table")]'))

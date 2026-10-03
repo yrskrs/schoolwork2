@@ -129,3 +129,13 @@ class AssignmentDetailLayoutTests(TestCase):
         self.assertTrue(materials.xpath('.//a[@href="https://example.org/material"]'))
         self.assertTrue(materials.xpath('.//iframe[contains(@src,"youtube.com/embed/abcdefghijk")]'))
         self.assertTrue(materials.xpath('.//*[@id="assignment-files-section"]'))
+
+    def test_help_opens_updated_assignment_guide_and_keeps_a_native_fallback(self):
+        page = self.page(self.client.get(self.url))
+        button = page.get_element_by_id('assignment-help-button')
+        self.assertEqual(button.get('aria-controls'), 'guide-modal')
+        self.assertIn("openGuideModal('assignment_detail')", button.get('onclick'))
+        self.assertEqual(button.get('href'), '#assignment-help-card')
+        guide = page.get_element_by_id('body-guide-assignment-detail').text_content()
+        self.assertIn('Основна інструкція розташована одразу під темою', guide)
+        self.assertNotIn('компактно згорнуті', guide)

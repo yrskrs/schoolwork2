@@ -1,14 +1,3 @@
-<!-- Предмет -->
-    <div class="form-group" style="margin-bottom:16px;">
-        <label class="form-label required" for="{{ form.subject.id_for_label }}">
-            📚 Предмет <span style="color:var(--color-danger)">*</span>
-        </label>
-        {{ form.subject }}
-        {% if form.subject.errors %}
-        <p class="form-error">{{ form.subject.errors.0 }}</p>
-        {% endif %}
-    </div>
-
     <!-- Тема -->
 <div class="form-group" style="margin-bottom:16px;">
     <label class="form-label required" for="{{ form.title.id_for_label }}">

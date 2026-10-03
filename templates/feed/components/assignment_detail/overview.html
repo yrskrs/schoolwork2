@@ -90,6 +90,6 @@
 <a href="#assignment-instructions-card">📝 Завдання</a>
 {% if has_assignment_materials %}<a href="#assignment-materials-section">📎 Матеріали</a>{% endif %}
 {% if not is_teacher %}<a href="#assignment-submit-section">{% if assignment.no_submission_required or is_archived or assignment.is_archived %}✅ Завершення{% else %}📤 Як здати{% endif %}</a>{% endif %}
-{% if not is_teacher %}<a href="#assignment-help-card">💡 Допомога</a>{% endif %}
+{% if not is_teacher %}<a href="#assignment-help-card" id="assignment-help-button" onclick="openGuideModal('assignment_detail'); return false;" aria-haspopup="dialog" aria-controls="guide-modal">💡 Допомога</a>{% endif %}
 </nav>
 </header>

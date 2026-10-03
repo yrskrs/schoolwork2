@@ -163,6 +163,7 @@ class PlatformNavigationTests(TestCase):
                 page = self.page(self.client.get(reverse(route), query))
                 tools = page.get_element_by_id('teacher-page-tools')
                 self.assertEqual(tools.getparent().tag, 'aside')
+                self.assertIn('Робота', tools.getprevious().text_content())
                 for action in actions:
                     self.assertEqual(len(tools.xpath('.//button[@onclick=$action]', action=action)), 1)
                     # Empty-state import remains a useful shortcut beside the first pupil button.
