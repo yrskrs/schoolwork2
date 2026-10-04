@@ -1,0 +1,24 @@
+{
+  "version": "4.1.1",
+  "checkpoint": "e526b89",
+  "django_tests": 394,
+  "final_image_test_seconds": 61.465,
+  "browser_states": 32,
+  "javascript_errors": 0,
+  "overflows": 0,
+  "interactive_checks": 7,
+  "new_migrations_required": false,
+  "deployed_verification": {
+    "version": "4.1.1",
+    "services": {
+      "app": "healthy",
+      "ai_worker": "healthy",
+      "postgres": "healthy"
+    },
+    "django_system_check": "passed",
+    "migration_check": "passed",
+    "pages_HTTP_status": 200,
+    "empty_group_selection_HTTP_status": 400,
+    "static_hashes_match": true
+  }
+}

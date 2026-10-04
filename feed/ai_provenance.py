@@ -1,9 +1,10 @@
 """Inspectable AI-origin signals; never an authorship verdict or a style-based penalty."""
 import re
 import zipfile
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
-GENERATORS = re.compile(r'stable[ _-]?diffusion|midjourney|dall[ ·_-]?e|comfyui|automatic1111|invokeai|adobe firefly', re.I)
+GENERATORS = re.compile(r'stable[ _-]?diffusion|midjourney|dall[ ·_-]?e|comfyui|automatic1111|invokeai|adobe firefly|chatgpt|openai|gpt[ _-]?image|google[ _-]?imagen', re.I)
 IMAGE_SUFFIXES = {'.png', '.jpg', '.jpeg', '.webp', '.tif', '.tiff'}
 
 
@@ -33,7 +34,7 @@ def _image_signals(stream, location):
 
 def file_provenance(path):
     from .ai_context import evidence_cache, file_cache_key
-    key = file_cache_key(path, purpose='provenance', options='4.1.0')
+    key = file_cache_key(path, purpose='provenance', options='4.1.1')
     cached = evidence_cache().get(key)
     if cached is not None:
         return cached
@@ -42,8 +43,19 @@ def file_provenance(path):
     try:
         if suffix in IMAGE_SUFFIXES:
             result['signals'] = _image_signals(path, 'зображення')
-        elif suffix in {'.docx', '.pptx', '.xlsx', '.sb3'}:
+        elif suffix in {'.docx', '.pptx', '.xlsx', '.sb3', '.odt', '.odp', '.ods'}:
             with zipfile.ZipFile(path) as package:
+                if suffix in {'.odt', '.odp', '.ods'} and 'meta.xml' in package.namelist():
+                    with package.open('meta.xml') as stream:
+                        root = ET.parse(stream).getroot()
+                    for element in root.iter():
+                        field = element.tag.rsplit('}', 1)[-1]
+                        if field in {'generator', 'description', 'keyword', 'user-defined'}:
+                            value = ''.join(element.itertext())[:8192]
+                            match = GENERATORS.search(value)
+                            if match:
+                                result['signals'].append({'location': 'meta.xml/' + field, 'basis': 'metadata',
+                                    'observation': f'Метадані містять назву {match.group(0)}. Це змінюване поле, а не доказ авторства.'})
                 for entry in package.infolist():
                     if Path(entry.filename).suffix.lower() in IMAGE_SUFFIXES:
                         try:
@@ -100,5 +112,9 @@ def normalize_authorship(result, allowed, provenance=()):
     if detected:
         lines.extend(['Це ознаки, а не доведений факт авторства. ' + note,
                       'Для уточнення поясни свої кроки, покажи проміжні результати та вкажи використані інструменти.'])
+    else:
+        lines = ['Походження роботи не встановлено. Виразних ознак ШІ не знайдено, але це не підтверджує самостійність. ' + note]
+        if not allowed:
+            lines.append('Бал оцінює наданий результат. Перед остаточним рішенням учитель може попросити пояснити кроки або показати чернетку.')
     return {'ai_generated_detected': detected, 'ai_generated_percent': None,
             'ai_generated_confidence': confidence, 'ai_generated_details': '\n'.join(lines)}

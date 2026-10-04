@@ -74,6 +74,7 @@ coverage.xml
 .pytest_cache/
 
 # Backups & Dumps
+.local-audits/
 datadump.json
 backups/
 

@@ -631,6 +631,8 @@
 
 {% block extra_scripts %}
 {{ default_gr_codes|json_script:"assignment-default-grs" }}
+{{ viewer_gr_codes|json_script:"viewer-selected-grs" }}
+{{ default_preset.id|json_script:"assignment-default-preset" }}
 <script src="{% static 'js/review_workspace.js' %}" defer></script>
 <script src="{% static 'js/material_preview.js' %}" defer></script>
 <!-- Prism.js для підсвічування коду -->
@@ -884,14 +886,6 @@ var VIEWER_PRESETS_DATA = [
 
 var windowLastAICleanFeedback = '';
 
-function onViewerPresetChanged() {
-    var presetEl = document.getElementById('single-ai-preset');
-    if (!presetEl) return;
-    var pId = presetEl.value;
-    var presetObj = VIEWER_PRESETS_DATA.find(function(p) { return String(p.id) === String(pId); });
-    renderViewerGrCheckboxes(presetObj);
-}
-
 function renderViewerGrCheckboxes(presetObj, defaultGrCodes) {
     var container = document.getElementById('viewer-gr-selector');
     var listEl = document.getElementById('viewer-gr-checkboxes');
@@ -914,30 +908,46 @@ function renderViewerGrCheckboxes(presetObj, defaultGrCodes) {
         var inputId = 'gr-cb-' + idx;
         var isChecked = !hasDef || defaultGrCodes.indexOf(grCode) !== -1;
         html += '<label for="' + inputId + '" style="font-size:11.5px;color:var(--color-text-primary);cursor:pointer;display:flex;align-items:flex-start;gap:6px;margin:0;line-height:1.35;">' +
-            '<input type="checkbox" id="' + inputId + '" value="' + grCode + '"' + (isChecked ? ' checked' : '') + ' style="accent-color:var(--color-primary);width:15px;height:15px;margin-top:1px;cursor:pointer;">' +
-            '<span><strong style="color:var(--color-primary);">' + grCode + ':</strong> ' + grName + '</span>' +
+            '<input type="checkbox" id="' + inputId + '" value="' + escapeHtmlForViewer(grCode) + '"' + (isChecked ? ' checked' : '') + ' onchange="updateViewerGrSummary()" style="accent-color:var(--color-primary);width:15px;height:15px;margin-top:1px;cursor:pointer;">' +
+            '<span><strong style="color:var(--color-primary);">' + escapeHtmlForViewer(grCode) + ':</strong> ' + escapeHtmlForViewer(grName) + '</span>' +
         '</label>';
     });
     listEl.innerHTML = html;
+    updateViewerGrSummary();
 }
 
-function onViewerPresetChanged(keepGRs) {
+function onViewerPresetChanged() {
     var presetEl = document.getElementById('single-ai-preset');
     if (!presetEl) return;
     var pId = presetEl.value;
     var presetObj = VIEWER_PRESETS_DATA.find(function(p) { return String(p.id) === String(pId); });
-    // When user manually changes preset, don't apply assignment defaults
-    renderViewerGrCheckboxes(presetObj, keepGRs || []);
+    var defaults = String(pId) === String(ASSIGNMENT_DEFAULT_PRESET) ? ASSIGNMENT_DEFAULT_GRS : [];
+    renderViewerGrCheckboxes(presetObj, defaults);
+}
+
+function updateViewerGrSummary() {
+    var selected = Array.from(document.querySelectorAll('#viewer-gr-checkboxes input:checked')).map(function(cb) { return cb.value; });
+    var summary = document.getElementById('viewer-gr-summary');
+    if (summary) summary.textContent = selected.length ? 'У наступній перевірці: ' + selected.join(', ') : 'Оберіть хоча б одну ГР.';
+}
+
+function restoreAssignmentGrDefaults() {
+    var preset = document.getElementById('single-ai-preset');
+    preset.value = String(ASSIGNMENT_DEFAULT_PRESET);
+    onViewerPresetChanged();
 }
 
 function toggleAllViewerGr(checkedState) {
     document.querySelectorAll('#viewer-gr-checkboxes input[type="checkbox"]').forEach(function(cb) {
         cb.checked = checkedState;
     });
+    updateViewerGrSummary();
 }
 
 // Ініціалізація прапорців ГР при завантаженні сторінки (з дефолтами завдання)
 var ASSIGNMENT_DEFAULT_GRS = JSON.parse(document.getElementById("assignment-default-grs").textContent);
+var ASSIGNMENT_DEFAULT_PRESET = JSON.parse(document.getElementById("assignment-default-preset").textContent);
+var VIEWER_SELECTED_GRS = JSON.parse(document.getElementById("viewer-selected-grs").textContent);
 document.addEventListener('DOMContentLoaded', function() {
     var presetEl = document.getElementById('single-ai-preset');
     if (!presetEl) return;
@@ -945,7 +955,7 @@ document.addEventListener('DOMContentLoaded', function() {
     var presetObj = VIEWER_PRESETS_DATA.find(function(p) { return String(p.id) === String(pId); });
     var defaultGRs = [];
     try {
-        defaultGRs = typeof ASSIGNMENT_DEFAULT_GRS === 'string' ? JSON.parse(ASSIGNMENT_DEFAULT_GRS) : (ASSIGNMENT_DEFAULT_GRS || []);
+        defaultGRs = Array.isArray(VIEWER_SELECTED_GRS) ? VIEWER_SELECTED_GRS : [];
     } catch(e) { defaultGRs = []; }
     renderViewerGrCheckboxes(presetObj, defaultGRs);
 });
@@ -965,6 +975,11 @@ function runSingleAICheck(subId) {
     document.querySelectorAll('#viewer-gr-checkboxes input[type="checkbox"]:checked').forEach(function(cb) {
         checkedGrCodes.push(cb.value);
     });
+    if (document.querySelector('#viewer-gr-checkboxes input') && !checkedGrCodes.length) {
+        if (box) { box.textContent = 'Оберіть хоча б одну групу результатів для перевірки.'; box.setAttribute('aria-busy', 'false'); }
+        document.querySelector('.fv-ai-options').open = true;
+        return;
+    }
 
     var thinkingCb = document.getElementById('force-thinking-checkbox');
     var isThinking = thinkingCb ? thinkingCb.checked : false;
@@ -1054,7 +1069,7 @@ function runSingleAICheck(subId) {
                     '</div>' +
                     '<div style="display:grid;grid-template-columns:1fr;gap:6px;">';
                 data.gr_results.forEach(function(gr) {
-                    var gScore = (gr.grade || '—') + ' б.';
+                    var gScore = gr.grade ? gr.grade + ' б.' : 'Не перевірено';
                     var gLvl = gr.level ? ' (' + gr.level + ')' : '';
                     var gComment = gr.comment ? '<div style="font-size:11px;color:var(--color-text-secondary);margin-top:3px;line-height:1.35;">' + gr.comment + '</div>' : '';
                     grHtml += '<div style="background:var(--color-bg-secondary);border:1px solid rgba(99,102,241,0.2);border-radius:6px;padding:6px 10px;font-size:11.5px;">' +
@@ -1085,6 +1100,16 @@ function runSingleAICheck(subId) {
                     detailsHtml +
                     '<div style="font-size:10.5px;color:var(--color-text-muted);">' + noteText + '</div>' +
                 '</div>';
+            }
+
+            if (!data.ai_generated_detected) {
+                aiDetectionBanner = '<div class="ai-origin-details" style="margin-bottom:8px;padding:8px 10px;background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:6px;"><strong>🤖 Походження роботи не встановлено</strong><p>' +
+                    (data.ai_generated_details || 'Виразних ознак ШІ не знайдено. Це не підтверджує самостійність роботи.').replace(/\n/g, '<br>') + '</p></div>';
+            }
+            var lastGrs = document.getElementById('viewer-last-grs');
+            if (lastGrs && data.gr_results) {
+                lastGrs.hidden = !data.gr_results.length;
+                lastGrs.textContent = 'Останній результат: ' + data.gr_results.map(function(gr) { return gr.code; }).join(', ') + '. Прапорці визначають наступну перевірку.';
             }
 
             box.innerHTML = '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:8px;">' +

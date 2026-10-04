@@ -91,6 +91,12 @@ def enqueue_understanding_job(assignment, user=None, force_refresh=False, eager=
 def job_response(job, is_teacher=False):
     if job.status in ('succeeded', 'failed'):
         result = dict(job.result)
+        if job.kind == 'student_check':
+            from .ai_context import strip_teacher_criteria
+            for field in ('feedback', 'clean_feedback', 'feedback_comment'):
+                if field in result:
+                    result[field] = strip_teacher_criteria(result[field])
+            result.pop('criteria_results', None)
         if job.kind == 'understanding':
             result['is_teacher'] = is_teacher
         return JsonResponse(result, status=job.http_status)

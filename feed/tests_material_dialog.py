@@ -146,7 +146,7 @@ class ReviewQuickStatusTests(TestCase):
     def test_unchecked_work_is_distinguished_from_a_negative_ai_result(self):
         self.assertIn('не перевірено', self.page().get_element_by_id('fv-quick-ai').text_content())
         self.sub.ai_status = 'success'; self.sub.save(update_fields=['ai_status'])
-        self.assertIn('без ознак', self.page().get_element_by_id('fv-quick-ai').text_content())
+        self.assertIn('Авторство: невідоме', self.page().get_element_by_id('fv-quick-ai').text_content())
 
     def test_ai_group_and_feedback_are_visible_without_opening_information(self):
         self.sub.ai_status = 'success'; self.sub.ai_generated_detected = True; self.sub.ai_generated_percent = 75; self.sub.is_group_work = True; self.sub.save()

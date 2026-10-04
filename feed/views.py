@@ -2999,9 +2999,10 @@ def _perform_student_ai_check(submission, result):
             parts.append(f"💬 {result.get('feedback_comment')}")
         clean_fb = "\n\n".join(parts) if parts else (result.get('feedback_comment') or '')
 
-    from .ai_context import feedback_evidence_sections
-    if '📋 **Перевірка критеріїв:**' not in (clean_fb or ''):
-        clean_fb = '\n\n'.join([clean_fb or '', *feedback_evidence_sections(result)]).strip()
+    from .ai_context import feedback_evidence_sections, strip_teacher_criteria
+    clean_fb = strip_teacher_criteria(clean_fb)
+    if '🎯 **Чому така оцінка:**' not in clean_fb:
+        clean_fb = '\n\n'.join([clean_fb, *feedback_evidence_sections(result, include_criteria=False)]).strip()
     submission.student_ai_feedback = clean_fb
     submission.student_ai_gr_results = _json.dumps(gr_results, ensure_ascii=False) if (gr_results and not is_traditional) else ''
 
@@ -3079,7 +3080,8 @@ def _perform_student_ai_check(submission, result):
     strengths = result.get('strengths') or []
     weaknesses = result.get('weaknesses') or []
     from .ai_context import feedback_evidence_sections
-    feedback_text = '\n\n'.join([result.get('feedback_comment') or '', *feedback_evidence_sections(result)]) or clean_fb
+    feedback_text = strip_teacher_criteria('\n\n'.join([
+        result.get('feedback_comment') or '', *feedback_evidence_sections(result, include_criteria=False)])) or clean_fb
 
     return JsonResponse({
         'ok': True,
@@ -3679,6 +3681,25 @@ def view_file(request, submission_id):
     criteria_presets = AICriteriaPreset.objects.all()
     default_preset, default_gr_codes = submission.assignment.get_ai_policy(submission.class_group) if submission.assignment else (None, [])
     default_preset = default_preset or AICriteriaPreset.objects.filter(is_default=True).first() or criteria_presets.first()
+    viewer_preset = default_preset
+    viewer_gr_codes = default_gr_codes
+    viewer_thinking_mode = bool((submission.assignment and submission.assignment.ai_thinking_mode) or AISettings.get_solo().default_thinking_mode)
+    from .models import AIJob
+    last_check = AIJob.objects.filter(submission=submission, kind='teacher_check', status='succeeded').order_by('-finished_at').first()
+    if last_check and default_preset:
+        parameters = last_check.parameters or {}
+        preset_id = parameters.get('preset_id')
+        if preset_id and str(preset_id).isdigit():
+            viewer_preset = criteria_presets.filter(pk=preset_id).first() or default_preset
+        codes = parameters.get('selected_gr_codes')
+        valid_codes = {gr.get('code') for gr in viewer_preset.get_gr_list()}
+        if isinstance(codes, list) and codes and all(isinstance(code, str) and code in valid_codes for code in codes):
+            viewer_gr_codes = codes
+        elif viewer_preset != default_preset:
+            viewer_gr_codes = []
+        if isinstance(parameters.get('force_thinking'), bool):
+            viewer_thinking_mode = parameters['force_thinking']
+    last_evaluated_gr_codes = [gr.get('code') for gr in submission.get_ai_gr_results_list() if gr.get('code')]
 
     dup_info = check_submission_duplicates(submission)
 
@@ -3721,6 +3742,10 @@ def view_file(request, submission_id):
         'criteria_presets': criteria_presets,
         'default_preset': default_preset,
         'default_gr_codes': default_gr_codes,
+        'viewer_gr_codes': viewer_gr_codes,
+        'viewer_preset': viewer_preset,
+        'viewer_thinking_mode': viewer_thinking_mode,
+        'last_evaluated_gr_codes': last_evaluated_gr_codes,
         'dup_info': dup_info,
         'is_filtered': is_filtered,
         'queue_pos': queue_pos,
@@ -7021,6 +7046,21 @@ def ai_check_single_submission(request, submission_id):
             selected_gr_codes = [c.strip() for c in selected_gr_codes_raw.split(',') if c.strip()]
     elif request.POST.getlist('selected_gr_codes'):
         selected_gr_codes = request.POST.getlist('selected_gr_codes')
+
+    if selected_gr_codes is not None:
+        if not isinstance(selected_gr_codes, list) or not all(isinstance(code, str) for code in selected_gr_codes):
+            return JsonResponse({'status': 'error', 'error': 'ГР потрібно передати списком кодів.'}, status=400)
+        chosen_preset = submission.assignment.get_ai_policy(submission.class_group)[0] if submission.assignment else None
+        if preset_id:
+            if not str(preset_id).isdigit():
+                return JsonResponse({'status': 'error', 'error': 'Невірний шаблон критеріїв.'}, status=400)
+            chosen_preset = AICriteriaPreset.objects.filter(pk=preset_id).first()
+            if not chosen_preset:
+                return JsonResponse({'status': 'error', 'error': 'Шаблон критеріїв не знайдено.'}, status=400)
+        if chosen_preset and chosen_preset.evaluation_type != 'traditional' and chosen_preset.get_gr_list():
+            valid_codes = {gr.get('code') for gr in chosen_preset.get_gr_list()}
+            if not selected_gr_codes or any(code not in valid_codes for code in selected_gr_codes):
+                return JsonResponse({'status': 'error', 'error': 'Оберіть хоча б одну ГР із цього шаблону.'}, status=400)
 
     force_thinking_raw = request.POST.get('force_thinking')
     force_thinking = None

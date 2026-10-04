@@ -2452,14 +2452,16 @@ class Submission(models.Model):
             from feed.utils import extract_clean_comment_from_raw_json
             extracted = extract_clean_comment_from_raw_json(text)
             if extracted:
-                return extracted
+                from .ai_context import strip_teacher_criteria
+                return strip_teacher_criteria(extracted)
 
         # Вирізаємо секцію Оцінювання за групами результатів
         pattern = r"📊\s*\*\*Оцінювання за групами результатів.*?(?=(\n\s*\n[✅💡💬⚠️📌]|\Z))"
         cleaned = re.sub(pattern, "", text, flags=re.DOTALL | re.IGNORECASE).strip()
         # Прибираємо окремі рядки оцінок ГР якщо є
         cleaned = re.sub(r"^[•*]\s*ГР\s*\d+:[^\n]+→[^\n]+\n?", "", cleaned, flags=re.MULTILINE | re.IGNORECASE).strip()
-        return cleaned or text
+        from .ai_context import strip_teacher_criteria
+        return strip_teacher_criteria(cleaned)
 
     def get_formatted_ai_feedback(self):
         """
@@ -2502,7 +2504,7 @@ class Submission(models.Model):
             if any(marker in line_s for marker in ['💡 **Зауваження', '💡 **Що потрібно доробити', 'Зауваження та неточності', 'Що доробити']):
                 in_weaknesses = True
                 continue
-            elif in_weaknesses and line_s.startswith(('✅', '📌', '💬', '⚠️', '📊')):
+            elif in_weaknesses and line_s.startswith(('✅', '📌', '💬', '⚠️', '📊', '🎯', '📋', '🛠️')):
                 break
             elif in_weaknesses and line_s.startswith(('•', '-', '*')):
                 item = line_s.lstrip('•-* ').strip()
@@ -2538,7 +2540,7 @@ class Submission(models.Model):
             if '✅ **Сильні сторони' in line_s:
                 in_strengths = True
                 continue
-            elif in_strengths and line_s.startswith(('💡', '📌', '💬', '⚠️', '📊')):
+            elif in_strengths and line_s.startswith(('💡', '📌', '💬', '⚠️', '📊', '🎯', '📋', '🛠️')):
                 break
             elif in_strengths and line_s.startswith(('•', '-', '*')):
                 item = line_s.lstrip('•-* ').strip()
@@ -2574,7 +2576,8 @@ class Submission(models.Model):
                     '📋 **Перевірка критеріїв:**': '📋 Перевірка критеріїв',
                     '🛠️ **Як покращити роботу:**': '🛠️ Як покращити роботу'}
         sections, current = [], None
-        for line in str(self.student_ai_feedback or '').splitlines():
+        from .ai_context import strip_teacher_criteria
+        for line in strip_teacher_criteria(self.student_ai_feedback).splitlines():
             title = headings.get(line.strip())
             if title:
                 current = {'title': title, 'lines': []}
@@ -2583,6 +2586,10 @@ class Submission(models.Model):
                 current['lines'].append(line)
         return [{'title': section['title'], 'text': '\n'.join(section['lines']).strip()}
                 for section in sections if any(line.strip() for line in section['lines'])]
+
+    def get_student_ai_public_feedback(self):
+        from .ai_context import strip_teacher_criteria
+        return strip_teacher_criteria(self.student_ai_feedback)
 
     def get_ai_grade_group_info(self):
         """

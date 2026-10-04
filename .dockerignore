@@ -19,6 +19,7 @@ logs/
 .DS_Store
 Thumbs.db
 backups/
+.local-audits/
 scripts/
 docker_data/
 staticfiles/

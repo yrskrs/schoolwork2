@@ -113,8 +113,8 @@
         window.updateReviewAIStatus = function (data) {
             const badge = document.getElementById('fv-quick-ai');
             badge.classList.toggle('fv-status-warning', !!data.ai_generated_detected);
-            badge.textContent = data.ai_generated_detected ? '🤖 Ознаки ШІ: ' + (Number(data.ai_generated_percent) || 0) + '%' : '🤖 ШІ: без ознак';
-            badge.title = data.ai_generated_detected ? 'ШІ-перевірка виявила ознаки генерації. Подробиці у рекомендаціях.' : 'ШІ-перевірка не виявила ознак генерації.';
+            badge.textContent = data.ai_generated_detected ? '🤖 Ознаки ШІ' : '🤖 Авторство: невідоме';
+            badge.title = data.ai_generated_details || (data.ai_generated_detected ? 'ШІ-перевірка виявила ознаки генерації. Подробиці у рекомендаціях.' : 'Виразних ознак ШІ не знайдено. Це не підтверджує самостійність роботи.');
         };
         window.updateReviewCommentCount();
         container.classList.add('fv-workspace-ready');

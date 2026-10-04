@@ -280,13 +280,14 @@
                             <div style="font-weight:800;color:var(--color-warning);margin-bottom:4px;display:flex;align-items:center;gap:6px;">
                                 <span>💡</span> <span>Зауваження та поради ШІ:</span>
                             </div>
-                            <div style="white-space:pre-wrap;">{{ submission.student_ai_feedback }}</div>
+                            <div style="white-space:pre-wrap;">{{ submission.get_student_ai_public_feedback }}</div>
                         </div>
                         {% endif %}
                         {% endwith %}
 
                         <!-- Блок «Сильні сторони» -->
-                        {% with strengths=submission.get_student_ai_strengths_list %}
+                        {% include "feed/components/ai_origin_unknown.html" with submission=submission %}
+{% with strengths=submission.get_student_ai_strengths_list %}
                         {% if strengths %}
                         <div style="margin-bottom:12px;padding:12px 16px;background:rgba(16,185,129,0.06);border:1.5px solid #10b981;border-radius:var(--radius-sm);">
                             <div style="display:flex;align-items:center;gap:6px;font-weight:800;font-size:13px;color:var(--color-success);margin-bottom:6px;">
@@ -532,6 +533,11 @@ function runStudentAICheck(subId) {
                 detailsText +
                 '<div style="margin-top:3px;font-size:11px;color:var(--color-text-muted);">' + alertNote + '</div>' +
             '</div>';
+        }
+
+        if (!data.ai_generated_detected) {
+            aiDetectionHtml = '<div class="ai-origin-details" style="margin-bottom:12px;padding:12px 16px;background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:var(--radius-sm);"><strong>🤖 Походження роботи не встановлено</strong><p>' +
+                (data.ai_generated_details || 'Виразних ознак ШІ не знайдено. Це не підтверджує самостійність; бал оцінює наданий результат.').replace(/\n/g, '<br>') + '</p></div>';
         }
 
         var duplicateHtml = '';

@@ -138,10 +138,10 @@ class AssessmentV4Tests(TestCase):
         session.save()
         page = self.client.get(reverse('submit_success', args=[self.assignment.pk]))
         self.assertContains(page, 'Чому така оцінка')
-        self.assertContains(page, 'Перевірка критеріїв')
+        self.assertNotContains(page, '📋 Перевірка критеріїв')
         self.assertContains(page, 'Як покращити роботу')
-        self.assertContains(page, 'Створи сторінку бюлетеня')
-        self.assertEqual(len(self.sub.get_student_ai_evidence_sections()), 3)
+        self.assertContains(page, 'Розмісти текст у колонках бюлетеня')
+        self.assertEqual(len(self.sub.get_student_ai_evidence_sections()), 2)
         later = Submission.objects.create(assignment=self.assignment, teacher=self.teacher, class_group=self.group,
                                           first_name=self.sub.first_name, last_name=self.sub.last_name)
         from .ai_jobs import SelfCheckUnavailable

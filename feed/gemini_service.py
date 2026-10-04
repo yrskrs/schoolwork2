@@ -6222,7 +6222,7 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                     api_key=c_key,
                     model_name=c_model,
                     custom_url=c_url,
-                    temperature=float(settings.temperature or 0.2),
+                    temperature=float(settings.temperature if settings.temperature is not None else 0.2),
                     max_output_tokens=min(10000, 4000 + 300 * len(active_grs) + 180 * len(scope.get("assigned_tasks") or [])),
                     timeout=35,
                     json_mode=True,
@@ -6657,6 +6657,9 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                     # Обробка та валідація результатів за групами результатів (ГР НУШ)
                     clean_gr_results = []
                     numeric_gr_grades = []
+                    if not is_traditional and active_grs:
+                        from .ai_context import complete_result_groups
+                        raw_gr_results = complete_result_groups(raw_gr_results if isinstance(raw_gr_results, list) else [], active_grs)
                     if not is_traditional and isinstance(raw_gr_results, list):
                         for idx, item in enumerate(raw_gr_results, 1):
                             if isinstance(item, dict):
@@ -6688,6 +6691,7 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                                     'name': name,
                                     'grade': grade,
                                     'level': gr_level,
+                                    'status': item.get('status', 'assessed'),
                                     'comment': comment
                                 })
 
@@ -7098,8 +7102,16 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                     feedback_comment = re.sub(r'\n{3,}', '\n\n', feedback_comment).strip()
                     summary = re.sub(r'\s{2,}', ' ', summary).strip()
 
+                    from .ai_context import complete_result_groups
+                    if not is_traditional and active_grs:
+                        clean_gr_results = complete_result_groups(clean_gr_results, active_grs)
+                    # A final artifact cannot verify who performed the work.
+                    strengths = [s for s in strengths if not re.search(r'самостійніст|самостійно\b|власноруч', str(s), re.I)]
                     result_json['grade_explanation'] = result_json.get('grade_explanation') or summary or feedback_comment
-                    result_json['needs_teacher_review'] = any(row.get('status') == 'unverifiable' for row in result_json.get('criteria_results') or [] if isinstance(row, dict))
+                    result_json['needs_teacher_review'] = (
+                        any(row.get('status') == 'unverifiable' for row in result_json.get('criteria_results') or [] if isinstance(row, dict))
+                        or any(row.get('status') == 'unverifiable' for row in clean_gr_results)
+                        or not assignment.allow_ai_usage)
                     full_feedback_parts = []
                     if format_warning:
                         full_feedback_parts.append(f"⚠️ **Зауваження до формату файлу (вплинуло на оцінку):**\n{format_warning}")
@@ -7140,8 +7152,9 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                         student_feedback_parts.append("💡 **Зауваження:**\n" + "\n".join(f"• {w}" for w in weaknesses))
                     if feedback_comment:
                         student_feedback_parts.append(f"💬 {feedback_comment}")
-                    student_feedback_parts.extend(evidence_sections)
-                    clean_student_feedback = "\n\n".join(student_feedback_parts) if student_feedback_parts else feedback_comment
+                    student_feedback_parts.extend(feedback_evidence_sections(result_json, include_criteria=False))
+                    from .ai_context import strip_teacher_criteria
+                    clean_student_feedback = strip_teacher_criteria("\n\n".join(student_feedback_parts) if student_feedback_parts else feedback_comment)
 
                     from .ai_provenance import normalize_authorship, submission_provenance
                     authorship = normalize_authorship(result_json, assignment.allow_ai_usage, submission_provenance(submission))

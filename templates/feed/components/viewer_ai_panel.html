@@ -7,7 +7,7 @@
                         <select id="single-ai-preset" class="form-input" onchange="onViewerPresetChanged()" style="font-size:12px;padding:6px 10px;font-weight:700;width:100%;border-color:rgba(99,102,241,0.4);background:var(--color-bg-secondary);">
                             {% for p in criteria_presets %}
                             <option value="{{ p.id }}"
-                                {% if default_preset.id == p.id %}selected{% endif %}>
+                                {% if viewer_preset.id == p.id %}selected{% endif %}>
                                 {{ p.name }}{% if p.document_name %} (📎 {{ p.document_name|truncatechars:20 }}){% endif %}
                             </option>
                             {% endfor %}
@@ -39,7 +39,10 @@
                         <div id="viewer-gr-checkboxes" style="display:flex;flex-direction:column;gap:5px;">
                             <!-- Заповнюється через JS відповідно до обраного шаблону -->
                         </div>
+                        <p id="viewer-gr-summary" class="form-hint" aria-live="polite"></p>
+                        <button type="button" class="btn btn-secondary btn-sm" onclick="restoreAssignmentGrDefaults()">Повернути ГР завдання для цього класу</button>
                     </div>
+                    <p id="viewer-last-grs" class="form-hint" {% if not last_evaluated_gr_codes %}hidden{% endif %}>Останній результат: {{ last_evaluated_gr_codes|join:", " }}. Прапорці вище визначають наступну перевірку.</p>
 
                     <!-- Опція Thinking Mode (Глибоке мислення) -->
                     <div style="margin-bottom:10px;padding:8px 12px;background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:space-between;gap:8px;">
@@ -47,7 +50,7 @@
                             <span style="font-size:15px;">🧠</span>
                             <span>Глибоке мислення (Thinking mode)</span>
                         </label>
-                        <input type="checkbox" id="force-thinking-checkbox" {% if submission.assignment.ai_thinking_mode %}checked{% endif %} style="width:16px;height:16px;cursor:pointer;accent-color:var(--color-primary);" title="Увімкніть для складних завдань, поглибленого аналізу або якщо маєте сумніви щодо швидкої перевірки">
+                        <input type="checkbox" id="force-thinking-checkbox" {% if viewer_thinking_mode %}checked{% endif %} style="width:16px;height:16px;cursor:pointer;accent-color:var(--color-primary);" title="Увімкніть для складних завдань, поглибленого аналізу або якщо маєте сумніви щодо швидкої перевірки">
                     </div>
 
                     </details>
@@ -87,7 +90,7 @@
                                         <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
                                             <strong style="color:var(--color-primary);font-size:12px;">{{ gr.code }}: {{ gr.name }}</strong>
                                             <span class="badge" style="background:var(--color-primary-light);color:var(--color-primary-text);font-weight:800;font-size:11px;white-space:nowrap;">
-                                                {{ gr.grade|default:"—" }} б. {% if gr.level %}({{ gr.level }}){% endif %}
+                                                {% if gr.grade %}{{ gr.grade }} б. {% if gr.level %}({{ gr.level }}){% endif %}{% else %}Не перевірено{% endif %}
                                             </span>
                                         </div>
                                         {% if gr.comment %}
@@ -126,6 +129,8 @@
                                     {% endif %}
                                 </div>
                             </div>
+                            {% else %}
+                            <div class="ai-origin-details" style="margin-bottom:8px;padding:8px 10px;background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:6px;"><strong>🤖 Походження роботи не встановлено</strong><p>{{ submission.ai_generated_details|default:"Виразних ознак ШІ не знайдено. Це не підтверджує самостійність; бал оцінює наданий результат, а процес виконання потребує уточнення."|linebreaksbr }}</p></div>
                             {% endif %}
                             <div style="font-size:12px;color:var(--color-text-secondary);line-height:1.4;white-space:pre-wrap;border-top:1px dashed var(--color-border);padding-top:6px;margin-top:6px;">{{ submission.get_formatted_ai_feedback }}</div>
                         </div>

@@ -835,20 +835,21 @@
                             <div class="ai-settings-advanced-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
                                 <div class="form-group" style="margin:0;">
                                     <label for="temperature" class="form-label" style="font-weight:700;">
-                                        Креативність (Temperature: <span id="temp-val">{{ ai_settings.temperature_dot }}</span>):
+                                        Мінливість відповіді (Temperature: <span id="temp-val">{{ ai_settings.temperature_dot }}</span>):
                                     </label>
                                     <input type="range" name="temperature" id="temperature" min="0.0" max="1.0" step="0.05"
                                            value="{{ ai_settings.temperature_dot }}" class="form-input" style="padding:0;cursor:pointer;"
                                            oninput="document.getElementById('temp-val').textContent = this.value">
                                     <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--color-text-muted);margin-top:2px;">
-                                        <span>0.0 (Строга точність)</span>
-                                        <span>1.0 (Творча оцінка)</span>
+                                        <span>0.0 — менше варіацій</span>
+                                        <span>1.0 — більше варіацій</span>
                                     </div>
+<p class="form-hint">Це мінливість формулювань, а не суворість оцінки чи чутливість до ШІ. Нижче значення не гарантує правильності; бал визначають критерії завдання. Для Gemini 3 Google рекомендує 1.0; для інших моделей дотримуйтеся рекомендацій провайдера.</p>
                                 </div>
 
                                 <div class="form-group" style="margin:0;">
     <strong>🛡️ Ознаки ШІ та самостійність</strong>
-    <p class="text-muted" style="font-size:13px;line-height:1.6;margin:8px 0 0;">Перевірка називає конкретні ознаки в тексті, зображеннях і прочитаних файлах. Вони не доводять авторство й не спричиняють автоматичного штрафу. Дозвіл на ШІ та критерії самостійності задайте для конкретного завдання. Відсотковий поріг більше не використовується.</p>
+    <p class="text-muted" style="font-size:13px;line-height:1.6;margin:8px 0 0;">Це пояснення автоматичної перевірки, а не перемикач. У редакторі завдання відкрийте «Параметри ШІ» та встановіть «Дозволити використання ШІ». Якщо потрібна самостійна робота, залиште дозвіл вимкненим і вкажіть критерій та його вагу. Після «Перевірити роботу ШІ» дивіться походження в рекомендаціях: знайдені ознаки або «Походження роботи не встановлено». Для спірної роботи попросіть пояснення кроків чи чернетку. Готовий файл і відсутність ознак не доводять самостійність; автоматичного штрафу за стиль немає.</p>
 </div>
                             </div>
 
