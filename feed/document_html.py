@@ -14,7 +14,7 @@ def safe_document_html(value):
         forbidden = {'script', 'style', 'iframe', 'object', 'embed', 'applet', 'meta', 'link', 'svg', 'math',
                      'form', 'input', 'button', 'textarea', 'select', 'base'}
         attributes = {'class', 'style', 'href', 'src', 'alt', 'title', 'width', 'height', 'colspan', 'rowspan',
-                      'align', 'valign', 'border', 'cellpadding', 'cellspacing'}
+                      'align', 'valign', 'border', 'cellpadding', 'cellspacing', 'loading', 'decoding'}
         properties = {'color', 'background-color', 'font-size', 'font-family', 'font-weight', 'font-style',
                       'text-align', 'text-decoration', 'white-space', 'line-height', 'vertical-align',
                       'border', 'border-color', 'border-width', 'border-style', 'border-collapse',

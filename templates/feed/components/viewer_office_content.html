@@ -1,0 +1,2 @@
+{% if error_message %}<div class="alert alert-warning" role="status">⚠️ {{ error_message }}</div>{% endif %}
+{% if html_content %}{{ html_content|safe }}{% endif %}

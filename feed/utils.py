@@ -138,25 +138,36 @@ def _cache_doc_conversion(prefix: str):
     """Декоратор для кешування конвертованого HTML документів (Word, Excel, PPTX, ODF)."""
     def decorator(func):
         def wrapper(file_path: str, *args, **kwargs):
+            preview_assets = kwargs.pop('preview_assets', False)
             if not file_path or not os.path.exists(file_path):
                 return "", "Файл не знайдено на сервері"
             cache_key = None
             shared_key = None
             try:
                 from .ai_context import file_cache_key, evidence_cache
-                shared_key = file_cache_key(file_path, 'html-' + prefix, repr((args, kwargs)))
+                purpose = 'html-' + prefix + ('-assets-v1' if preview_assets else '')
+                shared_key = file_cache_key(file_path, purpose, repr((args, kwargs)))
                 cached = evidence_cache().get(shared_key)
-                if cached is not None:
+                from .review_preview import assets_available
+                if cached is not None and (not preview_assets or assets_available(file_path, cached[0])):
                     return cached
                 stat = os.stat(file_path)
                 cache_key = (prefix, shared_key)
-                if cache_key in _DOC_HTML_CONVERSION_CACHE:
-                    return _DOC_HTML_CONVERSION_CACHE[cache_key]
+                cached = _DOC_HTML_CONVERSION_CACHE.get(cache_key)
+                if cached is not None and (not preview_assets or assets_available(file_path, cached[0])):
+                    return cached
             except Exception:
                 cache_key = None
 
             res = func(file_path, *args, **kwargs)
             if res and res[0]:
+                if preview_assets:
+                    from .review_preview import externalize_images
+                    try:
+                        res = (externalize_images(file_path, res[0]), res[1])
+                    except OSError:
+                        # Read-only/full cache disks still permit the original inline preview.
+                        pass
                 from .document_html import safe_document_html
                 res = (safe_document_html(res[0]), res[1])
 
@@ -165,7 +176,10 @@ def _cache_doc_conversion(prefix: str):
                     _DOC_HTML_CONVERSION_CACHE.clear()
                 _DOC_HTML_CONVERSION_CACHE[cache_key] = res
                 if shared_key:
-                    evidence_cache().set(shared_key, res, 604800)
+                    try:
+                        evidence_cache().set(shared_key, res, 604800)
+                    except OSError:
+                        pass
 
             return res
         return wrapper
@@ -1735,5 +1749,4 @@ def format_raw_json_feedback_for_display(text):
         parts.append(f"💬 **Рекомендація учню:**\n{fc}")
 
     return "\n\n".join(parts) if parts else (fc or summary or extract_clean_comment_from_raw_json(work_text))
-
 

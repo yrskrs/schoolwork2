@@ -3224,6 +3224,8 @@ def view_file(request, submission_id):
     )
 
     teacher = request.user.teacher_profile
+    from django.conf import settings
+    review_async = settings.REVIEW_ASYNC and request.GET.get('review_sync') != '1'
 
     # Перевірка прав доступу
     if not (request.user.is_superuser or (submission.teacher == teacher) or (submission.assignment and submission.assignment.teacher == teacher)):
@@ -3425,18 +3427,24 @@ def view_file(request, submission_id):
     # Визначаємо, чи активна фільтрація вибірки
     is_filtered = bool(selected_class_id or date_filter or (grade_filter and grade_filter != 'all') or search_query or assignment_id or show_mode)
 
-    submission_list = list(nav_qs)
+    # Keep the exact filter/order semantics without loading every submission's
+    # feedback, AI JSON, assignment descriptions and teacher profile.
+    submission_ids = list(nav_qs.values_list('pk', flat=True))
     try:
-        current_index = [s.id for s in submission_list].index(submission.id)
-        prev_submission = submission_list[current_index - 1] if current_index > 0 else None
-        next_submission = submission_list[current_index + 1] if current_index < len(submission_list) - 1 else None
+        current_index = submission_ids.index(submission.id)
+        prev_id = submission_ids[current_index - 1] if current_index > 0 else None
+        next_id = submission_ids[current_index + 1] if current_index < len(submission_ids) - 1 else None
+        neighbors = Submission.objects.select_related('assignment', 'class_group', 'teacher').in_bulk(
+            [pk for pk in (prev_id, next_id) if pk is not None])
+        prev_submission = neighbors.get(prev_id)
+        next_submission = neighbors.get(next_id)
         queue_pos = current_index + 1
     except ValueError:
         prev_submission = None
         next_submission = None
         queue_pos = None
 
-    queue_total = len(submission_list)
+    queue_total = len(submission_ids)
     queue_filter_desc = " • ".join(filter_desc_parts) if filter_desc_parts else ""
 
     # Параметри для посилань вперед/назад та кнопки повернення
@@ -3542,6 +3550,7 @@ def view_file(request, submission_id):
     embed_info = None
 
     active_file = None
+    preview_pending = False
     if selected_file_obj:
         active_file = selected_file_obj.file
         file_name = selected_file_obj.original_name or os.path.basename(selected_file_obj.file.name)
@@ -3612,7 +3621,9 @@ def view_file(request, submission_id):
         elif file_ext in office_preview:
             file_type = 'office_preview'
             try:
-                if file_ext in ['.docx', '.doc']:
+                if review_async:
+                    preview_pending = True
+                elif file_ext in ['.docx', '.doc']:
                     html_content, error_message = convert_docx_to_html(file_path)
                 elif file_ext in ['.xlsx', '.xls']:
                     html_content, error_message = convert_xlsx_to_html(file_path)
@@ -3701,12 +3712,16 @@ def view_file(request, submission_id):
             viewer_thinking_mode = parameters['force_thinking']
     last_evaluated_gr_codes = [gr.get('code') for gr in submission.get_ai_gr_results_list() if gr.get('code')]
 
-    dup_info = check_submission_duplicates(submission)
+    duplicates_pending = bool(review_async and submission.file and submission.assignment)
+    dup_info = {} if duplicates_pending else check_submission_duplicates(submission)
 
     group_members = []
     if submission.is_collective_work() or submission.is_group_work or submission.primary_submission_id:
         group_members = submission.get_all_group_submissions()
 
+    sync_params = request.GET.copy()
+    sync_params['review_sync'] = '1'
+    prefetch_submission = next_submission or next_submission_fallback or next_assignment_first_sub
     context = {
         'submission': submission,
         'group_members': group_members,
@@ -3747,6 +3762,11 @@ def view_file(request, submission_id):
         'viewer_thinking_mode': viewer_thinking_mode,
         'last_evaluated_gr_codes': last_evaluated_gr_codes,
         'dup_info': dup_info,
+        'review_async': review_async,
+        'preview_pending': preview_pending,
+        'duplicates_pending': duplicates_pending,
+        'review_sync_url': reverse('view_file', args=[submission.pk]) + '?' + sync_params.urlencode(),
+        'next_preview_url': reverse('review_document_preview', args=[prefetch_submission.pk]) if prefetch_submission else '',
         'is_filtered': is_filtered,
         'queue_pos': queue_pos,
         'queue_total': queue_total,
@@ -3756,6 +3776,91 @@ def view_file(request, submission_id):
         'back_label': back_label,
     }
     return render(request, 'feed/file_viewer.html', context)
+
+
+def _review_submission(request, submission_id):
+    from .permissions import teacher_submissions
+    return get_object_or_404(teacher_submissions(request, Submission.objects.select_related(
+        'assignment', 'class_group', 'teacher').prefetch_related('assignment__files')), pk=submission_id)
+
+
+def _review_active_file(request, submission):
+    files = list(submission.files.all())
+    selected = next((f for f in files if str(f.pk) == request.GET.get('file_id')), None)
+    selected = selected or (files[0] if files else None)
+    active = selected.file if selected else submission.file
+    if not active or not os.path.isfile(active.path):
+        raise Http404('Файл не знайдено')
+    extension = selected.get_extension() if selected else submission.get_file_extension()
+    return active, selected, extension
+
+
+@teacher_required
+def review_document_preview(request, submission_id):
+    """Conversion is a separate read-only request, never blocking the review controls."""
+    if request.method != 'GET':
+        return HttpResponse(status=405)
+    from django.template.loader import render_to_string
+    from .review_preview import convert_office, ASSET_PATTERN
+    from .ai_context import file_cache_key
+    submission = _review_submission(request, submission_id)
+    active, selected, extension = _review_active_file(request, submission)
+    version = file_cache_key(active.path, 'review-assets-v1')
+    try:
+        content, error = convert_office(active.path, extension)
+        # Resolve markers only after access checks; converters remain reusable.
+        def asset_url(match):
+            url = reverse('review_preview_asset', args=[submission.pk, match[1]])
+            url += f'?v={version}'
+            if selected:
+                url += f'&amp;file_id={selected.pk}'
+            return url
+        content = ASSET_PATTERN.sub(asset_url, content)
+    except Exception:
+        logging.getLogger(__name__).exception('Review preview failed for submission %s', submission.pk)
+        return JsonResponse({'error': 'Не вдалося підготувати перегляд. Спробуйте ще раз або завантажте файл.'}, status=503)
+    response = JsonResponse({'html': render_to_string('feed/components/viewer_office_content.html', {
+        'html_content': content, 'error_message': error,
+    })})
+    response['Cache-Control'] = 'private, no-store'
+    return response
+
+
+@teacher_required
+def review_preview_asset(request, submission_id, asset_name):
+    if request.method not in ('GET', 'HEAD'):
+        return HttpResponse(status=405)
+    from .review_preview import asset_directory
+    from .ai_context import file_cache_key
+    if not re.fullmatch(r'[a-f0-9]{64}\.(png|jpeg|gif|webp|bmp)', asset_name):
+        raise Http404('Зображення не знайдено')
+    submission = _review_submission(request, submission_id)
+    active, selected, extension = _review_active_file(request, submission)
+    if request.GET.get('v') != file_cache_key(active.path, 'review-assets-v1'):
+        raise Http404('Перегляд файла змінився')
+    response = file_response(request, str(asset_directory(active.path) / asset_name),
+                             content_type='image/' + asset_name.rsplit('.', 1)[1])
+    response['Cache-Control'] = 'private, max-age=604800, immutable'
+    response['Vary'] = 'Cookie'
+    return response
+
+
+@teacher_required
+def review_duplicates(request, submission_id):
+    if request.method != 'GET':
+        return HttpResponse(status=405)
+    from django.template.loader import render_to_string
+    submission = _review_submission(request, submission_id)
+    info = check_submission_duplicates(submission)
+    context = {'submission': submission, 'dup_info': info,
+               'group_members': submission.get_all_group_submissions() if submission.is_collective_work() else []}
+    response = JsonResponse({
+        'html': render_to_string('feed/components/viewer_duplicate_details.html', context),
+        'chip': render_to_string('feed/components/viewer_duplicate_chip.html', context),
+        'group_chip': render_to_string('feed/components/viewer_group_chip.html', context),
+    })
+    response['Cache-Control'] = 'private, no-store'
+    return response
 
 
 

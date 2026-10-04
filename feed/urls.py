@@ -51,6 +51,9 @@ urlpatterns = [
     path('teacher/assignment/<int:pk>/submissions/', views.assignment_submissions, name='assignment_submissions'),
     path('teacher/submissions/', views.all_submissions_dashboard, name='all_submissions_dashboard'),
     path('teacher/view-file/<int:submission_id>/', views.view_file, name='view_file'),
+    path('teacher/submission/<int:submission_id>/preview/', views.review_document_preview, name='review_document_preview'),
+    path('teacher/submission/<int:submission_id>/preview/assets/<str:asset_name>/', views.review_preview_asset, name='review_preview_asset'),
+    path('teacher/submission/<int:submission_id>/duplicates/', views.review_duplicates, name='review_duplicates'),
     path('teacher/submission/<int:submission_id>/file/', views.view_submission_raw_file, name='view_submission_raw_file'),
     path('teacher/comment/delete/<int:comment_id>/', views.delete_comment, name='delete_comment'),
 

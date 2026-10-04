@@ -1,0 +1,3 @@
+    <button type="button" class="fv-status-chip" id="fv-quick-group" onclick="selectReviewPanel('info', true)" title="{% if group_members %}Учасники: {{ submission.get_group_members_display|join:', ' }}{% elif submission.ignore_plagiarism or dup_info.plagiarism_ignored %}Позначено як спільну роботу{% else %}Здано як індивідуальну роботу{% endif %}">
+        {% if group_members %}👥 Групова ({{ group_members|length }}){% elif submission.ignore_plagiarism or dup_info.plagiarism_ignored %}👥 Спільна{% else %}👤 Індивідуальна{% endif %}
+    </button>

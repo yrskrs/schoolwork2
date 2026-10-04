@@ -132,6 +132,11 @@ FILE_UPLOAD_MAX_MEMORY_SIZE = 2 * 1024 * 1024
 AI_JOBS_EAGER = os.environ.get('AI_JOBS_EAGER', 'True' if 'test' in sys.argv else 'False') == 'True'
 AI_JOB_TIMEOUT = int(os.environ.get('AI_JOB_TIMEOUT', '600'))
 
+# Reversible viewer optimization; no database migrations or worker changes.
+REVIEW_ASYNC = os.environ.get('SCHOOLNET_REVIEW_ASYNC', 'True') == 'True'
+REVIEW_PREVIEW_DIR = os.environ.get('REVIEW_PREVIEW_DIR',
+    str(Path(os.environ.get('AI_CACHE_DIR', '/tmp/schoolnet-ai-cache')).parent / 'schoolnet-review-previews'))
+
 # Private cache, shared by web workers and the AI worker; never served as media.
 CACHES = {
     'default': {'BACKEND': 'django.core.cache.backends.locmem.LocMemCache'},
@@ -139,6 +144,6 @@ CACHES = {
         'BACKEND': 'django.core.cache.backends.filebased.FileBasedCache',
         'LOCATION': os.environ.get('AI_CACHE_DIR', '/tmp/schoolnet-ai-cache'),
         'TIMEOUT': 604800,
-        'OPTIONS': {'MAX_ENTRIES': 500},
+        'OPTIONS': {'MAX_ENTRIES': int(os.environ.get('AI_CACHE_MAX_ENTRIES', '2000'))},
     },
 }

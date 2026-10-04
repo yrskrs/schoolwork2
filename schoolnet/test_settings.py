@@ -12,6 +12,8 @@ else:
     DATABASES = {'default': {'ENGINE': 'django.db.backends.sqlite3', 'NAME': ':memory:'}}
 MEDIA_ROOT = tempfile.mkdtemp(prefix='schoolnet-tests-media-')
 atexit.register(shutil.rmtree, MEDIA_ROOT, ignore_errors=True)
+REVIEW_PREVIEW_DIR = tempfile.mkdtemp(prefix='schoolnet-tests-review-')
+atexit.register(shutil.rmtree, REVIEW_PREVIEW_DIR, ignore_errors=True)
 SECRET_KEY = 'schoolnet-tests-only-secret-key-with-at-least-fifty-characters'
 DEBUG = False
 AI_JOBS_EAGER = True

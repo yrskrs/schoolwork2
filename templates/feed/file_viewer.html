@@ -263,7 +263,7 @@
 {% include "feed/components/ai_job_status.html" %}
 <div class="page-wrapper" style="padding-top: 12px;">
 
-    <div class="fv-container">
+    <div class="fv-container"{% if review_async %} data-review-async="true" data-review-fallback="{{ review_sync_url }}"{% if next_preview_url %} data-next-preview="{{ next_preview_url }}"{% endif %}{% endif %}>
 
         {% include "feed/components/viewer_toolbar.html" %}
         <div class="fv-grid">
@@ -318,16 +318,11 @@
 
                     <!-- ОФІСНІ ДОКУМЕНТИ (Word, Excel, PowerPoint, ODT, ODS, ODP) -->
                     {% elif file_type == 'office_preview' %}
-                    <div class="file-preview-stage" style="margin:20px;border-radius:var(--radius-lg);">
-                        {% if error_message %}
-                        <div class="alert alert-warning" style="margin-bottom:16px;padding:12px;border-radius:var(--radius-sm);background:rgba(234,179,8,0.1);border:1px solid rgba(234,179,8,0.3);color:var(--color-warning);">
-                            ⚠️ {{ error_message }}
-                        </div>
-                        {% endif %}
-
-                        {% if html_content %}
-                            {{ html_content|safe }}
-                        {% endif %}
+                    <div class="file-preview-stage" style="margin:20px;border-radius:var(--radius-lg);"{% if preview_pending %} data-review-preview="{% url 'review_document_preview' submission.id %}{% if active_file_id %}?file_id={{ active_file_id }}{% endif %}" aria-busy="true"{% endif %}>
+                        {% if preview_pending %}
+                        <p role="status">Готуємо перегляд документа…</p>
+                        <noscript><a href="{{ review_sync_url }}">Відкрити документ</a></noscript>
+                        {% else %}{% include 'feed/components/viewer_office_content.html' %}{% endif %}
                     </div>
 
                     <!-- АРХІВИ (ZIP, RAR, 7Z, TAR) -->
@@ -634,6 +629,7 @@
 {{ viewer_gr_codes|json_script:"viewer-selected-grs" }}
 {{ default_preset.id|json_script:"assignment-default-preset" }}
 <script src="{% static 'js/review_workspace.js' %}" defer></script>
+<script src="{% static 'js/review_loading.js' %}" defer></script>
 <script src="{% static 'js/material_preview.js' %}" defer></script>
 <!-- Prism.js для підсвічування коду -->
 <script src="{% static 'vendor/prism/prism.min.js' %}"></script>

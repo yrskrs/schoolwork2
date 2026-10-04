@@ -163,8 +163,10 @@ class ReviewQuickStatusTests(TestCase):
 
     def test_duplicate_and_allowed_collaboration_have_distinct_indicators(self):
         AssignmentFile.objects.create(assignment=self.assignment, file=SimpleUploadedFile('task.txt', b'Original answer'), original_name='Умова.txt')
-        self.assertIn('Копія матеріалу', self.page().get_element_by_id('fv-quick-duplicate').text_content())
+        self.assertIn('Перевіряємо', self.page().get_element_by_id('fv-quick-duplicate').text_content())
+        result = self.client.get(reverse('review_duplicates', args=[self.sub.pk])).json()
+        self.assertIn('Копія матеріалу', html.fromstring(result['chip']).text_content())
         self.sub.ignore_plagiarism = True; self.sub.save(update_fields=['ignore_plagiarism'])
-        page = self.page()
-        self.assertIn('Збіг дозволено', page.get_element_by_id('fv-quick-duplicate').text_content())
-        self.assertIn('Спільна', page.get_element_by_id('fv-quick-group').text_content())
+        result = self.client.get(reverse('review_duplicates', args=[self.sub.pk])).json()
+        self.assertIn('Збіг дозволено', html.fromstring(result['chip']).text_content())
+        self.assertIn('Спільна', html.fromstring(result['group_chip']).text_content())

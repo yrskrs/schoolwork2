@@ -2479,9 +2479,11 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
         self.assertEqual(resp.status_code, 200)
 
         # 4. Перевіряємо наявність активного клікабельного посилання на роботу sub1
+        result = self.client.get(reverse('review_duplicates', args=[sub2.id]))
+        self.assertEqual(result.status_code, 200)
         expected_url = reverse('view_file', args=[sub1.id])
-        self.assertContains(resp, f'href="{expected_url}"')
-        self.assertContains(resp, 'Бондаренко Анастасія')
+        self.assertIn(f'href="{expected_url}"', result.json()['html'])
+        self.assertIn('Бондаренко Анастасія', result.json()['html'])
 
     def test_coauthor_submission_does_not_flag_plagiarism(self):
         """Перевірка, що колективна робота зі співавторами не позначається як плагіат чи дублікат."""
@@ -2590,8 +2592,10 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
         # Вчитель відкриває вікно перевірки - бачить позначку про спільну роботу
         resp_view = self.client.get(reverse('view_file', args=[sub2.id]))
         self.assertEqual(resp_view.status_code, 200)
-        self.assertContains(resp_view, 'Плагіат проігноровано')
-        self.assertContains(resp_view, 'ignore-plagiarism-checkbox')
+        result = self.client.get(reverse('review_duplicates', args=[sub2.id]))
+        self.assertEqual(result.status_code, 200)
+        self.assertIn('Плагіат проігноровано', result.json()['html'])
+        self.assertIn('ignore-plagiarism-checkbox', result.json()['html'])
 
         # Вчитель вимикає ігнорування плагіату
         resp_off = self.client.post(
