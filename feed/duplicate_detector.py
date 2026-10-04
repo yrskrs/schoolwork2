@@ -21,8 +21,13 @@ def get_file_sha256(file_path):
     if not file_path or not os.path.exists(file_path):
         return None
     try:
+        from .ai_context import file_cache_key, evidence_cache
+        shared_key = file_cache_key(file_path, 'sha256')
+        cached = evidence_cache().get(shared_key)
+        if cached is not None:
+            return cached
         stat = os.stat(file_path)
-        cache_key = (file_path, stat.st_mtime, stat.st_size)
+        cache_key = shared_key
         if cache_key in _SHA256_CACHE:
             return _SHA256_CACHE[cache_key]
 
@@ -35,6 +40,7 @@ def get_file_sha256(file_path):
         if len(_SHA256_CACHE) >= _MAX_CACHE_SIZE:
             _SHA256_CACHE.clear()
         _SHA256_CACHE[cache_key] = h
+        evidence_cache().set(shared_key, h, 604800)
         return h
     except Exception:
         return None
@@ -50,9 +56,15 @@ def get_normalized_file_content(file_path, original_filename=None):
     if not file_path or not os.path.exists(file_path):
         return ""
 
+    shared_key = None
     try:
+        from .ai_context import file_cache_key, evidence_cache
+        shared_key = file_cache_key(file_path, 'normalised-text', str(original_filename))
+        cached = evidence_cache().get(shared_key)
+        if cached is not None:
+            return cached
         stat = os.stat(file_path)
-        cache_key = (file_path, stat.st_mtime, stat.st_size)
+        cache_key = shared_key
         if cache_key in _NORM_TEXT_CACHE:
             return _NORM_TEXT_CACHE[cache_key]
     except Exception:
@@ -114,6 +126,8 @@ def get_normalized_file_content(file_path, original_filename=None):
         if len(_NORM_TEXT_CACHE) >= _MAX_CACHE_SIZE:
             _NORM_TEXT_CACHE.clear()
         _NORM_TEXT_CACHE[cache_key] = res
+        if shared_key:
+            evidence_cache().set(shared_key, res, 604800)
 
     return res
 

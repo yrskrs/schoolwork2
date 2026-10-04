@@ -44,6 +44,7 @@ import glob
 import shutil
 import subprocess
 import logging
+from .assignment_ai_policy import export_ai_policy, import_ai_policy
 from functools import wraps
 from datetime import datetime, timedelta
 
@@ -629,50 +630,13 @@ def assignment_detail(request, pk):
         pdf_preview_url = None
 
         if file_path and os.path.exists(file_path):
-            if ext in ['.docx', '.doc']:
+            if ext in ['.docx', '.doc', '.xlsx', '.xls', '.pptx', '.ppt', '.odt', '.ods', '.odp']:
                 preview_type = 'office'
-                html_preview, error_preview = convert_docx_to_html(file_path)
-                pdf_preview_url = get_pdf_preview_url(af, wait_if_missing=False)
-            elif ext in ['.xlsx', '.xls']:
-                preview_type = 'office'
-                html_preview, error_preview = convert_xlsx_to_html(file_path)
-            elif ext in ['.pptx', '.ppt', '.odp']:
-                preview_type = 'office'
-                html_preview, error_preview = convert_pptx_to_html(file_path)
-                slide_urls, pdf_preview_url = get_presentation_slides(af.id, file_path, wait_if_missing=False)
-            elif ext == '.odt':
-                preview_type = 'office'
-                html_preview, error_preview = convert_odt_to_html(file_path)
-            elif ext == '.ods':
-                preview_type = 'office'
-                html_preview, error_preview = convert_ods_to_html(file_path)
-            elif ext in ['.txt', '.text', '.log', '.csv']:
-                preview_type = 'text'
-                # Читання з мультикодуванням
-                encs = ['utf-8-sig', 'utf-8', 'cp1251', 'windows-1251', 'cp866', 'iso-8859-5']
-                for enc in encs:
-                    try:
-                        with open(file_path, 'r', encoding=enc) as f_read:
-                            text_preview = f_read.read(1024 * 1024)
-                            if len(text_preview) == 1024 * 1024:
-                                text_preview += "\n\n[Показано початок файлу. Завантажте файл, щоб переглянути його повністю.]"
-                            break
-                    except Exception:
-                        continue
-                if text_preview is None:
-                    try:
-                        with open(file_path, 'r', encoding='utf-8', errors='replace') as f_read:
-                            text_preview = f_read.read(1024 * 1024)
-                    except Exception as e:
-                        error_preview = str(e)
-            elif ext in text_files:
-                preview_type = 'code'
-                try:
-                    with open(file_path, 'r', encoding='utf-8', errors='replace') as f_read:
-                        text_preview = f_read.read(1024 * 1024)
-                except Exception as e:
-                    error_preview = str(e)
-            elif ext in ['.pdf']:
+            elif ext == '.sb3':
+                preview_type = 'scratch'
+            elif ext == '.hex':
+                preview_type = 'microbit'
+            elif ext == '.pdf':
                 preview_type = 'pdf'
             elif ext in ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.bmp']:
                 preview_type = 'image'
@@ -680,19 +644,10 @@ def assignment_detail(request, pk):
                 preview_type = 'audio'
             elif ext in ['.mp4', '.webm', '.ogv', '.mov', '.m4v', '.mkv', '.avi', '.3gp']:
                 preview_type = 'video'
-            elif ext == '.sb3':
-                preview_type = 'scratch'
-                from .scratch_utils import parse_scratch_sb3
-                raw_url = request.build_absolute_uri(reverse('file_view', args=[af.id]))
-                html_preview, text_preview, error_preview = parse_scratch_sb3(file_path, raw_file_url=raw_url)
-            elif ext == '.hex':
-                preview_type = 'microbit'
-                from .microbit_utils import parse_microbit_hex
-                raw_url = request.build_absolute_uri(reverse('file_view', args=[af.id]))
-                html_preview, text_preview, error_preview = parse_microbit_hex(file_path, raw_file_url=raw_url)
             elif ext in archive_files:
                 preview_type = 'archive'
-                archive_items, error_preview = get_archive_content(file_path, ext)
+            elif ext in text_files:
+                preview_type = 'text' if ext in ['.txt', '.text', '.log', '.csv'] else 'code'
 
         files_with_preview.append({
             'obj': af,
@@ -1816,6 +1771,7 @@ def assignment_duplicate(request, pk):
         published_at=now if publish_now else None,
         default_ai_preset=original.default_ai_preset,
         default_ai_grs=original.default_ai_grs,
+        class_ai_overrides={str(c.pk): original.class_ai_overrides[str(c.pk)] for c in target_classes if str(c.pk) in original.class_ai_overrides},
         allow_student_ai_check=original.allow_student_ai_check,
         allow_student_ai_understanding=original.allow_student_ai_understanding,
         allow_ai_usage=original.allow_ai_usage,
@@ -2998,14 +2954,7 @@ def _evaluate_student_submission(submission):
     ai_settings = AISettings.objects.first()
 
     # Визначаємо preset та ГР завдання
-    preset = assignment.default_ai_preset
-    selected_gr_codes = None
-    if assignment.default_ai_grs:
-        import json as _json
-        try:
-            selected_gr_codes = _json.loads(assignment.default_ai_grs)
-        except Exception:
-            selected_gr_codes = None
+    preset, selected_gr_codes = assignment.get_ai_policy(submission.class_group)
 
     return evaluate_submission_with_gemini(
         submission,
@@ -3022,7 +2971,8 @@ def _perform_student_ai_check(submission, result):
 
     # Зберігаємо чернову оцінку
     import json as _json
-    is_traditional = bool(result.get('is_traditional') or (assignment.default_ai_preset and assignment.default_ai_preset.evaluation_type == 'traditional'))
+    preset, _ = assignment.get_ai_policy(submission.class_group)
+    is_traditional = bool(result.get('is_traditional') or (preset and preset.evaluation_type == 'traditional'))
     gr_results = [] if is_traditional else result.get('gr_results', [])
     unclear_task = bool(result.get('unclear_task'))
     format_warning = result.get('format_warning', '')
@@ -3049,6 +2999,9 @@ def _perform_student_ai_check(submission, result):
             parts.append(f"💬 {result.get('feedback_comment')}")
         clean_fb = "\n\n".join(parts) if parts else (result.get('feedback_comment') or '')
 
+    from .ai_context import feedback_evidence_sections
+    if '📋 **Перевірка критеріїв:**' not in (clean_fb or ''):
+        clean_fb = '\n\n'.join([clean_fb or '', *feedback_evidence_sections(result)]).strip()
     submission.student_ai_feedback = clean_fb
     submission.student_ai_gr_results = _json.dumps(gr_results, ensure_ascii=False) if (gr_results and not is_traditional) else ''
 
@@ -3125,7 +3078,8 @@ def _perform_student_ai_check(submission, result):
 
     strengths = result.get('strengths') or []
     weaknesses = result.get('weaknesses') or []
-    feedback_text = result.get('feedback_comment') or clean_fb
+    from .ai_context import feedback_evidence_sections
+    feedback_text = '\n\n'.join([result.get('feedback_comment') or '', *feedback_evidence_sections(result)]) or clean_fb
 
     return JsonResponse({
         'ok': True,
@@ -3134,6 +3088,8 @@ def _perform_student_ai_check(submission, result):
         'grade_group': submission.get_ai_grade_group_info(),
         'summary': submission.student_ai_summary,
         'feedback': feedback_text,
+        'grade_explanation': result.get('grade_explanation') or summary_text,
+        'revision_advice': result.get('revision_advice') or [],
         'strengths': strengths,
         'weaknesses': weaknesses,
         'unclear_task': unclear_task,
@@ -3721,7 +3677,8 @@ def view_file(request, submission_id):
 
     AICriteriaPreset.ensure_default_presets()
     criteria_presets = AICriteriaPreset.objects.all()
-    default_preset = AICriteriaPreset.objects.filter(is_default=True).first() or criteria_presets.first()
+    default_preset, default_gr_codes = submission.assignment.get_ai_policy(submission.class_group) if submission.assignment else (None, [])
+    default_preset = default_preset or AICriteriaPreset.objects.filter(is_default=True).first() or criteria_presets.first()
 
     dup_info = check_submission_duplicates(submission)
 
@@ -3763,6 +3720,7 @@ def view_file(request, submission_id):
         'teacher': teacher,
         'criteria_presets': criteria_presets,
         'default_preset': default_preset,
+        'default_gr_codes': default_gr_codes,
         'dup_info': dup_info,
         'is_filtered': is_filtered,
         'queue_pos': queue_pos,
@@ -3952,9 +3910,11 @@ def assignment_ai_understanding(request, pk):
         from .gemini_service import analyze_assignment_task_understanding
         from .ai_jobs import enqueue_understanding_job, job_response
         import json
+        from .ai_context import assignment_fingerprint
         try:
-            cached = isinstance(json.loads(assignment.ai_task_understanding or 'null'), dict)
-        except ValueError:
+            data = json.loads(assignment.ai_task_understanding or 'null')
+            cached = isinstance(data, dict) and data.get('_source_fingerprint') == assignment_fingerprint(assignment) and data.get('analysis_mode') == 'ai'
+        except (ValueError, TypeError):
             cached = False
         if cached and not force_refresh:
             result = analyze_assignment_task_understanding(assignment, force_refresh=False)
@@ -7911,6 +7871,7 @@ def export_assignment_zip(request, pk):
                     'original_name': af.original_name or safe_name,
                     'zip_path': arc_name,
                     'file_type': af.get_file_type(),
+                    'is_task_source_for_ai': af.is_task_source_for_ai,
                 })
 
         # Прив'язки до розкладу
@@ -7940,6 +7901,7 @@ def export_assignment_zip(request, pk):
             'allow_student_ai_check': assignment.allow_student_ai_check,
             'allow_ai_usage': assignment.allow_ai_usage,
             'custom_criteria': assignment.custom_criteria,
+            'ai_policy': export_ai_policy(assignment, zip_file),
             'no_submission_required': assignment.no_submission_required,
             'additional_links': [{'url': l.url, 'label': l.label} for l in assignment.additional_links.all()],
             'youtube_links': [{'url': y.url, 'title': y.title} for y in assignment.youtube_links.all()],
@@ -8015,6 +7977,7 @@ def export_assignments_day_zip(request):
                         'original_name': af.original_name or safe_name,
                         'zip_path': arc_name,
                         'file_type': af.get_file_type(),
+                    'is_task_source_for_ai': af.is_task_source_for_ai,
                     })
 
             st_list = []
@@ -8043,6 +8006,7 @@ def export_assignments_day_zip(request):
                 'allow_student_ai_check': assignment.allow_student_ai_check,
                 'allow_ai_usage': assignment.allow_ai_usage,
                 'custom_criteria': assignment.custom_criteria,
+                'ai_policy': export_ai_policy(assignment, zip_file),
                 'no_submission_required': assignment.no_submission_required,
                 'additional_links': [{'url': l.url, 'label': l.label} for l in assignment.additional_links.all()],
                 'youtube_links': [{'url': y.url, 'title': y.title} for y in assignment.youtube_links.all()],
@@ -8148,6 +8112,8 @@ def import_assignments_zip(request):
                             assignment.classes.add(cg)
                             teacher.classes.add(cg)
 
+                    import_ai_policy(assignment, a_data.get('ai_policy'), zf)
+
                     # 5. Додаткові посилання
                     for link_item in a_data.get('additional_links', []):
                         if link_item.get('url'):
@@ -8174,7 +8140,8 @@ def import_assignments_zip(request):
                             file_bytes = zf.read(zpath)
                             af = AssignmentFile(
                                 assignment=assignment,
-                                original_name=orig_name
+                                original_name=orig_name,
+                                is_task_source_for_ai=bool(f_info.get('is_task_source_for_ai'))
                             )
                             af.file.save(orig_name, ContentFile(file_bytes), save=True)
                             imported_files_count += 1

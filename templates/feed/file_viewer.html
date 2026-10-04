@@ -630,6 +630,7 @@
 {% endblock %}
 
 {% block extra_scripts %}
+{{ default_gr_codes|json_script:"assignment-default-grs" }}
 <script src="{% static 'js/review_workspace.js' %}" defer></script>
 <script src="{% static 'js/material_preview.js' %}" defer></script>
 <!-- Prism.js для підсвічування коду -->
@@ -936,7 +937,7 @@ function toggleAllViewerGr(checkedState) {
 }
 
 // Ініціалізація прапорців ГР при завантаженні сторінки (з дефолтами завдання)
-var ASSIGNMENT_DEFAULT_GRS = {{ assignment.default_ai_grs|default:"'[]'"|safe }};
+var ASSIGNMENT_DEFAULT_GRS = JSON.parse(document.getElementById("assignment-default-grs").textContent);
 document.addEventListener('DOMContentLoaded', function() {
     var presetEl = document.getElementById('single-ai-preset');
     if (!presetEl) return;

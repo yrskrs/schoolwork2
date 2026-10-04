@@ -15,6 +15,8 @@ atexit.register(shutil.rmtree, MEDIA_ROOT, ignore_errors=True)
 SECRET_KEY = 'schoolnet-tests-only-secret-key-with-at-least-fifty-characters'
 DEBUG = False
 AI_JOBS_EAGER = True
+CACHES = {name: {'BACKEND': 'django.core.cache.backends.locmem.LocMemCache', 'LOCATION': 'test-' + name}
+          for name in ('default', 'ai_materials')}
 EMAIL_BACKEND = 'django.core.mail.backends.locmem.EmailBackend'
 
 PASSWORD_HASHERS = ['django.contrib.auth.hashers.MD5PasswordHasher']

@@ -28,6 +28,51 @@
 </div>
 
 <!-- Дозволити учням самоперевірку -->
+<details class="form-group" style="border:1px solid var(--color-border);border-radius:var(--radius-md);padding:10px;">
+    <summary style="cursor:pointer;font-weight:700;">🏫 Окремі критерії для класів</summary>
+    <p class="form-hint">Залиште «Критерії завдання», якщо для всіх класів підходить спільний шаблон. Індивідуальні критерії роботи також враховуються.</p>
+    {% for row in form.assessment_rows %}
+    <div data-class-assessment="{{ row.class_group.pk }}" style="margin-top:12px;">
+        <label for="{{ row.preset.id_for_label }}" class="form-label">{{ row.class_group.name }}</label>
+        {{ row.preset }}{{ row.preset.errors }}
+        <details data-class-grs style="margin-top:6px;"><summary>Групи результатів цього класу</summary><div data-class-gr-inputs>{{ row.grs }}</div>{{ row.grs.errors }}<p class="form-hint">Жодної позначки — усі ГР обраного шаблону. Для традиційного оцінювання ГР не потрібні.</p></details>
+    </div>
+    {% endfor %}
+</details>
+{{ form.ai_policy_presets|json_script:"class-ai-preset-data" }}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const presets = JSON.parse(document.getElementById('class-ai-preset-data').textContent);
+    document.querySelectorAll('[data-class-assessment]').forEach(function(row) {
+        const select = row.querySelector('select');
+        function updateGRs() {
+            const box = row.querySelector('[data-class-gr-inputs]');
+            const selected = new Set(Array.from(box.querySelectorAll('input:checked'), function(el) { return el.value; }));
+            const preset = presets.find(function(p) { return String(p.id) === select.value; });
+            row.querySelector('[data-class-grs]').hidden = !preset || preset.type === 'traditional' || !preset.grs.length;
+            box.replaceChildren();
+            (preset && preset.type !== 'traditional' ? preset.grs : []).forEach(function(gr) {
+                const label = document.createElement('label');
+                label.style.cssText = 'display:flex;gap:8px;align-items:baseline;margin-top:6px;';
+                const input = document.createElement('input');
+                input.type = 'checkbox'; input.name = 'class_ai_grs_' + row.dataset.classAssessment;
+                input.value = gr.code; input.checked = selected.has(gr.code);
+                label.append(input, document.createTextNode(gr.code + ': ' + gr.name));
+                box.append(label);
+            });
+        }
+        select.addEventListener('change', updateGRs); updateGRs();
+    });
+    function updateClassCriteria() {
+        var selected = new Set(Array.from(document.querySelectorAll('input[name="classes"]:checked'), function(el) { return el.value; }));
+        document.querySelectorAll('[data-class-assessment]').forEach(function(row) { row.hidden = !selected.has(row.dataset.classAssessment); });
+    }
+    document.querySelectorAll('input[name="classes"]').forEach(function(el) { el.addEventListener('change', updateClassCriteria); });
+    updateClassCriteria();
+});
+</script>
+
+<!-- Дозволити учням самоперевірку -->
 <div class="form-group" style="margin-bottom:12px;">
     <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px 12px;background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:var(--radius-md);width:100%;box-sizing:border-box;max-width:100%;">
         <input type="checkbox" name="allow_student_ai_check" id="id_allow_student_ai_check"

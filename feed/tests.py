@@ -1478,8 +1478,8 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
         # Перевірка вмісту запиту до Gemini
         self.assertTrue(len(captured_payloads) > 0)
         sent_prompt = captured_payloads[0]['contents'][0]['parts'][0]['text']
-        self.assertIn("ТОЧНЕ РОЗУМІННЯ СУТІ ЗАВДАННЯ", sent_prompt)
-        self.assertIn("ОБОВ'ЯЗКОВИЙ ЗВОРОТНИЙ ЗВ'ЯЗОК ПРИ ОЦІНЦІ МЕНШЕ 10 БАЛІВ", sent_prompt)
+        self.assertIn("preliminary_task_scope", sent_prompt)
+        self.assertIn("grade_explanation", sent_prompt)
         self.assertIn("Хронологія подій козацької доби", sent_prompt)
 
         # Перевірка зворотного зв'язку
@@ -2666,8 +2666,8 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
                 if 'text' in part:
                     sent_prompt += part['text']
 
-        self.assertIn('СПІЛЬНЕ / КОЛЕКТИВНЕ ВИКОНАННЯ РОБОТИ (ПЛАГІАТ ВИКЛЮЧЕНО)', sent_prompt)
-        self.assertIn('КАТЕГОРИЧНО ЗАБОРОНЕНО знижувати оцінку чи встановлювати штраф за плагіат або списування', sent_prompt)
+        self.assertIn('plagiarism_ignored', sent_prompt)
+        self.assertIn('не застосовуй штраф за однаковий файл', sent_prompt)
         self.assertNotIn('КРИТИЧНЕ ЗАУВАЖЕННЯ СИСТЕМИ АНТИПЛАГІАТУ:\nВстановлено 100% збіг', sent_prompt)
 
     def test_assignment_form_preset_select_attributes(self):
@@ -4058,28 +4058,13 @@ class AICreativityAndCriteriaTests(TestCase):
         req_body = str(captured_payloads[0])
 
         # Перевірка наявності індивідуальних критеріїв
-        self.assertIn("ІНДИВІДУАЛЬНІ КРИТЕРІЇ ОЦІНЮВАННЯ ВЧИТЕЛЯ", req_body)
+        self.assertIn("teacher_custom_criteria", req_body)
         self.assertIn(custom_text, req_body)
 
-        # Перевірка наявності інструкцій щодо зображень
-        self.assertIn("АНАЛІЗ ПРИКРІПЛЕНИХ ЗОБРАЖЕНЬ ТА ГРАФІКИ", req_body)
-        self.assertIn("Midjourney", req_body)
-
-        # Перевірка інструкцій щодо сервісів обходу (humanizers)
-        self.assertIn("Anti-AI Bypass", req_body)
-        self.assertIn("QuillBot", req_body)
-        self.assertIn("Undetectable AI", req_body)
-
-        # Перевірка суворої політики заборони ШІ
-        self.assertIn("СУВОРО ЗАБОРОНЕНО використання ШІ", req_body)
-
-        # Перевірка інструкцій щодо сервісів обходу (humanizers)
-        self.assertIn("Anti-AI Bypass", req_body)
-        self.assertIn("QuillBot", req_body)
-        self.assertIn("Undetectable AI", req_body)
-
-        # Перевірка суворої політики заборони ШІ
-        self.assertIn("СУВОРО ЗАБОРОНЕНО використання ШІ", req_body)
+        # Visual evidence and AI suspicion have explicit limits; no automatic punishment.
+        self.assertIn("візуальними сторінками", req_body)
+        self.assertIn("не знижуй бал лише за стиль", req_body)
+        self.assertIn('ai_usage_allowed', req_body)
 
     def test_criteria_modal_rendered_in_views(self):
         """Перевірка рендерингу кнопки та модального вікна критеріїв на сторінках завдання."""
@@ -4255,9 +4240,9 @@ class TeacherMaterialsAITaskRecognitionTests(TestCase):
             self.assertIn('Скласти список трьох факторів забруднення', user_text)
 
             # Перевіряємо вказівки для ШІ шукати завдання на слайдах
-            self.assertIn('ПОШУК ЗАВДАННЯ В ЦИХ МАТЕРІАЛАХ', user_text)
-            self.assertIn('ФІНАЛЬНІ/ОСТАННІ СЛАЙДИ', user_text)
-            self.assertIn('ЗАБОРОНА ПОМИЛКОВОГО «ДОПРАЦЮВАННЯ»', user_text)
+            self.assertIn('Уточни формулювання заданої вправи', user_text)
+            self.assertIn('текстом і зображеннями', user_text)
+            self.assertIn('Невизначеність системи не є помилкою учня', user_text)
 
             # Перевіряємо, що згенероване PDF прев'ю презентації передано до inlineData (Vision)
             inline_parts = [p['inlineData'] for p in payload['contents'][0]['parts'] if 'inlineData' in p]
@@ -5043,9 +5028,11 @@ class ExcelLegacyXlsSupportTests(TestCase):
         self.assertEqual(len(files), 1)
         f_info = files[0]
         self.assertIsNone(f_info['error_preview'])
-        self.assertIsNotNone(f_info['html_preview'])
-        self.assertIn("excel-table", f_info['html_preview'])
-        self.assertIn("Іваненко", f_info['html_preview'])
+        self.assertIsNone(f_info['html_preview'])  # Load the selected document on demand.
+        preview = self.client.get(reverse('file_preview', args=[f_info['id']]) + '?mode=text')
+        self.assertEqual(preview.status_code, 200)
+        self.assertIn('excel-table', preview.json()['content'])
+        self.assertIn('Іваненко', preview.json()['content'])
 
 
 class MultiProviderAndFailoverAITests(TestCase):
@@ -5437,7 +5424,7 @@ class QuestionAnswerMappingTests(TestCase):
         self.assertIn("СИСТЕМНЕ ЗІСТАВЛЕННЯ", full_prompt)
         self.assertIn("ПІДСТАВЛЕНА ВІДПОВІДЬ УЧНЯ №1", full_prompt)
         self.assertIn("ПІДСТАВЛЕНА ВІДПОВІДЬ УЧНЯ №2", full_prompt)
-        self.assertIn("СУВОРО ТА БЕЗАПЕЛЯЦІЙНО ЗАБОРОНЕНО писати, що «жодної відповіді не дано»", full_prompt)
+        self.assertIn("Не оголошуй роботу порожньою", full_prompt)
 
         # 2. Перевіряємо пост-обробку:
         # - unclear_task знято (стало False)
@@ -5446,8 +5433,7 @@ class QuestionAnswerMappingTests(TestCase):
         # - додано пораду щодо формату «питання-відповідь»
         self.assertEqual(result['status'], 'success')
         self.assertFalse(result['unclear_task'])
-        self.assertNotEqual(result['suggested_grade'], 'Доопрацювати')
-        self.assertIn(result['suggested_grade'], ['6', '7', '8', '9', '10'])
+        self.assertEqual(result['suggested_grade'], 'Доопрацювати')  # No grade from answer count alone.
 
         # Перевірка очищення від фрази «жодної відповіді не дано»
         self.assertNotIn("жодної відповіді не дано", result['summary'].lower())
@@ -5549,14 +5535,13 @@ class QuestionAnswerMappingTests(TestCase):
         # Перевіряємо, що промт містить критичні правила щодо пошукових завдань в інтернеті
         full_prompt = mock_call.call_args.kwargs.get('prompt_text', '')
         self.assertIn("ДОСЛІДНИЦЬКІ, ПОШУКОВІ ЗАВДАННЯ", full_prompt)
-        self.assertIn("інформації в інтернеті", full_prompt)
+        self.assertIn("Не вимагай дослівного збігу", full_prompt)
 
         # Перевіряємо пост-обробку:
         # 1. unclear_task знято (стало False)
         self.assertFalse(result['unclear_task'])
-        # 2. Оцінку виправлено з 'Доопрацювати' на високу оцінку (10)
-        self.assertEqual(result['suggested_grade'], '10')
-        self.assertIn('Високий', result['level'])
+        # No numeric grade is invented from text length without assessed result groups.
+        self.assertEqual(result['suggested_grade'], 'Доопрацювати')
         # 3. format_warning очищено від неправдивого зауваження
         self.assertEqual(result.get('format_warning', ''), '')
         # 4. Некоректні фрази "а що це таке" вичищено

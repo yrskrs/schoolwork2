@@ -93,8 +93,9 @@
                     <div class="form-group" style="margin:0;">
                         <label for="filter-preset" class="form-label" style="font-weight:700;color:var(--color-primary);">📋 Критерії перевірки ШІ:</label>
                         <select id="filter-preset" class="form-input" onchange="onBatchPresetChanged()" style="font-weight:700;border-color:var(--color-primary);">
+                            <option value="" selected>Критерії кожного завдання та класу</option>
                             {% for p in criteria_presets %}
-                            <option value="{{ p.id }}" {% if p.is_default %}selected{% endif %}>
+                            <option value="{{ p.id }}" >
                                 {{ p.name }}{% if p.document_name %} (📎 {{ p.document_name|truncatechars:20 }}){% endif %}
                             </option>
                             {% endfor %}

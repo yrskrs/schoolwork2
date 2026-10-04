@@ -597,6 +597,23 @@ class Assignment(models.Model):
         default='',
         help_text='JSON-список code ГР, наприклад ["ГР 1","ГР 2"]'
     )
+    class_ai_overrides = models.JSONField(
+        'Критерії ШІ для окремих класів', default=dict, blank=True,
+        help_text='Для кожного класу: шаблон та обрані групи результатів. Порожнє значення успадковує критерії завдання.'
+    )
+
+    def get_ai_policy(self, class_group=None):
+        """The same assignment/class policy for teacher, batch and student checks."""
+        preset = self.default_ai_preset
+        grs = self.get_default_gr_list()
+        override = (self.class_ai_overrides or {}).get(str(getattr(class_group, 'pk', class_group)), {})
+        if isinstance(override, dict) and override.get('preset_id'):
+            class_preset = AICriteriaPreset.objects.filter(pk=override['preset_id']).first()
+            if class_preset:
+                preset, grs = class_preset, override.get('grs') or []
+        if preset and preset.evaluation_type == 'traditional':
+            grs = []
+        return preset, grs
 
     # ── Самоперевірка учнем (Student AI Self-Check) ───────────────────────────
     allow_student_ai_check = models.BooleanField(
@@ -2384,8 +2401,9 @@ class Submission(models.Model):
 
     def is_traditional_grading(self):
         """Чи використовується для цієї роботи традиційна система оцінювання."""
-        if self.assignment and self.assignment.default_ai_preset:
-            return self.assignment.default_ai_preset.evaluation_type == 'traditional'
+        if self.assignment:
+            preset, _ = self.assignment.get_ai_policy(self.class_group)
+            return bool(preset and preset.evaluation_type == 'traditional')
         return False
 
     def has_gr_results(self):
@@ -2535,6 +2553,8 @@ class Submission(models.Model):
         Повертає загальну пораду/відгук без службових маркерів списку.
         """
         text = str(self.student_ai_feedback or '').strip()
+        for marker in ('🎯 **Чому така оцінка:**', '📋 **Перевірка критеріїв:**', '🛠️ **Як покращити роботу:**'):
+            text = text.split(marker, 1)[0].strip()
         if not text:
             return ""
         for line in text.splitlines():
@@ -2547,6 +2567,22 @@ class Submission(models.Model):
         if not text.startswith(('✅', '💡', '📌')):
             return text
         return ""
+
+    def get_student_ai_evidence_sections(self):
+        """Show persisted reasoning after reload, alongside the legacy feedback cards."""
+        headings = {'🎯 **Чому така оцінка:**': '🎯 Чому така оцінка',
+                    '📋 **Перевірка критеріїв:**': '📋 Перевірка критеріїв',
+                    '🛠️ **Як покращити роботу:**': '🛠️ Як покращити роботу'}
+        sections, current = [], None
+        for line in str(self.student_ai_feedback or '').splitlines():
+            title = headings.get(line.strip())
+            if title:
+                current = {'title': title, 'lines': []}
+                sections.append(current)
+            elif current is not None:
+                current['lines'].append(line)
+        return [{'title': section['title'], 'text': '\n'.join(section['lines']).strip()}
+                for section in sections if any(line.strip() for line in section['lines'])]
 
     def get_ai_grade_group_info(self):
         """

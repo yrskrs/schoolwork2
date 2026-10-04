@@ -251,6 +251,11 @@ def log_ai_request_metric(model_name, provider='gemini', action='evaluation', st
 
 def _raw_call_ai_api(prompt_text, system_prompt="", inline_media=None, provider="gemini", api_key="", model_name="", custom_url="", temperature=0.2, max_output_tokens=3500, timeout=35, json_mode=False, thinking_budget=None):
     provider = (provider or 'gemini').lower().strip()
+    from .ai_context import media_for_provider
+    try:
+        inline_media = media_for_provider(inline_media or [], provider)
+    except Exception:
+        return 0, None, 'Не вдалося прочитати всі візуальні матеріали для цього провайдера. Спробуйте PDF-сумісну модель.', None
     url, headers, model = get_provider_endpoint(provider, model_name=model_name, api_key=api_key, custom_url=custom_url)
 
     if provider == 'gemini':
@@ -259,6 +264,8 @@ def _raw_call_ai_api(prompt_text, system_prompt="", inline_media=None, provider=
             parts.append({"text": prompt_text})
         if inline_media:
             for item in inline_media:
+                if item.get("source"):
+                    parts.append({"text": item["source"]})
                 parts.append({
                     "inlineData": {
                         "mimeType": item["mime_type"],
@@ -301,6 +308,8 @@ def _raw_call_ai_api(prompt_text, system_prompt="", inline_media=None, provider=
                 candidates = data.get('candidates', [])
                 if candidates:
                     cand = candidates[0]
+                    if cand.get('finishReason') == 'MAX_TOKENS':
+                        return status_code, '', 'MAX_TOKENS: відповідь неповна; оцінку не збережено.', data
                     c_parts = cand.get('content', {}).get('parts', [])
                     if c_parts:
                         # Фільтруємо частини роздумів ШІ (thinking)
@@ -336,6 +345,8 @@ def _raw_call_ai_api(prompt_text, system_prompt="", inline_media=None, provider=
 
         if inline_media:
             for item in inline_media:
+                if item.get("source"):
+                    user_content.append({"type": "text", "text": item["source"]})
                 user_content.append({
                     "type": "image_url",
                     "image_url": {
@@ -371,6 +382,8 @@ def _raw_call_ai_api(prompt_text, system_prompt="", inline_media=None, provider=
             if status_code == 200 and data:
                 choices = data.get('choices', [])
                 if choices:
+                    if choices[0].get('finish_reason') == 'length':
+                        return status_code, '', 'MAX_TOKENS: відповідь неповна; оцінку не збережено.', data
                     msg = choices[0].get('message', {})
                     raw_reply = msg.get('content', '') or msg.get('reasoning_content', '')
                     raw_reply = raw_reply.strip()
@@ -1537,7 +1550,7 @@ def extract_text_from_excel(file_path, max_rows=50, max_cols=20):
         try:
             import xlrd
             wb = xlrd.open_workbook(file_path)
-            for sheetname in wb.sheet_names()[:5]:
+            for sheetname in wb.sheet_names():
                 sheet = wb.sheet_by_name(sheetname)
                 sheet_lines = [f"📊 Аркуш: {sheetname}"]
                 max_r = min(sheet.nrows, max_rows)
@@ -1572,25 +1585,35 @@ def extract_text_from_excel(file_path, max_rows=50, max_cols=20):
     if not sheet_summaries:
         try:
             import openpyxl
-            wb = openpyxl.load_workbook(file_path, data_only=True, read_only=True)
+            wb = openpyxl.load_workbook(file_path, data_only=False, read_only=True)
+            cached_wb = openpyxl.load_workbook(file_path, data_only=True, read_only=True)
 
-            for sheetname in wb.sheetnames[:5]:
+            for sheetname in wb.sheetnames:
                 sheet = wb[sheetname]
                 sheet_lines = [f"📊 Аркуш: {sheetname}"]
                 rows_count = 0
 
+                cached_rows = cached_wb[sheetname].iter_rows(values_only=True)
                 for row in sheet.iter_rows(values_only=True):
+                    cached_row = next(cached_rows, ())
                     rows_count += 1
                     if rows_count > max_rows:
                         sheet_lines.append(f"[... ще рядки]")
                         break
-                    row_vals = [str(v) if v is not None else "" for v in row[:max_cols]]
+                    row_vals = []
+                    for column, value in enumerate(row[:max_cols]):
+                        text = str(value) if value is not None else ""
+                        if isinstance(value, str) and value.startswith('='):
+                            cached_value = cached_row[column] if column < len(cached_row) else None
+                            text = f"{col_num_to_letter(column + 1)}{rows_count}: {value} → {cached_value if cached_value is not None else '[результат не кешований]'}"
+                        row_vals.append(text)
                     if any(v.strip() for v in row_vals):
                         sheet_lines.append(" | ".join(row_vals))
 
                 sheet_summaries.append("\n".join(sheet_lines))
 
             wb.close()
+            cached_wb.close()
         except Exception as e:
             # Резервне читання для застарілих .xls або пошкоджених файлів через LibreOffice
             lo_bin = 'libreoffice' if shutil.which('libreoffice') else ('soffice' if shutil.which('soffice') else None)
@@ -1989,6 +2012,8 @@ def fetch_url_content(url, timeout=10, max_chars=20000):
         with public_urlopen(req, timeout=timeout) as resp:
             content_type = resp.headers.get('Content-Type', '').lower()
             raw_bytes = resp.read(500 * 1024)  # до 500 КБ
+            if content_type.startswith(('image/', 'audio/', 'video/')) or content_type.startswith(('application/pdf', 'application/vnd.', 'application/msword', 'application/zip')):
+                return None, None, 'За посиланням бінарний файл. Для змістової перевірки прикріпіть сам файл; його вміст не прочитано як вебсторінку.'
 
             # Визначаємо кодування
             charset = 'utf-8'
@@ -2101,6 +2126,7 @@ def extract_submission_content(submission):
     text_parts = []
     inline_media = []
     inaccessible_materials = []
+    unreadable_files = []
 
     # 1. Текстовий коментар учня (обов'язково читається ШІ)
     if submission.comment_student:
@@ -2148,6 +2174,18 @@ def extract_submission_content(submission):
         filename = getattr(sf, 'original_name', '') or os.path.basename(file_path)
         ext = getattr(sf, 'get_extension', lambda: os.path.splitext(file_path)[1].lower())() or os.path.splitext(file_path)[1].lower()
         file_size_kb = os.path.getsize(file_path) / 1024
+
+        from .ai_context import extract_file_evidence, OFFICE, IMAGES
+        if ext in OFFICE | IMAGES | {'.pdf', '.sb3', '.hex', '.mdb', '.accdb'} or is_text_file(file_path):
+            evidence = extract_file_evidence(file_path, ext)
+            if not evidence['text'] and not evidence['media']:
+                unreadable_files.append(filename)
+            text_parts.append(f"Вміст роботи учня ({filename}):\n{evidence['text']}")
+            inline_media.extend(dict(item, source=f"Робота учня: {filename}") for item in evidence['media'])
+            for limitation in evidence['limitations']:
+                inaccessible_materials.append({'type': 'file', 'target': filename, 'reason': limitation})
+                text_parts.append(f"МЕЖІ ПРОЧИТАНОГО ({filename}): {limitation}")
+            continue
 
         # ── А. ФАЙЛИ БЕЗ РОЗШИРЕННЯ (Default to text file detection) ──────────
         if not ext:
@@ -2362,6 +2400,9 @@ def extract_submission_content(submission):
         elif ext in ['.zip', '.rar', '.7z', '.tar', '.gz', '.tgz']:
             archive_summary = extract_text_from_archive(file_path, ext)
             text_parts.append(f"Вміст прикріпленого архіву ({filename}, {file_size_kb:.1f} КБ):\n{archive_summary}")
+            limitation = 'Архів: вибірковий витяг, до 8 текстових файлів і 6 зображень; інші вкладення не перевірено. Не вважай їх відсутніми.'
+            inaccessible_materials.append({'type': 'file', 'target': filename, 'reason': limitation})
+            text_parts.append(f'МЕЖІ ПРОЧИТАНОГО ({filename}): {limitation}')
             if ext == '.zip':
                 zip_imgs = extract_images_from_zip(file_path)
                 for z_img in zip_imgs:
@@ -2414,9 +2455,13 @@ def extract_submission_content(submission):
                 content = read_text_file(file_path)
                 text_parts.append(f"Вміст прикріпленого файлу ({filename}, {file_size_kb:.1f} КБ):\n```\n{content}\n```")
             else:
+                unreadable_files.append(filename)
+                inaccessible_materials.append({'type': 'file', 'target': filename, 'reason': 'Цей формат потребує ручного перегляду; вміст не прочитано.'})
                 text_parts.append(f"[Прикріплено файл формату {ext} ({filename}, {file_size_kb:.1f} КБ)]")
 
     setattr(submission, '_inaccessible_materials', inaccessible_materials)
+    if submission_files and len(unreadable_files) == len(submission_files) and not submission.link:
+        return [], [], 'Вміст прикріплених файлів не прочитано. Потрібна ручна перевірка; спробу самоперевірки не використано.'
 
     if not text_parts and not inline_media:
         return text_parts, inline_media, "Учень не додав жодного тексту, посилання чи придатного файлу для перевірки."
@@ -2936,18 +2981,19 @@ def find_question_by_task_num(questions: list[str], target_num: int) -> str | No
 
     # 2. Пошук номера на початку рядка/питання (наприклад: «2.», «2)», «[Слайд X] 2.»)
     start_num_pattern = re.compile(
-        rf'^(?:(?:📽️\s*)?(?:\[?\s*слайд\s*\d+\b[^\]\n\r]*\]?[\s\:\-]*)?)?(?:[•\-\*]\s*)?{t_str}[\.\)\:\–\—\-]\s+',
+        rf'^(?:[•\-\*]\s*)?{t_str}[\.\)\:\–\—\-]\s+',
         re.IGNORECASE
     )
-    for q in questions:
-        if start_num_pattern.search(q):
-            return q
+    cleaned_questions = [re.sub(r'^(?:📽️\s*)?\[?\s*слайд\s*\d+(?:\s*/\s*\d+)?\s*[\]\:\-]\s*', '', q, flags=re.IGNORECASE) for q in questions]
+    for original, cleaned in zip(questions, cleaned_questions):
+        if start_num_pattern.search(cleaned):
+            return original
 
     # 3. Пошук номера як окремого пункту всередині тексту
     body_num_pattern = re.compile(rf'(?:^|\n|\b)\s*{t_str}[\.\)]\s+[А-Яа-яA-Za-z]', re.IGNORECASE)
-    for q in questions:
-        if body_num_pattern.search(q):
-            return q
+    for original, cleaned in zip(questions, cleaned_questions):
+        if body_num_pattern.search(cleaned):
+            return original
 
     # 4. Позиційний fallback (idx = target_num - 1) КАТЕГОРИЧНО ЗАБОРОНЕНО (Section 19),
     # оскільки список може містити заголовки, теорію, приклади або питання для самоперевірки.
@@ -5399,20 +5445,16 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
             )
             return {'status': 'failed', 'error': error_msg}
 
-    # Визначаємо шаблон критеріїв оцінювання
+    # Assignment/class choices are the default in every entry point. An explicit
+    # teacher override applies only to this request, never to future student checks.
+    policy_preset, policy_grs = asgn.get_ai_policy(submission.class_group) if asgn else (None, [])
     selected_preset = criteria_preset
-    if not selected_preset and not preset_id and asgn:
-        selected_preset = asgn.default_ai_preset
-    if selected_gr_codes is None and asgn and asgn.default_ai_grs:
-        try:
-            selected_gr_codes = json.loads(asgn.default_ai_grs)
-        except (ValueError, TypeError):
-            selected_gr_codes = None
     if not selected_preset and preset_id:
-        try:
-            selected_preset = AICriteriaPreset.objects.filter(id=preset_id).first()
-        except Exception:
-            selected_preset = None
+        selected_preset = AICriteriaPreset.objects.filter(pk=preset_id).first()
+    if not selected_preset:
+        selected_preset = policy_preset
+    if selected_gr_codes is None:
+        selected_gr_codes = policy_grs if selected_preset == policy_preset else []
 
     if not selected_preset:
         try:
@@ -5437,7 +5479,7 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
             for gr in all_preset_grs:
                 gr_code = str(gr.get('code', '')).strip().lower()
                 gr_name = str(gr.get('name', '')).strip().lower()
-                if gr_code in selected_set or any(s in gr_code or s in gr_name for s in selected_set):
+                if re.sub(r'\s+', '', gr_code) in {re.sub(r'\s+', '', code) for code in selected_set}:
                     active_grs.append(gr)
         elif all_preset_grs:
             active_grs = all_preset_grs
@@ -5621,119 +5663,13 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
         "- Оцінюй також коректність розрахунків, використання формул (якщо вимагалося) та структуру таблиці."
     )
 
-    # Витягуємо вміст прикріплених вчителем файлів до завдання (щоб ШІ знав повну умову завдання)
+    # Read the same complete teacher evidence in evaluation and in the student guide.
+    from .ai_context import teacher_materials, ASSESSMENT_RULES, feedback_evidence_sections
+    teacher_files_content = []
+    material_coverage = []
     if assignment and assignment.files.exists():
-        from django.conf import settings as django_settings
-        primary_task_content = []
-        teacher_files_content = []
-        for af in assignment.files.all():
-            if af.file and os.path.exists(af.file.path):
-                af_name = af.original_name or os.path.basename(af.file.name)
-                af_ext = af.get_extension()
-                is_ai_task = getattr(af, 'is_task_source_for_ai', False)
-
-                # 1. Спочатку витягуємо детальний структурований текст файлу (слайди, заголовки, таблиці, параграфи)
-                af_text = ""
-                if af_ext in ['.pptx', '.ppt']:
-                    try:
-                        af_text = extract_text_from_powerpoint(af.file.path)
-                    except Exception:
-                        pass
-                elif af_ext == '.odp':
-                    try:
-                        af_text = extract_text_from_opendocument(af.file.path)
-                    except Exception:
-                        pass
-
-                if not af_text:
-                    try:
-                        af_text = get_normalized_file_content(af.file.path, af.file.name)
-                    except Exception:
-                        pass
-
-                # 2. Додаємо візуальні медіа до inline_media для Gemini Vision (тільки коли це дійсно необхідно):
-                has_visual_attached = False
-
-                # Зображення (фото вправ з підручника, зошита, графічні схеми) — оптимізуємо розмір
-                if af_ext in ['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif']:
-                    try:
-                        b_data, mime_t = _optimize_image_for_ai(af.file.path)
-                        if b_data:
-                            inline_media.append({
-                                "mime_type": mime_t,
-                                "data": base64.b64encode(b_data).decode('utf-8')
-                            })
-                            has_visual_attached = True
-                    except Exception:
-                        pass
-
-                # Прямий PDF документ: передаємо у Vision для повноцінного мультимодального аналізу (формули, схеми, скани)
-                elif af_ext == '.pdf':
-                    try:
-                        pdf_size = os.path.getsize(af.file.path)
-                        if pdf_size <= 10 * 1024 * 1024:
-                            with open(af.file.path, 'rb') as f_pdf:
-                                inline_media.append({
-                                    "mime_type": "application/pdf",
-                                    "data": base64.b64encode(f_pdf.read()).decode('utf-8')
-                                })
-                            has_visual_attached = True
-                    except Exception:
-                        pass
-
-                # Презентація (.pptx, .ppt, .odp) або Office документ:
-                # Перевіряємо згенероване PDF-прев'ю (до 10 МБ), щоб передати його в Vision (слайди, схеми)
-                elif af_ext in ['.pptx', '.ppt', '.odp', '.docx', '.xlsx', '.xls', '.ods']:
-                    preview_pdf_path = None
-                    cand1 = os.path.join(django_settings.MEDIA_ROOT, 'previews', f"{af.id}.pdf")
-                    cand2 = os.path.join(django_settings.MEDIA_ROOT, 'previews', str(af.id), 'presentation.pdf')
-                    if os.path.exists(cand1):
-                        preview_pdf_path = cand1
-                    elif os.path.exists(cand2):
-                        preview_pdf_path = cand2
-                    else:
-                        try:
-                            from .views import get_pdf_preview_url
-                            get_pdf_preview_url(af)
-                            if os.path.exists(cand1):
-                                preview_pdf_path = cand1
-                        except Exception:
-                            pass
-
-                    if preview_pdf_path and os.path.exists(preview_pdf_path) and os.path.getsize(preview_pdf_path) <= 10 * 1024 * 1024:
-                        try:
-                            with open(preview_pdf_path, 'rb') as f_prev:
-                                inline_media.append({
-                                    "mime_type": "application/pdf",
-                                    "data": base64.b64encode(f_prev.read()).decode('utf-8')
-                                })
-                            has_visual_attached = True
-                        except Exception:
-                            pass
-
-                visual_status = " [візуальний вміст/PDF передано на безпосередній зоровий аналіз ШІ]" if has_visual_attached else ""
-
-                if is_ai_task:
-                    header = f"🎯 ГОЛОВНИЙ ФАЙЛ З УМОВОЮ ЗАВДАННЯ ВІД ВЧИТЕЛЯ «{af_name}»{visual_status} (вчитель зазначив цей файл як першоджерело умови завдання):"
-                    if af_text:
-                        primary_task_content.append(f"{header}\n{af_text[:16000]}")
-                    else:
-                        primary_task_content.append(f"{header} ({af_ext})")
-                else:
-                    if af_ext in ['.pptx', '.ppt', '.odp']:
-                        kind = "Презентація до уроку"
-                    elif af_ext == '.pdf':
-                        kind = "PDF документ/матеріал"
-                    elif af_ext in ['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif']:
-                        kind = "Зображення завдання"
-                    else:
-                        kind = "Матеріал"
-
-                    if af_text:
-                        teacher_files_content.append(f"• {kind} вчителя «{af_name}» ({af_ext}){visual_status}:\n{af_text[:16000]}")
-                    else:
-                        teacher_files_content.append(f"• Прикріплений вчителем файл «{af_name}» ({af_ext}){visual_status}")
-
+        primary_task_content, teacher_files_content, teacher_media, material_coverage = teacher_materials(assignment)
+        inline_media.extend(teacher_media)
         if primary_task_content:
             prompt_lines.append("\n═══════════════════════════════════════════════════════════════════")
             prompt_lines.append("🎯 ОСНОВНИЙ ФАЙЛ З УМОВОЮ ЗАВДАННЯ ДЛЯ ШІ (ВКАЗАНО ВЧИТЕЛЕМ):")
@@ -5948,7 +5884,7 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
         assignment_desc=assignment_desc,
         custom_criteria=custom_criteria,
         primary_task_content=primary_task_content if 'primary_task_content' in locals() else None,
-        teacher_files_content=teacher_files_content if 'teacher_files_content' in locals() else None,
+        teacher_files_content=(primary_task_content if 'primary_task_content' in locals() else []) + teacher_files_content,
     )
     teacher_specific_task_nums = scope.get('teacher_specific_task_nums') or []
     task_questions = scope.get('task_questions') or []
@@ -6302,7 +6238,17 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
             "  * НЕ МОЖНА ставити оцінку за те, що учень просто щось прикріпив. Оцінюються виключно реальні відповіді та праця учня!\n"
         )
 
-    prompt_content = "\n".join(prompt_lines)
+    from .ai_context import build_assessment_request
+    prompt_content, system_instruction = build_assessment_request(
+        submission, selected_preset, active_grs, scope, text_parts,
+        primary_task_content if 'primary_task_content' in locals() else [],
+        teacher_files_content, material_coverage, custom_prompt=custom_prompt)
+    if selected_preset and selected_preset.document_file and os.path.exists(selected_preset.document_file.path):
+        from .ai_context import extract_file_evidence
+        rubric_evidence = extract_file_evidence(selected_preset.document_file.path)
+        prompt_content += "\nПОВНИЙ ДОКУМЕНТ ОБРАНИХ КРИТЕРІЇВ:\n" + (rubric_evidence['text'] or '')
+        inline_media.extend(dict(item, source='Документ критеріїв учителя') for item in rubric_evidence['media'])
+        prompt_content += "\n" + "\n".join(rubric_evidence['limitations'])
 
     attempts_configs = settings.get_request_configs()
 
@@ -6338,7 +6284,7 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                     model_name=c_model,
                     custom_url=c_url,
                     temperature=float(settings.temperature or 0.2),
-                    max_output_tokens=2500,
+                    max_output_tokens=min(10000, 4000 + 300 * len(active_grs) + 180 * len(scope.get("assigned_tasks") or [])),
                     timeout=35,
                     json_mode=True,
                     thinking_budget=thinking_budget_val
@@ -6406,9 +6352,21 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                     )
 
                 if result_json:
+                    if result_json.get('assessment_blocked') is True or result_json.get('suggested_grade') is None:
+                        reason = str(result_json.get('grade_explanation') or result_json.get('summary') or 'Недостатньо прочитаних даних для оцінювання.')
+                        submission.ai_status, submission.ai_error_reason = 'failed', reason
+                        submission.save(update_fields=['ai_status', 'ai_error_reason'])
+                        return {'status': 'failed', 'error': reason, 'assessment_blocked': True}
                     suggested_grade = str(result_json.get('suggested_grade', '')).strip()
-                    if suggested_grade.lower() in ['none', 'null', '']:
-                        suggested_grade = 'Доопрацювати'
+                    if suggested_grade != 'Доопрацювати':
+                        try:
+                            numeric_grade = float(suggested_grade.replace(',', '.'))
+                            if not math.isfinite(numeric_grade) or not 1 <= numeric_grade <= 12:
+                                raise ValueError('grade out of scale')
+                            suggested_grade = str(math.ceil(numeric_grade))
+                        except (TypeError, ValueError):
+                            attempted_errors.append(f"[{c_provider}/{c_model}] Некоректний бал у відповіді; оцінку не збережено.")
+                            continue
 
                     level = str(result_json.get('level', '')).strip()
                     format_warning = str(result_json.get('format_warning') or '').strip()
@@ -6444,7 +6402,8 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
 
                     if is_single_complex_task:
                         result_json['tasks_total_count'] = 1
-                        result_json['tasks_completed_count'] = 1 if suggested_grade != 'Доопрацювати' else 0
+                        single_evals = result_json.get('tasks_evaluated') or []
+                        result_json['tasks_completed_count'] = (1 if any(isinstance(task, dict) and task.get('status') == 'completed' for task in single_evals) else 0) if single_evals else min(1, max(0, int(result_json.get('tasks_completed_count') or 0)))
                         raw_evals = result_json.get('tasks_evaluated') or []
                         if isinstance(raw_evals, list) and (len(raw_evals) > 1 or not raw_evals):
                             main_task_title = assigned_tasks_list[0]['description'] if assigned_tasks_list else (assignment_title or "Комплексне завдання")
@@ -6525,17 +6484,15 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                             for idx, r in enumerate(raw_crit_results):
                                 if isinstance(r, dict):
                                     r_crit = str(r.get('criterion', '')).lower()
-                                    if c_name.lower() in r_crit or r_crit in c_name.lower():
+                                    if r_crit and (c_name.lower() in r_crit or r_crit in c_name.lower()):
                                         found_res = dict(r)
                                         matched_raw_indices.add(idx)
                                         break
                         if not found_res:
-                            is_completed = (suggested_grade not in ['Доопрацювати', '1', '2', '3'])
                             found_res = {
-                                'criterion': c_name,
-                                'status': 'completed' if is_completed else 'missing',
-                                'evidence': 'Підтверджено у зданій роботі' if is_completed else 'Не виявлено достатніх доказів виконання',
-                                'recommendation': '' if is_completed else f'Виконати вимогу: {c_name}'
+                                'criterion': c_name, 'status': 'unverifiable',
+                                'evidence': 'ШІ не навів доказів перевірки цього критерію.',
+                                'recommendation': 'Потрібно зіставити результат роботи з цим критерієм.'
                             }
                         synced_crit_results.append(found_res)
 
@@ -6613,7 +6570,7 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                             ev_text = 'Заява учня у коментарі не підтверджена фактичними матеріалами'
                             ev_source = 'unverified'
                         else:
-                            raw_st = str(found_res.get('status', 'completed')).lower()
+                            raw_st = str(found_res.get('status', 'unverifiable')).lower()
                             if raw_st in ['completed', 'done', 'так', 'виконано']:
                                 st_val = 'completed'
                             elif raw_st in ['partial', 'частково']:
@@ -6775,7 +6732,7 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                                     selected_set = {str(c).strip().lower() for c in selected_gr_codes if str(c).strip()}
                                     code_lower = code.lower()
                                     name_lower = name.lower()
-                                    if not (code_lower in selected_set or any(s in code_lower or s in name_lower for s in selected_set)):
+                                    if re.sub(r'\s+', '', code_lower) not in {re.sub(r'\s+', '', value) for value in selected_set}:
                                         continue
 
                                 # Переконуємось, що бал ГР є цілим числом
@@ -6801,7 +6758,7 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                         avg_val = sum(numeric_gr_grades) / len(numeric_gr_grades)
                         avg_gr_grade = int(min(12, max(1, math.ceil(avg_val))))
                         # Якщо оцінювалось декілька ГР одночасно — середня оцінка стає рекомендованою
-                        if suggested_grade != 'Доопрацювати':
+                        if suggested_grade != 'Доопрацювати' and not custom_criteria.strip():
                             suggested_grade = str(avg_gr_grade)
                     elif suggested_grade and suggested_grade != 'Доопрацювати':
                         try:
@@ -6840,6 +6797,14 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                         'просто прикріп', 'лише прикріп', 'нічого не зробив', 'робота не виконана',
                         'не зараховано', 'не можна ставити оцінку'
                     ])
+
+                    # A format mismatch is partial work, not an unrelated submission.
+                    content_credit = any(row.get('status') in ('completed', 'partial')
+                                         for row in result_json.get('criteria_results') or [] if isinstance(row, dict))
+                    if content_credit:
+                        ai_detected_topic_mismatch = False
+                    if not questions_expected and not post_is_invalid:
+                        ai_detected_teacher_template = False
 
                     is_rejected_submission = (
                         post_is_invalid or
@@ -6999,21 +6964,6 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                                     level = 'Середній (4-6)'
                                 else:
                                     level = 'Початковий (1-3)'
-                            elif is_research_or_search_task:
-                                if len(student_raw_text) >= 120 or (inline_media and len(inline_media) > 0):
-                                    suggested_grade = '10'
-                                    level = 'Високий (10-12)'
-                                elif len(student_raw_text) >= 50:
-                                    suggested_grade = '8'
-                                    level = 'Достатній (7-9)'
-                                else:
-                                    suggested_grade = '6'
-                                    level = 'Середній (4-6)'
-                            elif total_questions > 0 and answered_count > 0:
-                                calc_grade = max(4, min(10, int(round((answered_count / total_questions) * 12))))
-                                suggested_grade = str(calc_grade)
-                                level = 'Середній (4-6)' if calc_grade <= 6 else 'Достатній (7-9)'
-
                     # Очищення від некоректних здивованих реплік ШІ («а що це таке», «що це за місто» тощо)
                     if (is_research_or_search_task or len(student_raw_text) >= 40) and not is_rejected_submission:
                         odd_phrases = [
@@ -7137,7 +7087,7 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                             weaknesses = [w for w in weaknesses if phrase not in w.lower()]
 
                     # ── Педагогічний захист від завищення балів у багатозадачних роботах (Multi-task ceiling) ──
-                    if not is_rejected_submission:
+                    if not is_rejected_submission and not custom_criteria.strip() and not (selected_preset and selected_preset.evaluation_type == 'custom'):
                         suggested_grade, level, clean_gr_results, numeric_gr_grades, avg_gr_grade, summary, strengths, weaknesses, feedback_comment = apply_multi_task_evaluation_guardrail(
                             result_json=result_json,
                             task_questions=task_questions,
@@ -7209,6 +7159,8 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                     feedback_comment = re.sub(r'\n{3,}', '\n\n', feedback_comment).strip()
                     summary = re.sub(r'\s{2,}', ' ', summary).strip()
 
+                    result_json['grade_explanation'] = result_json.get('grade_explanation') or summary or feedback_comment
+                    result_json['needs_teacher_review'] = any(row.get('status') == 'unverifiable' for row in result_json.get('criteria_results') or [] if isinstance(row, dict))
                     full_feedback_parts = []
                     if format_warning:
                         full_feedback_parts.append(f"⚠️ **Зауваження до формату файлу (вплинуло на оцінку):**\n{format_warning}")
@@ -7233,6 +7185,8 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                     if feedback_comment:
                         full_feedback_parts.append(f"💬 **Рекомендація учню:**\n{feedback_comment}")
 
+                    evidence_sections = feedback_evidence_sections(result_json)
+                    full_feedback_parts.extend(evidence_sections)
                     combined_feedback = "\n\n".join(full_feedback_parts) if full_feedback_parts else feedback_comment
 
                     # Формуємо чистий відгук для публічних коментарів учневі (БЕЗ оцінок ГР)
@@ -7247,6 +7201,7 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                         student_feedback_parts.append("💡 **Зауваження:**\n" + "\n".join(f"• {w}" for w in weaknesses))
                     if feedback_comment:
                         student_feedback_parts.append(f"💬 {feedback_comment}")
+                    student_feedback_parts.extend(evidence_sections)
                     clean_student_feedback = "\n\n".join(student_feedback_parts) if student_feedback_parts else feedback_comment
 
                     # Виявлення використання ШІ у роботі з урахуванням порогу толерантності
@@ -7308,6 +7263,9 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                         'task_resolution': result_json.get('task_resolution'),
                         'evaluation_plan': result_json.get('evaluation_plan'),
                         'submission_evidence': result_json.get('submission_evidence'),
+                        'grade_explanation': result_json.get('grade_explanation') or summary,
+                        'needs_teacher_review': result_json.get('needs_teacher_review', False),
+                        'material_coverage': material_coverage,
                         'criteria_results': result_json.get('criteria_results'),
                         'revision_advice': result_json.get('revision_advice'),
                         'improvement_steps': result_json.get('improvement_steps') or result_json.get('revision_advice') or [],
@@ -7341,105 +7299,8 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                         'fallback_activated': fallback_happened
                     }
                 else:
-                    from feed.utils import extract_clean_comment_from_raw_json, format_raw_json_feedback_for_display
-
-                    grade_match = re.search(r'(?:suggested_grade["\']?\s*:\s*["\']?|\b)(1[0-2]|[1-9]|Доопрацювати)\b', raw_text, re.IGNORECASE)
-                    suggested_grade = grade_match.group(1) if grade_match else 'Доопрацювати'
-
-                    # Гарантуємо, що учням і вчителю не показується сирий JSON
-                    clean_feedback = extract_clean_comment_from_raw_json(raw_text)
-                    formatted_feedback = format_raw_json_feedback_for_display(raw_text)
-
-                    unclear_task = ('не зрозуміло' in formatted_feedback.lower() and 'завдан' in formatted_feedback.lower()) or ('незрозуміло' in formatted_feedback.lower() and 'завдан' in formatted_feedback.lower())
-                    student_raw_text = " ".join(text_parts).strip() if text_parts else ""
-                    is_research_or_search_task = any(kw in combined_task_for_qs.lower() for kw in [
-                        'інтернет', 'пошук', 'знайдіть', 'знайти', 'досліджен', 'місто', 'село', 'населен'
-                    ])
-
-                    post_is_invalid, post_reason, post_code = detect_invalid_or_teacher_template_submission(submission, text_parts)
-                    fb_lower_fallback = formatted_feedback.lower()
-                    ai_detected_mismatch_fallback = any(k in fb_lower_fallback for k in [
-                        'інший клас', 'іншого класу', 'не для цього класу', 'не відповідає темі', 'не відповідає завданню',
-                        'практична робота вчителя', 'бланк практичної', 'без власних відповідей', 'відповіді відсутні',
-                        'просто прикріп', 'робота не виконана', 'не зараховано'
-                    ])
-
-                    is_rejected_fallback = post_is_invalid or ai_detected_mismatch_fallback
-
-                    if not is_rejected_fallback and unclear_task and ((answered_count > 0 and total_questions > 0) or (is_research_or_search_task and len(student_raw_text) >= 50)):
-                        unclear_task = False
-
-                    if is_rejected_fallback or unclear_task:
-                        suggested_grade = 'Доопрацювати'
-                        level = 'Початковий (1-3)'
-                        unclear_task = True
-                        if is_rejected_fallback and post_reason:
-                            formatted_feedback = f"⚠️ {post_reason}\n\n{formatted_feedback}"
-                    elif suggested_grade != 'Доопрацювати':
-                        try:
-                            s_int = int(suggested_grade)
-                            if s_int <= 3:
-                                level = 'Початковий (1-3)'
-                            elif s_int <= 6:
-                                level = 'Середній (4-6)'
-                            elif s_int <= 9:
-                                level = 'Достатній (7-9)'
-                            else:
-                                level = 'Високий (10-12)'
-                        except (ValueError, TypeError):
-                            level = 'Початковий'
-                    else:
-                        level = 'Початковий (1-3)'
-
-                    submission.ai_suggested_grade = suggested_grade
-                    submission.ai_score_level = level
-                    submission.ai_feedback = formatted_feedback
-                    submission.ai_model_used = model_name
-                    submission.ai_status = 'success'
-                    submission.ai_error_reason = ''
-                    submission.ai_reviewed_at = timezone.now()
-                    submission.save(update_fields=[
-                        'ai_suggested_grade', 'ai_score_level', 'ai_feedback', 'ai_model_used', 'ai_status', 'ai_error_reason', 'ai_reviewed_at'
-                    ])
-                    return {
-                        'status': 'success',
-                        'feedback': formatted_feedback,
-                        'clean_feedback': clean_feedback,
-                        'feedback_comment': clean_feedback,
-                        'suggested_grade': suggested_grade,
-                        'level': level,
-                        'tasks_total_count': expected_scope_count,
-                        'tasks_completed_count': 1 if suggested_grade != 'Доопрацювати' else 0,
-                        'task_resolution': scope.get('task_resolution') or {
-                            'scope_source': scope.get('scope_source', 'teacher_description'),
-                            'assigned_task_count': expected_scope_count,
-                            'assigned_tasks': scope.get('assigned_tasks', []),
-                            'ignored_found_tasks': scope.get('ignored_found_tasks', [])
-                        },
-                        'evaluation_plan': scope.get('evaluation_plan', {}),
-                        'submission_evidence': {
-                            'submitted_files': [getattr(sf, 'original_name', '') or os.path.basename(sf.file.name) for sf in submission.files.all() if sf.file] if hasattr(submission, 'files') and submission.files.exists() else ([submission.file.name] if submission.file else []),
-                            'has_link': bool(submission.link),
-                            'has_comment': bool(submission.comment_student and submission.comment_student.strip()),
-                            'inaccessible_materials': getattr(submission, '_inaccessible_materials', [])
-                        },
-                        'criteria_results': [],
-                        'revision_advice': [],
-                        'improvement_steps': [],
-                        'resubmission_recommendations': [],
-                        'unclear_task': unclear_task,
-                        'format_warning': "Не зрозуміло, яке саме завдання виконане. Будь ласка, вкажіть номер завдання у коментарі до здачі та надішліть роботу повторно." if unclear_task else "",
-                        'summary': clean_feedback,
-                        'task_type': task_type,
-                        'task_interpretation': task_interpretation,
-                        'deliverable': deliverable,
-                        'questions_expected': questions_expected,
-                        'final_task_understanding': scope.get('final_task_understanding') or {},
-                        'teacher_intent': scope.get('teacher_intent') or {},
-                        'task_understanding_confidence': scope.get('task_understanding_confidence', 1.0),
-                        'ambiguities': scope.get('ambiguities', []),
-                        'model_used': model_name
-                    }
+                    attempted_errors.append(f"[{c_provider}/{c_model}] Неповна відповідь JSON; оцінку не збережено.")
+                    continue
 
             except Exception as e:
                 attempted_errors.append(f"[{c_provider}/{c_model} виняток]: {str(e)}")
@@ -7975,10 +7836,12 @@ def analyze_assignment_task_understanding(assignment, force_refresh=False) -> di
     grade_str, age_str = get_assignment_target_grades_and_ages(assignment)
     min_grade = get_assignment_min_grade(assignment)
 
+    from .ai_context import assignment_fingerprint, teacher_materials, ASSESSMENT_RULES
+    fingerprint = assignment_fingerprint(assignment)
     if not force_refresh and assignment.ai_task_understanding:
         try:
             cached_data = json.loads(assignment.ai_task_understanding)
-            if isinstance(cached_data, dict):
+            if isinstance(cached_data, dict) and cached_data.get('_source_fingerprint') == fingerprint and cached_data.get('analysis_mode') == 'ai':
                 cached_data = sanitize_ai_understanding_data(cached_data)
                 cur_expl = cached_data.get('student_explanation') or ''
                 if not cur_expl or len(cur_expl) < 50 or 'крок' not in cur_expl.lower():
@@ -8000,57 +7863,8 @@ def analyze_assignment_task_understanding(assignment, force_refresh=False) -> di
         except Exception:
             pass
 
-    files_content_parts = []
-    inline_media = []
-
-    if assignment.files.exists():
-        for af in assignment.files.all():
-            if af.file and os.path.exists(af.file.path):
-                af_name = af.original_name or os.path.basename(af.file.name)
-                af_ext = af.get_extension()
-                af_text = ""
-                if af_ext in ['.pptx', '.ppt']:
-                    try:
-                        af_text = extract_text_from_powerpoint(af.file.path)
-                    except Exception:
-                        pass
-                elif af_ext == '.odp':
-                    try:
-                        af_text = extract_text_from_opendocument(af.file.path)
-                    except Exception:
-                        pass
-
-                if not af_text:
-                    try:
-                        af_text = get_normalized_file_content(af.file.path, af.file.name)
-                    except Exception:
-                        pass
-
-                if af_text and af_text.strip():
-                    clean_af_text = strip_html_tags(af_text)
-                    files_content_parts.append(f"• Матеріал вчителя «{af_name}» ({af_ext}):\n{clean_af_text[:16000]}")
-
-                if af_ext in ['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif']:
-                    try:
-                        b_data, mime_t = _optimize_image_for_ai(af.file.path)
-                        if b_data:
-                            inline_media.append({
-                                "mime_type": mime_t,
-                                "data": base64.b64encode(b_data).decode('utf-8')
-                            })
-                    except Exception:
-                        pass
-                elif af_ext == '.pdf':
-                    try:
-                        pdf_size = os.path.getsize(af.file.path)
-                        if pdf_size <= 6 * 1024 * 1024:
-                            with open(af.file.path, 'rb') as f_pdf:
-                                inline_media.append({
-                                    "mime_type": "application/pdf",
-                                    "data": base64.b64encode(f_pdf.read()).decode('utf-8')
-                                })
-                    except Exception:
-                        pass
+    primary, reference, inline_media, material_coverage = teacher_materials(assignment, force_refresh_links=force_refresh)
+    files_content_parts = primary + reference
 
     scope = resolve_assignment_scope(
         assignment_title=assignment_title,
@@ -8070,13 +7884,32 @@ def analyze_assignment_task_understanding(assignment, force_refresh=False) -> di
         f"ТЕМА ЗАВДАННЯ: {assignment_title}",
         f"\nОПИС / ВКАЗІВКИ ВЧИТЕЛЯ:\n{assignment_desc}"
     ]
+    seen_rubrics = set()
+    from .models import DEFAULT_NUS_SYSTEM_PROMPT, DEFAULT_NUS_GR_SYSTEM_PROMPT, DEFAULT_TRADITIONAL_SYSTEM_PROMPT
+    for class_group in assignment.classes.all():
+        preset, grs = assignment.get_ai_policy(class_group)
+        if preset:
+            selected = [gr for gr in preset.get_gr_list() if not grs or gr['code'] in grs]
+            prompt_lines.append(f"КРИТЕРІЇ КЛАСУ {class_group.name}: {preset.name}; тип: {preset.evaluation_type}; обрані ГР: {json.dumps(selected, ensure_ascii=False)}")
+            if preset.pk in seen_rubrics:
+                continue
+            seen_rubrics.add(preset.pk)
+            if preset.system_prompt.strip() not in {p.strip() for p in (DEFAULT_NUS_SYSTEM_PROMPT, DEFAULT_NUS_GR_SYSTEM_PROMPT, DEFAULT_TRADITIONAL_SYSTEM_PROMPT)}:
+                prompt_lines.append(f'ВКАЗІВКИ ШАБЛОНУ {preset.name}:\n{preset.system_prompt}')
+            prompt_lines.append(f'ДОКУМЕНТ КРИТЕРІЇВ {preset.name}:\n{preset.extracted_criteria_text}')
+            if preset.document_file and os.path.exists(preset.document_file.path):
+                from .ai_context import extract_file_evidence
+                rubric = extract_file_evidence(preset.document_file.path)
+                prompt_lines.append((rubric['text'] or '') + '\n' + '\n'.join(rubric['limitations']))
+                inline_media.extend(dict(item, source=f'Критерії класу {class_group.name}') for item in rubric['media'])
+
     if custom_criteria:
         prompt_lines.append(f"\nКРИТЕРІЇ ВЧИТЕЛЯ:\n{custom_criteria}")
     if files_content_parts:
         prompt_lines.append("\nПРИКРІПЛЕНІ НАВЧАЛЬНІ МАТЕРІАЛИ (ПРЕЗЕНТАЦІЇ, PDF, ДОКУМЕНТИ):")
         prompt_lines.extend(files_content_parts)
 
-    if is_single_task:
+    if is_single_task and not teacher_specific_task_nums:
         task_desc_str = assigned_tasks_list[0]['description'] if assigned_tasks_list else (assignment_desc or assignment_title or "Комплексне завдання")
         prompt_lines.append(
             f"\n🎯 НАЙВИЩИЙ ПРІОРИТЕТ — ТОЧНИЙ ОБСЯГ ВІД ВЧИТЕЛЯ (SCOPE OF WORK):\n"
@@ -8178,11 +8011,15 @@ def analyze_assignment_task_understanding(assignment, force_refresh=False) -> di
         '      "expected_submission": "Що має бути у відповіді"\n'
         '    }\n'
         '  ],\n'
+        '  "task_type": "bulletin/document/presentation/spreadsheet/code/database/scratch/practical/question_answer",\n'
+        '  "deliverable": {"type": "тип створеного учнем результату, не файла умови", "description": "що створити", "format": "формат за вимогами"},\n'
+        '  "teacher_requirements": ["тільки реальні вимоги вчителя або заданої вправи"],\n'
+        '  "questions_expected": false,\n'
         '  "submission_format_expected": "Вимоги до формату здачі",\n'
         '  "grading_breakdown": {\n'
-        '    "full_completion": "10-12 б. (Високий рівень) — ...",\n'
-        '    "partial_two_tasks": "7-8 б. (Достатній рівень) — ...",\n'
-        '    "partial_one_task": "4-5 б. (Середній рівень) — ...",\n'
+        '    "full_completion": "Повне виконання за критеріями вчителя",\n'
+        '    "partial_two_tasks": "Як зараховується часткове виконання за критеріями",\n'
+        '    "partial_one_task": "Які результати зараховуються на початковому рівні",\n'
         '    "rules": ["Правило 1", "Правило 2"]\n'
         '  },\n'
         '  "teacher_recommendations": ["Порада 1"]\n'
@@ -8202,14 +8039,15 @@ def analyze_assignment_task_understanding(assignment, force_refresh=False) -> di
                 thinking_budget_val = 0 if ('flash' in str(target_m).lower() and act_provider == 'gemini') else None
                 status_code, raw_text, err_msg, raw_data = call_ai_api(
                     prompt_text="\n".join(prompt_lines),
-                    system_prompt=system_instruction,
+                    system_prompt=system_instruction + "\n" + ASSESSMENT_RULES + "\nЦе пояснення завдання, не оцінка роботи. Не вигадуй розбаловку: відтворюй критерії вчителя, без універсальних штрафів за кількість вправ.",
                     inline_media=inline_media,
                     provider=act_provider,
                     api_key=act_key,
                     model_name=target_m,
                     custom_url=act_url,
                     temperature=0.2,
-                    max_output_tokens=2500,
+                    max_output_tokens=4500,
+                    action='task_understanding',
                     timeout=40,
                     json_mode=True,
                     thinking_budget=thinking_budget_val
@@ -8218,6 +8056,9 @@ def analyze_assignment_task_understanding(assignment, force_refresh=False) -> di
                     parsed = extract_json_from_text(raw_text)
                     if isinstance(parsed, dict) and 'tasks_total_count' in parsed:
                         result_data = sanitize_ai_understanding_data(parsed)
+                        result_data['analysis_mode'] = 'ai'
+                        from .ai_context import cohere_task_guide
+                        result_data = cohere_task_guide(result_data, assignment, teacher_specific_task_nums)
                         break
             except Exception:
                 pass
@@ -8243,18 +8084,19 @@ def analyze_assignment_task_understanding(assignment, force_refresh=False) -> di
             else:
                 result_data['student_explanation'] = current_expl
             # Суворий пріоритет обсягу завдань від вчителя
-            result_data['tasks_total_count'] = scope.get('assigned_task_count', 1)
-            result_data['task_type'] = scope.get('task_type', 'practical')
-            result_data['deliverable'] = scope.get('deliverable', {})
-            result_data['questions_expected'] = scope.get('questions_expected', False)
-            result_data['task_interpretation'] = scope.get('task_interpretation', {})
-            result_data['teacher_requirements'] = scope.get('task_interpretation', {}).get('teacher_requirements', [])
-            result_data['final_task_understanding'] = scope.get('final_task_understanding', {})
-            result_data['teacher_intent'] = scope.get('teacher_intent', {})
-            result_data['task_understanding_confidence'] = scope.get('task_understanding_confidence', 1.0)
-            result_data['ambiguities'] = scope.get('ambiguities', [])
+            if teacher_specific_task_nums or is_single_task:
+                result_data['tasks_total_count'] = scope.get('assigned_task_count', 1)
+            result_data.setdefault('task_type', scope.get('task_type', 'practical'))
+            result_data.setdefault('deliverable', scope.get('deliverable', {}))
+            result_data.setdefault('questions_expected', scope.get('questions_expected', False))
+            result_data.setdefault('task_interpretation', scope.get('task_interpretation', {}))
+            result_data.setdefault('teacher_requirements', scope.get('task_interpretation', {}).get('teacher_requirements', []))
+            result_data.setdefault('final_task_understanding', scope.get('final_task_understanding', {}))
+            result_data.setdefault('teacher_intent', scope.get('teacher_intent', {}))
+            result_data.setdefault('task_understanding_confidence', None)
+            result_data.setdefault('ambiguities', scope.get('ambiguities', []))
 
-            if is_single_task:
+            if is_single_task and not teacher_specific_task_nums:
                 if isinstance(result_data.get('tasks'), list) and len(result_data['tasks']) > 1:
                     result_data['tasks'] = [{
                         'num': 1,
@@ -8363,7 +8205,7 @@ def analyze_assignment_task_understanding(assignment, force_refresh=False) -> di
             ]
             rules_list = [
                 "Кожне запитання вимагає окремої відповіді. Одне речення не зараховується за два завдання.",
-                "При неповному обсязі оцінка суворо обмежується відповідною стелею НУШ."
+                "Часткове виконання оцінюється за відповідними критеріями вчителя."
             ]
 
         result_data = {
@@ -8385,14 +8227,19 @@ def analyze_assignment_task_understanding(assignment, force_refresh=False) -> di
             "tasks": tasks_list,
             "submission_format_expected": submission_format,
             "grading_breakdown": {
-                "full_completion": f"10-12 б. (Високий рівень) — якісне виконання всіх {total_cnt} завдань у повному обсязі.",
-                "partial_two_tasks": f"7-8 б. (Достатній рівень) — часткове виконання (близько 66% завдань).",
-                "partial_one_task": f"4-5 б. (Середній рівень) — виконання початкового обсягу (близько 33% завдань).",
+                "full_completion": "Якісне виконання за критеріями вчителя; точну розбаловку потрібно уточнити.",
+                "partial_two_tasks": "Зараховуються виконані вимоги за відповідними критеріями.",
+                "partial_one_task": "Бал визначає якість підтверджених результатів, а не кількість файлів.",
                 "rules": rules_list
             },
             "teacher_recommendations": teacher_recs
         }
 
+    result_data.setdefault('analysis_mode', 'local')
+    result_data['_source_fingerprint'] = fingerprint
+    result_data['material_coverage'] = material_coverage
+    if result_data['analysis_mode'] == 'local':
+        result_data['teacher_recommendations'].append('ШІ недоступний: це попереднє локальне пояснення. Візуальну умову потрібно уточнити у вчителя.')
     # Фінальна санітизація всіх полів від будь-яких залишків HTML-розмітки
     result_data = sanitize_ai_understanding_data(result_data)
 
@@ -8411,4 +8258,3 @@ def analyze_assignment_task_understanding(assignment, force_refresh=False) -> di
         'cached': False,
         'updated_at': assignment.ai_task_understanding_updated_at.strftime('%d.%m.%Y о %H:%M') if assignment.ai_task_understanding_updated_at else None
     }
-

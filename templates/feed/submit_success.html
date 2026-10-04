@@ -228,7 +228,7 @@
                         {% endfor %}
                     </ul>
                 </div>
-                {% elif latest_submission.student_ai_feedback and not latest_submission.get_student_ai_strengths_list %}
+                {% elif latest_submission.student_ai_feedback and not latest_submission.get_student_ai_strengths_list and not latest_submission.get_student_ai_evidence_sections %}
                 <div style="margin-bottom:12px;padding:12px 16px;background:rgba(245,158,11,0.06);border:1.5px solid rgba(245,158,11,0.4);border-radius:var(--radius-sm);font-size:12.5px;color:var(--color-text-primary);line-height:1.45;">
                     <div style="font-weight:800;color:var(--color-warning);margin-bottom:4px;display:flex;align-items:center;gap:6px;">
                         <span>💡</span> <span>Зауваження та поради ШІ:</span>
@@ -254,6 +254,12 @@
                 {% endif %}
                 {% endwith %}
 
+                {% for section in latest_submission.get_student_ai_evidence_sections %}
+                <div style="margin-bottom:12px;padding:12px 16px;background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:var(--radius-sm);">
+                    <strong style="display:block;margin-bottom:6px;font-size:13px;color:var(--color-text-primary);">{{ section.title }}</strong>
+                    <div style="white-space:pre-wrap;overflow-wrap:anywhere;font-size:12.5px;line-height:1.5;color:var(--color-text-secondary);">{{ section.text }}</div>
+                </div>
+                {% endfor %}
                 {% with clean_fb=latest_submission.get_student_ai_clean_feedback %}
                 {% if clean_fb %}
                 <div style="margin-top:8px;padding:10px 14px;background:var(--color-bg-secondary);border-left:4px solid var(--color-primary);border-radius:0 var(--radius-sm) var(--radius-sm) 0;font-size:12.5px;color:var(--color-text-primary);line-height:1.45;">

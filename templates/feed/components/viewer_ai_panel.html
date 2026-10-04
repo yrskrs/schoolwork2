@@ -7,8 +7,7 @@
                         <select id="single-ai-preset" class="form-input" onchange="onViewerPresetChanged()" style="font-size:12px;padding:6px 10px;font-weight:700;width:100%;border-color:rgba(99,102,241,0.4);background:var(--color-bg-secondary);">
                             {% for p in criteria_presets %}
                             <option value="{{ p.id }}"
-                                {% if assignment and assignment.default_ai_preset_id == p.id %}selected
-                                {% elif not assignment or not assignment.default_ai_preset %}{% if p.is_default %}selected{% endif %}{% endif %}>
+                                {% if default_preset.id == p.id %}selected{% endif %}>
                                 {{ p.name }}{% if p.document_name %} (📎 {{ p.document_name|truncatechars:20 }}){% endif %}
                             </option>
                             {% endfor %}

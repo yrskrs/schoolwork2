@@ -141,9 +141,15 @@ def _cache_doc_conversion(prefix: str):
             if not file_path or not os.path.exists(file_path):
                 return "", "Файл не знайдено на сервері"
             cache_key = None
+            shared_key = None
             try:
+                from .ai_context import file_cache_key, evidence_cache
+                shared_key = file_cache_key(file_path, 'html-' + prefix, repr((args, kwargs)))
+                cached = evidence_cache().get(shared_key)
+                if cached is not None:
+                    return cached
                 stat = os.stat(file_path)
-                cache_key = (prefix, file_path, stat.st_mtime, stat.st_size, str(args), str(kwargs))
+                cache_key = (prefix, shared_key)
                 if cache_key in _DOC_HTML_CONVERSION_CACHE:
                     return _DOC_HTML_CONVERSION_CACHE[cache_key]
             except Exception:
@@ -158,6 +164,8 @@ def _cache_doc_conversion(prefix: str):
                 if len(_DOC_HTML_CONVERSION_CACHE) >= _MAX_DOC_CACHE:
                     _DOC_HTML_CONVERSION_CACHE.clear()
                 _DOC_HTML_CONVERSION_CACHE[cache_key] = res
+                if shared_key:
+                    evidence_cache().set(shared_key, res, 604800)
 
             return res
         return wrapper
@@ -1727,6 +1735,5 @@ def format_raw_json_feedback_for_display(text):
         parts.append(f"💬 **Рекомендація учню:**\n{fc}")
 
     return "\n\n".join(parts) if parts else (fc or summary or extract_clean_comment_from_raw_json(work_text))
-
 
 

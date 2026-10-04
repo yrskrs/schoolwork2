@@ -497,6 +497,25 @@ class AssignmentForm(forms.ModelForm):
 
 
 
+        from .models import AICriteriaPreset
+        presets = list(AICriteriaPreset.objects.all())
+        self.ai_policy_presets = [{'id': preset.pk, 'type': preset.evaluation_type, 'grs': preset.get_gr_list()} for preset in presets]
+        gr_choices = dict((gr['code'], gr['code'] + ': ' + gr.get('name', ''))
+                          for preset in presets for gr in preset.get_gr_list())
+        self.assessment_rows = []
+        self.fields['default_ai_preset'] = forms.ModelChoiceField(queryset=AICriteriaPreset.objects.all(), required=False)
+        for class_group in self.fields['classes'].queryset:
+            preset_key, gr_key = f'class_ai_preset_{class_group.pk}', f'class_ai_grs_{class_group.pk}'
+            previous = (self.instance.class_ai_overrides or {}).get(str(class_group.pk), {})
+            self.fields[preset_key] = forms.ModelChoiceField(
+                queryset=AICriteriaPreset.objects.all(), required=False,
+                empty_label='Критерії завдання', initial=previous.get('preset_id'),
+                widget=forms.Select(attrs={'class': 'form-select'}))
+            self.fields[gr_key] = forms.MultipleChoiceField(
+                required=False, choices=list(gr_choices.items()), initial=previous.get('grs', []),
+                widget=forms.CheckboxSelectMultiple)
+            self.assessment_rows.append({'class_group': class_group, 'preset': self[preset_key], 'grs': self[gr_key]})
+
         # Заповнення publish_choice з існуючого об'єкта (при редагуванні)
         if self.instance and self.instance.pk:
             if self.instance.status == Assignment.STATUS_DRAFT:
@@ -548,12 +567,24 @@ class AssignmentForm(forms.ModelForm):
                     'Обовʼязково оберіть хоча б один клас або позначте як індивідуальне завдання.'
                 )
 
+        overrides = {}
+        for class_group in classes or []:
+            preset_key, gr_key = f'class_ai_preset_{class_group.pk}', f'class_ai_grs_{class_group.pk}'
+            preset = cleaned_data.get(preset_key)
+            grs = cleaned_data.get(gr_key) or []
+            if preset:
+                allowed = {gr['code'] for gr in preset.get_gr_list()}
+                if preset.evaluation_type != 'traditional' and set(grs) - allowed:
+                    self.add_error(gr_key, 'Оберіть тільки групи результатів цього шаблону.')
+                overrides[str(class_group.pk)] = {'preset_id': preset.pk, 'grs': grs if preset.evaluation_type != 'traditional' else []}
+        cleaned_data['class_ai_overrides'] = overrides
         return cleaned_data
 
     def save_with_status(self, teacher, commit=True):
         """Зберігає завдання з правильним статусом на основі publish_choice."""
         instance = super().save(commit=False)
         instance.teacher = teacher
+        instance.class_ai_overrides = self.cleaned_data.get('class_ai_overrides', {})
 
         publish_choice = self.cleaned_data.get('publish_choice')
 
@@ -1060,6 +1091,4 @@ class StudentImportForm(forms.Form):
         required=False,
         widget=forms.CheckboxInput(attrs={'id': 'id_create_missing_classes'})
     )
-
-
 

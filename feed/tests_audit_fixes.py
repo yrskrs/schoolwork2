@@ -277,7 +277,7 @@ class DurableAIQueueTests(TestCase):
         with patch('feed.gemini_service.evaluate_submission_with_gemini') as evaluate:
             _evaluate_student_submission(self.sub)
             self.assertEqual(evaluate.call_args.kwargs['criteria_preset'], preset)
-            self.assertEqual(evaluate.call_args.kwargs['selected_gr_codes'], ['ГР1'])
+            self.assertEqual(evaluate.call_args.kwargs['selected_gr_codes'], [])  # Traditional grading has no GR groups.
 
 
 class PublicURLSafetyTests(TestCase):

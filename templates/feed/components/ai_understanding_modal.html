@@ -110,20 +110,20 @@
                 <div style="background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:16px;">
                     <div style="font-weight:800;font-size:13.5px;color:var(--color-text-primary);margin-bottom:12px;display:flex;align-items:center;gap:8px;">
                         <span style="font-size:16px;">⚖️</span>
-                        <span>Шкала та критерії оцінювання ШІ (НУШ 1–12 б.)</span>
+                        <span>Критерії та розбаловка завдання</span>
                     </div>
 
                     <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(210px, 1fr));gap:10px;margin-bottom:12px;">
                         <div style="background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.25);border-radius:var(--radius-sm);padding:10px 12px;">
-                            <div style="font-weight:800;font-size:13px;color:var(--color-success);margin-bottom:4px;">10–12 б. (Високий)</div>
+                            <div style="font-weight:800;font-size:13px;color:var(--color-success);margin-bottom:4px;">Повне виконання</div>
                             <div id="ai-und-grade-full" style="font-size:12px;line-height:1.4;color:var(--color-text-primary);"></div>
                         </div>
                         <div style="background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.25);border-radius:var(--radius-sm);padding:10px 12px;">
-                            <div style="font-weight:800;font-size:13px;color:var(--color-info);margin-bottom:4px;">7–8 б. (Достатній)</div>
+                            <div style="font-weight:800;font-size:13px;color:var(--color-info);margin-bottom:4px;">Часткове виконання</div>
                             <div id="ai-und-grade-partial-2" style="font-size:12px;line-height:1.4;color:var(--color-text-primary);"></div>
                         </div>
                         <div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);border-radius:var(--radius-sm);padding:10px 12px;">
-                            <div style="font-weight:800;font-size:13px;color:var(--color-warning);margin-bottom:4px;">4–5 б. (Середній)</div>
+                            <div style="font-weight:800;font-size:13px;color:var(--color-warning);margin-bottom:4px;">Початкові результати</div>
                             <div id="ai-und-grade-partial-1" style="font-size:12px;line-height:1.4;color:var(--color-text-primary);"></div>
                         </div>
                     </div>
@@ -413,6 +413,12 @@ function renderAiUnderstandingData(data, updatedAt, isCached, isTeacher) {
 
     if (data.student_explanation) {
         studentExplEl.innerHTML = renderStudentExplanationHtml(data.student_explanation);
+        if (data.analysis_mode === 'local') {
+            const note = document.createElement('p');
+            note.className = 'form-hint';
+            note.textContent = 'Попереднє пояснення: ШІ зараз недоступний. Перевір умову в матеріалах або уточни її у вчителя.';
+            studentExplEl.prepend(note);
+        }
         if (data.target_audience) {
             targetAudEl.textContent = stripHtmlTags(data.target_audience);
             targetAudEl.style.display = 'inline-block';
@@ -436,8 +442,12 @@ function renderAiUnderstandingData(data, updatedAt, isCached, isTeacher) {
         delivWrap.style.display = 'flex';
         if (typeBadge) {
             var typeLabels = {
+                'bulletin': '📰 Бюлетень',
                 'presentation': '📊 Презентація',
                 'programming': '💻 Програмування',
+                'code': '💻 Код програми',
+                'scratch': '🐱 Проєкт Scratch',
+                'spreadsheet': '📈 Електронна таблиця',
                 'table': '📈 Таблиця',
                 'diagram': '📊 Діаграма / Схема',
                 'database': '🗄️ База даних',
@@ -511,8 +521,8 @@ function renderAiUnderstandingData(data, updatedAt, isCached, isTeacher) {
     // 4. Шкала оцінювання
     const gb = data.grading_breakdown || {};
     document.getElementById('ai-und-grade-full').textContent = gb.full_completion || `Якісне виконання всіх ${totalCount} завдань у повному обсязі.`;
-    document.getElementById('ai-und-grade-partial-2').textContent = gb.partial_two_tasks || 'Виконання близько 66% обсягу завдань (наприклад 2 з 3).';
-    document.getElementById('ai-und-grade-partial-1').textContent = gb.partial_one_task || 'Виконання близько 33% обсягу завдань (1 з 3).';
+    document.getElementById('ai-und-grade-partial-2').textContent = gb.partial_two_tasks || 'Зараховуються виконані вимоги за критеріями вчителя.';
+    document.getElementById('ai-und-grade-partial-1').textContent = gb.partial_one_task || 'Оцінюються підтверджені результати за критеріями вчителя.';
 
     // Правила ШІ
     const rulesListEl = document.getElementById('ai-und-rules-list');
@@ -520,7 +530,7 @@ function renderAiUnderstandingData(data, updatedAt, isCached, isTeacher) {
     const rules = gb.rules || [
         'Кожне практичне завдання вимагає окремої відповіді учня.',
         'Одне речення або фраза не може зараховуватися одночасно за два різні завдання.',
-        'При частковому виконанні оцінка обмежується суворою педагогічною стелею НУШ (не більше 8 балів за 2 з 3 завдань).'
+        'Розбаловка вчителя має пріоритет; технічно неперевірене не вважається невиконаним.'
     ];
     rules.forEach(r => {
         const li = document.createElement('li');

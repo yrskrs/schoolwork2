@@ -535,6 +535,10 @@ def extract_access_text_for_ai(file_path: str, max_rows_per_table: int = 50) -> 
                     else:
                         parts.append("  (SQL код недоступний або запит без тексту)")
 
+            relationships = db_data.get('relationships', [])
+            if relationships:
+                parts.append('\nЗв’язки між таблицями: ' + ', '.join(str(item) for item in relationships))
+            parts.append(f'\nМежі аналізу: таблиці містять вибірку до {max_rows_per_table} записів; дизайн форм/звітів і макроси не виконувались.')
             if forms:
                 parts.append(f"\n📑 Екранні форми: {', '.join(forms)}")
 

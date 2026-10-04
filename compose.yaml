@@ -13,11 +13,13 @@ services:
       - .env
     environment:
       AI_JOBS_EAGER: 'False'
+      AI_CACHE_DIR: '/var/cache/schoolnet/ai'
     ports:
       - "${APP_PORT:-8000}:8000"
     volumes:
       - app_media:/app/media
       - app_logs:/app/logs
+      - app_cache:/var/cache/schoolnet
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/teacher/login/', timeout=5)"]
       interval: 15s
@@ -34,6 +36,7 @@ services:
       - .env
     environment:
       AI_JOBS_EAGER: 'False'
+      AI_CACHE_DIR: '/var/cache/schoolnet/ai'
     depends_on:
       app:
         condition: service_healthy
@@ -42,6 +45,7 @@ services:
     volumes:
       - app_media:/app/media
       - app_logs:/app/logs
+      - app_cache:/var/cache/schoolnet
     healthcheck:
       test: ["CMD", "python", "-c", "import os,time; assert time.time()-os.path.getmtime('/tmp/schoolnet-ai-worker-heartbeat') < 60"]
       interval: 30s
@@ -71,3 +75,4 @@ volumes:
   postgres_data:
   app_media:
   app_logs:
+  app_cache:
