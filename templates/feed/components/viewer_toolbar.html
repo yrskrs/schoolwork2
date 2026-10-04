@@ -24,8 +24,9 @@
                         <button class="btn btn-secondary btn-sm" disabled style="opacity:0.35;" title="{% if is_filtered %}Це перша робота у вибраному фільтрі{% else %}Це перша робота в системі{% endif %}">« Попередня</button>
                         {% endif %}
 
-                        <span class="fv-flow-label">
+                        <span class="fv-flow-label" title="{{ queue_filter_desc|default:'Поточний потік робіт' }}">
                             Потік
+                            {% if queue_pos and queue_total %}<small>{{ queue_pos }} / {{ queue_total }}</small>{% endif %}
                         </span>
 
                         {% if next_submission %}
@@ -70,7 +71,7 @@
                         </a>
                         {% else %}<button type="button" class="btn btn-secondary btn-sm" disabled>⬇️ Немає файлу</button>{% endif %}
 
-<a href="#fv-document-card" class="btn btn-secondary btn-sm fv-read-link" data-viewer-pane="document">📄 Файл</a><a href="#fv-grading-card" class="btn btn-secondary btn-sm" data-viewer-pane="review">🎯 Оцінити</a></div></nav>
+</div></nav>
     <div class="fv-identity-row">                    <!-- Навігація назад та назва поточного файлу -->
                     <div class="fv-file-identity">
                         <a href="{{ back_url|default:'/teacher/submissions/' }}" class="btn btn-secondary btn-sm" style="font-weight:700;">
@@ -87,7 +88,7 @@
                         {% endif %}
 
                         <span class="fv-active-file-name">
-                            <span class="fv-file-name" title="{{ file_name }}">{{ file_name }}</span>
+                            <span id="fv-file-title" class="fv-file-name" title="{{ file_name }}">{{ file_name }}</span>
                             <span class="badge" style="background:var(--color-bg-secondary);color:var(--color-primary);font-size:11px;border:1px solid var(--color-border);">
                                 {% if file_type == 'code' %}💻 Код
                                 {% elif file_type == 'scratch' %}🐱 Scratch проєкт
@@ -113,4 +114,5 @@
                             <button type="button" onclick="setViewerTheme('dark')" title="Темна тема" style="background:none;border:none;cursor:pointer;font-size:13px;padding:2px 6px;border-radius:3px;">🌙</button>
                             <button type="button" onclick="toggleViewerFullscreen()" title="На весь екран (F11 / Alt+F)" style="background:none;border:none;cursor:pointer;font-size:13px;padding:2px 6px;border-radius:3px;border-left:1px solid var(--color-border);">⛶</button>
                         </div></details></div>
+{% include 'feed/components/viewer_grading.html' %}
 </div>

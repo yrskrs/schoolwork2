@@ -268,7 +268,8 @@
         <div class="fv-grid">
 
             <!-- ════ ЛІВА КОЛОНКА: Робоча область переглядача ════════════════════ -->
-            <main class="fv-main-card" id="fv-document-card">
+            <main class="fv-main-card" id="fv-document-card" aria-label="Робота учня" tabindex="-1">
+                {% include "feed/components/viewer_submission_files.html" %}
 
                 <!-- Рядок формул для Excel / ODS -->
                 {% if file_ext == '.xlsx' or file_ext == '.xls' or file_ext == '.ods' %}
@@ -602,794 +603,27 @@
             </main>
 
 
-            <!-- ════ ПРАВА КОЛОНКА: Оцінювання та Коментарі (Панель вчителя) ═════ -->
-            <aside class="fv-sidebar" aria-label="Оцінювання і відгук">
-                <!-- Форма виставлення оцінки -->
-                <section class="fv-grading-card" id="fv-grading-card" aria-labelledby="fv-grading-title"><h3 id="fv-grading-title">🎯 Оцінювання роботи</h3><p class="fv-grading-identity"><strong>{{ submission.get_student_full_name }}</strong> · {{ submission.class_group.name }}<span class="fv-grading-assignment" title="{{ submission.assignment.title }}">{{ submission.assignment.title }}</span></p><p id="fv-current-grade" class="form-hint">Збережена оцінка: {{ submission.grade|default:"ще немає" }}</p>
-                    <label for="grade-input" class="form-label" style="font-weight:700;font-size:13px;">
-                        Оцінка вчителя (1-12 балів):
-                    </label>
-
-                    <div style="display:flex;gap:8px;align-items:center;">
-                        <input type="text"
-                               id="grade-input"
-                               value="{{ submission.grade|default:'' }}"
-                               placeholder="1-12"
-                               maxlength="15"
-                               class="form-input"
-                               style="font-size:18px;font-weight:800;text-align:center;width:90px;"
-                               oninput="syncMasterGradeToMembers(this.value); markViewerGradeDirty();"
-                               onkeydown="if(event.key==='Enter'){saveViewerGrade();}">
-                        <button type="button" class="btn btn-success" onclick="saveViewerGrade()" id="save-grade-btn" style="flex:1;font-weight:700;">
-                            ✓ Зберегти
-                        </button>
-                    </div>
-                    <div role="status" aria-live="polite" id="grade-saved-msg" style="font-size:12px;color:var(--color-success);margin-top:6px;min-height:18px;font-weight:600;"></div>
-
-<button type="button" class="btn btn-primary fv-save-next" id="save-grade-next-btn" onclick="saveViewerGrade(true)">✓ Зберегти й далі →</button>
-                    <p class="form-hint">Виберіть оцінку, потім збережіть. Enter або Ctrl+Enter — зберегти.</p>
-                    <!-- Швидкі кнопки оцінок 1-12 -->
-                    <div style="font-size:11px;color:var(--color-text-muted);margin-top:8px;font-weight:700;text-transform:uppercase;">
-                        Швидкий вибір оцінки:
-                    </div>
-                    <div class="fv-grade-presets">
-                        <button type="button" class="fv-preset-btn" data-grade-preset="1" aria-pressed="false" onclick="setPresetGrade('1')">1</button>
-                        <button type="button" class="fv-preset-btn" data-grade-preset="2" aria-pressed="false" onclick="setPresetGrade('2')">2</button>
-                        <button type="button" class="fv-preset-btn" data-grade-preset="3" aria-pressed="false" onclick="setPresetGrade('3')">3</button>
-                        <button type="button" class="fv-preset-btn" data-grade-preset="4" aria-pressed="false" onclick="setPresetGrade('4')">4</button>
-                        <button type="button" class="fv-preset-btn" data-grade-preset="5" aria-pressed="false" onclick="setPresetGrade('5')">5</button>
-                        <button type="button" class="fv-preset-btn" data-grade-preset="6" aria-pressed="false" onclick="setPresetGrade('6')">6</button>
-                        <button type="button" class="fv-preset-btn" data-grade-preset="7" aria-pressed="false" onclick="setPresetGrade('7')">7</button>
-                        <button type="button" class="fv-preset-btn" data-grade-preset="8" aria-pressed="false" onclick="setPresetGrade('8')">8</button>
-                        <button type="button" class="fv-preset-btn" data-grade-preset="9" aria-pressed="false" onclick="setPresetGrade('9')">9</button>
-                        <button type="button" class="fv-preset-btn" data-grade-preset="10" aria-pressed="false" onclick="setPresetGrade('10')">10</button>
-                        <button type="button" class="fv-preset-btn" data-grade-preset="11" aria-pressed="false" onclick="setPresetGrade('11')">11</button>
-                        <button type="button" class="fv-preset-btn" data-grade-preset="12" aria-pressed="false" onclick="setPresetGrade('12')">12</button>
-                        <button type="button" class="fv-preset-btn" data-grade-preset="Доопрацювати" aria-pressed="false" style="grid-column:span 6;margin-top:4px;background:rgba(245,158,11,0.12);color:var(--color-warning);border-color:rgba(245,158,11,0.35);font-size:12px;" onclick="setPresetGrade('Доопрацювати')">
-                            🔄 Повернути на доопрацювання
-                        </button>
-                    </div>
-
-                    {% if group_members and group_members|length > 1 %}
-                    <!-- Індивідуальне оцінювання учасників колективної роботи -->
-                    <div class="fv-group-grading-box" style="margin-top:16px;padding:12px;background:rgba(99,102,241,0.05);border:1px solid rgba(99,102,241,0.22);border-radius:10px;">
-                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-                            <span style="font-weight:700;font-size:12px;color:var(--color-primary);display:flex;align-items:center;gap:5px;">
-                                👥 Склад колективної роботи ({{ group_members|length }}):
-                            </span>
-                            <span style="font-size:11px;color:var(--color-text-muted);">
-                                Індивідуальні оцінки
-                            </span>
-                        </div>
-                        <div style="display:flex;flex-direction:column;gap:6px;">
-                            {% for m in group_members %}
-                            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;background:var(--color-surface, #ffffff);padding:6px 10px;border-radius:6px;border:1px solid var(--color-border);">
-                                <div style="display:flex;align-items:center;gap:6px;min-width:0;flex:1;">
-                                    <span style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-                                        {{ m.get_student_full_name }}
-                                    </span>
-                                    {% if m.id == submission.id and not m.primary_submission_id %}
-                                    <span class="badge" style="font-size:10px;background:rgba(99,102,241,0.15);color:var(--color-primary);padding:1px 5px;border-radius:4px;">Автор</span>
-                                    {% else %}
-                                    <span class="badge" style="font-size:10px;background:rgba(16,185,129,0.15);color:var(--color-success);padding:1px 5px;border-radius:4px;">Співавтор</span>
-                                    {% endif %}
-                                </div>
-                                <div style="display:flex;align-items:center;gap:6px;">
-                                    <input type="text"
-                                           name="member_grade_{{ m.id }}"
-                                           id="member_grade_{{ m.id }}"
-                                           data-member-id="{{ m.id }}"
-                                           value="{{ m.grade|default:submission.grade|default:'' }}"
-                                           class="form-input member-grade-input" oninput="markViewerGradeDirty()"
-                                           placeholder="1-12"
-                                           maxlength="15"
-                                           style="font-size:14px;font-weight:700;text-align:center;width:60px;padding:4px;"
-                                           title="Оцінка для {{ m.get_student_full_name }}"
-                                           onkeydown="if(event.key==='Enter'){saveViewerGrade();}">
-                                </div>
-                            </div>
-                            {% endfor %}
-                        </div>
-                        <div style="font-size:11px;color:var(--color-text-muted);margin-top:8px;line-height:1.4;">
-                            💡 За замовчуванням оцінка однакова для всіх. Ви можете вказати індивідуальну оцінку для будь-якого співавтора.
-                        </div>
-                    </div>
-                    {% endif %}
-                </section>
-
-<details class="fv-context-details"><summary>📋 Завдання, матеріали й файли</summary>
-
-                <!-- 1. Інформаційний блок про роботу та учня -->
-                <div class="fv-info-card" style="background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:14px;display:flex;flex-direction:column;gap:10px;">
-                    <!-- Назва файлу та статус -->
-                    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
-                        <div style="min-width:0;flex:1;">
-                            <div style="font-size:10.5px;font-weight:800;color:var(--color-primary);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:2px;">
-                                📄 Активний файл:
-                            </div>
-                            <div style="font-size:13.5px;font-weight:800;color:var(--color-text-primary);word-break:break-word;line-height:1.3;" title="{{ file_name }}">
-                                {{ file_name }}
-                            </div>
-                        </div>
-                        <div style="flex-shrink:0;">
-                            {% if submission.grade == 'Доопрацювати' or submission.grade == 'доопрацювання' or submission.grade == 'д' or submission.grade == 'Д' %}
-                            <span class="badge" style="font-size:11px;padding:3px 8px;font-weight:800;background:var(--color-warning-light);color:var(--color-warning);border:1px solid #fcd34d;">
-                                🔄 Доопрацювати
-                            </span>
-                            {% elif submission.grade %}
-                            <span class="badge badge-success" style="font-size:11px;padding:3px 8px;font-weight:800;">
-                                ✅ {{ submission.grade }}
-                            </span>
-                            {% else %}
-                            <span class="badge badge-warning" style="font-size:11px;padding:3px 8px;font-weight:800;">
-                                ⏳ Очікує оцінки
-                            </span>
-                            {% endif %}
-                        </div>
-                    </div>
-
-                    <!-- Інформація про учня, клас, дату та завдання -->
-                    <div style="display:flex;flex-direction:column;gap:6px;font-size:12.5px;border-top:1px solid var(--color-border);padding-top:8px;">
-                        <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
-                            <span style="color:var(--color-text-muted);">👤 Учень:</span>
-                            <a href="{% url 'student_detail' student_name=submission.last_name|add:'_'|add:submission.first_name %}" style="font-weight:800;color:var(--color-primary);text-decoration:none;" title="Переглянути профіль учня">
-                                {{ submission.last_name }} {{ submission.first_name }}
-                            </a>
-                        </div>
-                        <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
-                            <span style="color:var(--color-text-muted);">🏫 Клас:</span>
-                            <span class="class-prominent-badge" style="font-size:11px;padding:1px 6px;">{{ submission.class_group.name }}</span>
-                        </div>
-                        <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
-                            <span style="color:var(--color-text-muted);">📅 Здано:</span>
-                            <span style="color:var(--color-text-primary);font-weight:600;">{{ submission.submitted_at|date:"d.m.Y H:i" }}</span>
-                        </div>
-                        {% if submission.assignment %}
-                        <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
-                            <span style="color:var(--color-text-muted);white-space:nowrap;flex-shrink:0;">📋 Завдання:</span>
-                            <a href="{% url 'assignment_detail' submission.assignment.id %}" target="_blank" rel="noopener noreferrer" style="font-weight:700;color:var(--color-text-primary);text-decoration:none;text-align:right;max-width:165px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;" title="Відкрити завдання у новому вікні так, як його бачить учень: {{ submission.assignment.title }}">
-                                {{ submission.assignment.title }} ↗
-                            </a>
-                        </div>
-                        {% endif %}
-
-                        <!-- Колективна (групова) робота -->
-                        {% if submission.is_collective_work %}
-                        <div style="background:rgba(99,102,241,0.08);border:1.5px solid rgba(99,102,241,0.3);border-radius:var(--radius-sm);padding:8px 10px;margin-top:4px;">
-                            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
-                                <span style="font-weight:800;color:var(--color-primary);display:inline-flex;align-items:center;gap:4px;font-size:12px;">
-                                    <span>👥</span> <span>Колективна робота</span>
-                                </span>
-                                <span class="badge" style="background:rgba(99,102,241,0.15);color:var(--color-primary);font-size:10px;font-weight:800;padding:1px 5px;">
-                                    Група
-                                </span>
-                            </div>
-                            <div style="font-size:11.5px;color:var(--color-text-primary);line-height:1.35;">
-                                <strong style="color:var(--color-text-secondary);">Учасники:</strong> {{ submission.get_group_members_display|join:", " }}
-                            </div>
-                            <div style="font-size:10px;color:var(--color-text-muted);margin-top:3px;">
-                                💡 Оцінка автоматично виставляється всім учасникам групи.
-                            </div>
-                        </div>
-                        {% endif %}
-
-                        <!-- Статус спроби здачі (якщо це повторна здача або є історія) -->
-                        {% if submission.is_resubmission or submission.resubmission_attempt > 1 %}
-                        <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:2px;">
-                            <span style="color:var(--color-text-muted);">🔄 Спроба:</span>
-                            <span class="badge" style="background:var(--color-success-light);color:var(--color-success);border:1px solid #a7f3d0;font-size:11px;font-weight:800;padding:2px 7px;">
-                                Спроба #{{ submission.resubmission_attempt }} (Робота над помилками)
-                            </span>
-                        </div>
-                        {% endif %}
-
-                        <!-- Політика використання ШІ -->
-                        <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:2px;">
-                            <span style="color:var(--color-text-muted);">🤖 Використання ШІ:</span>
-                            {% if submission.assignment.allow_ai_usage %}
-                            <span class="badge" style="background:var(--color-success-light);color:var(--color-success);border:1px solid #a7f3d0;font-size:10.5px;font-weight:700;">
-                                💡 Дозволено вчителем
-                            </span>
-                            {% else %}
-                            <span class="badge" style="background:var(--color-bg-secondary);color:var(--color-text-secondary);border:1px solid #cbd5e1;font-size:10.5px;font-weight:600;">
-                                🚫 Не дозволено
-                            </span>
-                            {% endif %}
-                        </div>
-
-                        <!-- Ознаки використання ШІ у роботі (якщо виявлено) -->
-                        {% if submission.ai_generated_detected %}
-                        <div style="background:{% if submission.is_ai_allowed %}rgba(16,185,129,0.08){% else %}rgba(239,68,68,0.08){% endif %};border:1.5px solid {% if submission.is_ai_allowed %}#10b981{% else %}#ef4444{% endif %};border-radius:var(--radius-sm);padding:8px 10px;font-size:11.5px;margin-top:6px;">
-                            <div style="font-weight:800;color:{% if submission.is_ai_allowed %}#065f46{% else %}var(--color-danger){% endif %};display:flex;align-items:center;gap:6px;margin-bottom:3px;">
-                                <span>🤖</span>
-                                <span>Виявлено ознаки використання ШІ{% if submission.ai_generated_percent is not None %}: {{ submission.ai_generated_percent }}%{% endif %} ({{ submission.get_ai_generated_confidence_display|default:submission.ai_generated_confidence }})</span>
-                            </div>
-                            {% if submission.ai_generated_details %}
-                            <div style="color:var(--color-text-secondary);line-height:1.35;margin-bottom:4px;">{{ submission.ai_generated_details }}</div>
-                            {% endif %}
-                            <div style="font-size:10.5px;color:var(--color-text-muted);">
-                                {% if submission.is_ai_allowed %}
-                                💡 У цьому завданні використання ШІ дозволено вчителем.
-                                {% else %}
-                                ⚠️ У цьому завданні вчитель вимагав повністю самостійну роботу!
-                                {% endif %}
-                            </div>
-                        </div>
-                        {% endif %}
-                    </div>
-
-                    <!-- Попередження, якщо вчитель відкрив застарілу версію роботи, а учень здав новішу -->
-                    {% if not submission.is_latest_attempt %}
-                    <div style="background:var(--color-warning-light);border:1.5px solid #fde68a;border-radius:var(--radius-sm);padding:8px 10px;font-size:11.5px;color:var(--color-warning);">
-                        <strong style="display:block;margin-bottom:2px;color:var(--color-warning);">⚠️ Це попередня версія роботи (Спроба #{{ submission.resubmission_attempt }})!</strong>
-                        <div>Учень здав оновлену роботу (роботу над помилками). Цю спробу оцінювати не потрібно.</div>
-                        {% if submission.subsequent_submissions.all %}
-                        {% for subseq in submission.subsequent_submissions.all %}
-                        <div style="margin-top:4px;">
-                            <a href="{% url 'view_file' subseq.id %}{% if nav_query_string %}?{{ nav_query_string }}{% endif %}" class="btn btn-sm btn-primary" style="font-size:11px;font-weight:700;padding:3px 8px;display:inline-flex;align-items:center;gap:4px;text-decoration:none;">
-                                <span>👉 Відкрити актуальну здачу (Спроба #{{ subseq.resubmission_attempt }})</span>
-                            </a>
-                        </div>
-                        {% endfor %}
-                        {% endif %}
-                    </div>
-                    {% endif %}
-
-                    <!-- Блок інформації про попередню спробу -->
-                    {% if submission.previous_submission %}
-                    <div style="background:var(--color-surface);border:1px solid rgba(16,185,129,0.35);border-radius:var(--radius-sm);padding:8px 10px;font-size:11.5px;">
-                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
-                            <strong style="color:var(--color-success);display:flex;align-items:center;gap:4px;">
-                                <span>📜</span> <span>Попередня спроба #{{ submission.previous_submission.resubmission_attempt|default:"1" }}</span>
-                            </strong>
-                            <a href="{% url 'view_file' submission.previous_submission.id %}{% if nav_query_string %}?{{ nav_query_string }}{% endif %}" style="font-size:11px;font-weight:700;color:var(--color-primary);text-decoration:none;">
-                                👁️ Відкрити ↗
-                            </a>
-                        </div>
-                        <div style="color:var(--color-text-secondary);line-height:1.4;">
-                            <div>📅 Здано: {{ submission.previous_submission.submitted_at|date:"d.m.Y H:i" }}</div>
-                            {% if submission.previous_submission.student_ai_grade %}
-                            <div style="margin-top:2px;">🤖 Чернетка ШІ: <strong>{{ submission.previous_submission.student_ai_grade }}</strong> ({{ submission.previous_submission.student_ai_summary|truncatechars:50 }})</div>
-                            {% endif %}
-                            {% if submission.previous_submission.grade %}
-                            <div style="margin-top:2px;">✅ Оцінка вчителя: <strong>{{ submission.previous_submission.grade }}</strong></div>
-                            {% endif %}
-                        </div>
-                    </div>
-                    {% endif %}
-
-                    <!-- Коментар учня (якщо є) -->
-                    {% if submission.comment_student %}
-                    <div style="background:var(--color-surface);border:1px solid var(--color-border);border-left:3px solid #0ea5e9;border-radius:4px;padding:8px 10px;font-size:12px;">
-                        <strong style="color:var(--color-text-primary);display:block;margin-bottom:2px;">💬 Коментар учня:</strong>
-                        <div style="color:var(--color-text-secondary);white-space:pre-wrap;line-height:1.4;">{{ submission.comment_student }}</div>
-                    </div>
-                    {% endif %}
-
-                    <!-- Попередження про плагіат / дублікат або спільну роботу -->
-                    {% if dup_info.is_duplicate %}
-                    <div id="duplicate-warning-card" style="background:{% if dup_info.type == 'teacher_duplicate' %}rgba(239,68,68,0.08){% else %}rgba(245,158,11,0.08){% endif %};border:1.5px solid {% if dup_info.type == 'teacher_duplicate' %}#ef4444{% else %}#f59e0b{% endif %};border-radius:6px;padding:10px 12px;font-size:12px;">
-                        <strong style="color:{% if dup_info.type == 'teacher_duplicate' %}var(--color-danger){% else %}var(--color-warning){% endif %};display:flex;align-items:center;gap:6px;margin-bottom:4px;font-size:12.5px;">
-                            {% if dup_info.type == 'teacher_duplicate' %}<span>🚫</span> <span>Файл без виконання (копія завдання)</span>{% else %}<span>⚠️</span> <span>Схожість робіт / Збіг файлів</span>{% endif %}
-                        </strong>
-                        {% if dup_info.type == 'student_duplicate' %}
-                        <div style="color:var(--color-text-secondary);line-height:1.45;">
-                            Вміст файлу повністю збігається з роботою, яку раніше здав(ла):
-                            {% if dup_info.duplicate_submission_id %}
-                            <a href="{% url 'view_file' dup_info.duplicate_submission_id %}" style="font-weight:800;color:var(--color-primary);text-decoration:underline;display:inline-flex;align-items:center;gap:3px;" title="Перейти до перевірки роботи {{ dup_info.duplicate_student_name }}">
-                                👤 {{ dup_info.duplicate_student_name }}
-                            </a>
-                            {% else %}
-                            <strong>👤 {{ dup_info.duplicate_student_name }}</strong>
-                            {% endif %}
-                            <span class="class-prominent-badge" style="font-size:10px;padding:1px 5px;margin-left:2px;">{{ dup_info.duplicate_class }}</span>
-                            {% if dup_info.duplicate_submitted_at %}
-                            <span style="font-size:11px;color:var(--color-text-muted);display:block;margin-top:2px;">📅 Здано: {{ dup_info.duplicate_submitted_at|date:"d.m.Y H:i" }}</span>
-                            {% endif %}
-                        </div>
-                        {% if dup_info.duplicate_submission_id %}
-                        <div style="margin-top:8px;">
-                            <a href="{% url 'view_file' dup_info.duplicate_submission_id %}" class="btn btn-secondary btn-sm" style="display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;padding:4px 10px;text-decoration:none;border-color:rgba(245,158,11,0.5);background:var(--color-surface);">
-                                <span>🔍</span> <span>Відкрити роботу {{ dup_info.duplicate_student_name }} →</span>
-                            </a>
-                        </div>
-                        {% endif %}
-                        {% else %}
-                        <div style="color:var(--color-text-secondary);line-height:1.35;">{{ dup_info.warning_message }}</div>
-                        {% endif %}
-
-                        <!-- Прапорець ігнорування плагіату для вчителя -->
-                        <div style="margin-top:10px;padding-top:8px;border-top:1px dashed rgba(245,158,11,0.35);">
-                            <label style="display:inline-flex;align-items:flex-start;gap:8px;cursor:pointer;user-select:none;">
-                                <input type="checkbox" id="ignore-plagiarism-checkbox" {% if submission.ignore_plagiarism %}checked{% endif %} onchange="toggleViewerIgnorePlagiarism(this.checked)" style="width:16px;height:16px;margin-top:2px;accent-color:var(--color-primary);cursor:pointer;">
-                                <div>
-                                    <span style="font-weight:800;color:var(--color-text-primary);font-size:12px;display:block;">
-                                        👥 Ігнорувати плагіат (спільна робота)
-                                    </span>
-                                    <span style="font-size:11px;color:var(--color-text-muted);display:block;margin-top:2px;">
-                                        Увімкніть, якщо учні виконували роботу разом, але проігнорували блок вказування співавторів. Робота та ШІ оцінюватимуться без штрафу за плагіат.
-                                    </span>
-                                </div>
-                            </label>
-                        </div>
-                    </div>
-                    {% elif submission.ignore_plagiarism or dup_info.plagiarism_ignored %}
-                    <div id="collaboration-plagiarism-ignored-card" style="background:rgba(16,185,129,0.08);border:1.5px solid #10b981;border-radius:6px;padding:10px 12px;font-size:12px;">
-                        <strong style="color:var(--color-success);display:flex;align-items:center;gap:6px;margin-bottom:4px;font-size:12.5px;">
-                            <span>👥</span> <span>Спільна робота / Плагіат проігноровано</span>
-                        </strong>
-                        <div style="color:var(--color-text-secondary);line-height:1.45;">
-                            {% if dup_info.duplicate_student_name %}
-                            Вміст файлу збігається з роботою:
-                            {% if dup_info.duplicate_submission_id %}
-                            <a href="{% url 'view_file' dup_info.duplicate_submission_id %}" style="font-weight:800;color:var(--color-primary);text-decoration:underline;" title="Відкрити роботу {{ dup_info.duplicate_student_name }}">
-                                👤 {{ dup_info.duplicate_student_name }}
-                            </a>
-                            {% else %}
-                            <strong>👤 {{ dup_info.duplicate_student_name }}</strong>
-                            {% endif %}
-                            <span class="class-prominent-badge" style="font-size:10px;padding:1px 5px;margin-left:2px;">{{ dup_info.duplicate_class }}</span>
-                            {% endif %}
-                            <div style="margin-top:3px;color:var(--color-success);font-weight:700;">
-                                ✓ Підтверджено спільне виконання вчителем або системою. ШІ та система оцінюють проект по суті без штрафу за дублікат.
-                            </div>
-                        </div>
-                        <div style="margin-top:8px;padding-top:6px;border-top:1px dashed rgba(16,185,129,0.35);">
-                            <label style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;user-select:none;">
-                                <input type="checkbox" id="ignore-plagiarism-checkbox" checked onchange="toggleViewerIgnorePlagiarism(this.checked)" style="width:16px;height:16px;accent-color:#10b981;cursor:pointer;">
-                                <span style="font-size:11.5px;font-weight:700;color:var(--color-text-primary);">
-                                    Ігнорувати плагіат (активно)
-                                </span>
-                            </label>
-                        </div>
-                    </div>
-                    {% else %}
-                    <!-- Загальний прапорець ігнорування плагіату -->
-                    <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:6px;padding:8px 10px;font-size:11.5px;">
-                        <label style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;user-select:none;margin:0;">
-                            <input type="checkbox" id="ignore-plagiarism-checkbox" onchange="toggleViewerIgnorePlagiarism(this.checked)" style="width:15px;height:15px;accent-color:var(--color-primary);cursor:pointer;">
-                            <span style="font-weight:600;color:var(--color-text-secondary);">
-                                👥 Ігнорувати плагіат (якщо робота виконувалась спільно)
-                            </span>
-                        </label>
-                    </div>
-                    {% endif %}
-
-                    <!-- Кнопка розгортання умови завдання та відкриття у новому вікні -->
-                    {% if submission.assignment %}
-                    <div style="border-top:1px dashed var(--color-border);padding-top:8px;">
-                        <div style="display:flex;flex-direction:column;gap:6px;">
-                            <button type="button" id="toggle-assignment-btn" onclick="toggleAssignmentCondition()" class="btn btn-secondary btn-sm" style="width:100%;font-size:11.5px;padding:6px 10px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:6px;" title="Показати/приховати умову завдання тут у вікні перевірки">
-                                <span id="toggle-assignment-chevron" style="font-size:9px;">▼</span>
-                                <span id="toggle-assignment-text">Переглянути умову завдання</span>
-                            </button>
-                            <a href="{% url 'assignment_detail' submission.assignment.id %}" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm" style="width:100%;font-size:11.5px;padding:6px 10px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:5px;text-decoration:none;" title="Відкрити завдання так, як його бачить учень у новому вікні">
-                                <span>👁️</span> <span>Відкрити завдання як учень ↗</span>
-                            </a>
-                        </div>
-                        
-                        <!-- Розгортаємий блок умови завдання -->
-                        <div id="assignment-condition-panel" class="assignment-description-card is-compact" style="display:none;margin-top:8px;">
-                            <div class="assignment-description-header" style="display:flex;align-items:center;justify-content:space-between;gap:6px;flex-wrap:wrap;">
-                                <div class="assignment-description-title" style="font-size:11.5px;">
-                                    <span class="desc-icon">📝</span>
-                                    <span>{{ submission.assignment.title }}</span>
-                                </div>
-                                <div style="display:flex;align-items:center;gap:6px;">
-                                    <span class="assignment-desc-badge" style="font-size:10px;">Умова вчителя</span>
-                                    <a href="{% url 'assignment_detail' submission.assignment.id %}" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm" style="font-size:10.5px;padding:2px 7px;font-weight:750;text-decoration:none;display:inline-flex;align-items:center;gap:3px;" title="Відкрити завдання так, як його бачить учень у новому вікні">
-                                        <span>👁️ Як бачить учень ↗</span>
-                                    </a>
-                                </div>
-                            </div>
-                            {% if submission.assignment.description %}
-                            <div class="assignment-full-description" style="font-size:13px;line-height:1.6;padding:12px 14px;">{{ submission.assignment.get_formatted_description|safe }}</div>
-                            {% endif %}
-                            {% if submission.assignment.files.all or submission.assignment.link_url or submission.assignment.all_youtube_videos %}
-                            <div style="border-top:1px dashed var(--color-border);padding-top:8px;margin-top:8px;display:flex;flex-direction:column;gap:6px;">
-                                <span style="font-size:11px;font-weight:800;color:var(--color-text-muted);text-transform:uppercase;letter-spacing:0.04em;">📁 Матеріали вчителя:</span>
-                                {% for f in submission.assignment.files.all %}
-                                <div style="display:flex;align-items:center;justify-content:space-between;background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:4px;padding:5px 8px;gap:6px;">
-                                    <button type="button"
-                                            onclick="openAssignmentFileModal({{ f.id }}, '{{ f.original_name|escapejs }}', '{{ f.get_extension|escapejs }}', '{% url 'file_view' f.id %}')"
-                                            class="btn btn-sm"
-                                            style="background:none;border:none;padding:0;font-size:11.5px;font-weight:700;color:var(--color-primary);display:inline-flex;align-items:center;gap:5px;cursor:pointer;min-width:0;text-align:left;flex:1;"
-                                            title="Переглянути файл прямо в браузері без завантаження на ПК (з підсвіткою коду)">
-                                        <span style="font-size:13px;flex-shrink:0;">{{ f.get_file_icon }}</span>
-                                        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ f.original_name }}</span>
-                                        <span style="font-size:10px;color:var(--color-text-muted);flex-shrink:0;">({{ f.get_size_display }})</span>
-                                        <span style="font-size:10.5px;color:var(--color-primary);font-weight:800;flex-shrink:0;margin-left:auto;">👁️ Переглянути</span>
-                                    </button>
-                                    <a href="{% url 'file_view' f.id %}" download
-                                       style="color:var(--color-text-muted);font-size:11px;text-decoration:none;padding:2px 4px;border-left:1px solid var(--color-border);"
-                                       title="Завантажити {{ f.original_name }} на комп'ютер">
-                                        ⬇️
-                                    </a>
-                                </div>
-                                {% endfor %}
-
-                                {% if submission.assignment.link_url %}
-                                <a href="{{ submission.assignment.link_url }}" target="_blank" rel="noopener noreferrer"
-                                   style="font-size:11.5px;color:var(--color-primary);text-decoration:none;display:inline-flex;align-items:center;gap:4px;padding:4px 0;">
-                                    <span>🔗</span>
-                                    <span>{{ submission.assignment.link_label|default:"Корисне посилання" }} ↗</span>
-                                </a>
-                                {% endif %}
-
-                                {% for vid in submission.assignment.all_youtube_videos %}
-                                <a href="{{ vid.watch_url }}" target="_blank" rel="noopener noreferrer"
-                                   style="font-size:11.5px;color:var(--color-danger);text-decoration:none;display:inline-flex;align-items:center;gap:4px;padding:4px 0;">
-                                    <span>▶</span>
-                                    <span>{{ vid.title }} ↗</span>
-                                </a>
-                                {% endfor %}
-                            </div>
-                            {% endif %}
-                        </div>
-                    </div>
-                    {% endif %}
-                </div>
-
-                <!-- 2. Блок прикріплених файлів учня (відображається ТІЛЬКИ якщо файлів більше ніж 1) -->
-                {% if submission_files|length > 1 %}
-                <div class="fv-sidebar-files-card" style="background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:12px;display:flex;flex-direction:column;gap:8px;">
-                    <!-- Заголовок з лічильником і кнопкою ZIP -->
-                    <div style="display:flex;justify-content:space-between;align-items:center;">
-                        <div style="font-size:12px;font-weight:800;color:var(--color-text-primary);display:flex;align-items:center;gap:6px;">
-                            <span>📎</span>
-                            <span>Файли роботи ({{ submission_files|length }})</span>
-                        </div>
-                        <a href="{% url 'download_submission_files_zip' submission.id %}" class="btn btn-secondary btn-sm" style="font-size:11px;padding:2px 7px;font-weight:700;" title="Завантажити всі файли учня у форматі ZIP">
-                            📦 Всі (ZIP)
-                        </a>
-                    </div>
-
-                    <!-- Кнопки швидкого перемикання "Попередній / Наступний" -->
-                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
-                        {% if prev_file_id %}
-                        <a href="?{% if assignment_id %}assignment={{ assignment_id }}&{% endif %}file_id={{ prev_file_id }}"
-                           class="btn btn-secondary btn-sm"
-                           style="font-size:11.5px;font-weight:700;padding:4px 6px;text-align:center;display:flex;align-items:center;justify-content:center;gap:4px;"
-                           title="Попередній файл (Клавіша [)"
-                           id="prev-file-nav-btn">
-                            <span>‹ Попередній</span>
-                            <kbd style="font-size:8.5px;background:rgba(0,0,0,0.06);padding:1px 3px;border-radius:2px;">[</kbd>
-                        </a>
-                        {% else %}
-                        <button class="btn btn-secondary btn-sm" disabled style="opacity:0.35;font-size:11.5px;padding:4px 6px;">‹ Попередній</button>
-                        {% endif %}
-
-                        {% if next_file_id %}
-                        <a href="?{% if assignment_id %}assignment={{ assignment_id }}&{% endif %}file_id={{ next_file_id }}"
-                           class="btn btn-primary btn-sm"
-                           style="font-size:11.5px;font-weight:700;padding:4px 6px;text-align:center;display:flex;align-items:center;justify-content:center;gap:4px;"
-                           title="Наступний файл (Клавіша ])"
-                           id="next-file-nav-btn">
-                            <span>Наступний ›</span>
-                            <kbd style="font-size:8.5px;background:rgba(255,255,255,0.25);padding:1px 3px;border-radius:2px;color:#fff;">]</kbd>
-                        </a>
-                        {% else %}
-                        <button class="btn btn-secondary btn-sm" disabled style="opacity:0.35;font-size:11.5px;padding:4px 6px;">Наступний ›</button>
-                        {% endif %}
-                    </div>
-
-                    <!-- Вертикальний перелік файлів -->
-                    <div style="display:flex;flex-direction:column;gap:5px;max-height:220px;overflow-y:auto;padding-right:2px;">
-                        {% for sf in submission_files %}
-                        <div style="display:flex;align-items:center;gap:4px;">
-                            <a href="?{% if assignment_id %}assignment={{ assignment_id }}&{% endif %}file_id={{ sf.id }}"
-                               class="fv-file-tab-item {% if sf.id == active_file_id %}active{% endif %}"
-                               style="flex:1;padding:5px 8px;font-size:12px;border-radius:4px;display:flex;align-items:center;gap:6px;min-width:0;text-decoration:none;"
-                               title="Файл {{ forloop.counter }}: {{ sf.original_name }}">
-                                <span style="font-size:10px;font-weight:800;opacity:0.85;background:{% if sf.id == active_file_id %}rgba(255,255,255,0.25){% else %}var(--color-bg-secondary){% endif %};padding:1px 4px;border-radius:3px;">#{{ forloop.counter }}</span>
-                                <span style="font-size:13px;flex-shrink:0;">{{ sf.get_file_icon }}</span>
-                                <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ sf.original_name|default:sf.file.name }}</span>
-                                <span style="font-size:10px;opacity:0.8;flex-shrink:0;">{{ sf.get_size_display }}</span>
-                                {% if sf.id == active_file_id %}
-                                <span style="font-size:11px;flex-shrink:0;">👁️</span>
-                                {% endif %}
-                            </a>
-                            <a href="{% url 'view_submission_raw_file' submission.id %}?file_id={{ sf.id }}" download class="btn btn-secondary btn-sm" style="font-size:11px;padding:5px 7px;flex-shrink:0;" title="Завантажити {{ sf.original_name }}">
-                                ⬇️
-                            </a>
-                        </div>
-                        {% endfor %}
-                    </div>
-                </div>
-                {% endif %}
-
-</details>
-<details class="fv-ai-details"><summary>🤖 ШІ-перевірка та рекомендації</summary>
-                <!-- 3. Блок оцінювання роботи -->
-                <!-- 🤖 УЧЕНЬ СКОРИСТАВСЯ САМОПЕРЕВІРКОЮ ШІ (чернова оцінка) -->
-                {% if submission.student_ai_checked %}
-                <div id="student-ai-draft-block" style="margin-bottom:16px;background:{% if submission.student_ai_accepted %}rgba(16,185,129,0.07){% else %}rgba(245,158,11,0.07){% endif %};border:2px solid {% if submission.student_ai_accepted %}#10b981{% else %}#f59e0b{% endif %};border-radius:var(--radius-lg);padding:14px 16px;overflow:hidden;">
-                    <div style="font-weight:800;font-size:13px;color:{% if submission.student_ai_accepted %}var(--color-success){% else %}var(--color-warning){% endif %};margin-bottom:8px;display:flex;align-items:center;gap:6px;">
-                        <span>🤖</span>
-                        <span>{% if submission.student_ai_accepted %}Учнівська самоперевірка прийнята{% else %}Учень(-иця) перевірив(-ла) роботу самостійно{% endif %}</span>
-                    </div>
-                    {% if submission.student_ai_checked_at %}
-                    <div style="font-size:11px;color:var(--color-text-muted);margin-bottom:8px;">{{ submission.student_ai_checked_at|date:"d.m.Y H:i" }}</div>
-                    {% endif %}
-
-                    {% if submission.student_ai_grade %}
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-                        <span style="font-size:12px;color:var(--color-text-secondary);font-weight:700;">Чернова оцінка ШІ:</span>
-                        {% if submission.student_ai_grade == 'Доопрацювати' %}
-                        <span class="badge" style="font-size:12px;font-weight:800;background:var(--color-warning-light);color:var(--color-warning);border:1px solid #fcd34d;">🔄 Доопрацювати</span>
-                        {% else %}
-                        <span class="badge" style="font-size:13px;font-weight:800;background:rgba(16,185,129,0.15);color:var(--color-success);">
-                            {{ submission.student_ai_grade }}{% if submission.student_ai_level %} ({{ submission.student_ai_level }}){% endif %}
-                        </span>
-                        {% endif %}
-                    </div>
-                    {% endif %}
-
-                    {% if submission.student_ai_summary %}
-                    <div style="font-size:12px;color:var(--color-text-secondary);line-height:1.5;margin-bottom:8px;background:var(--color-surface);border-radius:6px;padding:8px 10px;">
-                        {{ submission.student_ai_summary|linebreaksbr }}
-                    </div>
-                    {% endif %}
-
-                    {% if submission.student_ai_gr_results %}
-                    <details style="margin-bottom:8px;">
-                        <summary style="font-size:11px;font-weight:800;color:var(--color-primary);cursor:pointer;">📊 Оцінки за ГР (деталі)</summary>
-                        <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px;">
-                        {% with student_gr=submission.student_ai_gr_results %}
-                        {% comment %}parsed by JS below{% endcomment %}
-                        {% endwith %}
-                        </div>
-                        <div id="student-gr-detail-list" data-gr="{{ submission.student_ai_gr_results|escapejs }}"></div>
-                    </details>
-                    {% endif %}
-
-                    {% if submission.student_ai_feedback %}
-                    <div style="font-size:11.5px;color:var(--color-text-muted);line-height:1.5;margin-bottom:10px;border-top:1px solid var(--color-border);padding-top:8px;">
-                        {{ submission.student_ai_feedback|linebreaksbr }}
-                    </div>
-                    {% endif %}
-
-                    {% if not submission.student_ai_accepted and not submission.grade %}
-                    <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                        <button type="button" onclick="acceptStudentAIGrade({{ submission.id }})"
-                                style="flex:1;min-width:100px;padding:8px 12px;background:linear-gradient(135deg,#10b981,#059669);color:white;border:none;border-radius:var(--radius-md);font-weight:800;font-size:12px;cursor:pointer;">
-                            ✅ Прийняти оцінку
-                        </button>
-                        <button type="button"
-                                onclick="document.getElementById('student-ai-draft-block').style.opacity='0.5';this.disabled=true;"
-                                style="flex:1;min-width:100px;padding:8px 12px;background:var(--color-bg-secondary);color:var(--color-text-muted);border:1px solid var(--color-border);border-radius:var(--radius-md);font-weight:700;font-size:12px;cursor:pointer;">
-                            ❌ Оцінити самостійно
-                        </button>
-                    </div>
-                    {% elif submission.student_ai_accepted %}
-                    <div style="font-size:12px;color:var(--color-success);font-weight:700;text-align:center;padding:6px 0;">✅ Оцінка вже прийнята і записана в журнал</div>
-                    {% endif %}
-                </div>
-                {% endif %}
-
-                <!-- 🤖 ШІ-АСИСТЕНТ ОЦІНЮВАННЯ (GOOGLE GEMINI AI) -->
-                <div style="margin-bottom:20px;background:var(--color-surface);border:1.5px solid rgba(99,102,241,0.35);border-radius:var(--radius-lg);padding:16px;box-shadow:0 4px 16px rgba(99,102,241,0.08);">
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:6px;">
-                        <div style="font-weight:800;font-size:13.5px;color:var(--color-primary);display:flex;align-items:center;gap:6px;">
-                            <span style="font-size:16px;">🤖</span> <span>ШІ-Асистент оцінювання</span>
-                        </div>
-                        <span class="badge" style="background:rgba(99,102,241,0.12);color:var(--color-primary);font-size:10.5px;font-weight:700;">
-                            Gemini AI (НУШ)
-                        </span>
-                    </div>
-
-                    <!-- Вибір критеріїв оцінювання -->
-                    <div style="margin-bottom:10px;">
-                        <label for="single-ai-preset" style="font-size:11px;font-weight:800;color:var(--color-text-secondary);text-transform:uppercase;display:block;margin-bottom:4px;">
-                            📋 Критерії оцінювання:
-                        </label>
-                        <select id="single-ai-preset" class="form-input" onchange="onViewerPresetChanged()" style="font-size:12px;padding:6px 10px;font-weight:700;width:100%;border-color:rgba(99,102,241,0.4);background:var(--color-bg-secondary);">
-                            {% for p in criteria_presets %}
-                            <option value="{{ p.id }}"
-                                {% if assignment and assignment.default_ai_preset_id == p.id %}selected
-                                {% elif not assignment or not assignment.default_ai_preset %}{% if p.is_default %}selected{% endif %}{% endif %}>
-                                {{ p.name }}{% if p.document_name %} (📎 {{ p.document_name|truncatechars:20 }}){% endif %}
-                            </option>
-                            {% endfor %}
-                        </select>
-                    </div>
-
-                    <!-- Інтерактивний вибір ГР (прапорці) -->
-                    <div id="viewer-gr-selector" style="{% if submission.is_traditional_grading %}display:none;{% endif %}margin-bottom:12px;background:var(--color-bg-secondary);border:1px solid rgba(99,102,241,0.25);border-radius:var(--radius-sm);padding:8px 10px;">
-                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-                            <span style="font-size:11px;font-weight:800;color:var(--color-primary);text-transform:uppercase;display:flex;align-items:center;gap:4px;">
-                                <span>☑️</span> <span>Оберіть ГР для оцінювання:</span>
-                            </span>
-                            <div style="display:flex;gap:6px;">
-                                <button type="button" onclick="toggleAllViewerGr(true)" style="background:none;border:none;color:var(--color-primary);font-size:10.5px;cursor:pointer;padding:0;font-weight:700;">Всі</button>
-                                <span style="color:var(--color-text-muted);font-size:10px;">|</span>
-                                <button type="button" onclick="toggleAllViewerGr(false)" style="background:none;border:none;color:var(--color-text-muted);font-size:10.5px;cursor:pointer;padding:0;font-weight:600;">Зняти</button>
-                            </div>
-                        </div>
-                        <div id="viewer-gr-checkboxes" style="display:flex;flex-direction:column;gap:5px;">
-                            <!-- Заповнюється через JS відповідно до обраного шаблону -->
-                        </div>
-                    </div>
-
-                    <!-- Опція Thinking Mode (Глибоке мислення) -->
-                    <div style="margin-bottom:10px;padding:8px 12px;background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:space-between;gap:8px;">
-                        <label for="force-thinking-checkbox" style="display:flex;align-items:center;gap:7px;font-size:12px;font-weight:600;color:var(--color-text);cursor:pointer;margin:0;" title="Увімкніть для складних завдань, поглибленого аналізу або якщо маєте сумніви щодо швидкої перевірки">
-                            <span style="font-size:15px;">🧠</span>
-                            <span>Глибоке мислення (Thinking mode)</span>
-                        </label>
-                        <input type="checkbox" id="force-thinking-checkbox" {% if submission.assignment.ai_thinking_mode %}checked{% endif %} style="width:16px;height:16px;cursor:pointer;accent-color:var(--color-primary);" title="Увімкніть для складних завдань, поглибленого аналізу або якщо маєте сумніви щодо швидкої перевірки">
-                    </div>
-
-                    <!-- Головна помітна кнопка перевірки ШІ -->
-                    <div style="margin-bottom:12px;">
-                        <button type="button" class="btn-ai-prominent" id="btn-run-ai-check" onclick="runSingleAICheck({{ submission.id }})">
-                            <span style="font-size:16px;">⚡</span>
-                            <span>Перевірити роботу ШІ</span>
-                        </button>
-                    </div>
-
-                    <div id="ai-evaluation-box">
-                        {% if submission.ai_status == 'success' %}
-                        <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:8px;">
-                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-                                <span style="font-size:11px;font-weight:700;color:var(--color-text-muted);text-transform:uppercase;">Попередня оцінка:</span>
-                                {% if submission.ai_suggested_grade == 'Доопрацювати' %}
-                                <span class="badge" style="font-size:12px;font-weight:700;background:var(--color-warning-light);color:var(--color-warning);border:1px solid #fcd34d;">
-                                    🔄 Доопрацювати
-                                </span>
-                                {% else %}
-                                <span class="badge" style="font-size:13px;font-weight:800;background:rgba(16,185,129,0.15);color:var(--color-success);">
-                                    🤖 {{ submission.ai_suggested_grade|default:"Оцінено" }}{% if submission.ai_score_level %} ({{ submission.ai_score_level }}){% endif %}
-                                </span>
-                                {% endif %}
-                            </div>
-
-                            {% if submission.has_gr_results and not submission.is_traditional_grading %}
-                            <!-- Оцінювання за групами результатів (ГР НУШ) -->
-                            <div style="margin:8px 0 6px;padding:6px 0;border-top:1px dashed var(--color-border);border-bottom:1px dashed var(--color-border);">
-                                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-                                    <div style="font-size:11px;font-weight:800;color:var(--color-primary);text-transform:uppercase;display:flex;align-items:center;gap:4px;">
-                                        <span>📊</span> <span>Оцінки за групами результатів (ГР):</span>
-                                    </div>
-                                    {% if submission.get_ai_gr_average %}
-                                    <span class="badge" style="background:var(--action-success-bg);color:#fff;font-size:11px;font-weight:800;" title="Середній бал за оціненими групами результатів">
-                                        Сер. бал ГР: {{ submission.get_ai_gr_average_display }}
-                                    </span>
-                                    {% endif %}
-                                </div>
-                                <div style="display:grid;grid-template-columns:1fr;gap:6px;">
-                                    {% for gr in submission.get_ai_gr_results_list %}
-                                    <div style="background:var(--color-bg-secondary);border:1px solid rgba(99,102,241,0.2);border-radius:6px;padding:6px 10px;font-size:11.5px;">
-                                        <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
-                                            <strong style="color:var(--color-primary);font-size:12px;">{{ gr.code }}: {{ gr.name }}</strong>
-                                            <span class="badge" style="background:var(--color-primary-light);color:var(--color-primary-text);font-weight:800;font-size:11px;white-space:nowrap;">
-                                                {{ gr.grade|default:"—" }} б. {% if gr.level %}({{ gr.level }}){% endif %}
-                                            </span>
-                                        </div>
-                                        {% if gr.comment %}
-                                        <div style="font-size:11px;color:var(--color-text-secondary);margin-top:3px;line-height:1.35;">{{ gr.comment }}</div>
-                                        {% endif %}
-                                    </div>
-                                    {% endfor %}
-                                </div>
-                            </div>
-                            {% endif %}
-
-                            {% if 'Зауваження до формату файлу' in submission.ai_feedback %}
-                            <div style="background:var(--color-warning-light);border:1px solid #fde68a;border-radius:6px;padding:8px 10px;margin-bottom:8px;font-size:12px;color:var(--color-warning);display:flex;align-items:flex-start;gap:6px;">
-                                <span style="font-size:14px;">⚠️</span>
-                                <div>
-                                    <strong style="color:var(--color-warning);">Невідповідний формат файлу:</strong>
-                                    <div style="margin-top:2px;font-size:11.5px;color:#78350f;">Файл здано без належного розширення або не у тому форматі (оцінку знижено).</div>
-                                </div>
-                            </div>
-                            {% endif %}
-
-                            {% if submission.ai_generated_detected %}
-                            <div style="background:{% if submission.is_ai_allowed %}rgba(16,185,129,0.08){% else %}rgba(239,68,68,0.08){% endif %};border:1px solid {% if submission.is_ai_allowed %}#10b981{% else %}#ef4444{% endif %};border-radius:6px;padding:8px 10px;margin-bottom:8px;font-size:11.5px;">
-                                <div style="font-weight:800;color:{% if submission.is_ai_allowed %}#065f46{% else %}var(--color-danger){% endif %};display:flex;align-items:center;gap:5px;margin-bottom:3px;">
-                                    <span>🤖</span>
-                                    <span>Виявлено ознаки використання ШІ{% if submission.ai_generated_percent is not None %}: {{ submission.ai_generated_percent }}%{% endif %} ({{ submission.get_ai_generated_confidence_display|default:submission.ai_generated_confidence }})</span>
-                                </div>
-                                {% if submission.ai_generated_details %}
-                                <div style="color:var(--color-text-secondary);line-height:1.35;margin-bottom:3px;">{{ submission.ai_generated_details }}</div>
-                                {% endif %}
-                                <div style="font-size:10.5px;color:var(--color-text-muted);">
-                                    {% if submission.is_ai_allowed %}
-                                    💡 Дозволено вчителем для цього завдання.
-                                    {% else %}
-                                    ⚠️ Не дозволено вчителем (вимагалась повністю самостійна робота).
-                                    {% endif %}
-                                </div>
-                            </div>
-                            {% endif %}
-                            <div style="font-size:12px;color:var(--color-text-secondary);line-height:1.4;white-space:pre-wrap;max-height:160px;overflow-y:auto;border-top:1px dashed var(--color-border);padding-top:6px;margin-top:6px;">{{ submission.get_formatted_ai_feedback }}</div>
-                        </div>
-
-                        <button type="button" class="btn btn-primary btn-sm" onclick="applyAIEvaluation({{ submission.id }})" style="width:100%;font-size:12px;font-weight:700;padding:6px;">
-                            ✓ Прийняти оцінку та відгук ШІ
-                        </button>
-
-                        {% elif submission.ai_status == 'failed' or submission.ai_status == 'unsupported' %}
-                        <div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);border-radius:var(--radius-sm);padding:8px 10px;font-size:12px;color:var(--color-danger);margin-bottom:6px;">
-                            <strong>⚠️ {% if submission.ai_status == 'unsupported' %}Не підтримується:{% else %}Помилка ШІ:{% endif %}</strong>
-                            <div style="margin-top:2px;">{{ submission.ai_error_reason }}</div>
-                        </div>
-                        {% else %}
-                        <div style="font-size:12px;color:var(--color-text-muted);text-align:center;padding:6px 0;">
-                            Робота ще не аналізувалась ШІ.<br>Натисніть «⚡ Перевірити ШІ» для оцінювання за критеріями НУШ.
-                        </div>
-                        {% endif %}
-                    </div>
-
-                </div>
-
-                <hr style="border:none;border-top:1px solid var(--color-border);margin:20px 0;">
-
-</details>
-                <!-- Коментарі / Зауваження для учня -->
-                <h4 style="font-size:0.95rem;font-weight:800;margin:0 0 12px;color:var(--color-text-primary);">
-                    💬 Відгук / Зауваження вчителя
-                </h4>
-
-                <div class="fv-comments-list" id="fv-comments-container">
-                    {% for comment in comments %}
-                    <div class="fv-comment-card" id="comment-{{ comment.id }}">
-                        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px;">
-                            <span style="font-weight:700;color:var(--color-primary);">{{ comment.get_author_name }}</span>
-                            <div style="display:flex;align-items:center;gap:6px;">
-                                <span style="font-size:11px;color:var(--color-text-muted);">{{ comment.created_at|date:"d.m H:i" }}</span>
-                                {% if comment.author == user or user.is_superuser %}
-                                <button type="button" onclick="deleteViewerComment({{ comment.id }})" style="background:none;border:none;color:var(--color-danger);cursor:pointer;padding:0;font-size:12px;" title="Видалити">✕</button>
-                                {% endif %}
-                            </div>
-                        </div>
-                        <div style="white-space:pre-wrap;line-height:1.5;">{{ comment.text }}</div>
-                    </div>
-                    {% empty %}
-                    <p class="text-muted" style="font-size:13px;margin:0;" id="no-comments-msg">Коментарів до роботи ще немає.</p>
-                    {% endfor %}
-                </div>
-
-                <!-- Швидкі шаблони відгуку -->
-                <div style="margin-bottom:8px;">
-                    <div style="font-size:11px;font-weight:700;color:var(--color-text-muted);text-transform:uppercase;margin-bottom:4px;">
-                        ⚡ Швидкі відгуки:
-                    </div>
-                    <div style="display:flex;flex-wrap:wrap;gap:4px;">
-                        <button type="button" onclick="insertCommentSnippet('🌟 Відмінно! Завдання виконано повністю та вірно.')" class="btn btn-secondary btn-sm" style="font-size:11px;padding:3px 6px;">🌟 Відмінно!</button>
-                        <button type="button" onclick="insertCommentSnippet('📝 Зверни увагу на акуратність оформлення.')" class="btn btn-secondary btn-sm" style="font-size:11px;padding:3px 6px;">📝 Оформлення</button>
-                        <button type="button" onclick="insertCommentSnippet('⚠️ Перевір формули та розрахунки.')" class="btn btn-secondary btn-sm" style="font-size:11px;padding:3px 6px;">⚠️ Розрахунки</button>
-                        <button type="button" onclick="insertCommentSnippet('💡 Уважно перечитай умову завдання.')" class="btn btn-secondary btn-sm" style="font-size:11px;padding:3px 6px;">💡 Умова</button>
-                        <button type="button" onclick="insertCommentSnippet('🔄 Роботу повернуто на доопрацювання. Виправ зауваження та перездай.')" class="btn btn-secondary btn-sm" style="font-size:11px;padding:3px 6px;">🔄 Перездати</button>
-                    </div>
-                </div>
-
-                <!-- Форма надсилання коментаря -->
-                <div>
-                    <textarea id="comment-textarea"
-                              class="form-input"
-                              rows="3"
-                              placeholder="Напишіть відгук учню..."
-                              style="font-size:13px;margin-bottom:8px;resize:vertical;"></textarea>
-                    <button type="button" class="btn btn-primary btn-sm" style="width:100%;font-weight:700;" onclick="sendViewerComment()" id="send-comment-btn">
-                        💬 Надіслати відгук
-                    </button>
-                </div>
-
-
-                <!-- Видалення здачі -->
-                <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--color-border);text-align:center;">
-                    <form method="POST" action="{% url 'delete_submission' submission.id %}" onsubmit="return confirm('Ви впевнені, що хочете видалити цю здачу роботи?');">
-                        {% csrf_token %}
-                        <button type="submit" class="btn btn-danger btn-sm" style="font-size:12px;opacity:0.8;">
-                            🗑️ Видалити цю здачу
-                        </button>
-                    </form>
-                </div>
+            <aside class="fv-sidebar fv-workbench" id="fv-workbench" aria-label="Інструменти перевірки">
+    <div class="fv-workbench-heading"><strong>Інструменти перевірки</strong><button type="button" class="btn btn-secondary btn-sm" id="fv-expand-tools" aria-pressed="false">⤢ Розгорнути</button></div>
+    <div class="fv-workbench-tabs" role="tablist" aria-label="Панелі перевірки">
+        <button type="button" role="tab" id="fv-tab-document" aria-controls="fv-document-card" aria-selected="false" tabindex="-1" class="fv-document-tab" data-review-tab="document">📄 Робота учня</button>
+        <button type="button" role="tab" id="fv-tab-task" aria-controls="fv-panel-task" aria-selected="true" data-review-tab="task">📋 Умова й матеріали</button>
+        <button type="button" role="tab" id="fv-tab-ai" aria-controls="fv-panel-ai" aria-selected="false" tabindex="-1" data-review-tab="ai">🤖 ШІ-перевірка</button>
+        <button type="button" role="tab" id="fv-tab-comments" aria-controls="fv-panel-comments" aria-selected="false" tabindex="-1" data-review-tab="comments">💬 Відгук</button>
+        <button type="button" role="tab" id="fv-tab-info" aria-controls="fv-panel-info" aria-selected="false" tabindex="-1" data-review-tab="info">ℹ️ Про роботу</button>
+    </div>
+    <div class="fv-panel-scroll" id="fv-panel-scroll">
+        <section class="fv-review-panel" id="fv-panel-task" role="tabpanel" aria-labelledby="fv-tab-task" data-review-panel="task" tabindex="0">{% include 'feed/components/viewer_task_panel.html' %}</section>
+        <section class="fv-review-panel" id="fv-panel-ai" role="tabpanel" aria-labelledby="fv-tab-ai" data-review-panel="ai" tabindex="0">{% include 'feed/components/viewer_ai_panel.html' %}</section>
+        <section class="fv-review-panel" id="fv-panel-comments" role="tabpanel" aria-labelledby="fv-tab-comments" data-review-panel="comments" tabindex="0">{% include 'feed/components/viewer_comments.html' %}</section>
+        <section class="fv-review-panel" id="fv-panel-info" role="tabpanel" aria-labelledby="fv-tab-info" data-review-panel="info" tabindex="0">{% include 'feed/components/viewer_submission_info.html' %}</section>
+    </div>
+</aside>
+        </div>
+    </div>
 
     <!-- ══ МОДАЛЬНЕ ВІКНО ПЕРЕГЛЯДУ ФАЙЛУ ЗАВДАННЯ ДЛЯ ВЧИТЕЛЯ (З ПІДСВІТКОЮ КОДУ) ══ -->
-    <div id="assignment-file-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:99999;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px);">
+    <div id="assignment-file-modal" role="dialog" aria-modal="true" aria-labelledby="assign-modal-title" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:99999;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px);">
         <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);width:100%;max-width:960px;max-height:90vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.4);">
             <!-- Шапка модального вікна -->
             <div style="padding:14px 20px;background:var(--color-bg-secondary);border-bottom:1px solid var(--color-border);display:flex;justify-content:space-between;align-items:center;gap:12px;">
@@ -1422,6 +656,7 @@
 {% endblock %}
 
 {% block extra_scripts %}
+<script src="{% static 'js/review_workspace.js' %}" defer></script>
 <!-- Prism.js для підсвічування коду -->
 <script src="{% static 'vendor/prism/prism.min.js' %}"></script>
 <script src="{% static 'vendor/prism/prism-python.min.js' %}"></script>
@@ -1505,13 +740,6 @@ document.addEventListener('DOMContentLoaded', function () {
     const container = document.querySelector('.fv-container'), toolbar = document.querySelector('.fv-workspace-toolbar');
     const nextLink = document.getElementById('next-sub-btn'); document.getElementById('save-grade-next-btn').disabled = !nextLink;
     document.getElementById('save-grade-next-btn').title = nextLink ? 'Зберегти оцінку та перейти до наступної роботи у потоці' : 'Наступної роботи у потоці немає';
-    container.classList.add('fv-has-pane-switch');
-    document.querySelectorAll('[data-viewer-pane]').forEach(link => link.addEventListener('click', function(event) {
-        if (matchMedia('(max-width:1100px)').matches) {
-            event.preventDefault(); container.classList.toggle('fv-review-mode', link.dataset.viewerPane === 'review');
-            document.getElementById(link.dataset.viewerPane === 'review' ? 'fv-grading-card' : 'fv-document-card').scrollIntoView({block:'start'});
-        }
-    }));
     if (window.ResizeObserver) new ResizeObserver(() => container.style.setProperty('--fv-tools-height', toolbar.getBoundingClientRect().height + 'px')).observe(toolbar);
 });
 
@@ -1613,29 +841,9 @@ function copyViewerText(btn) {
     });
 }
 
-// Перемикання відображення умови завдання без перезавантаження сторінки
+// Alt + T opens the same task panel as its tab.
 function toggleAssignmentCondition() {
-    var panel = document.getElementById('assignment-condition-panel');
-    var textEl = document.getElementById('toggle-assignment-text');
-    var chevron = document.getElementById('toggle-assignment-chevron');
-    if (!panel) return;
-
-    if (panel.style.display === 'none' || !panel.style.display) {
-        panel.style.display = 'block';
-        if (textEl) textEl.textContent = 'Приховати умову завдання';
-        if (chevron) {
-            chevron.textContent = '▲';
-            chevron.style.transform = 'rotate(180deg)';
-        }
-        panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    } else {
-        panel.style.display = 'none';
-        if (textEl) textEl.textContent = 'Переглянути умову завдання';
-        if (chevron) {
-            chevron.textContent = '▼';
-            chevron.style.transform = 'rotate(0deg)';
-        }
-    }
+    if (window.selectReviewPanel) window.selectReviewPanel('task', true);
 }
 
 function insertCommentSnippet(text) {
@@ -1768,6 +976,9 @@ document.addEventListener('DOMContentLoaded', function() {
 function runSingleAICheck(subId) {
     var btn = document.getElementById('btn-run-ai-check');
     var box = document.getElementById('ai-evaluation-box');
+    if (window.selectReviewPanel) window.selectReviewPanel('ai');
+    if (btn && btn.disabled) return;
+    if (box) box.setAttribute('aria-busy', 'true');
     var presetEl = document.getElementById('single-ai-preset');
     var presetId = presetEl ? presetEl.value : '';
 
@@ -1827,6 +1038,7 @@ function runSingleAICheck(subId) {
         });
     })
     .then(function(data) {
+        if (box) box.setAttribute('aria-busy', 'false');
         var rawFeedback = data.clean_feedback || "";
         data = SchoolNetAI.escapeResult(data);
         if (btn) {
@@ -1848,7 +1060,7 @@ function runSingleAICheck(subId) {
                 var warnMsg = data.format_warning || 'Файл здано без належного розширення або не у тому форматі (оцінку знижено).';
                 formatWarningBanner = '<div style="background:var(--color-warning-light);border:1px solid #fde68a;border-radius:6px;padding:8px 10px;margin-bottom:8px;font-size:12px;color:var(--color-warning);display:flex;align-items:flex-start;gap:6px;">' +
                     '<span style="font-size:14px;">⚠️</span>' +
-                    '<div><strong style="color:var(--color-warning);">Невідповідний формат файлу:</strong><div style="margin-top:2px;font-size:11.5px;color:#78350f;">' + warnMsg + '</div></div>' +
+                    '<div><strong style="color:var(--color-warning);">Невідповідний формат файлу:</strong><div style="margin-top:2px;font-size:11.5px;color:var(--color-warning);">' + warnMsg + '</div></div>' +
                 '</div>';
             }
 
@@ -1883,7 +1095,7 @@ function runSingleAICheck(subId) {
                 var isAllowed = {% if submission.is_ai_allowed %}true{% else %}false{% endif %};
                 var bgStyle = isAllowed ? 'rgba(16,185,129,0.08)' : 'rgba(239,68,68,0.08)';
                 var borderStyle = isAllowed ? '#10b981' : '#ef4444';
-                var titleColor = isAllowed ? '#065f46' : '#dc2626';
+                var titleColor = isAllowed ? 'var(--color-success)' : 'var(--color-danger)';
                 var noteText = isAllowed ? '💡 Дозволено вчителем для цього завдання.' : '⚠️ Не дозволено вчителем (вимагалась повністю самостійна робота)!';
                 var detailsHtml = data.ai_generated_details ? '<div style="color:var(--color-text-secondary);line-height:1.35;margin-bottom:3px;">' + data.ai_generated_details + '</div>' : '';
 
@@ -1904,7 +1116,7 @@ function runSingleAICheck(subId) {
                 grHtml +
                 formatWarningBanner +
                 aiDetectionBanner +
-                '<div style="font-size:12px;color:var(--color-text-secondary);line-height:1.4;white-space:pre-wrap;max-height:160px;overflow-y:auto;border-top:1px dashed var(--color-border);padding-top:6px;margin-top:6px;">' + (data.feedback || '') + '</div>' +
+                '<div style="font-size:12px;color:var(--color-text-secondary);line-height:1.4;white-space:pre-wrap;border-top:1px dashed var(--color-border);padding-top:6px;margin-top:6px;">' + (data.feedback || '') + '</div>' +
             '</div>' +
             '<button type="button" class="btn btn-primary btn-sm" onclick="applyAIEvaluation(' + subId + ')" style="width:100%;font-size:12px;font-weight:700;padding:6px;">✓ Прийняти оцінку та відгук ШІ</button>';
         } else {
@@ -1914,13 +1126,14 @@ function runSingleAICheck(subId) {
         }
     })
     .catch(function(err) {
+        if (box) box.setAttribute('aria-busy', 'false');
         if (btn) {
             btn.disabled = false;
             btn.innerHTML = '<span style="font-size:16px;">⚡</span> <span>Перевірити роботу ШІ</span>';
         }
         if (box) {
             box.innerHTML = '<div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);border-radius:var(--radius-sm);padding:8px 10px;font-size:12px;color:var(--color-danger);">' +
-                '<strong>⚠️ Помилка:</strong> ' + err.message +
+                '<strong>⚠️ Помилка:</strong> ' + escapeHtmlForViewer(err.message) +
             '</div>';
         }
     });
@@ -1976,7 +1189,9 @@ function escapeHtmlForViewer(str) {
         .replace(/'/g, '&#039;');
 }
 
+let assignmentMaterialFocus = null;
 function openAssignmentFileModal(fileId, fileName, fileExt, fileUrl) {
+    assignmentMaterialFocus = document.activeElement;
     const modal = document.getElementById('assignment-file-modal');
     const titleEl = document.getElementById('assign-modal-title');
     const iconEl = document.getElementById('assign-modal-icon');
@@ -2006,6 +1221,8 @@ function openAssignmentFileModal(fileId, fileName, fileExt, fileUrl) {
 
     // Відображаємо модалку
     modal.style.display = 'flex';
+    modal.dataset.materialId = String(fileId);
+    modal.querySelector('button[onclick="closeAssignmentFileModal()"]').focus();
     spinnerEl.style.display = 'block';
     contentEl.style.display = 'none';
     contentEl.innerHTML = '';
@@ -2013,6 +1230,7 @@ function openAssignmentFileModal(fileId, fileName, fileExt, fileUrl) {
     fetch('/assignment/file/' + fileId + '/preview/')
         .then(function(r) { return r.json(); })
         .then(function(data) {
+            if (modal.style.display !== 'flex' || modal.dataset.materialId !== String(fileId)) return;
             spinnerEl.style.display = 'none';
             contentEl.style.display = 'block';
 
@@ -2062,6 +1280,7 @@ function openAssignmentFileModal(fileId, fileName, fileExt, fileUrl) {
             }
         })
         .catch(function(err) {
+            if (modal.style.display !== 'flex' || modal.dataset.materialId !== String(fileId)) return;
             spinnerEl.style.display = 'none';
             contentEl.style.display = 'block';
             contentEl.innerHTML = '<div class="alert alert-error" style="padding:14px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);color:var(--color-danger);border-radius:var(--radius-md);">⚠️ Помилка завантаження файлу: ' + escapeHtmlForViewer(err.message) + '</div>';
@@ -2082,10 +1301,12 @@ function copyViewerModalCode(btn) {
 
 function closeAssignmentFileModal() {
     const modal = document.getElementById('assignment-file-modal');
-    if (modal) {
+    if (modal && modal.style.display === 'flex') {
         modal.style.display = 'none';
+        delete modal.dataset.materialId;
         const contentEl = document.getElementById('assign-modal-content');
         if (contentEl) contentEl.innerHTML = '';
+        if (assignmentMaterialFocus && assignmentMaterialFocus.isConnected) assignmentMaterialFocus.focus({preventScroll:true});
     }
 }
 
@@ -2164,10 +1385,21 @@ window.addEventListener('click', function(e) {
 // R (Повернути фото зошита)
 // Alt + ← (Попередня робота), Alt + → (Наступна робота), Alt + T (Умова), Alt + F (Повний екран)
 document.addEventListener('keydown', function(e) {
+    const materialModal = document.getElementById('assignment-file-modal');
+    if (materialModal && materialModal.style.display === 'flex') {
+        if (e.key === 'Escape') { e.preventDefault(); closeAssignmentFileModal(); }
+        if (e.key === 'Tab') {
+            const focusable = Array.from(materialModal.querySelectorAll('a[href],button')).filter(element => element.getClientRects().length && !element.disabled);
+            const first = focusable[0], last = focusable[focusable.length - 1];
+            if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+            else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+        }
+        return;
+    }
     if (e.key === 'Escape') {
         closeAssignmentFileModal();
     }
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) return;
+    if (e.defaultPrevented || e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT' || e.target.isContentEditable) return;
 
     // Швидке перемикання між файлами учня: [ та ] або Ctrl + стрілки
     if (e.key === '[' || (e.ctrlKey && e.key === 'ArrowLeft')) {
@@ -2180,15 +1412,17 @@ document.addEventListener('keydown', function(e) {
         rotateActiveImage();
     } else if (/^[1-9]$/.test(e.key) && !e.ctrlKey && !e.altKey && !e.metaKey) {
         var tabIndex = parseInt(e.key, 10) - 1;
-        var tabBtns = document.querySelectorAll('.fv-file-tab-item');
-        if (tabBtns && tabBtns[tabIndex]) {
+        var filePicker = document.getElementById('fv-file-picker');
+        if (filePicker && filePicker.options[tabIndex]) {
             e.preventDefault();
-            tabBtns[tabIndex].click();
+            window.location.assign(filePicker.options[tabIndex].value);
         }
     } else if (e.altKey && e.key === 'ArrowLeft') {
+        e.preventDefault();
         const prevBtn = document.getElementById('prev-sub-btn');
         if (prevBtn) prevBtn.click();
     } else if (e.altKey && e.key === 'ArrowRight') {
+        e.preventDefault();
         const nextBtn = document.getElementById('next-sub-btn');
         if (nextBtn) nextBtn.click();
     } else if (e.altKey && (e.key === 't' || e.key === 'е' || e.key === 'T' || e.key === 'Е')) {
@@ -2208,15 +1442,15 @@ document.addEventListener('DOMContentLoaded', function() {
         var grList = JSON.parse(raw);
         var html = '';
         grList.forEach(function(gr) {
-            var badgeColor = (gr.grade == 'Доопрацювати') ? '#d97706' : '#059669';
-            var badgeBg = (gr.grade == 'Доопрацювати') ? '#fef3c7' : 'rgba(16,185,129,0.12)';
+            var badgeColor = 'var(--color-text-primary)';
+            var badgeBg = (gr.grade == 'Доопрацювати') ? 'var(--color-warning-light)' : 'rgba(16,185,129,0.12)';
             html += '<div style="padding:7px 10px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:6px;">' +
                 '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">' +
-                '<span style="font-size:11.5px;font-weight:800;color:var(--color-primary);">' + (gr.code || '') + '</span>' +
-                '<span style="font-size:12px;font-weight:800;padding:2px 8px;border-radius:10px;background:' + badgeBg + ';color:' + badgeColor + ';">' + (gr.grade || '') + '</span>' +
+                '<span style="font-size:11.5px;font-weight:800;color:var(--color-primary);">' + escapeHtmlForViewer(gr.code || '') + '</span>' +
+                '<span style="font-size:12px;font-weight:800;padding:2px 8px;border-radius:10px;background:' + badgeBg + ';color:' + badgeColor + ';">' + escapeHtmlForViewer(gr.grade || '') + '</span>' +
                 '</div>' +
-                (gr.name ? '<div style="font-size:11px;color:var(--color-text-muted);margin:3px 0;">' + gr.name + '</div>' : '') +
-                (gr.comment ? '<div style="font-size:11.5px;color:var(--color-text-secondary);margin-top:4px;line-height:1.4;">' + gr.comment + '</div>' : '') +
+                (gr.name ? '<div style="font-size:11px;color:var(--color-text-muted);margin:3px 0;">' + escapeHtmlForViewer(gr.name) + '</div>' : '') +
+                (gr.comment ? '<div style="font-size:11.5px;color:var(--color-text-secondary);margin-top:4px;line-height:1.4;">' + escapeHtmlForViewer(gr.comment) + '</div>' : '') +
                 '</div>';
         });
         grDetailEl.innerHTML = html;
@@ -2305,4 +1539,3 @@ function toggleViewerIgnorePlagiarism(isChecked) {
 }
 </script>
 {% endblock %}
-

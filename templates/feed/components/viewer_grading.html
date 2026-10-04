@@ -1,0 +1,79 @@
+<section class="fv-grading-card" id="fv-grading-card" aria-labelledby="fv-grading-title">
+    <h3 id="fv-grading-title" class="fv-sr-only">Оцінювання роботи</h3>
+    <div class="fv-grading-identity">
+        <strong>{{ submission.get_student_full_name }}</strong> · {{ submission.class_group.name }}
+        <span id="fv-current-grade">Збережена оцінка: {{ submission.grade|default:"ще немає" }}</span>
+    </div>
+    <div class="fv-grade-controls">
+        <label for="grade-input" class="fv-sr-only">Оцінка вчителя (1–12 або Доопрацювати)</label>
+        <input type="text" id="grade-input" value="{{ submission.grade|default:'' }}" placeholder="1–12" maxlength="15" class="form-input" oninput="syncMasterGradeToMembers(this.value); markViewerGradeDirty();" onkeydown="if(event.key==='Enter'){saveViewerGrade();}">
+        <button type="button" class="btn btn-success" onclick="saveViewerGrade()" id="save-grade-btn">✓ Зберегти</button>
+        <button type="button" class="btn btn-primary" id="save-grade-next-btn" onclick="saveViewerGrade(true)">Зберегти й далі →</button>
+        <details class="fv-grade-options"><summary title="Швидкі оцінки та бали учасників">Бали ▾</summary><div class="fv-grade-options-body">
+            <p class="form-hint">Виберіть бал, потім натисніть «Зберегти». Enter або Ctrl+Enter — зберегти.</p>
+<div class="fv-grade-presets">
+                        <button type="button" class="fv-preset-btn" data-grade-preset="1" aria-pressed="false" onclick="setPresetGrade('1')">1</button>
+                        <button type="button" class="fv-preset-btn" data-grade-preset="2" aria-pressed="false" onclick="setPresetGrade('2')">2</button>
+                        <button type="button" class="fv-preset-btn" data-grade-preset="3" aria-pressed="false" onclick="setPresetGrade('3')">3</button>
+                        <button type="button" class="fv-preset-btn" data-grade-preset="4" aria-pressed="false" onclick="setPresetGrade('4')">4</button>
+                        <button type="button" class="fv-preset-btn" data-grade-preset="5" aria-pressed="false" onclick="setPresetGrade('5')">5</button>
+                        <button type="button" class="fv-preset-btn" data-grade-preset="6" aria-pressed="false" onclick="setPresetGrade('6')">6</button>
+                        <button type="button" class="fv-preset-btn" data-grade-preset="7" aria-pressed="false" onclick="setPresetGrade('7')">7</button>
+                        <button type="button" class="fv-preset-btn" data-grade-preset="8" aria-pressed="false" onclick="setPresetGrade('8')">8</button>
+                        <button type="button" class="fv-preset-btn" data-grade-preset="9" aria-pressed="false" onclick="setPresetGrade('9')">9</button>
+                        <button type="button" class="fv-preset-btn" data-grade-preset="10" aria-pressed="false" onclick="setPresetGrade('10')">10</button>
+                        <button type="button" class="fv-preset-btn" data-grade-preset="11" aria-pressed="false" onclick="setPresetGrade('11')">11</button>
+                        <button type="button" class="fv-preset-btn" data-grade-preset="12" aria-pressed="false" onclick="setPresetGrade('12')">12</button>
+                        <button type="button" class="fv-preset-btn" data-grade-preset="Доопрацювати" aria-pressed="false" style="grid-column:span 6;margin-top:4px;background:rgba(245,158,11,0.12);color:var(--color-warning);border-color:rgba(245,158,11,0.35);font-size:12px;" onclick="setPresetGrade('Доопрацювати')">
+                            🔄 Повернути на доопрацювання
+                        </button>
+                    </div>
+{% if group_members and group_members|length > 1 %}
+                    <!-- Індивідуальне оцінювання учасників колективної роботи -->
+                    <div class="fv-group-grading-box" style="margin-top:16px;padding:12px;background:rgba(99,102,241,0.05);border:1px solid rgba(99,102,241,0.22);border-radius:10px;">
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+                            <span style="font-weight:700;font-size:12px;color:var(--color-primary);display:flex;align-items:center;gap:5px;">
+                                👥 Склад колективної роботи ({{ group_members|length }}):
+                            </span>
+                            <span style="font-size:11px;color:var(--color-text-muted);">
+                                Індивідуальні оцінки
+                            </span>
+                        </div>
+                        <div style="display:flex;flex-direction:column;gap:6px;">
+                            {% for m in group_members %}
+                            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;background:var(--color-surface, #ffffff);padding:6px 10px;border-radius:6px;border:1px solid var(--color-border);">
+                                <div style="display:flex;align-items:center;gap:6px;min-width:0;flex:1;">
+                                    <span style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                                        {{ m.get_student_full_name }}
+                                    </span>
+                                    {% if m.id == submission.id and not m.primary_submission_id %}
+                                    <span class="badge" style="font-size:10px;background:rgba(99,102,241,0.15);color:var(--color-primary);padding:1px 5px;border-radius:4px;">Автор</span>
+                                    {% else %}
+                                    <span class="badge" style="font-size:10px;background:rgba(16,185,129,0.15);color:var(--color-success);padding:1px 5px;border-radius:4px;">Співавтор</span>
+                                    {% endif %}
+                                </div>
+                                <div style="display:flex;align-items:center;gap:6px;">
+                                    <input type="text"
+                                           name="member_grade_{{ m.id }}"
+                                           id="member_grade_{{ m.id }}"
+                                           data-member-id="{{ m.id }}"
+                                           value="{{ m.grade|default:submission.grade|default:'' }}"
+                                           class="form-input member-grade-input" oninput="markViewerGradeDirty()"
+                                           placeholder="1-12"
+                                           maxlength="15"
+                                           style="font-size:14px;font-weight:700;text-align:center;width:60px;padding:4px;"
+                                           title="Оцінка для {{ m.get_student_full_name }}"
+                                           onkeydown="if(event.key==='Enter'){saveViewerGrade();}">
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        <div style="font-size:11px;color:var(--color-text-muted);margin-top:8px;line-height:1.4;">
+                            💡 За замовчуванням оцінка однакова для всіх. Ви можете вказати індивідуальну оцінку для будь-якого співавтора.
+                        </div>
+                    </div>
+                    {% endif %}
+        </div></details>
+    </div>
+    <div role="status" aria-live="polite" id="grade-saved-msg"></div>
+</section>

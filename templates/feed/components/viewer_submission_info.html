@@ -1,0 +1,266 @@
+<div class="fv-info-card" style="background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:14px;display:flex;flex-direction:column;gap:10px;">
+                    <!-- Назва файлу та статус -->
+                    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+                        <div style="min-width:0;flex:1;">
+                            <div style="font-size:10.5px;font-weight:800;color:var(--color-primary);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:2px;">
+                                📄 Активний файл:
+                            </div>
+                            <div style="font-size:13.5px;font-weight:800;color:var(--color-text-primary);word-break:break-word;line-height:1.3;" title="{{ file_name }}">
+                                {{ file_name }}
+                            </div>
+                        </div>
+                        <div style="flex-shrink:0;">
+                            {% if submission.grade == 'Доопрацювати' or submission.grade == 'доопрацювання' or submission.grade == 'д' or submission.grade == 'Д' %}
+                            <span class="badge" style="font-size:11px;padding:3px 8px;font-weight:800;background:var(--color-warning-light);color:var(--color-warning);border:1px solid #fcd34d;">
+                                🔄 Доопрацювати
+                            </span>
+                            {% elif submission.grade %}
+                            <span class="badge badge-success" style="font-size:11px;padding:3px 8px;font-weight:800;">
+                                ✅ {{ submission.grade }}
+                            </span>
+                            {% else %}
+                            <span class="badge badge-warning" style="font-size:11px;padding:3px 8px;font-weight:800;">
+                                ⏳ Очікує оцінки
+                            </span>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <!-- Інформація про учня, клас, дату та завдання -->
+                    <div style="display:flex;flex-direction:column;gap:6px;font-size:12.5px;border-top:1px solid var(--color-border);padding-top:8px;">
+                        <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
+                            <span style="color:var(--color-text-muted);">👤 Учень:</span>
+                            <a href="{% url 'student_detail' student_name=submission.last_name|add:'_'|add:submission.first_name %}" style="font-weight:800;color:var(--color-primary);text-decoration:none;" title="Переглянути профіль учня">
+                                {{ submission.last_name }} {{ submission.first_name }}
+                            </a>
+                        </div>
+                        <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
+                            <span style="color:var(--color-text-muted);">🏫 Клас:</span>
+                            <span class="class-prominent-badge" style="font-size:11px;padding:1px 6px;">{{ submission.class_group.name }}</span>
+                        </div>
+                        <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
+                            <span style="color:var(--color-text-muted);">📅 Здано:</span>
+                            <span style="color:var(--color-text-primary);font-weight:600;">{{ submission.submitted_at|date:"d.m.Y H:i" }}</span>
+                        </div>
+                        {% if submission.assignment %}
+                        <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
+                            <span style="color:var(--color-text-muted);white-space:nowrap;flex-shrink:0;">📋 Завдання:</span>
+                            <a href="{% url 'assignment_detail' submission.assignment.id %}" target="_blank" rel="noopener noreferrer" style="font-weight:700;color:var(--color-text-primary);text-decoration:none;text-align:right;max-width:165px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;" title="Відкрити завдання у новому вікні так, як його бачить учень: {{ submission.assignment.title }}">
+                                {{ submission.assignment.title }} ↗
+                            </a>
+                        </div>
+                        {% endif %}
+
+                        <!-- Колективна (групова) робота -->
+                        {% if submission.is_collective_work %}
+                        <div style="background:rgba(99,102,241,0.08);border:1.5px solid rgba(99,102,241,0.3);border-radius:var(--radius-sm);padding:8px 10px;margin-top:4px;">
+                            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+                                <span style="font-weight:800;color:var(--color-primary);display:inline-flex;align-items:center;gap:4px;font-size:12px;">
+                                    <span>👥</span> <span>Колективна робота</span>
+                                </span>
+                                <span class="badge" style="background:rgba(99,102,241,0.15);color:var(--color-primary);font-size:10px;font-weight:800;padding:1px 5px;">
+                                    Група
+                                </span>
+                            </div>
+                            <div style="font-size:11.5px;color:var(--color-text-primary);line-height:1.35;">
+                                <strong style="color:var(--color-text-secondary);">Учасники:</strong> {{ submission.get_group_members_display|join:", " }}
+                            </div>
+                            <div style="font-size:10px;color:var(--color-text-muted);margin-top:3px;">
+                                💡 Оцінка автоматично виставляється всім учасникам групи.
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        <!-- Статус спроби здачі (якщо це повторна здача або є історія) -->
+                        {% if submission.is_resubmission or submission.resubmission_attempt > 1 %}
+                        <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:2px;">
+                            <span style="color:var(--color-text-muted);">🔄 Спроба:</span>
+                            <span class="badge" style="background:var(--color-success-light);color:var(--color-success);border:1px solid #a7f3d0;font-size:11px;font-weight:800;padding:2px 7px;">
+                                Спроба #{{ submission.resubmission_attempt }} (Робота над помилками)
+                            </span>
+                        </div>
+                        {% endif %}
+
+                        <!-- Політика використання ШІ -->
+                        <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:2px;">
+                            <span style="color:var(--color-text-muted);">🤖 Використання ШІ:</span>
+                            {% if submission.assignment.allow_ai_usage %}
+                            <span class="badge" style="background:var(--color-success-light);color:var(--color-success);border:1px solid #a7f3d0;font-size:10.5px;font-weight:700;">
+                                💡 Дозволено вчителем
+                            </span>
+                            {% else %}
+                            <span class="badge" style="background:var(--color-bg-secondary);color:var(--color-text-secondary);border:1px solid #cbd5e1;font-size:10.5px;font-weight:600;">
+                                🚫 Не дозволено
+                            </span>
+                            {% endif %}
+                        </div>
+
+                        <!-- Ознаки використання ШІ у роботі (якщо виявлено) -->
+                        {% if submission.ai_generated_detected %}
+                        <div style="background:{% if submission.is_ai_allowed %}rgba(16,185,129,0.08){% else %}rgba(239,68,68,0.08){% endif %};border:1.5px solid {% if submission.is_ai_allowed %}#10b981{% else %}#ef4444{% endif %};border-radius:var(--radius-sm);padding:8px 10px;font-size:11.5px;margin-top:6px;">
+                            <div style="font-weight:800;color:{% if submission.is_ai_allowed %}var(--color-success){% else %}var(--color-danger){% endif %};display:flex;align-items:center;gap:6px;margin-bottom:3px;">
+                                <span>🤖</span>
+                                <span>Виявлено ознаки використання ШІ{% if submission.ai_generated_percent is not None %}: {{ submission.ai_generated_percent }}%{% endif %} ({{ submission.get_ai_generated_confidence_display|default:submission.ai_generated_confidence }})</span>
+                            </div>
+                            {% if submission.ai_generated_details %}
+                            <div style="color:var(--color-text-secondary);line-height:1.35;margin-bottom:4px;">{{ submission.ai_generated_details }}</div>
+                            {% endif %}
+                            <div style="font-size:10.5px;color:var(--color-text-muted);">
+                                {% if submission.is_ai_allowed %}
+                                💡 У цьому завданні використання ШІ дозволено вчителем.
+                                {% else %}
+                                ⚠️ У цьому завданні вчитель вимагав повністю самостійну роботу!
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    <!-- Попередження, якщо вчитель відкрив застарілу версію роботи, а учень здав новішу -->
+                    {% if not submission.is_latest_attempt %}
+                    <div style="background:var(--color-warning-light);border:1.5px solid #fde68a;border-radius:var(--radius-sm);padding:8px 10px;font-size:11.5px;color:var(--color-warning);">
+                        <strong style="display:block;margin-bottom:2px;color:var(--color-warning);">⚠️ Це попередня версія роботи (Спроба #{{ submission.resubmission_attempt }})!</strong>
+                        <div>Учень здав оновлену роботу (роботу над помилками). Цю спробу оцінювати не потрібно.</div>
+                        {% if submission.subsequent_submissions.all %}
+                        {% for subseq in submission.subsequent_submissions.all %}
+                        <div style="margin-top:4px;">
+                            <a href="{% url 'view_file' subseq.id %}{% if nav_query_string %}?{{ nav_query_string }}{% endif %}" class="btn btn-sm btn-primary" style="font-size:11px;font-weight:700;padding:3px 8px;display:inline-flex;align-items:center;gap:4px;text-decoration:none;">
+                                <span>👉 Відкрити актуальну здачу (Спроба #{{ subseq.resubmission_attempt }})</span>
+                            </a>
+                        </div>
+                        {% endfor %}
+                        {% endif %}
+                    </div>
+                    {% endif %}
+
+                    <!-- Блок інформації про попередню спробу -->
+                    {% if submission.previous_submission %}
+                    <div style="background:var(--color-surface);border:1px solid rgba(16,185,129,0.35);border-radius:var(--radius-sm);padding:8px 10px;font-size:11.5px;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+                            <strong style="color:var(--color-success);display:flex;align-items:center;gap:4px;">
+                                <span>📜</span> <span>Попередня спроба #{{ submission.previous_submission.resubmission_attempt|default:"1" }}</span>
+                            </strong>
+                            <a href="{% url 'view_file' submission.previous_submission.id %}{% if nav_query_string %}?{{ nav_query_string }}{% endif %}" style="font-size:11px;font-weight:700;color:var(--color-primary);text-decoration:none;">
+                                👁️ Відкрити ↗
+                            </a>
+                        </div>
+                        <div style="color:var(--color-text-secondary);line-height:1.4;">
+                            <div>📅 Здано: {{ submission.previous_submission.submitted_at|date:"d.m.Y H:i" }}</div>
+                            {% if submission.previous_submission.student_ai_grade %}
+                            <div style="margin-top:2px;">🤖 Чернетка ШІ: <strong>{{ submission.previous_submission.student_ai_grade }}</strong> ({{ submission.previous_submission.student_ai_summary|truncatechars:50 }})</div>
+                            {% endif %}
+                            {% if submission.previous_submission.grade %}
+                            <div style="margin-top:2px;">✅ Оцінка вчителя: <strong>{{ submission.previous_submission.grade }}</strong></div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <!-- Коментар учня (якщо є) -->
+                    {% if submission.comment_student %}
+                    <div style="background:var(--color-surface);border:1px solid var(--color-border);border-left:3px solid #0ea5e9;border-radius:4px;padding:8px 10px;font-size:12px;">
+                        <strong style="color:var(--color-text-primary);display:block;margin-bottom:2px;">💬 Коментар учня:</strong>
+                        <div style="color:var(--color-text-secondary);white-space:pre-wrap;line-height:1.4;">{{ submission.comment_student }}</div>
+                    </div>
+                    {% endif %}
+
+                    <!-- Попередження про плагіат / дублікат або спільну роботу -->
+                    {% if dup_info.is_duplicate %}
+                    <div id="duplicate-warning-card" style="background:{% if dup_info.type == 'teacher_duplicate' %}rgba(239,68,68,0.08){% else %}rgba(245,158,11,0.08){% endif %};border:1.5px solid {% if dup_info.type == 'teacher_duplicate' %}#ef4444{% else %}#f59e0b{% endif %};border-radius:6px;padding:10px 12px;font-size:12px;">
+                        <strong style="color:{% if dup_info.type == 'teacher_duplicate' %}var(--color-danger){% else %}var(--color-warning){% endif %};display:flex;align-items:center;gap:6px;margin-bottom:4px;font-size:12.5px;">
+                            {% if dup_info.type == 'teacher_duplicate' %}<span>🚫</span> <span>Файл без виконання (копія завдання)</span>{% else %}<span>⚠️</span> <span>Схожість робіт / Збіг файлів</span>{% endif %}
+                        </strong>
+                        {% if dup_info.type == 'student_duplicate' %}
+                        <div style="color:var(--color-text-secondary);line-height:1.45;">
+                            Вміст файлу повністю збігається з роботою, яку раніше здав(ла):
+                            {% if dup_info.duplicate_submission_id %}
+                            <a href="{% url 'view_file' dup_info.duplicate_submission_id %}" style="font-weight:800;color:var(--color-primary);text-decoration:underline;display:inline-flex;align-items:center;gap:3px;" title="Перейти до перевірки роботи {{ dup_info.duplicate_student_name }}">
+                                👤 {{ dup_info.duplicate_student_name }}
+                            </a>
+                            {% else %}
+                            <strong>👤 {{ dup_info.duplicate_student_name }}</strong>
+                            {% endif %}
+                            <span class="class-prominent-badge" style="font-size:10px;padding:1px 5px;margin-left:2px;">{{ dup_info.duplicate_class }}</span>
+                            {% if dup_info.duplicate_submitted_at %}
+                            <span style="font-size:11px;color:var(--color-text-muted);display:block;margin-top:2px;">📅 Здано: {{ dup_info.duplicate_submitted_at|date:"d.m.Y H:i" }}</span>
+                            {% endif %}
+                        </div>
+                        {% if dup_info.duplicate_submission_id %}
+                        <div style="margin-top:8px;">
+                            <a href="{% url 'view_file' dup_info.duplicate_submission_id %}" class="btn btn-secondary btn-sm" style="display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;padding:4px 10px;text-decoration:none;border-color:rgba(245,158,11,0.5);background:var(--color-surface);">
+                                <span>🔍</span> <span>Відкрити роботу {{ dup_info.duplicate_student_name }} →</span>
+                            </a>
+                        </div>
+                        {% endif %}
+                        {% else %}
+                        <div style="color:var(--color-text-secondary);line-height:1.35;">{{ dup_info.warning_message }}</div>
+                        {% endif %}
+
+                        <!-- Прапорець ігнорування плагіату для вчителя -->
+                        <div style="margin-top:10px;padding-top:8px;border-top:1px dashed rgba(245,158,11,0.35);">
+                            <label style="display:inline-flex;align-items:flex-start;gap:8px;cursor:pointer;user-select:none;">
+                                <input type="checkbox" id="ignore-plagiarism-checkbox" {% if submission.ignore_plagiarism %}checked{% endif %} onchange="toggleViewerIgnorePlagiarism(this.checked)" style="width:16px;height:16px;margin-top:2px;accent-color:var(--color-primary);cursor:pointer;">
+                                <div>
+                                    <span style="font-weight:800;color:var(--color-text-primary);font-size:12px;display:block;">
+                                        👥 Ігнорувати плагіат (спільна робота)
+                                    </span>
+                                    <span style="font-size:11px;color:var(--color-text-muted);display:block;margin-top:2px;">
+                                        Увімкніть, якщо учні виконували роботу разом, але проігнорували блок вказування співавторів. Робота та ШІ оцінюватимуться без штрафу за плагіат.
+                                    </span>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+                    {% elif submission.ignore_plagiarism or dup_info.plagiarism_ignored %}
+                    <div id="collaboration-plagiarism-ignored-card" style="background:rgba(16,185,129,0.08);border:1.5px solid #10b981;border-radius:6px;padding:10px 12px;font-size:12px;">
+                        <strong style="color:var(--color-success);display:flex;align-items:center;gap:6px;margin-bottom:4px;font-size:12.5px;">
+                            <span>👥</span> <span>Спільна робота / Плагіат проігноровано</span>
+                        </strong>
+                        <div style="color:var(--color-text-secondary);line-height:1.45;">
+                            {% if dup_info.duplicate_student_name %}
+                            Вміст файлу збігається з роботою:
+                            {% if dup_info.duplicate_submission_id %}
+                            <a href="{% url 'view_file' dup_info.duplicate_submission_id %}" style="font-weight:800;color:var(--color-primary);text-decoration:underline;" title="Відкрити роботу {{ dup_info.duplicate_student_name }}">
+                                👤 {{ dup_info.duplicate_student_name }}
+                            </a>
+                            {% else %}
+                            <strong>👤 {{ dup_info.duplicate_student_name }}</strong>
+                            {% endif %}
+                            <span class="class-prominent-badge" style="font-size:10px;padding:1px 5px;margin-left:2px;">{{ dup_info.duplicate_class }}</span>
+                            {% endif %}
+                            <div style="margin-top:3px;color:var(--color-success);font-weight:700;">
+                                ✓ Підтверджено спільне виконання вчителем або системою. ШІ та система оцінюють проект по суті без штрафу за дублікат.
+                            </div>
+                        </div>
+                        <div style="margin-top:8px;padding-top:6px;border-top:1px dashed rgba(16,185,129,0.35);">
+                            <label style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;user-select:none;">
+                                <input type="checkbox" id="ignore-plagiarism-checkbox" checked onchange="toggleViewerIgnorePlagiarism(this.checked)" style="width:16px;height:16px;accent-color:#10b981;cursor:pointer;">
+                                <span style="font-size:11.5px;font-weight:700;color:var(--color-text-primary);">
+                                    Ігнорувати плагіат (активно)
+                                </span>
+                            </label>
+                        </div>
+                    </div>
+                    {% else %}
+                    <!-- Загальний прапорець ігнорування плагіату -->
+                    <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:6px;padding:8px 10px;font-size:11.5px;">
+                        <label style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;user-select:none;margin:0;">
+                            <input type="checkbox" id="ignore-plagiarism-checkbox" onchange="toggleViewerIgnorePlagiarism(this.checked)" style="width:15px;height:15px;accent-color:var(--color-primary);cursor:pointer;">
+                            <span style="font-weight:600;color:var(--color-text-secondary);">
+                                👥 Ігнорувати плагіат (якщо робота виконувалась спільно)
+                            </span>
+                        </label>
+                    </div>
+                    {% endif %}
+
+
+</div>
+<!-- Видалення здачі -->
+                <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--color-border);text-align:center;">
+                    <form method="POST" action="{% url 'delete_submission' submission.id %}" onsubmit="return confirm('Ви впевнені, що хочете видалити цю здачу роботи?');">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-danger btn-sm" style="font-size:12px;opacity:0.8;">
+                            🗑️ Видалити цю здачу
+                        </button>
+                    </form>
+                </div>

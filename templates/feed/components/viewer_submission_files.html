@@ -1,0 +1,11 @@
+{% if submission_files|length > 1 %}
+<div class="fv-student-files-toolbar">
+    <label for="fv-file-picker" class="fv-sr-only">Файли роботи ({{ submission_files|length }})</label>
+    <select id="fv-file-picker" class="form-input" onchange="window.location.assign(this.value)">
+        {% for sf in submission_files %}<option value="?{% if nav_query_string %}{{ nav_query_string }}&{% endif %}file_id={{ sf.id }}" {% if sf.id == active_file_id %}selected{% endif %}>{{ forloop.counter }} / {{ submission_files|length }} · {{ sf.original_name|default:sf.file.name }}</option>{% endfor %}
+    </select>
+    {% if prev_file_id %}<a href="?{% if nav_query_string %}{{ nav_query_string }}&{% endif %}file_id={{ prev_file_id }}" class="btn btn-secondary btn-sm" id="prev-file-nav-btn" title="Попередній файл ([)">‹</a>{% endif %}
+    {% if next_file_id %}<a href="?{% if nav_query_string %}{{ nav_query_string }}&{% endif %}file_id={{ next_file_id }}" class="btn btn-secondary btn-sm" id="next-file-nav-btn" title="Наступний файл (])">›</a>{% endif %}
+    <a href="{% url 'download_submission_files_zip' submission.id %}" class="btn btn-secondary btn-sm" title="Завантажити всі файли роботи">📦 ZIP</a>
+</div>
+{% endif %}

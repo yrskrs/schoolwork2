@@ -1,0 +1,29 @@
+<header class="fv-task-heading">
+    <span class="fv-eyebrow">Умова вчителя</span>
+    <h2>{{ submission.assignment.title }}</h2>
+    <a href="{% url 'assignment_detail' submission.assignment.id %}" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm" title="Відкрити завдання як учень ↗">👁️ Як бачить учень ↗</a>
+</header>
+<section class="fv-task-section" aria-labelledby="fv-task-description-title">
+    <h3 id="fv-task-description-title">Що потрібно зробити</h3>
+    <div class="assignment-full-description" id="assignment-condition-panel">
+        {% if submission.assignment.description %}{{ submission.assignment.get_formatted_description|safe }}{% else %}<p class="text-muted">Текст умови не додано. Перегляньте матеріали вчителя.</p>{% endif %}
+    </div>
+</section>
+<section class="fv-task-section" aria-labelledby="fv-materials-title">
+    <h3 id="fv-materials-title">📁 Матеріали вчителя</h3>
+    <div class="fv-materials-list">
+        {% for f in submission.assignment.files.all %}
+        <div class="fv-material-row">
+            <button type="button" class="fv-material-preview" onclick="openAssignmentFileModal({{ f.id }}, '{{ f.original_name|escapejs }}', '{{ f.get_extension|escapejs }}', '{% url 'file_view' f.id %}')">
+                <span class="fv-material-icon" aria-hidden="true">{{ f.get_file_icon }}</span>
+                <span><strong>{{ f.original_name }}</strong><small>{{ f.get_size_display }} · Переглянути матеріал</small></span>
+            </button>
+            <a href="{% url 'file_view' f.id %}" download class="btn btn-secondary btn-sm" aria-label="Завантажити {{ f.original_name }}">⬇️</a>
+        </div>
+        {% endfor %}
+        {% if submission.assignment.link_url %}<a class="fv-material-link" href="{{ submission.assignment.link_url }}" target="_blank" rel="noopener noreferrer">🔗 {{ submission.assignment.link_label|default:"Корисне посилання" }} ↗</a>{% endif %}
+        {% for link in submission.assignment.additional_links.all %}<a class="fv-material-link" href="{{ link.url }}" target="_blank" rel="noopener noreferrer">🔗 {{ link.label|default:link.url }} ↗</a>{% endfor %}
+        {% for vid in submission.assignment.all_youtube_videos %}<a class="fv-material-link" href="{{ vid.watch_url }}" target="_blank" rel="noopener noreferrer">▶ {{ vid.title }} ↗</a>{% endfor %}
+        {% if not submission.assignment.files.all and not submission.assignment.link_url and not submission.assignment.additional_links.all and not submission.assignment.all_youtube_videos %}<p class="text-muted">Додаткових матеріалів немає.</p>{% endif %}
+    </div>
+</section>
