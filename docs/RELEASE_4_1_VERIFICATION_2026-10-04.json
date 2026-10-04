@@ -31,5 +31,77 @@
     },
     "reload_and_back_progress": "passed"
   },
-  "final_image_test_seconds": 56.589
+  "final_image_test_seconds": 56.589,
+  "deployed_verification": {
+    "source_commit": "2194173",
+    "version": "4.1.0",
+    "services": {
+      "app": "healthy",
+      "ai_worker": "healthy",
+      "postgres": "healthy"
+    },
+    "public_statuses": [
+      200,
+      200
+    ],
+    "teacher_review_statuses": [
+      200,
+      200,
+      200,
+      200,
+      200
+    ],
+    "assignment_status": 200,
+    "assets": "200; hashes match deployed source",
+    "material_formats": [
+      {
+        "extension": ".docx",
+        "mode": "document",
+        "type": "url",
+        "slides": 0
+      },
+      {
+        "extension": ".docx",
+        "mode": "text",
+        "type": "html",
+        "slides": 0
+      },
+      {
+        "extension": ".pptx",
+        "mode": "document",
+        "type": "slides",
+        "slides": 26
+      },
+      {
+        "extension": ".pptx",
+        "mode": "text",
+        "type": "html",
+        "slides": 0
+      }
+    ],
+    "counts_match_pre_restart_baseline": true,
+    "counts": {
+      "Assignment": 34,
+      "Submission": 41,
+      "AssignmentFile": 32,
+      "SubmissionFile": 28
+    },
+    "grades_unchanged": true,
+    "migration_0050_applied": true,
+    "early_navigation_transition_policy": true,
+    "startup_tracebacks": 0,
+    "startup_ERROR_lines": 0,
+    "login_HTML_compression": {
+      "HTML_compression": true,
+      "encoded_bytes": 30111,
+      "decoded_bytes": 210516
+    },
+    "dependencies": {
+      "django": "6.1.1",
+      "pillow": "12.3.0",
+      "gunicorn": "26.2.0",
+      "whitenoise": "6.12.0",
+      "psycopg": "3.3.6"
+    }
+  }
 }
