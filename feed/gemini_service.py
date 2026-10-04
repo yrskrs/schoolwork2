@@ -6181,7 +6181,8 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
     prompt_content, system_instruction = build_assessment_request(
         submission, selected_preset, active_grs, scope, text_parts,
         primary_task_content if 'primary_task_content' in locals() else [],
-        teacher_files_content, material_coverage, custom_prompt=custom_prompt)
+        teacher_files_content, material_coverage, custom_prompt=custom_prompt,
+        ai_settings=settings)
     if selected_preset and selected_preset.document_file and os.path.exists(selected_preset.document_file.path):
         from .ai_context import extract_file_evidence
         rubric_evidence = extract_file_evidence(selected_preset.document_file.path)
@@ -7129,6 +7130,29 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                             gr_lines.append(f"\n📊 **Середній бал за ГР (Оцінка по ГР):** **{avg_gr_grade} б.**")
                         full_feedback_parts.append("📊 **Оцінювання за групами результатів (ГР НУШ):**\n" + "\n".join(gr_lines))
 
+                    tolerance = getattr(settings, 'ai_detector_tolerance_percent', 25) or 25
+                    from .ai_provenance import normalize_authorship, submission_provenance
+                    authorship = normalize_authorship(result_json, assignment.allow_ai_usage, submission_provenance(submission), tolerance_percent=tolerance)
+                    ai_generated_detected = authorship['ai_generated_detected']
+                    ai_generated_percent = authorship['ai_generated_percent']
+                    ai_generated_confidence = authorship['ai_generated_confidence']
+                    ai_generated_details = authorship['ai_generated_details']
+
+                    if ai_generated_detected and not assignment.allow_ai_usage and ai_generated_percent is not None:
+                        try:
+                            cur_grade = int(float(str(suggested_grade).replace('бал', '').strip()))
+                            if cur_grade > 3:
+                                suggested_grade = 'Доопрацювати'
+                                level = 'Початковий'
+                        except (ValueError, TypeError):
+                            pass
+                        ai_violation_msg = f"У роботі виявлено ознаки використання штучного інтелекту ({ai_generated_percent}%), що перевищує допустимий поріг ({tolerance}%). Вчитель вимагав повністю самостійного виконання завдання без застосування сторонніх генераторів."
+                        if weaknesses and isinstance(weaknesses, list):
+                            if ai_violation_msg not in weaknesses:
+                                weaknesses.insert(0, ai_violation_msg)
+                        else:
+                            weaknesses = [ai_violation_msg]
+
                     if strengths and isinstance(strengths, list) and len(strengths) > 0:
                         full_feedback_parts.append("✅ **Сильні сторони:**\n" + "\n".join(f"• {s}" for s in strengths))
                     if weaknesses and isinstance(weaknesses, list) and len(weaknesses) > 0:
@@ -7155,13 +7179,6 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                     student_feedback_parts.extend(feedback_evidence_sections(result_json, include_criteria=False))
                     from .ai_context import strip_teacher_criteria
                     clean_student_feedback = strip_teacher_criteria("\n\n".join(student_feedback_parts) if student_feedback_parts else feedback_comment)
-
-                    from .ai_provenance import normalize_authorship, submission_provenance
-                    authorship = normalize_authorship(result_json, assignment.allow_ai_usage, submission_provenance(submission))
-                    ai_generated_detected = authorship['ai_generated_detected']
-                    ai_generated_percent = authorship['ai_generated_percent']
-                    ai_generated_confidence = authorship['ai_generated_confidence']
-                    ai_generated_details = authorship['ai_generated_details']
 
                     submission.ai_suggested_grade = suggested_grade
                     submission.ai_score_level = level

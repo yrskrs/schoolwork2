@@ -6851,7 +6851,7 @@ def teacher_settings_view(request):
     avg_ai_percent = round(avg_ai_percent_result['avg'] or 0, 1)
 
     # Підозрілі (ai_generated_percent > порогового значення)
-    tolerance = getattr(ai_settings, 'ai_detector_tolerance_percent', 70) or 70
+    tolerance = getattr(ai_settings, 'ai_detector_tolerance_percent', 25) or 25
     total_ai_detected = Submission.objects.filter(ai_generated_detected=True).count()
 
     model_stats = []

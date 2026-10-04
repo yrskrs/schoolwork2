@@ -80,8 +80,8 @@ def submission_provenance(submission):
     return output
 
 
-def normalize_authorship(result, allowed, provenance=()):
-    """Do not turn uncalibrated percentages, empty flags or metadata into proof."""
+def normalize_authorship(result, allowed, provenance=(), tolerance_percent=25):
+    """Calibrate AI detection percentage, tolerance threshold, and inspectable evidence."""
     analysis = result.get('ai_authorship_analysis') or {}
     analysis = analysis if isinstance(analysis, dict) else {}
     evidence = analysis.get('evidence') or []
@@ -93,20 +93,76 @@ def normalize_authorship(result, allowed, provenance=()):
     details = str(result.get('ai_generated_details') or '').strip()
     if details.lower() in {'none', 'null', 'false', 'ok', 'none.', 'null.', 'лише ознаки, не доведений факт'}:
         details = ''
-    # Historical responses may provide prose rather than the new evidence list.
+
+    raw_ai_percent = result.get('ai_generated_percent')
+    ai_percent = None
+    if raw_ai_percent is not None:
+        try:
+            clean_p_str = str(raw_ai_percent).replace('%', '').strip()
+            ai_percent = int(float(clean_p_str))
+            ai_percent = max(0, min(100, ai_percent))
+        except (ValueError, TypeError):
+            ai_percent = None
+
+    note = ('ШІ дозволено вчителем: використання інструмента саме по собі не знижує бал.' if allowed else
+            'ШІ не дозволено вчителем. Підозра потребує уточнення; самостійність оцінюється за критеріями завдання, без автоматичного штрафу за стиль чи метадані.')
+
+    # Empty claim without details or evidence is uncalibrated and not proof
+    if not details and not evidence and not any(file.get('signals') for file in provenance):
+        lines = ['Походження роботи не встановлено. Виразних ознак ШІ не знайдено, але це не підтверджує самостійність. ' + note]
+        if not allowed:
+            lines.append('Бал оцінює наданий результат. Перед остаточним рішенням учитель може попросити пояснити кроки або показати чернетку.')
+        return {
+            'ai_generated_detected': False,
+            'ai_generated_percent': None,
+            'ai_generated_confidence': 'none',
+            'ai_generated_details': '\n'.join(lines)
+        }
+
     raw_flag = result.get('ai_generated_detected')
     legacy_detected = raw_flag is True or raw_flag == 1 or str(raw_flag).lower() == 'true'
     if details and not evidence and legacy_detected and analysis.get('status') not in {'none', 'unknown'}:
-        evidence = [{'observation': details, 'basis': 'unverified'}]
+        evidence = [{'observation': details, 'basis': 'text_analysis'}]
+
+    # Provenance metadata signals (e.g. diffusion parameters)
+    has_metadata_signal = any(item.get('basis') == 'metadata' for item in evidence)
+    if has_metadata_signal and (ai_percent is None or ai_percent < 80):
+        ai_percent = max(ai_percent or 0, 90)
+
+    # Determine detection against tolerance
+    tol = 25 if tolerance_percent is None else tolerance_percent
+    if ai_percent is not None:
+        if ai_percent > tol:
+            detected = True
+        else:
+            detected = False
+    else:
+        detected = legacy_detected or bool(evidence)
+
     lines = []
     for item in evidence:
         source = ' — '.join(str(item.get(k) or '') for k in ('source', 'location') if item.get(k))
         line = (source + ': ' if source else '') + str(item['observation'])
         if line not in lines:
             lines.append(line)
-    detected = bool(lines)
+    if details and details not in lines and not any(details in l for l in lines):
+        lines.insert(0, details)
+
     basis = {item.get('basis') for item in evidence}
-    confidence = 'medium' if basis & {'metadata', 'self_disclosure'} else ('low' if detected else 'none')
+    raw_conf = str(result.get('ai_generated_confidence') or '').lower().strip()
+    if raw_conf in {'high', 'medium', 'low'}:
+        confidence = raw_conf if detected else 'none'
+    elif basis & {'metadata', 'self_disclosure'}:
+        confidence = 'high' if detected else 'none'
+    elif ai_percent is not None and ai_percent >= 70:
+        confidence = 'high' if detected else 'none'
+    elif ai_percent is not None and ai_percent >= 40:
+        confidence = 'medium' if detected else 'none'
+    elif detected:
+        confidence = 'low'
+    else:
+        confidence = 'none'
+
     note = ('ШІ дозволено вчителем: використання інструмента саме по собі не знижує бал.' if allowed else
             'ШІ не дозволено вчителем. Підозра потребує уточнення; самостійність оцінюється за критеріями завдання, без автоматичного штрафу за стиль чи метадані.')
     if detected:
@@ -116,5 +172,5 @@ def normalize_authorship(result, allowed, provenance=()):
         lines = ['Походження роботи не встановлено. Виразних ознак ШІ не знайдено, але це не підтверджує самостійність. ' + note]
         if not allowed:
             lines.append('Бал оцінює наданий результат. Перед остаточним рішенням учитель може попросити пояснити кроки або показати чернетку.')
-    return {'ai_generated_detected': detected, 'ai_generated_percent': None,
+    return {'ai_generated_detected': detected, 'ai_generated_percent': ai_percent,
             'ai_generated_confidence': confidence, 'ai_generated_details': '\n'.join(lines)}

@@ -221,7 +221,7 @@
                             <div style="font-weight:800;font-size:13px;color:{% if submission.is_ai_allowed %}#065f46{% else %}var(--color-danger){% endif %};display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;margin-bottom:4px;">
                                 <span style="display:inline-flex;align-items:center;gap:6px;">
                                     <span>🤖</span>
-                                    <span>{% if submission.is_ai_allowed %}У роботі зафіксовано використання штучного інтелекту (ШІ) (дозволено вчителем){% else %}У роботі виявлено ознаки використання штучного інтелекту (ШІ){% endif %}</span>
+                                    <span>{% if submission.is_ai_allowed %}У роботі зафіксовано використання штучного інтелекту (ШІ){% if is_teacher and submission.ai_generated_percent is not None %}: {{ submission.ai_generated_percent }}%{% endif %} (дозволено вчителем){% else %}У роботі виявлено ознаки використання штучного інтелекту (ШІ){% if is_teacher and submission.ai_generated_percent is not None %}: {{ submission.ai_generated_percent }}%{% endif %}{% endif %}</span>
                                 </span>
                             </div>
                             {% if is_teacher and submission.ai_generated_details %}
@@ -234,7 +234,7 @@
                                 {% if submission.is_ai_allowed %}
                                 💡 Вчитель дозволив використання ШІ для виконання цього завдання.
                                 {% else %}
-                                ⚠️ Для цього завдання вчитель вимагав повністю самостійного виконання учнем!
+                                ⚠️ Для цього завдання вчитель вимагав повністю самостійного виконання учнем! Перевищено допустимий поріг ШІ.
                                 {% endif %}
                             </div>
                         </div>
@@ -521,8 +521,10 @@ function runStudentAICheck(subId) {
             var alertBg = isAllowed ? 'rgba(16,185,129,0.08)' : 'rgba(239,68,68,0.08)';
             var alertBorder = isAllowed ? '#10b981' : '#ef4444';
             var alertColor = isAllowed ? '#065f46' : '#b91c1c';
-            var alertTitle = isAllowed ? 'У роботі зафіксовано використання штучного інтелекту (ШІ) (дозволено вчителем)' : 'У роботі виявлено ознаки використання штучного інтелекту (ШІ)';
-            var alertNote = isAllowed ? '💡 Вчитель дозволив використання ШІ для виконання цього завдання.' : '⚠️ Для цього завдання вчитель вимагав повністю самостійного виконання учнем!';
+            var isTeacher = {% if is_teacher %}true{% else %}false{% endif %};
+            var pctText = (isTeacher && data.ai_generated_percent !== null && data.ai_generated_percent !== undefined) ? ': ' + data.ai_generated_percent + '%' : '';
+            var alertTitle = isAllowed ? 'У роботі зафіксовано використання штучного інтелекту (ШІ)' + pctText + ' (дозволено вчителем)' : 'У роботі виявлено ознаки використання штучного інтелекту (ШІ)' + pctText;
+            var alertNote = isAllowed ? '💡 Вчитель дозволив використання ШІ для виконання цього завдання.' : '⚠️ Для цього завдання вчитель вимагав повністю самостійного виконання учнем! Перевищено допустимий поріг ШІ.';
 
             var detailsText = '';
 

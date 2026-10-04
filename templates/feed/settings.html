@@ -848,9 +848,27 @@
                                 </div>
 
                                 <div class="form-group" style="margin:0;">
-    <strong>🛡️ Ознаки ШІ та самостійність</strong>
-    <p class="text-muted" style="font-size:13px;line-height:1.6;margin:8px 0 0;">Це пояснення автоматичної перевірки, а не перемикач. У редакторі завдання відкрийте «Параметри ШІ» та встановіть «Дозволити використання ШІ». Якщо потрібна самостійна робота, залиште дозвіл вимкненим і вкажіть критерій та його вагу. Після «Перевірити роботу ШІ» дивіться походження в рекомендаціях: знайдені ознаки або «Походження роботи не встановлено». Для спірної роботи попросіть пояснення кроків чи чернетку. Готовий файл і відсутність ознак не доводять самостійність; автоматичного штрафу за стиль немає.</p>
-</div>
+                                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+                                        <label for="ai_detector_tolerance_percent" class="form-label" style="font-weight:700;margin:0;display:flex;align-items:center;gap:6px;">
+                                            <span>🛡️</span>
+                                            <span>Ознаки ШІ та самостійність (поріг допустимості):</span>
+                                            <span class="badge" style="background:#6366f1;color:#fff;font-size:12px;font-weight:800;padding:2px 8px;border-radius:10px;">
+                                                <span id="ai-tol-val">{{ ai_settings.ai_detector_tolerance_percent|default:25 }}</span>%
+                                            </span>
+                                        </label>
+                                    </div>
+                                    <input type="range" name="ai_detector_tolerance_percent" id="ai_detector_tolerance_percent" min="0" max="60" step="5"
+                                           value="{{ ai_settings.ai_detector_tolerance_percent|default:25 }}" class="form-input" style="padding:0;cursor:pointer;"
+                                           oninput="document.getElementById('ai-tol-val').textContent = this.value">
+                                    <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--color-text-muted);margin-top:2px;">
+                                        <span>0% (Повна заборона)</span>
+                                        <span style="font-weight:700;color:var(--color-primary);">25% (Рекомендовано: цитати, терміни)</span>
+                                        <span>60% (Висока толерантність)</span>
+                                    </div>
+                                    <p class="form-hint" style="margin-top:6px;font-size:12px;color:var(--color-text-muted);line-height:1.5;">
+                                        Встановлює максимальний допустимий відсоток використання ШІ у роботах учнів. Якщо зданий матеріал перевищує цей поріг і використання ШІ не дозволено у завданні, система зафіксує порушення самостійності, знизить оцінку або поверне на доопрацювання та повідомить вчителя й учня.
+                                    </p>
+                                </div>
                             </div>
 
                             <!-- Налаштування режиму Thinking Mode (Глибоке мислення за замовчуванням) -->
