@@ -1,0 +1,137 @@
+{
+  "version": "4.0.0",
+  "date": "2026-10-04",
+  "checkpoint_commit": "aa931ed",
+  "implementation_commit": "e99377f",
+  "automated_tests": {
+    "count": 372,
+    "new_v4_scenarios": 23,
+    "database": "isolated PostgreSQL test database",
+    "seconds": 55.189,
+    "result": "OK"
+  },
+  "django_check": "no issues",
+  "migration": "0049 applied; no model changes detected",
+  "browser": {
+    "states": 20,
+    "themes": [
+      "light",
+      "dark"
+    ],
+    "widths": [
+      390,
+      1280
+    ],
+    "horizontal_page_overflow": 0,
+    "javascript_errors": 0
+  },
+  "synthetic_live_ai": {
+    "provider": "gemini",
+    "model": "gemini-3.1-flash-lite",
+    "task": "exercise 3 shown as an image; bulletin requested, presentation submitted",
+    "result": "9/12 using teacher content=9, format=3 rubric",
+    "guide_seconds": 7.2,
+    "assessment_seconds": 9.01,
+    "teacher_grade_unchanged": true,
+    "real_student_data_used": false
+  },
+  "benchmark": {
+    "request_chars_before": 38770,
+    "request_chars_after": 5394,
+    "request_text_reduction_pct": 86.1,
+    "cold": {
+      "version": "4.0.0",
+      "phase": "cold",
+      "evidence_seconds": 1.4508,
+      "preview_seconds": 0.2105,
+      "text_chars": 16820,
+      "visual_pdf_bytes": 55660,
+      "html_chars": 17375
+    },
+    "warm_another_process": {
+      "version": "4.0.0",
+      "phase": "warm",
+      "evidence_seconds": 0.0005,
+      "preview_seconds": 0.0001,
+      "text_chars": 16820,
+      "visual_pdf_bytes": 55660,
+      "html_chars": 17375
+    }
+  },
+  "deployment": {
+    "services": {
+      "app": "healthy",
+      "ai_worker": "healthy",
+      "postgres": "healthy"
+    },
+    "startup_error_lines": 0,
+    "version": "4.0.0",
+    "public": [
+      {
+        "url": "/",
+        "status": 200
+      },
+      {
+        "url": "/teacher/login/",
+        "status": 200
+      }
+    ],
+    "teacher_views": [
+      {
+        "submission": 33,
+        "status": 200
+      },
+      {
+        "submission": 30,
+        "status": 200
+      },
+      {
+        "submission": 21,
+        "status": 200
+      },
+      {
+        "submission": 33,
+        "status": 200
+      },
+      {
+        "submission": 33,
+        "status": 200
+      }
+    ],
+    "assets": "200; hashes match deployed source",
+    "counts": {
+      "Assignment": 34,
+      "Submission": 38,
+      "AssignmentFile": 32,
+      "SubmissionFile": 25
+    },
+    "assignment_36": 200,
+    "materials": [
+      {
+        "extension": ".docx",
+        "mode": "document",
+        "type": "url",
+        "slides": 0
+      },
+      {
+        "extension": ".docx",
+        "mode": "text",
+        "type": "html",
+        "slides": 0
+      },
+      {
+        "extension": ".pptx",
+        "mode": "document",
+        "type": "slides",
+        "slides": 26
+      },
+      {
+        "extension": ".pptx",
+        "mode": "text",
+        "type": "html",
+        "slides": 0
+      }
+    ],
+    "grades_unchanged": true
+  }
+}
