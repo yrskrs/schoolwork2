@@ -950,7 +950,7 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
         self.assertContains(resp, 'Центр налаштувань')
         self.assertContains(resp, 'Профіль вчителя')
         self.assertContains(resp, 'Середовище та заклад')
-        self.assertContains(resp, 'Модуль ШІ (Gemini)')
+        self.assertContains(resp, 'Модуль ШІ')
 
         # Вкладка Профіль
         resp_prof = self.client.get(reverse('teacher_settings') + '?tab=profile')

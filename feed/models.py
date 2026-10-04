@@ -3409,16 +3409,21 @@ class AISettings(models.Model):
         verbose_name = 'Налаштування ШІ'
         verbose_name_plural = 'Налаштування ШІ'
 
+    @staticmethod
+    def _default_provider_model(provider):
+        from .gemini_service import get_default_model_for_provider
+        return get_default_model_for_provider(provider)
+
     def get_active_config(self):
         """
         Повертає конфігурацію поточного активного API:
         (provider: str, api_key: str, model_name: str, custom_url: str, is_backup: bool)
         """
-        if self.active_api_type == 'backup' and self.backup_api_key.strip():
+        if self.active_api_type == 'backup' and (self.backup_api_key.strip() or (self.backup_ai_provider == 'custom' and self.backup_custom_api_url.strip())):
             return (
                 self.backup_ai_provider or 'gemini',
                 self.backup_api_key.strip(),
-                (self.backup_model_name.strip() or self.model_name or 'gemini-3.8-flash'),
+                (self.backup_model_name.strip() or self._default_provider_model(self.backup_ai_provider)),
                 (self.backup_custom_api_url or '').strip(),
                 True
             )
@@ -3437,7 +3442,7 @@ class AISettings(models.Model):
         """
         if self.active_api_type == 'backup':
             # Якщо активним є резервний, то резервом для нього стає основний (якщо заповнений)
-            if self.api_key.strip():
+            if self.api_key.strip() or (self.ai_provider == 'custom' and self.custom_api_url.strip()):
                 return (
                     self.ai_provider or 'gemini',
                     self.api_key.strip(),
@@ -3446,11 +3451,11 @@ class AISettings(models.Model):
                 )
             return None
         else:
-            if self.backup_api_key.strip():
+            if self.backup_api_key.strip() or (self.backup_ai_provider == 'custom' and self.backup_custom_api_url.strip()):
                 return (
                     self.backup_ai_provider or 'gemini',
                     self.backup_api_key.strip(),
-                    (self.backup_model_name.strip() or self.model_name or 'gemini-3.6-flash'),
+                    (self.backup_model_name.strip() or self._default_provider_model(self.backup_ai_provider)),
                     (self.backup_custom_api_url or '').strip()
                 )
             return None
@@ -3470,197 +3475,151 @@ class AISettings(models.Model):
         obj, _ = cls.objects.get_or_create(id=1)
         return obj
 
+    def get_provider_config(self, provider, include_alternative=True):
+        """Resolve a model to its provider's credentials, never another provider's key."""
+        slots = [
+            {'provider': self.ai_provider, 'api_key': self.api_key.strip(), 'model': self.model_name,
+             'custom_url': self.custom_api_url.strip(), 'is_backup': False},
+            {'provider': self.backup_ai_provider, 'api_key': self.backup_api_key.strip(), 'model': self.backup_model_name,
+             'custom_url': self.backup_custom_api_url.strip(), 'is_backup': True},
+        ]
+        if self.active_api_type == 'backup' and (self.backup_api_key.strip() or (self.backup_ai_provider == 'custom' and self.backup_custom_api_url.strip())): slots.reverse()
+        if not include_alternative: slots = slots[:1]
+        return next((slot for slot in slots if slot['provider'] == provider and
+                     (slot['api_key'] or (provider == 'custom' and slot['custom_url']))), None)
+
     def get_models_with_priority(self):
-        """
-        Повертає структурований список моделей із зазначенням пріоритету та активності:
-        [{'name': 'gemini-2.5-flash', 'priority': 1, 'enabled': True}, ...]
-        Сортує за зростанням пріоритету (1 — найвищий).
-        """
-        result = []
-        seen_names = set()
-        default_names = ['gemini-3.6-flash', 'gemini-3.1-flash-lite', 'gemini-3.8-flash', 'gemini-3.7-flash']
-
+        from .ai_model_catalog import infer_model_provider
+        result, seen = [], set()
         try:
-            raw_data = json.loads(self.saved_models_list) if self.saved_models_list else []
-            if isinstance(raw_data, list):
-                for idx, item in enumerate(raw_data, start=1):
-                    if isinstance(item, dict):
-                        name = str(item.get('name', '')).strip()
-                        priority = int(item.get('priority', idx))
-                        enabled = bool(item.get('enabled', True))
-                    else:
-                        name = str(item).strip()
-                        priority = idx
-                        enabled = True
-
-                    if name and name not in seen_names:
-                        seen_names.add(name)
-                        result.append({
-                            'name': name,
-                            'priority': priority,
-                            'enabled': enabled,
-                        })
-        except Exception:
-            pass
-
-        # Якщо список порожній, ініціалізуємо за замовчуванням
-        if not result:
-            for idx, d_name in enumerate(default_names, start=1):
-                result.append({
-                    'name': d_name,
-                    'priority': idx,
-                    'enabled': True,
-                })
-                seen_names.add(d_name)
-
-        # Гарантуємо, що активна self.model_name присутня у списку
-        curr_model = (self.model_name or '').strip()
-        if curr_model and curr_model not in seen_names:
-            result.insert(0, {
-                'name': curr_model,
-                'priority': 1,
-                'enabled': True,
-            })
-            seen_names.add(curr_model)
-
-        # Сортуємо за пріоритетом та нормалізуємо ранги 1..N
-        result.sort(key=lambda x: x['priority'])
-        for idx, item in enumerate(result, start=1):
-            item['priority'] = idx
-
+            raw = json.loads(self.saved_models_list or '[]')
+        except (ValueError, TypeError):
+            raw = []
+        for idx, item in enumerate(raw if isinstance(raw, list) else [], 1):
+            name = str(item.get('name', '') if isinstance(item, dict) else item).strip()
+            provider = (item.get('provider') if isinstance(item, dict) else None) or infer_model_provider(name, self.ai_provider)
+            if not name or provider not in dict(AI_PROVIDER_CHOICES) or (provider, name) in seen: continue
+            try: priority = int(item.get('priority', idx)) if isinstance(item, dict) else idx
+            except (ValueError, TypeError): priority = idx
+            result.append({'name': name, 'provider': provider, 'priority': priority,
+                           'enabled': bool(item.get('enabled', True)) if isinstance(item, dict) else True})
+            seen.add((provider, name))
+        if not result and self.ai_provider == 'gemini':
+            for idx, name in enumerate(['gemini-3.6-flash', 'gemini-3.1-flash-lite', 'gemini-3.8-flash', 'gemini-3.7-flash'], 1):
+                result.append({'name': name, 'provider': 'gemini', 'priority': idx, 'enabled': True})
+                seen.add(('gemini', name))
+        for provider, name in [(self.ai_provider, self.model_name), (self.backup_ai_provider, self.backup_model_name)]:
+            if name and (provider, name) not in seen:
+                result.append({'name': name, 'provider': provider, 'priority': len(result) + 1, 'enabled': True})
+                seen.add((provider, name))
+        result.sort(key=lambda item: item['priority'])
+        for idx, item in enumerate(result, 1): item['priority'] = idx
         return result
 
     def get_saved_models(self):
-        """Повертає список назв збережених моделей у порядку пріоритету."""
-        models_data = self.get_models_with_priority()
-        return [m['name'] for m in models_data]
+        return [item['name'] for item in self.get_models_with_priority()]
 
-    def get_active_fallback_chain(self):
-        """
-        Повертає впорядкований список активних моделей для черги запитів та перемикання (fallback).
-        Першою завжди йде поточна основна модель, далі резервні за пріоритетом.
-        """
-        models_data = self.get_models_with_priority()
-        chain = [m['name'] for m in models_data if m['enabled']]
-        curr = (self.model_name or '').strip()
-
-        if curr and curr in chain:
-            # Переконуємось, що обрана активна модель стоїть першою в черзі
-            chain.remove(curr)
-            chain.insert(0, curr)
-        elif curr and curr not in chain:
-            chain.insert(0, curr)
-
-        if not chain:
-            chain = [curr or 'gemini-3.6-flash']
-
+    def get_active_fallback_chain(self, provider=None):
+        provider = provider or self.get_active_config()[0]
+        chain = [m['name'] for m in self.get_models_with_priority() if m['enabled'] and m['provider'] == provider]
+        active_provider, _, current, _, _ = self.get_active_config()
+        if provider == active_provider and current:
+            if current in chain: chain.remove(current)
+            chain.insert(0, current)
         return chain
 
-    def add_saved_model(self, name, priority=None, enabled=True):
-        """
-        Додає або оновлює модель із зазначеним пріоритетом.
-        Якщо пріоритет не задано, призначає найвищий доступний порядковий номер.
-        """
-        name = str(name).strip()
-        if not name:
-            return
+    def get_request_configs(self, custom_model=None):
+        """Ordered attempts with matching keys, enabled models, and optional failover."""
+        from .gemini_service import clean_model_name, get_default_model_for_provider
+        provider, key, model, url, is_backup = self.get_active_config()
+        configs, seen = [], set()
+        def append(config, name):
+            name = clean_model_name(name or get_default_model_for_provider(config['provider']), config['provider'])
+            identity = (config['provider'], name, config['api_key'], config['custom_url'])
+            if identity not in seen and (config['api_key'] or (config['provider'] == 'custom' and config['custom_url'])):
+                configs.append({**config, 'model': name}); seen.add(identity)
+        append({'provider': provider, 'api_key': key, 'custom_url': url, 'is_backup': is_backup}, custom_model or model)
+        for item in self.get_models_with_priority():
+            if not item['enabled']: continue
+            config = self.get_provider_config(item['provider'], include_alternative=self.auto_failover_enabled)
+            if config: append(config, item['name'])
+        if self.auto_failover_enabled:
+            alternative = self.get_backup_config()
+            if alternative:
+                p, k, m, u = alternative
+                append({'provider': p, 'api_key': k, 'custom_url': u, 'is_backup': not is_backup}, m)
+        return configs
 
-        current_models = self.get_models_with_priority()
-        existing = next((m for m in current_models if m['name'] == name), None)
+    def _model_provider(self, name, provider=None):
+        from .ai_model_catalog import infer_model_provider
+        return provider or next((m['provider'] for m in self.get_models_with_priority() if m['name'] == name),
+                                infer_model_provider(name, self.ai_provider))
 
-        if priority is not None:
-            p_val = int(priority)
-            for m in current_models:
-                if m['name'] != name and m['priority'] >= p_val:
-                    m['priority'] += 1
+    def activate_saved_model(self, name, provider=None):
+        provider = self._model_provider(name, provider)
+        config = self.get_provider_config(provider)
+        # The currently selected provider can be edited before entering its key.
+        if config is None and provider == self.ai_provider:
+            config = {'is_backup': False}
+        if config is None: raise ValueError('Спочатку налаштуйте ключ і адресу цього провайдера у «Підключення».')
+        if config['is_backup']:
+            self.backup_model_name, self.active_api_type = name, 'backup'
         else:
-            p_val = (len(current_models) + 1) if not existing else existing['priority']
+            self.model_name, self.active_api_type = name, 'primary'
+        self.save(update_fields=['model_name', 'backup_model_name', 'active_api_type', 'updated_at'])
 
-        if existing:
-            existing['priority'] = p_val
-            existing['enabled'] = bool(enabled)
-        else:
-            current_models.append({
-                'name': name,
-                'priority': p_val,
-                'enabled': bool(enabled),
-            })
-
-        # Нормалізуємо та зберігаємо
-        current_models.sort(key=lambda x: x['priority'])
-        for idx, m in enumerate(current_models, start=1):
-            m['priority'] = idx
-
-        if p_val == 1 or priority == 1:
-            self.model_name = name
-        elif current_models:
-            self.model_name = current_models[0]['name']
-
-        self.saved_models_list = json.dumps(current_models, ensure_ascii=False)
-        self.save(update_fields=['saved_models_list', 'model_name', 'updated_at'])
-
-    def remove_saved_model(self, name):
-        """
-        Видаляє модель зі збереженого списку.
-        Якщо видалено поточну активну модель, активною стає наступна за пріоритетом.
-        """
-        name = str(name).strip()
-        current_models = [m for m in self.get_models_with_priority() if m['name'] != name]
-
-        if not current_models:
-            current_models = [{
-                'name': 'gemini-3.6-flash',
-                'priority': 1,
-                'enabled': True,
-            }]
-
-        for idx, m in enumerate(current_models, start=1):
-            m['priority'] = idx
-
-        if self.model_name == name:
-            self.model_name = current_models[0]['name']
-
-        self.saved_models_list = json.dumps(current_models, ensure_ascii=False)
-        self.save(update_fields=['saved_models_list', 'model_name', 'updated_at'])
-
-    def move_model_priority(self, name, direction):
-        """
-        Переміщує пріоритет моделі вгору ('up') або вниз ('down') у списку черги.
-        """
-        name = str(name).strip()
-        current_models = self.get_models_with_priority()
-        idx = next((i for i, m in enumerate(current_models) if m['name'] == name), None)
-
-        if idx is None:
-            return
-
-        if direction == 'up' and idx > 0:
-            current_models[idx], current_models[idx - 1] = current_models[idx - 1], current_models[idx]
-        elif direction == 'down' and idx < len(current_models) - 1:
-            current_models[idx], current_models[idx + 1] = current_models[idx + 1], current_models[idx]
-
-        for i, m in enumerate(current_models, start=1):
-            m['priority'] = i
-
-        # Якщо перша модель змінилась, оновлюємо model_name
-        self.model_name = current_models[0]['name']
-        self.saved_models_list = json.dumps(current_models, ensure_ascii=False)
-        self.save(update_fields=['saved_models_list', 'model_name', 'updated_at'])
-
-    def toggle_model_enabled(self, name, enabled=None):
-        """
-        Вмикає або вимикає модель у ланцюжку автоматичного перемикання (fallback).
-        """
-        name = str(name).strip()
-        current_models = self.get_models_with_priority()
-        for m in current_models:
-            if m['name'] == name:
-                m['enabled'] = not m['enabled'] if enabled is None else bool(enabled)
-                break
-
-        self.saved_models_list = json.dumps(current_models, ensure_ascii=False)
+    def _save_model_queue(self, items):
+        for idx, item in enumerate(items, 1): item['priority'] = idx
+        self.saved_models_list = json.dumps(items, ensure_ascii=False)
         self.save(update_fields=['saved_models_list', 'updated_at'])
 
+    def add_saved_model(self, name, priority=None, enabled=True, provider=None):
+        name = str(name).strip()
+        if not name: return
+        provider = self._model_provider(name, provider)
+        if provider not in dict(AI_PROVIDER_CHOICES): raise ValueError('Невідомий провайдер.')
+        items = self.get_models_with_priority()
+        existing = next((m for m in items if (m['provider'], m['name']) == (provider, name)), None)
+        position = max(1, min(len(items) + 1, int(priority))) if priority is not None else (existing['priority'] if existing else len(items) + 1)
+        if existing: items.remove(existing)
+        items.insert(position - 1, {'name': name, 'provider': provider, 'priority': position, 'enabled': bool(enabled)})
+        self._save_model_queue(items)
+        if priority == 1 and (provider == self.ai_provider or self.get_provider_config(provider)):
+            self.activate_saved_model(name, provider)
+
+    def remove_saved_model(self, name, provider=None):
+        provider = self._model_provider(name, provider)
+        items = [m for m in self.get_models_with_priority() if (m['provider'], m['name']) != (provider, name)]
+        if (provider, name) == (self.ai_provider, self.model_name):
+            replacement = next((m['name'] for m in items if m['provider'] == provider and m['enabled']), None)
+            from .gemini_service import get_default_model_for_provider
+            self.model_name = replacement or get_default_model_for_provider(provider)
+        if (provider, name) == (self.backup_ai_provider, self.backup_model_name):
+            self.backup_model_name = next((m['name'] for m in items if m['provider'] == provider and m['enabled']), '')
+        self.save(update_fields=['model_name', 'backup_model_name', 'updated_at'])
+        self._save_model_queue(items)
+
+    def move_model_priority(self, name, direction, provider=None):
+        if direction not in ['up', 'down']: return
+        provider = self._model_provider(name, provider)
+        items = self.get_models_with_priority()
+        idx = next((i for i, m in enumerate(items) if (m['provider'], m['name']) == (provider, name)), None)
+        if idx is None: return
+        target = idx - 1 if direction == 'up' else idx + 1
+        if 0 <= target < len(items): items[idx], items[target] = items[target], items[idx]
+        self._save_model_queue(items)
+        first = items[0]
+        if first['enabled'] and (first['provider'] == self.ai_provider or self.get_provider_config(first['provider'])):
+            self.activate_saved_model(first['name'], first['provider'])
+
+    def toggle_model_enabled(self, name, enabled=None, provider=None):
+        provider = self._model_provider(name, provider)
+        items = self.get_models_with_priority()
+        for item in items:
+            if (item['provider'], item['name']) == (provider, name):
+                item['enabled'] = not item['enabled'] if enabled is None else bool(enabled)
+                break
+        self._save_model_queue(items)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # ЖУРНАЛ ПОМИЛОК ТА ЗБОЇВ ШІ (AI ERROR LOG)

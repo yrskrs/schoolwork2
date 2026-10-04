@@ -159,16 +159,16 @@
                         <div style="display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap;">
                             <div style="display:flex;align-items:center;gap:18px;">
                                 <div style="min-width:80px;height:80px;border-radius:20px;background:{{ gg.bg_color }};border:2.5px solid {{ gg.border_color }};display:flex;flex-direction:column;align-items:center;justify-content:center;box-shadow:0 4px 14px {{ gg.bg_color }};">
-                                    <span style="font-size:36px;font-weight:950;line-height:1;color:{{ gg.color }};">{{ gg.raw_grade }}</span>
+                                    <span style="font-size:36px;font-weight:950;line-height:1;color:var(--color-text-primary);">{{ gg.raw_grade }}</span>
                                     {% if gg.level_code != 'rework' %}
-                                    <span style="font-size:11px;font-weight:800;color:{{ gg.color }};opacity:0.85;margin-top:2px;">з 12 балів</span>
+                                    <span style="font-size:11px;font-weight:800;color:var(--color-text-primary);opacity:0.85;margin-top:2px;">з 12 балів</span>
                                     {% endif %}
                                 </div>
 
                                 <div>
                                     <div style="font-size:11.5px;font-weight:750;color:var(--color-text-muted);text-transform:uppercase;letter-spacing:0.5px;">Група успішності / Рівень:</div>
                                     <div style="font-size:20px;font-weight:900;color:var(--color-text-primary);margin:2px 0 6px;">{{ gg.icon }} {{ gg.group_name }}</div>
-                                    <div style="display:inline-flex;align-items:center;gap:6px;background:{{ gg.bg_color }};border:1.5px solid {{ gg.border_color }};border-radius:20px;padding:4px 12px;font-size:13px;font-weight:850;color:{{ gg.color }};">
+                                    <div style="display:inline-flex;align-items:center;gap:6px;background:{{ gg.bg_color }};border:1.5px solid {{ gg.border_color }};border-radius:20px;padding:4px 12px;font-size:13px;font-weight:850;color:var(--color-text-primary);">
                                         <span>🎯</span>
                                         <span>Діапазон оцінок групи: <strong>{{ gg.range_str }}</strong></span>
                                     </div>
@@ -184,7 +184,7 @@
                         <div style="margin-top:16px;padding-top:14px;border-top:1px dashed var(--color-border);">
                             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-size:12px;">
                                 <span style="font-weight:750;color:var(--color-text-secondary);">Шкала рівнів навчальних досягнень:</span>
-                                <span style="font-weight:850;color:{{ gg.color }};">Ваша оцінка <strong>{{ gg.raw_grade }}</strong> належить до групи «{{ gg.group_name }}»</span>
+                                <span style="font-weight:850;color:var(--color-text-primary);">Ваша оцінка <strong>{{ gg.raw_grade }}</strong> належить до групи «{{ gg.group_name }}»</span>
                             </div>
                             <div style="display:grid;grid-template-columns:repeat(4, 1fr);gap:6px;">
                                 <div style="padding:7px 8px;border-radius:var(--radius-sm);text-align:center;font-size:11.5px;transition:all 0.2s;{% if gg.level_code == 'low' %}background:rgba(239,68,68,0.18);border:2px solid #ef4444;font-weight:900;color:var(--color-danger);box-shadow:0 2px 8px rgba(239,68,68,0.2);{% else %}background:var(--color-bg-secondary);border:1px solid var(--color-border);color:var(--color-text-muted);opacity:0.65;{% endif %}">
@@ -653,13 +653,13 @@ function runStudentAICheck(subId) {
                 '<div style="display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap;">' +
                     '<div style="display:flex;align-items:center;gap:18px;">' +
                         '<div style="min-width:80px;height:80px;border-radius:20px;background:' + gg.bg_color + ';border:2.5px solid ' + gg.border_color + ';display:flex;flex-direction:column;align-items:center;justify-content:center;box-shadow:0 4px 14px ' + gg.bg_color + ';">' +
-                            '<span style="font-size:36px;font-weight:950;line-height:1;color:' + gg.color + ';">' + gg.raw_grade + '</span>' +
-                            (gg.level_code !== 'rework' ? '<span style="font-size:11px;font-weight:800;color:' + gg.color + ';opacity:0.85;margin-top:2px;">з 12 балів</span>' : '') +
+                            '<span style="font-size:36px;font-weight:950;line-height:1;color:var(--color-text-primary);">' + gg.raw_grade + '</span>' +
+                            (gg.level_code !== 'rework' ? '<span style="font-size:11px;font-weight:800;color:var(--color-text-primary);opacity:0.85;margin-top:2px;">з 12 балів</span>' : '') +
                         '</div>' +
                         '<div>' +
                             '<div style="font-size:11.5px;font-weight:750;color:var(--color-text-muted);text-transform:uppercase;letter-spacing:0.5px;">Група успішності / Рівень:</div>' +
                             '<div style="font-size:20px;font-weight:900;color:var(--color-text-primary);margin:2px 0 6px;">' + gg.icon + ' ' + gg.group_name + '</div>' +
-                            '<div style="display:inline-flex;align-items:center;gap:6px;background:' + gg.bg_color + ';border:1.5px solid ' + gg.border_color + ';border-radius:20px;padding:4px 12px;font-size:13px;font-weight:850;color:' + gg.color + ';">' +
+                            '<div style="display:inline-flex;align-items:center;gap:6px;background:' + gg.bg_color + ';border:1.5px solid ' + gg.border_color + ';border-radius:20px;padding:4px 12px;font-size:13px;font-weight:850;color:var(--color-text-primary);">' +
                                 '<span>🎯</span> <span>Діапазон оцінок групи: <strong>' + gg.range_str + '</strong></span>' +
                             '</div>' +
                         '</div>' +
@@ -671,7 +671,7 @@ function runStudentAICheck(subId) {
                 '<div style="margin-top:16px;padding-top:14px;border-top:1px dashed var(--color-border);">' +
                     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-size:12px;">' +
                         '<span style="font-weight:750;color:var(--color-text-secondary);">Шкала рівнів навчальних досягнень:</span>' +
-                        '<span style="font-weight:850;color:' + gg.color + ';">Ваша оцінка <strong>' + gg.raw_grade + '</strong> належить до групи «' + gg.group_name + '»</span>' +
+                        '<span style="font-weight:850;color:var(--color-text-primary);">Ваша оцінка <strong>' + gg.raw_grade + '</strong> належить до групи «' + gg.group_name + '»</span>' +
                     '</div>' +
                     '<div style="display:grid;grid-template-columns:repeat(4, 1fr);gap:6px;">' +
                         '<div style="padding:7px 8px;border-radius:var(--radius-sm);text-align:center;font-size:11.5px;' + sLow + '"><div>1–3 бали</div><div style="font-size:10.5px;margin-top:1px;">Початковий</div>' + (gg.level_code === 'low' ? '<div style="font-size:9.5px;margin-top:2px;">⭐ Ваша оцінка</div>' : '') + '</div>' +

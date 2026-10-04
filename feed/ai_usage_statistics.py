@@ -1,7 +1,7 @@
 """Aggregate usage logs into bounded, timezone-aware chart data."""
 from datetime import timedelta
 
-from django.db.models import Count, Min, Sum
+from django.db.models import Count, Max, Min, Sum
 from django.db.models.functions import TruncDate, TruncHour, TruncMonth
 from django.utils import timezone
 
@@ -67,3 +67,39 @@ def build_usage_chart(logs, now, start_date=None):
         'providers': sorted({row['provider'] for row in rows}),
         'actions': sorted({row['action'] for row in rows}),
     }
+
+
+def build_model_usage_stats(logs, now, start_date, period_days, active_provider, active_model):
+    """Three grouped queries, keeping identical model IDs at different providers separate."""
+    from django.db.models import Q
+    from django.db.models.functions import TruncMinute
+    logs = logs.exclude(model_name='').filter(created_at__lte=now)
+    today = timezone.localtime(now).replace(hour=0, minute=0, second=0, microsecond=0)
+    grouped = logs.values('provider', 'model_name').annotate(
+        current_rpm=Count('pk', filter=Q(created_at__gte=now - timedelta(minutes=1))),
+        requests_today=Count('pk', filter=Q(created_at__gte=today)),
+        first_used=Min('created_at'), last_used=Max('created_at'),
+    )
+    period = logs.filter(created_at__gte=start_date) if start_date else logs
+    summaries = {(r['provider'], r['model_name']): r for r in period.values('provider', 'model_name').annotate(
+        period_total_reqs=Count('pk'), period_success_reqs=Count('pk', filter=Q(is_success=True)),
+        period_failed_reqs=Count('pk', filter=Q(is_success=False)),
+        prompt_tokens=Sum('prompt_tokens'), completion_tokens=Sum('completion_tokens'), total_tokens=Sum('total_tokens'),
+    )}
+    peaks = {}
+    for row in period.annotate(minute=TruncMinute('created_at')).values('provider', 'model_name', 'minute').annotate(count=Count('pk')):
+        key = (row['provider'], row['model_name'])
+        peaks[key] = max(peaks.get(key, 0), row['count'])
+    result = []
+    for row in grouped:
+        key = (row['provider'], row['model_name'])
+        summary = summaries.get(key, {})
+        total = summary.get('period_total_reqs', 0)
+        row.pop('model_name')
+        first = row.pop('first_used')
+        result.append({**row, **{k: (summary.get(k) or 0) for k in ['period_total_reqs', 'period_success_reqs', 'period_failed_reqs', 'prompt_tokens', 'completion_tokens', 'total_tokens']},
+                       'name': key[1], 'is_active': key == (active_provider, active_model),
+                       'peak_rpm': max(row['current_rpm'], peaks.get(key, 0)),
+                       'avg_rpd': round(total / max(1, period_days or (now - first).days), 1),
+                       'success_rate': round(summary.get('period_success_reqs', 0) / total * 100, 1) if total else 100.0})
+    return sorted(result, key=lambda row: (not row['is_active'], -row['period_total_reqs'], row['name'], row['provider']))

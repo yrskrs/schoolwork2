@@ -6620,7 +6620,7 @@ def teacher_settings_view(request):
             ai_settings.api_key = api_key
             if model_name:
                 ai_settings.model_name = model_name
-                ai_settings.add_saved_model(model_name)
+                ai_settings.add_saved_model(model_name, provider=ai_settings.ai_provider)
             ai_settings.custom_api_url = custom_api_url
 
             ai_settings.backup_ai_provider = backup_ai_provider or 'gemini'
@@ -6660,50 +6660,40 @@ def teacher_settings_view(request):
                 return redirect('ai_settings')
             return redirect(ai_settings_url(request))
 
-        elif action == 'add_custom_model':
-            new_model = request.POST.get('new_model_name', '').strip()
-            priority_val = request.POST.get('priority', '').strip()
-            p_int = int(priority_val) if priority_val.isdigit() else None
-            make_active = bool(request.POST.get('make_active'))
-
-            if new_model:
-                if make_active:
-                    p_int = 1
-                ai_settings.add_saved_model(new_model, priority=p_int, enabled=True)
-                if make_active:
-                    ai_settings.model_name = new_model
-                    ai_settings.save(update_fields=['model_name', 'updated_at'])
-                messages.success(request, f"Модель «{new_model}» успішно додано з пріоритетом #{p_int or 'черги'}! 🚀")
-            return redirect(ai_settings_url(request))
-
-        elif action == 'move_model_priority':
-            m_name = request.POST.get('model_name', '').strip()
-            direction = request.POST.get('direction', '').strip()
-            if m_name and direction in ['up', 'down']:
-                ai_settings.move_model_priority(m_name, direction)
-                messages.info(request, f"Порядок моделі «{m_name}» оновлено.")
-            return redirect(ai_settings_url(request))
-
-        elif action == 'toggle_model_enabled':
-            m_name = request.POST.get('model_name', '').strip()
-            if m_name:
-                ai_settings.toggle_model_enabled(m_name)
-                messages.info(request, f"Статус активності моделі «{m_name}» змінено.")
-            return redirect(ai_settings_url(request))
-
-        elif action == 'delete_model':
-            del_model = request.POST.get('model_to_delete', '').strip()
-            if del_model:
-                ai_settings.remove_saved_model(del_model)
-                messages.warning(request, f"Модель «{del_model}» видалено зі списку.")
-            return redirect(ai_settings_url(request))
-
-        elif action == 'switch_model':
-            switch_to = request.POST.get('switch_to_model', '').strip()
-            if switch_to:
-                ai_settings.model_name = switch_to
-                ai_settings.add_saved_model(switch_to, priority=1)
-                messages.success(request, f"Активну модель змінено на «{switch_to}» (Пріоритет #1)!")
+        elif action in ['add_custom_model', 'move_model_priority', 'toggle_model_enabled', 'delete_model', 'switch_model']:
+            provider = request.POST.get('model_provider', '').strip() or None
+            try:
+                if provider and provider not in dict(AI_PROVIDER_CHOICES):
+                    raise ValueError('Оберіть підтримуваного провайдера.')
+                if action == 'add_custom_model':
+                    name = request.POST.get('new_model_name', '').strip()
+                    if not name or len(name) > 100 or any(ch.isspace() for ch in name):
+                        raise ValueError('Вкажіть ідентифікатор моделі без пробілів, до 100 символів.')
+                    raw_priority = request.POST.get('priority', '')
+                    priority = int(raw_priority) if raw_priority.isdigit() else None
+                    if request.POST.get('make_active'): priority = 1
+                    ai_settings.add_saved_model(name, priority=priority, provider=provider)
+                    messages.success(request, f'Модель «{name}» додано до черги.')
+                    resolved = ai_settings._model_provider(name, provider)
+                    if not ai_settings.get_provider_config(resolved):
+                        messages.info(request, 'Модель збережено. Щоб використовувати її, налаштуйте цей провайдер у «Підключення».')
+                elif action == 'move_model_priority':
+                    ai_settings.move_model_priority(request.POST.get('model_name', ''), request.POST.get('direction'), provider=provider)
+                    messages.info(request, 'Порядок моделей оновлено.')
+                elif action == 'toggle_model_enabled':
+                    ai_settings.toggle_model_enabled(request.POST.get('model_name', ''), provider=provider)
+                    messages.info(request, 'Участь моделі у fallback змінено.')
+                elif action == 'delete_model':
+                    ai_settings.remove_saved_model(request.POST.get('model_to_delete', ''), provider=provider)
+                    messages.info(request, 'Модель видалено з черги.')
+                else:
+                    name = request.POST.get('switch_to_model', '').strip()
+                    if not name: raise ValueError('Оберіть модель.')
+                    ai_settings.activate_saved_model(name, provider)
+                    ai_settings.add_saved_model(name, priority=1, provider=provider)
+                    messages.success(request, f'Активну модель змінено на «{name}».')
+            except (ValueError, TypeError) as error:
+                messages.error(request, str(error))
             return redirect(ai_settings_url(request))
 
         elif action == 'reset_prompt':
@@ -6869,31 +6859,15 @@ def teacher_settings_view(request):
         ai_generated_percent__gte=tolerance,
     ).count()
 
-    db_models = list(Submission.objects.exclude(ai_model_used='').values_list('ai_model_used', flat=True).distinct())
-    all_known_models = list(dict.fromkeys(saved_models + db_models))
     model_stats = []
-
-    for m in all_known_models:
-        m_count = Submission.objects.filter(ai_model_used=m).count()
-        m_success = Submission.objects.filter(ai_model_used=m, ai_status='success').count()
-        m_failed = Submission.objects.filter(ai_model_used=m, ai_status='failed').count()
-        m_last = Submission.objects.filter(ai_model_used=m).order_by('-ai_reviewed_at').first()
-        m_priority_info = next((item for item in models_with_priority if item['name'] == m), None)
-
-        model_stats.append({
-            'name': m,
-            'total_checks': m_count,
-            'success_checks': m_success,
-            'failed_checks': m_failed,
-            'is_active': (m == ai_settings.model_name),
-            'is_saved': (m in saved_models),
-            'priority': m_priority_info['priority'] if m_priority_info else None,
-            'enabled': m_priority_info['enabled'] if m_priority_info else False,
-            'last_used': m_last.ai_reviewed_at if m_last else None,
-        })
-
-    # Сортування статистики: спочатку за пріоритетом
-    model_stats.sort(key=lambda x: (x['priority'] if x['priority'] is not None else 999, x['name']))
+    for item in models_with_priority:
+        display_name = item['name'] if item['provider'] == 'gemini' else f"{item['name']} ({item['provider'].title()})"
+        checks = Submission.objects.filter(ai_model_used=display_name)
+        model_stats.append({**item, 'is_saved': True,
+                            'configured': bool(ai_settings.get_provider_config(item['provider'])),
+                            'is_active': (item['provider'], item['name']) == (ai_settings.get_active_config()[0], ai_settings.get_active_config()[2]),
+                            'total_checks': checks.count(), 'success_checks': checks.filter(ai_status='success').count(),
+                            'failed_checks': checks.filter(ai_status='failed').count()})
 
     level_high = Submission.objects.filter(ai_score_level__icontains='висок').count()
     level_sufficient = Submission.objects.filter(ai_score_level__icontains='достат').count()
@@ -6913,112 +6887,7 @@ def teacher_settings_view(request):
         'db_size': _get_database_size_display(),
     }
 
-    # ── 3.3.1. КАТАЛОГ ОФІЦІЙНИХ МОДЕЛЕЙ GOOGLE GEMINI ТА ЇХ КВОТ ────────────
-    gemini_catalog_raw = [
-        {
-            'name': 'gemini-3.6-flash',
-            'title': 'Gemini 3.6 Flash',
-            'tag': 'Рекомендована',
-            'tag_color': '#10b981',
-            'description': 'Найновіша швидка збалансована Flash-модель. Ідеальна для щоденної перевірки робіт учнів.',
-            'rpm': '15',
-            'rpd': '1 500',
-            'tpm': '1 000 000',
-            'context': '1M токенів',
-            'speed': '~1-3 сек',
-            'thinking_support': True,
-        },
-        {
-            'name': 'gemini-3.1-flash-lite',
-            'title': 'Gemini 3.1 Flash Lite',
-            'tag': 'Надвисока швидкість (30 RPM)',
-            'tag_color': '#06b6d4',
-            'description': 'Ультрашвидка генерація з подвоєним лімітом запитів на хвилину. Оптимальна для великих шкіл та масової перевірки.',
-            'rpm': '30',
-            'rpd': '1 500',
-            'tpm': '2 000 000',
-            'context': '1M токенів',
-            'speed': '<1.5 сек',
-            'thinking_support': False,
-        },
-        {
-            'name': 'gemini-3.8-flash',
-            'title': 'Gemini 3.8 Flash',
-            'tag': 'Нове покоління',
-            'tag_color': '#6366f1',
-            'description': 'Флагманська Flash-модель нового покоління. Потужний мультимодальний аналіз (можливі тимчасові піки попиту).',
-            'rpm': '15',
-            'rpd': '1 500',
-            'tpm': '1 000 000',
-            'context': '1M токенів',
-            'speed': '~2-4 сек',
-            'thinking_support': True,
-        },
-        {
-            'name': 'gemini-3.7-flash',
-            'title': 'Gemini 3.7 Flash',
-            'tag': 'Thinking Mode',
-            'tag_color': '#8b5cf6',
-            'description': 'Гібридна модель із розширеними можливостями покрокового розмірковування для складних завдань.',
-            'rpm': '15',
-            'rpd': '1 500',
-            'tpm': '1 000 000',
-            'context': '1M токенів',
-            'speed': '~3-6 сек',
-            'thinking_support': True,
-        },
-        {
-            'name': 'gemini-flash-latest',
-            'title': 'Gemini Flash Latest',
-            'tag': 'Автооновлення',
-            'tag_color': '#f59e0b',
-            'description': 'Динамічний системний псевдонім (аліас), який автоматично вказує на найсвіжішу стабільну Flash-версію.',
-            'rpm': '15',
-            'rpd': '1 500',
-            'tpm': '1 000 000',
-            'context': '1M токенів',
-            'speed': '~2-3 сек',
-            'thinking_support': True,
-        },
-        {
-            'name': 'gemini-3.1-pro-preview',
-            'title': 'Gemini 3.1 Pro Preview',
-            'tag': 'Глибокий аналіз (Pro)',
-            'tag_color': '#ec4899',
-            'description': 'Максимальна глибина педагогічного аналізу, величезне контекстне вікно для великих творів та проєктів.',
-            'rpm': '5',
-            'rpd': '300',
-            'tpm': '500 000',
-            'context': '2M токенів',
-            'speed': '~5-10 сек',
-            'thinking_support': True,
-        },
-        {
-            'name': 'gemini-2.5-flash',
-            'title': 'Gemini 2.5 Flash',
-            'tag': 'Стабільна класика',
-            'tag_color': '#64748b',
-            'description': 'Попередня стабільна Flash-модель. Перевірена надійність для сумісності.',
-            'rpm': '15',
-            'rpd': '1 500',
-            'tpm': '1 000 000',
-            'context': '1M токенів',
-            'speed': '~2-4 сек',
-            'thinking_support': False,
-        },
-    ]
-
-    gemini_catalog_models = []
-    for g_item in gemini_catalog_raw:
-        g_name = g_item['name']
-        p_info = next((item for item in models_with_priority if item['name'] == g_name), None)
-        gemini_catalog_models.append({
-            **g_item,
-            'is_active': (g_name == ai_settings.model_name),
-            'is_saved': (g_name in saved_models),
-            'priority': p_info['priority'] if p_info else None,
-            'enabled': p_info['enabled'] if p_info else False,
-        })
+    from .ai_model_catalog import PROVIDER_CATALOG, CATALOG_CHECKED_AT
 
     # ── 3.3.2. СТАТИСТИКА ЗАПИТІВ ТА ТОКЕНІВ ДЛЯ ВИКОРИСТАНИХ МОДЕЛЕЙ ──────
     stats_days_param = request.GET.get('stats_days', '7').strip()
@@ -7054,88 +6923,12 @@ def teacher_settings_view(request):
 
     from feed.models import AIRequestLog
 
-    # Беремо тільки ті моделі, які фактично використовувалися
-    used_models_names = list(
-        AIRequestLog.objects.exclude(model_name='').values_list('model_name', flat=True).distinct()
-    )
-
-    used_model_usage_stats = []
-    for m_name in used_models_names:
-        qs_all_time = AIRequestLog.objects.filter(model_name=m_name)
-        if not qs_all_time.exists():
-            continue
-
-        # RPM за останню хвилину
-        current_rpm = qs_all_time.filter(created_at__gte=one_minute_ago).count()
-
-        # RPD за сьогодні (від 00:00)
-        requests_today = qs_all_time.filter(created_at__gte=today_start).count()
-
-        # Вибірка за обраний період
-        if start_date:
-            qs_period = qs_all_time.filter(created_at__gte=start_date)
-        else:
-            qs_period = qs_all_time
-
-        period_total_reqs = qs_period.count()
-        period_success_reqs = qs_period.filter(is_success=True).count()
-        period_failed_reqs = qs_period.filter(is_success=False).count()
-
-        token_aggr = qs_period.aggregate(
-            p_tokens=Sum('prompt_tokens'),
-            c_tokens=Sum('completion_tokens'),
-            t_tokens=Sum('total_tokens')
-        )
-        prompt_tokens = token_aggr['p_tokens'] or 0
-        completion_tokens = token_aggr['c_tokens'] or 0
-        total_tokens = token_aggr['t_tokens'] or 0
-
-        if period_days_count:
-            avg_rpd = round(period_total_reqs / max(1, period_days_count), 1)
-        else:
-            first_req = qs_all_time.order_by('created_at').first()
-            days_span = max(1, (now - first_req.created_at).days) if first_req else 1
-            avg_rpd = round(period_total_reqs / days_span, 1)
-
-        # Піковий RPM за період (максимальна кількість запитів в одну хвилину)
-        peak_rpm = current_rpm
-        try:
-            from django.db.models.functions import TruncMinute
-            minute_peaks = qs_period.annotate(minute_slot=TruncMinute('created_at')).values('minute_slot').annotate(cnt=Count('id')).order_by('-cnt').first()
-            if minute_peaks and minute_peaks.get('cnt'):
-                peak_rpm = max(peak_rpm, minute_peaks['cnt'])
-        except Exception:
-            pass
-
-        last_req = qs_all_time.order_by('-created_at').first()
-        last_used = last_req.created_at if last_req else None
-        provider = last_req.provider if last_req else 'gemini'
-
-        success_rate = round((period_success_reqs / max(1, period_total_reqs)) * 100, 1) if period_total_reqs > 0 else 100.0
-
-        used_model_usage_stats.append({
-            'name': m_name,
-            'provider': provider,
-            'is_active': (m_name == ai_settings.model_name),
-            'current_rpm': current_rpm,
-            'peak_rpm': peak_rpm,
-            'requests_today': requests_today,
-            'avg_rpd': avg_rpd,
-            'period_total_reqs': period_total_reqs,
-            'period_success_reqs': period_success_reqs,
-            'period_failed_reqs': period_failed_reqs,
-            'success_rate': success_rate,
-            'prompt_tokens': prompt_tokens,
-            'completion_tokens': completion_tokens,
-            'total_tokens': total_tokens,
-            'last_used': last_used,
-        })
-
-    # Сортуємо: спочатку активна модель, далі за спаданням кількості запитів
-    used_model_usage_stats.sort(key=lambda x: (not x['is_active'], -x['period_total_reqs']))
-
-    from .ai_usage_statistics import build_usage_chart
+    from .ai_usage_statistics import build_usage_chart, build_model_usage_stats
+    active_provider, _, active_model, _, _ = ai_settings.get_active_config()
+    used_model_usage_stats = build_model_usage_stats(AIRequestLog.objects.all(), now, start_date, period_days_count, active_provider, active_model)
     ai_usage_chart = build_usage_chart(AIRequestLog.objects.all(), now, start_date)
+    stats_view = request.GET.get('stats_view', 'usage')
+    if stats_view not in ['usage', 'models', 'overview']: stats_view = 'usage'
 
     context = {
         'active_tab': tab,
@@ -7157,12 +6950,14 @@ def teacher_settings_view(request):
         'bell_schedules': BellSchedule.objects.all().order_by('lesson_number'),
         'env_stats': env_stats,
         'ai_settings': ai_settings,
-        'ai_providers': AI_PROVIDER_CHOICES,
+        'ai_providers': [(group['provider'], group['title']) for group in PROVIDER_CATALOG],
         'saved_models': saved_models,
         'models_with_priority': models_with_priority,
         'active_fallback_chain': active_fallback_chain,
         'model_stats': model_stats,
-        'gemini_catalog_models': gemini_catalog_models,
+        'provider_catalog': PROVIDER_CATALOG,
+        'catalog_checked_at': CATALOG_CHECKED_AT,
+        'stats_view': stats_view,
         'used_model_usage_stats': used_model_usage_stats,
         'ai_usage_chart': ai_usage_chart,
         'stats_days': stats_days_param,
@@ -7212,9 +7007,11 @@ def api_test_gemini_connection(request):
     """
     from .gemini_service import test_ai_connection
     provider = request.POST.get('provider', '').strip()
-    api_key = request.POST.get('api_key', '').strip()
+    if provider and provider not in dict(AI_PROVIDER_CHOICES):
+        return JsonResponse({'success': False, 'message': 'Невідомий провайдер.'}, status=400)
+    api_key = request.POST.get('api_key')
     model_name = request.POST.get('model_name', '').strip()
-    custom_url = request.POST.get('custom_url', '').strip()
+    custom_url = request.POST.get('custom_url')
 
     success, message, model_used, prov_used = test_ai_connection(
         provider=provider,

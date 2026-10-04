@@ -69,3 +69,49 @@
 @media (max-width: 600px) {
     #ai-usage-chart-section, #used-models-stats-section { scroll-margin-top: 252px; }
 }
+/* Compact statistics, sourced catalogs and local test feedback. */
+[data-stats-panel][hidden], [data-model-record][hidden], [data-catalog-provider][hidden] { display: none !important; }
+.ai-statistics-toolbar { display:flex; align-items:end; gap:16px; flex-wrap:wrap; margin-bottom:16px; }
+.ai-statistics-toolbar > div { flex:1 1 180px; }
+.ai-statistics-tabs { display:flex; flex:3 1 400px; gap:6px; flex-wrap:wrap; }
+.ai-statistics-tabs a { padding:10px 12px; border:1px solid var(--color-border); border-radius:var(--radius-sm); color:var(--color-text-secondary); font-size:13px; font-weight:700; }
+.ai-statistics-tabs a[aria-current] { background:var(--color-primary-light); color:var(--color-primary-text); }
+.ai-chart-filters { border:1px solid var(--color-border); border-radius:var(--radius-sm); margin-bottom:12px; }
+.ai-chart-filters > summary, .ai-model-metric-details > summary { cursor:pointer; padding:10px; color:var(--color-text-secondary); font-size:13px; line-height:1.5; }
+.ai-chart-filters .ai-usage-filters { padding:12px; }
+.ai-chart-display { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+.ai-chart-display label { margin:0; }
+.ai-chart-display select { width:auto; min-width:160px; }
+.ai-usage-totals { margin:12px 0; }
+.ai-usage-totals > div { padding:9px 12px; }
+.ai-usage-plot, .ai-usage-legend { --ai-series-lightness:42%; }
+[data-theme="dark"] .ai-usage-plot, [data-theme="dark"] .ai-usage-legend { --ai-series-lightness:66%; }
+.ai-usage-line { fill:none; stroke-width:2.5; stroke-linejoin:round; }
+.ai-usage-point, .ai-usage-bar { cursor:pointer; }
+.ai-usage-point:focus, .ai-usage-bar:focus { stroke:var(--color-text-primary); stroke-width:3; outline:none; }
+.ai-usage-zero { fill:var(--color-border); }
+.ai-usage-legend { display:flex; flex-wrap:wrap; gap:8px 14px; max-height:140px; overflow-y:auto; padding:8px 0; }
+.ai-usage-legend > span { display:flex; align-items:center; gap:6px; font-size:11px; color:var(--color-text-secondary); min-width:0; max-width:100%; }
+.ai-usage-legend > span > span { overflow-wrap:anywhere; }
+.ai-usage-legend i { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+.ai-usage-point-info { min-height:26px; margin:6px 0; }
+.ai-model-stat-card { padding:12px 0; }
+.ai-model-metric-details { margin-top:8px; border:1px solid var(--color-border); border-radius:var(--radius-sm); }
+.ai-model-metric-details .ai-model-stat-metrics { margin:0; padding:10px; }
+.ai-model-pagination { display:flex; gap:10px; justify-content:center; padding:12px; }
+.ai-model-search { padding-bottom:0!important; }
+.ai-model-test-result { padding:10px; background:var(--color-bg-secondary); border:1px solid var(--color-border); border-radius:var(--radius-sm); color:var(--color-text-primary)!important; font-size:12px; white-space:normal; overflow-wrap:anywhere; margin:10px 0 0; }
+.ai-model-test-result[data-state="success"] { border-color:var(--color-success); background:var(--color-success-light); }
+.ai-model-test-result[data-state="error"] { border-color:var(--color-danger); background:var(--color-danger-light); }
+.ai-queue-provider { display:block; font-family:var(--font-sans); font-size:11px; margin-top:5px; font-weight:400; color:var(--color-text-secondary); }
+.ai-add-model-box { margin-top:16px; padding:16px; border:1px dashed var(--color-border); border-radius:var(--radius-md); background:var(--color-bg-secondary); }
+.ai-add-model-box h3 { font-size:16px; margin:0 0 12px; }
+.ai-add-model-form { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; align-items:end; }
+.ai-add-model-form > div { min-width:0; }
+.ai-add-model-box .ai-settings-disclosure { margin:14px 0 0; }
+.ai-catalog-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+.ai-catalog-card { min-width:0; padding:14px; border:1px solid var(--color-border); border-radius:var(--radius-md); background:var(--color-surface); }
+.ai-catalog-card code { display:block; overflow-wrap:anywhere; white-space:normal; color:var(--color-text-primary); font-size:13px; }
+.ai-catalog-card p { font-size:12px; margin:8px 0; }
+.ai-catalog-actions { display:flex; flex-wrap:wrap; gap:6px; margin-top:12px; }
+@media(max-width:650px) { .ai-catalog-grid, .ai-add-model-form { grid-template-columns:minmax(0,1fr); } .ai-statistics-tabs a { flex:1; text-align:center; } }

@@ -1,0 +1,74 @@
+                <!-- 3.3. Аналітика та статистика використання -->
+                <div class="form-card mb-4">
+                    <div class="form-card-header">
+                        <h2 class="form-card-title">📊 Загальна статистика перевірок ШІ</h2>
+                    </div>
+                    <div class="form-card-body">
+                        <!-- 6 карток метрик -->
+                        <div class="ai-overview-grid">
+                            <div class="sidebar-card" style="padding:14px;text-align:center;border-top:3px solid var(--color-primary);">
+                                <div style="font-size:24px;font-weight:900;color:var(--color-primary);">{{ total_ai_checks }}</div>
+                                <div class="text-muted text-xs" style="font-weight:700;margin-top:2px;">Всього перевірок</div>
+                                {% if teacher_ai_checks or student_ai_checks %}
+                                <div style="font-size:10px;color:var(--color-text-muted);margin-top:4px;">
+                                    👩‍🏫 {{ teacher_ai_checks }} вчит. · 🎓 {{ student_ai_checks }} учн.
+                                </div>
+                                {% endif %}
+                            </div>
+
+                            <div class="sidebar-card" style="padding:14px;text-align:center;border-top:3px solid #10b981;">
+                                <div style="font-size:24px;font-weight:900;color:var(--color-success);">{{ total_ai_success }}</div>
+                                <div class="text-muted text-xs" style="font-weight:700;margin-top:2px;">Успішно оцінено</div>
+                            </div>
+
+                            <div class="sidebar-card" style="padding:14px;text-align:center;border-top:3px solid #8b5cf6;">
+                                <div style="font-size:24px;font-weight:900;color:var(--color-primary);">{{ total_applied_grades }}</div>
+                                <div class="text-muted text-xs" style="font-weight:700;margin-top:2px;">Прийнято в журнал</div>
+                            </div>
+
+                            <div class="sidebar-card" style="padding:14px;text-align:center;border-top:3px solid #f59e0b;">
+                                <div style="font-size:24px;font-weight:900;color:var(--color-warning);">{{ level_rework }}</div>
+                                <div class="text-muted text-xs" style="font-weight:700;margin-top:2px;">🔄 На доопрацюванні</div>
+                            </div>
+
+                            <div class="sidebar-card" style="padding:14px;text-align:center;border-top:3px solid #ef4444;">
+                                <div style="font-size:24px;font-weight:900;color:var(--color-danger);">{{ total_ai_detected }}</div>
+                                <div class="text-muted text-xs" style="font-weight:700;margin-top:2px;">🤖 Підозра на ШІ</div>
+                                {% if avg_ai_percent %}
+                                <div style="font-size:10px;color:var(--color-text-muted);margin-top:4px;">середнє {{ avg_ai_percent }}%</div>
+                                {% endif %}
+                            </div>
+
+                            <div class="sidebar-card" style="padding:14px;text-align:center;border-top:3px solid #6b7280;">
+                                <div style="font-size:24px;font-weight:900;color:var(--color-text-muted);">{{ total_ai_failed }}</div>
+                                <div class="text-muted text-xs" style="font-weight:700;margin-top:2px;">⚠️ Помилки / Непідтримані</div>
+                            </div>
+                        </div>
+
+                        <!-- Рівні НУШ -->
+                        <div style="background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:14px 16px;">
+                            <div style="font-size:12px;font-weight:800;color:var(--color-text-secondary);text-transform:uppercase;margin-bottom:10px;">
+                                Розподіл оцінок за рівнями НУШ:
+                            </div>
+                            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;">
+                                <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:8px 12px;">
+                                    <div style="font-size:11px;font-weight:700;color:var(--color-success);">⭐ Високий (10-12)</div>
+                                    <div style="font-size:16px;font-weight:800;color:var(--color-text-primary);margin-top:2px;">{{ level_high }}</div>
+                                </div>
+                                <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:8px 12px;">
+                                    <div style="font-size:11px;font-weight:700;color:var(--color-info);">🔷 Достатній (7-9)</div>
+                                    <div style="font-size:16px;font-weight:800;color:var(--color-text-primary);margin-top:2px;">{{ level_sufficient }}</div>
+                                </div>
+                                <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:8px 12px;">
+                                    <div style="font-size:11px;font-weight:700;color:var(--color-warning);">🔶 Середній (4-6)</div>
+                                    <div style="font-size:16px;font-weight:800;color:var(--color-text-primary);margin-top:2px;">{{ level_medium }}</div>
+                                </div>
+                                <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:8px 12px;">
+                                    <div style="font-size:11px;font-weight:700;color:var(--color-danger);">🔻 Початковий (1-3)</div>
+                                    <div style="font-size:16px;font-weight:800;color:var(--color-text-primary);margin-top:2px;">{{ level_initial }}</div>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>

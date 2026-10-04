@@ -41,8 +41,8 @@ OPENROUTER_API_BASE_URL = "https://openrouter.ai/api/v1"
 DEFAULT_MODELS_BY_PROVIDER = {
     'gemini': ['gemini-3.6-flash', 'gemini-3.1-flash-lite', 'gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-flash-latest', 'gemini-3.1-pro-preview'],
     'openai': ['gpt-4o-mini', 'gpt-4o', 'gpt-4-turbo', 'o3-mini'],
-    'deepseek': ['deepseek-chat', 'deepseek-reasoner'],
-    'groq': ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768'],
+    'deepseek': ['deepseek-flash', 'deepseek-v4-pro'],
+    'groq': ['openai/gpt-oss-120b', 'openai/gpt-oss-20b'],
     'openrouter': ['google/gemini-2.5-flash', 'deepseek/deepseek-chat', 'openai/gpt-4o-mini', 'anthropic/claude-3.5-sonnet'],
     'custom': ['llama3.2', 'mistral', 'qwen2.5'],
 }
@@ -464,13 +464,15 @@ def test_ai_connection(provider=None, api_key=None, model_name=None, custom_url=
     Повертає (success: bool, message: str, model_used: str, provider_used: str).
     """
     settings = get_ai_settings()
-    act_provider, act_key, act_model, act_url, _ = settings.get_active_config()
-
-    prov = (provider or act_provider or 'gemini').lower().strip()
-    key = api_key.strip() if api_key is not None else act_key
-    raw_model = (model_name or act_model or get_default_model_for_provider(prov)).strip()
+    active_provider = settings.get_active_config()[0]
+    prov = (provider or active_provider or 'gemini').lower().strip()
+    config = settings.get_provider_config(prov)
+    key = api_key.strip() if api_key is not None else (config['api_key'] if config else '')
+    raw_model = (model_name or (config['model'] if config else '') or get_default_model_for_provider(prov)).strip()
     model = clean_model_name(raw_model, provider=prov)
-    url = custom_url.strip() if custom_url is not None else act_url
+    url = custom_url.strip() if custom_url is not None else (config['custom_url'] if config else '')
+    if prov == 'custom' and not url:
+        return False, 'Вкажіть Base URL власного API.', model, prov
 
     if prov != 'custom' and not key:
         return False, f"API Key для {prov.title()} не вказано.", model, prov
@@ -485,7 +487,8 @@ def test_ai_connection(provider=None, api_key=None, model_name=None, custom_url=
         temperature=0.1,
         max_output_tokens=1000,
         timeout=15,
-        thinking_budget=0
+        thinking_budget=0,
+        action='test_connection'
     )
 
     if status_code == 200 and reply_text:
@@ -6301,48 +6304,7 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
 
     prompt_content = "\n".join(prompt_lines)
 
-    # Формуємо ланцюжок спроб: спочатку активний провайдер, потім резервний (failover)
-    attempts_configs = []
-
-    # 1. Спроби для активної конфігурації
-    if act_provider == 'gemini':
-        models_chain = settings.get_active_fallback_chain() if hasattr(settings, 'get_active_fallback_chain') else [act_model]
-        models_to_try = []
-        for m in models_chain:
-            m_clean = clean_model_name(m)
-            if m_clean and m_clean not in models_to_try:
-                models_to_try.append(m_clean)
-        if not models_to_try:
-            models_to_try = [clean_model_name(act_model or 'gemini-3.6-flash')]
-        for m in models_to_try:
-            attempts_configs.append({
-                'provider': act_provider,
-                'api_key': act_key,
-                'model': m,
-                'custom_url': act_url,
-                'is_backup': is_backup_active
-            })
-    else:
-        attempts_configs.append({
-            'provider': act_provider,
-            'api_key': act_key,
-            'model': act_model or get_default_model_for_provider(act_provider),
-            'custom_url': act_url,
-            'is_backup': is_backup_active
-        })
-
-    # 2. Резервна конфігурація у разі збою / 429 (failover)
-    if settings.auto_failover_enabled and settings.has_backup_configured():
-        b_prov, b_key, b_model, b_url = settings.get_backup_config()
-        if b_key or b_prov == 'custom':
-            m_target = b_model or get_default_model_for_provider(b_prov)
-            attempts_configs.append({
-                'provider': b_prov,
-                'api_key': b_key,
-                'model': clean_model_name(m_target) if b_prov == 'gemini' else m_target,
-                'custom_url': b_url,
-                'is_backup': not is_backup_active
-            })
+    attempts_configs = settings.get_request_configs()
 
     attempted_errors = []
 
@@ -7558,53 +7520,7 @@ def generate_criteria_with_gemini(teacher_notes, assignment_title='', assignment
     except (ValueError, TypeError):
         temperature = 0.3
 
-    # Ланцюжок спроб (активний провайдер + резервний)
-    attempts_configs = []
-
-    # 1. Активна конфігурація
-    if act_provider == 'gemini':
-        models_to_try = []
-        if custom_model:
-            models_to_try.append(clean_model_name(custom_model))
-        if hasattr(settings, 'get_active_fallback_chain'):
-            for m in settings.get_active_fallback_chain():
-                m_clean = clean_model_name(m)
-                if m_clean not in models_to_try:
-                    models_to_try.append(m_clean)
-        if hasattr(settings, 'model_name') and settings.model_name:
-            m_clean = clean_model_name(settings.model_name)
-            if m_clean not in models_to_try:
-                models_to_try.append(m_clean)
-        for m in models_to_try:
-            attempts_configs.append({
-                'provider': act_provider,
-                'api_key': act_key,
-                'model': m,
-                'custom_url': act_url,
-                'is_backup': is_backup_active
-            })
-    else:
-        m_chosen = clean_model_name(custom_model) if custom_model else (act_model or get_default_model_for_provider(act_provider))
-        attempts_configs.append({
-            'provider': act_provider,
-            'api_key': act_key,
-            'model': m_chosen,
-            'custom_url': act_url,
-            'is_backup': is_backup_active
-        })
-
-    # 2. Резервна конфігурація (якщо налаштована та дозволено failover)
-    if settings.auto_failover_enabled and settings.has_backup_configured():
-        b_prov, b_key, b_model, b_url = settings.get_backup_config()
-        if b_key or b_prov == 'custom':
-            m_target = b_model or get_default_model_for_provider(b_prov)
-            attempts_configs.append({
-                'provider': b_prov,
-                'api_key': b_key,
-                'model': clean_model_name(m_target) if b_prov == 'gemini' else m_target,
-                'custom_url': b_url,
-                'is_backup': not is_backup_active
-            })
+    attempts_configs = settings.get_request_configs(custom_model=custom_model)
 
     attempted_errors = []
 
@@ -8276,19 +8192,12 @@ def analyze_assignment_task_understanding(assignment, force_refresh=False) -> di
     settings = get_ai_settings()
     act_provider, act_key, act_model, act_url, is_backup_active = settings.get_active_config()
 
-    models_to_try = []
-    if act_provider == 'gemini':
-        if hasattr(settings, 'get_active_fallback_chain'):
-            for m in settings.get_active_fallback_chain():
-                m_clean = clean_model_name(m)
-                if m_clean and m_clean not in models_to_try:
-                    models_to_try.append(m_clean)
-    else:
-        models_to_try = [act_model or get_default_model_for_provider(act_provider)]
+    attempts_configs = settings.get_request_configs()
 
     result_data = None
-    if act_key or act_provider == 'custom':
-        for target_m in models_to_try:
+    if attempts_configs:
+        for config in attempts_configs:
+            act_provider, act_key, act_url, target_m = config['provider'], config['api_key'], config['custom_url'], config['model']
             try:
                 thinking_budget_val = 0 if ('flash' in str(target_m).lower() and act_provider == 'gemini') else None
                 status_code, raw_text, err_msg, raw_data = call_ai_api(

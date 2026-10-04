@@ -1,0 +1,116 @@
+<div class="fv-workspace-toolbar" aria-label="Навігація перевірки">
+    <nav class="fv-flow-nav" aria-label="Потік робіт">                        {% if prev_submission %}
+                        <a href="{% url 'view_file' prev_submission.id %}{% if nav_query_string %}?{{ nav_query_string }}{% endif %}"
+                           class="btn btn-secondary btn-sm"
+                           title="Попередня робота учня в потоці (Alt + ←)"
+                           id="prev-sub-btn">
+                            « Попередня
+                        </a>
+                        {% elif not is_filtered and prev_submission_fallback %}
+                        <a href="{% url 'view_file' prev_submission_fallback.id %}"
+                           class="btn btn-secondary btn-sm"
+                           title="Попередня робота: {{ prev_submission_fallback.get_student_full_name }} ({{ prev_submission_fallback.assignment.title|default:'Робота'|truncatechars:20 }})"
+                           id="prev-sub-btn">
+                            « Попередня
+                        </a>
+                        {% elif not is_filtered and prev_assignment and prev_assignment_first_sub %}
+                        <a href="{% url 'view_file' prev_assignment_first_sub.id %}?assignment={{ prev_assignment.id }}"
+                           class="btn btn-secondary btn-sm"
+                           title="Попереднє завдання: {{ prev_assignment.title|truncatechars:25 }}"
+                           id="prev-sub-btn">
+                            « Попереднє завд.
+                        </a>
+                        {% else %}
+                        <button class="btn btn-secondary btn-sm" disabled style="opacity:0.35;" title="{% if is_filtered %}Це перша робота у вибраному фільтрі{% else %}Це перша робота в системі{% endif %}">« Попередня</button>
+                        {% endif %}
+
+                        <span class="fv-flow-label">
+                            Потік
+                        </span>
+
+                        {% if next_submission %}
+                        <a href="{% url 'view_file' next_submission.id %}{% if nav_query_string %}?{{ nav_query_string }}{% endif %}"
+                           class="btn btn-primary btn-sm"
+                           title="Наступна робота учня в потоці (Alt + →)"
+                           id="next-sub-btn">
+                            Наступна »
+                        </a>
+                        {% elif not is_filtered and next_submission_fallback %}
+                        <a href="{% url 'view_file' next_submission_fallback.id %}"
+                           class="btn btn-primary btn-sm"
+                           title="Наступна робота: {{ next_submission_fallback.get_student_full_name }} ({{ next_submission_fallback.assignment.title|default:'Робота'|truncatechars:20 }}) (Alt + →)"
+                           id="next-sub-btn">
+                            Наступна »
+                        </a>
+                        {% elif not is_filtered and next_assignment and next_assignment_first_sub %}
+                        <a href="{% url 'view_file' next_assignment_first_sub.id %}?assignment={{ next_assignment.id }}"
+                           class="btn btn-primary btn-sm"
+                           title="Перейти до першої роботи наступного завдання: {{ next_assignment.title|truncatechars:25 }}"
+                           id="next-sub-btn">
+                            Наступне завд. »
+                        </a>
+                        {% elif not is_filtered and next_assignment %}
+                        <a href="{% url 'assignment_submissions' next_assignment.id %}"
+                           class="btn btn-primary btn-sm"
+                           title="Перейти до списку робіт наступного завдання: {{ next_assignment.title|truncatechars:25 }}"
+                           id="next-sub-btn">
+                            Наступне завд. »
+                        </a>
+                        {% else %}
+                        <button class="btn btn-secondary btn-sm" disabled style="opacity:0.35;" title="{% if is_filtered %}Всі роботи у вибраному фільтрі перевірено{% else %}Це остання робота в системі{% endif %}">Наступна »</button>
+                        {% endif %}
+
+<div class="fv-flow-actions">                        {% if submission.link %}
+                        <a href="{{ submission.link }}" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm" style="margin-left:4px;" title="Відкрити посилання учня у новій вкладці">
+                            🔗 Лінк ↗
+                        </a>
+                        {% elif active_file %}
+                        <a href="{% url 'view_submission_raw_file' submission.id %}{% if active_file_id %}?file_id={{ active_file_id }}{% endif %}" download class="btn btn-secondary btn-sm" style="margin-left:4px;" title="Завантажити активний файл">
+                            ⬇️ Завантажити
+                        </a>
+                        {% else %}<button type="button" class="btn btn-secondary btn-sm" disabled>⬇️ Немає файлу</button>{% endif %}
+
+<a href="#fv-document-card" class="btn btn-secondary btn-sm fv-read-link" data-viewer-pane="document">📄 Файл</a><a href="#fv-grading-card" class="btn btn-secondary btn-sm" data-viewer-pane="review">🎯 Оцінити</a></div></nav>
+    <div class="fv-identity-row">                    <!-- Навігація назад та назва поточного файлу -->
+                    <div class="fv-file-identity">
+                        <a href="{{ back_url|default:'/teacher/submissions/' }}" class="btn btn-secondary btn-sm" style="font-weight:700;">
+                            {{ back_label|default:'← До списку здач' }}
+                        </a>
+
+                        {% if is_filtered %}
+                        <div class="fv-filter-badge" style="display:inline-flex;align-items:center;gap:6px;background:rgba(99,102,241,0.12);border:1px solid rgba(99,102,241,0.3);color:var(--color-primary);padding:3px 10px;border-radius:20px;font-size:11.5px;font-weight:700;" title="Активна фільтрація черги перевірки">
+                            <span>🎯 {{ queue_filter_desc|default:"Фільтр" }}</span>
+                            {% if queue_pos and queue_total %}
+                            <span style="background:var(--action-primary-bg);color:#fff;padding:1px 7px;border-radius:10px;font-size:10.5px;font-weight:800;">{{ queue_pos }} / {{ queue_total }}</span>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+
+                        <span class="fv-active-file-name">
+                            <span class="fv-file-name" title="{{ file_name }}">{{ file_name }}</span>
+                            <span class="badge" style="background:var(--color-bg-secondary);color:var(--color-primary);font-size:11px;border:1px solid var(--color-border);">
+                                {% if file_type == 'code' %}💻 Код
+                                {% elif file_type == 'scratch' %}🐱 Scratch проєкт
+                                {% elif file_type == 'microbit' %}📟 BBC micro:bit
+                                {% elif file_type == 'access_db' %}🗄️ Microsoft Access
+                                {% elif file_type == 'video' %}🎬 Відео
+                                {% elif file_type == 'audio' %}🎵 Аудіо
+                                {% elif file_type == 'office_preview' %}📊 Документ
+                                {% elif file_type == 'archive' %}📦 Архів
+                                {% elif file_type == 'image' %}🖼️ Фото
+                                {% elif file_type == 'pdf' %}📄 PDF
+                                {% elif file_type == 'link' %}🔗 Лінк
+                                {% elif file_type == 'text' %}📝 Текст
+                                {% else %}📎 Файл{% endif %}
+                            </span>
+                        </span>
+                    </div>
+
+<details class="fv-reading-tools"><summary>⚙️ Вигляд</summary>                        <!-- Режими читання та повний екран -->
+                        <div style="display:inline-flex;align-items:center;background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:2px;gap:2px;margin-left:4px;">
+                            <button type="button" onclick="setViewerTheme('default')" title="Звичайна тема" style="background:none;border:none;cursor:pointer;font-size:13px;padding:2px 6px;border-radius:3px;">☀️</button>
+                            <button type="button" onclick="setViewerTheme('sepia')" title="Тема Сепія для очей" style="background:none;border:none;cursor:pointer;font-size:13px;padding:2px 6px;border-radius:3px;">📜</button>
+                            <button type="button" onclick="setViewerTheme('dark')" title="Темна тема" style="background:none;border:none;cursor:pointer;font-size:13px;padding:2px 6px;border-radius:3px;">🌙</button>
+                            <button type="button" onclick="toggleViewerFullscreen()" title="На весь екран (F11 / Alt+F)" style="background:none;border:none;cursor:pointer;font-size:13px;padding:2px 6px;border-radius:3px;border-left:1px solid var(--color-border);">⛶</button>
+                        </div></details></div>
+</div>

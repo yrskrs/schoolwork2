@@ -106,7 +106,7 @@ class AIUsageStatisticsTests(TestCase):
         payload = json.loads(source)
         self.assertEqual(payload['models'], [name])
         self.assertNotIn('created_at', payload['rows'][0])
-        self.assertEqual(len(page.xpath('//*[@data-usage-filter]')), 5)
+        self.assertEqual(len(page.xpath('//*[@data-usage-filter]')), 6)
         self.assertEqual(len(page.xpath('//*[@id="stats_days_select"]')), 1)
         self.assertEqual(page.xpath('//article[@class="ai-model-stat-card"]//code')[0].text_content(), name)
         self.assertFalse(page.xpath('//table[contains(@class,"ai-model-usage-table")]'))

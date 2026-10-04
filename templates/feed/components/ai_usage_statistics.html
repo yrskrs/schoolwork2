@@ -1,11 +1,9 @@
-<section class="form-card mb-4" id="ai-usage-chart-section" aria-labelledby="ai-usage-chart-title">
-    <div class="form-card-header">
-        <h2 class="form-card-title" id="ai-usage-chart-title">📊 Використання ШІ у часі</h2>
-        <p class="form-hint">Фактичні запити й токени з журналу системи. Період: {{ stats_days_label }}.</p>
-    </div>
-    <div class="form-card-body" data-ai-usage-chart>
-        <div class="ai-usage-filters" role="group" aria-label="Фільтри графіка використання ШІ">
-            <div><label class="form-label" for="stats_days_select">Період</label>
+<div class="ai-statistics-toolbar">
+<nav class="ai-statistics-tabs" aria-label="Розділи статистики">
+<a href="?tab=ai&amp;ai_section=statistics&amp;stats_days={{ stats_days }}&amp;stats_view=usage" data-stats-tab="usage" {% if stats_view == 'usage' %}aria-current="page"{% endif %}>📊 Графік</a>
+<a href="?tab=ai&amp;ai_section=statistics&amp;stats_days={{ stats_days }}&amp;stats_view=models" data-stats-tab="models" {% if stats_view == 'models' %}aria-current="page"{% endif %}>📈 Моделі ({{ used_model_usage_stats|length }})</a>
+<a href="?tab=ai&amp;ai_section=statistics&amp;stats_days={{ stats_days }}&amp;stats_view=overview" data-stats-tab="overview" {% if stats_view == 'overview' %}aria-current="page"{% endif %}>🧮 Підсумки робіт</a>
+</nav>            <div><label class="form-label" for="stats_days_select">Період</label>
                 <select id="stats_days_select" class="form-input" onchange="changeStatsDays(this.value)">
                     <option value="1" {% if stats_days == '1' %}selected{% endif %}>Останні 24 години</option>
                     <option value="3" {% if stats_days == '3' %}selected{% endif %}>Останні 3 дні</option>
@@ -15,6 +13,14 @@
                     <option value="all" {% if stats_days == 'all' %}selected{% endif %}>Увесь час</option>
                 </select>
             </div>
+</div>
+<div data-stats-panel="usage" {% if stats_view != 'usage' %}hidden{% endif %}><section class="form-card mb-4" id="ai-usage-chart-section" aria-labelledby="ai-usage-chart-title">
+    <div class="form-card-header">
+        <h2 class="form-card-title" id="ai-usage-chart-title">📊 Використання ШІ у часі</h2>
+        <p class="form-hint">Фактичні запити й токени з журналу системи. Період: {{ stats_days_label }}.</p>
+    </div>
+    <div class="form-card-body" data-ai-usage-chart>
+        <details class="ai-chart-filters"><summary>Фільтри графіка</summary><div class="ai-usage-filters" role="group" aria-label="Фільтри графіка використання ШІ">
             <div><label class="form-label" for="ai-usage-metric">Показник</label><select id="ai-usage-metric" class="form-input" data-usage-filter="metric">
                 <option value="requests">Кількість запитів</option><option value="total_tokens">Усі токени</option><option value="prompt_tokens">Вхідні токени</option><option value="completion_tokens">Вихідні токени</option>
             </select></div>
@@ -30,40 +36,46 @@
             <div><label class="form-label" for="ai-usage-status">Результат запиту</label><select id="ai-usage-status" class="form-input" data-usage-filter="status">
                 <option value="all">Усі результати</option><option value="success">Успішні</option><option value="failure">Помилки</option>
             </select></div>
-        </div>
+        </div></details>
+        <div class="ai-chart-display"><label class="form-label" for="ai-usage-display">Вигляд графіка</label><select id="ai-usage-display" class="form-input" data-usage-filter="display"><option value="bars">Стовпчики</option><option value="lines">Лінії</option><option value="curves">Криві</option></select></div>
         <div class="ai-usage-totals" aria-live="polite" id="ai-usage-totals"></div>
         <div class="ai-usage-plot" id="ai-usage-plot" aria-labelledby="ai-usage-chart-title"></div>
-        <p class="form-hint" id="ai-usage-chart-note">Час відображено за часовим поясом школи. {% if ai_usage_chart.resolution == 'hour' %}Кожен стовпчик — година.{% elif ai_usage_chart.resolution == 'month' %}Кожен стовпчик — місяць.{% else %}Кожен стовпчик — день.{% endif %}</p>
+        <div id="ai-usage-legend" class="ai-usage-legend" aria-label="Кольори моделей"></div>
+        <p class="form-hint" id="ai-usage-chart-note">Час відображено за часовим поясом школи. {% if ai_usage_chart.resolution == 'hour' %}Кожна позначка часу — година.{% elif ai_usage_chart.resolution == 'month' %}Кожна позначка часу — місяць.{% else %}Кожна позначка часу — день.{% endif %}</p>
         <p class="ai-usage-point-info" id="ai-usage-point-info" aria-live="polite">Натисніть стовпчик або оберіть його з клавіатури, щоб побачити точне значення.</p>
         <button type="button" class="btn btn-secondary btn-sm" data-usage-reset>Скинути фільтри графіка</button>
         <noscript><p class="form-hint">Для інтерактивного графіка увімкніть JavaScript. Показники моделей доступні нижче.</p></noscript>
     </div>
     {{ ai_usage_chart|json_script:'ai-usage-chart-data' }}
 </section>
-<section class="form-card mb-4" id="used-models-stats-section" aria-labelledby="used-models-stats-title">
+</div>
+<div data-stats-panel="models" {% if stats_view != 'models' %}hidden{% endif %}><section class="form-card mb-4" id="used-models-stats-section" aria-labelledby="used-models-stats-title">
     <div class="form-card-header">
         <h2 class="form-card-title" id="used-models-stats-title">📈 Статистика запитів (RPM, RPD) та токенів використаних моделей <span class="badge">{{ used_model_usage_stats|length }}</span></h2>
         <p class="form-hint">Показники за {{ stats_days_label|lower }}. RPM — запити за останню хвилину; RPD — за сьогодні. Графік можна фільтрувати окремо, картки показують усі використані моделі.</p>
     </div>
+    <div class="form-card-body ai-model-search"><label for="ai-stat-model-search" class="form-label">Знайти модель або провайдера</label><input id="ai-stat-model-search" type="search" class="form-input" placeholder="Назва моделі або провайдер" data-model-search><p data-model-page-info class="form-hint" aria-live="polite"></p></div>
     <div class="ai-model-stats-list">
         {% for stat in used_model_usage_stats %}
-        <article class="ai-model-stat-card" aria-label="Статистика {{ stat.name }}">
+        <article data-model-record data-model-name="{{ stat.name }}" data-model-provider="{{ stat.provider }}" class="ai-model-stat-card" aria-label="Статистика {{ stat.name }}">
             <header class="ai-model-stat-header">
                 <div class="ai-model-identity"><code>{{ stat.name }}</code>{% if stat.is_active %}<span class="badge ai-model-active">🟢 Активна</span>{% endif %}<span class="form-hint">{{ stat.provider|upper }}</span></div>
                 <div class="ai-model-stat-actions">
-                    {% if not stat.is_active %}<button type="button" class="btn btn-secondary btn-sm" onclick="selectModelToInput('{{ stat.name|escapejs }}', 'primary')">⭐ Основна</button>{% endif %}
-                    <button type="button" class="btn btn-secondary btn-sm" onclick="testModelDirect('{{ stat.name|escapejs }}', this)">🧪 Тест</button>
+                    {% if not stat.is_active %}<button type="button" class="btn btn-secondary btn-sm" onclick="selectModelToInput('{{ stat.name|escapejs }}', 'primary', '{{ stat.provider|escapejs }}')">⭐ Основна</button>{% endif %}
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="testModelDirect('{{ stat.name|escapejs }}', this, '{{ stat.provider|escapejs }}')">🧪 Тест</button>
                 </div>
             </header>
-            <dl class="ai-model-stat-metrics">
+            <details class="ai-model-metric-details"><summary>Показники: {{ stat.period_total_reqs }} запитів · {{ stat.total_tokens }} токенів · {{ stat.success_rate }}% успішних</summary><dl class="ai-model-stat-metrics">
                 <div><dt>RPM · за хвилину</dt><dd>{{ stat.current_rpm }}<small>Пік за період: {{ stat.peak_rpm }}</small></dd></div>
                 <div><dt>RPD · сьогодні</dt><dd>{{ stat.requests_today }}<small>Середнє: {{ stat.avg_rpd }}/день</small></dd></div>
                 <div><dt>Запитів за період</dt><dd>{{ stat.period_total_reqs }}<small>{{ stat.period_failed_reqs }} помилок</small></dd></div>
                 <div><dt>Успішність</dt><dd>{{ stat.success_rate }}%<small>{{ stat.period_success_reqs }} успішних</small></dd></div>
                 <div><dt>Токенів</dt><dd>{{ stat.total_tokens }}<small>Вхідні: {{ stat.prompt_tokens }}<br>Вихідні: {{ stat.completion_tokens }}</small></dd></div>
                 <div><dt>Останній запит</dt><dd class="ai-model-stat-date">{% if stat.last_used %}<time datetime="{{ stat.last_used|date:'c' }}">{{ stat.last_used|date:'d.m.Y H:i' }}</time>{% else %}—{% endif %}</dd></div>
-            </dl>
+            </dl></details>
         </article>
         {% empty %}<p class="ai-model-stats-empty">За цей період даних немає. Оберіть інший період або «Увесь час».</p>{% endfor %}
-    </div>
+    </div><nav class="ai-model-pagination" aria-label="Сторінки показників моделей"><button type="button" class="btn btn-secondary btn-sm" data-model-prev>← Попередні</button><button type="button" class="btn btn-secondary btn-sm" data-model-next>Наступні →</button></nav>
 </section>
+</div>
+<div data-stats-panel="overview" {% if stats_view != 'overview' %}hidden{% endif %}>{% include 'feed/components/ai_statistics_overview.html' %}</div>

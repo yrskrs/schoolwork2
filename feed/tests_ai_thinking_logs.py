@@ -242,7 +242,8 @@ class AIThinkingAndErrorLogTestCase(TestCase):
         self.assertNotIn('gemini-1.5-pro', used_model_names) # Невикористана модель не повинна відображатися!
 
         # Перевіряємо що передано каталог моделей Gemini
-        catalog = resp.context.get('gemini_catalog_models', [])
+        groups = resp.context['provider_catalog']
+        catalog = next(group['models'] for group in groups if group['provider'] == 'gemini')
         self.assertGreater(len(catalog), 0)
         catalog_names = [m['name'] for m in catalog]
         self.assertIn('gemini-3.6-flash', catalog_names)
