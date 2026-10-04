@@ -5789,67 +5789,6 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
         )
         prompt_lines.append("═══════════════════════════════════════════════════════════════════\n")
 
-    # ── ПЕРЕВІРКА НА ВИКОРИСТАННЯ ШТУЧНОГО ІНТЕЛЕКТУ, ЗОБРАЖЕНЬ ТА ОБХОДУ ДЕТЕКТОРІВ ──
-    tolerance_percent = getattr(settings, 'ai_detector_tolerance_percent', 25) or 25
-    is_ai_allowed = bool(assignment and assignment.allow_ai_usage)
-    prompt_lines.append("═══════════════════════════════════════════════════════════════════")
-    prompt_lines.append("🤖 ПЕРЕВІРКА НА ВИКОРИСТАННЯ ШТУЧНОГО ІНТЕЛЕКТУ, ЗОБРАЖЕНЬ ТА ОБХОДУ ДЕТЕКТОРІВ (AI DETECTOR & BYPASS CHECK):")
-    ai_check_instructions = [
-        f"ПОЛІТИКА ВЧИТЕЛЯ ЩОДО ШІ ДЛЯ ЦЬОГО ЗАВДАННЯ: {'🟢 ДОЗВОЛЕНО використання ШІ учнями' if is_ai_allowed else '🔴 СУВОРО ЗАБОРОНЕНО використання ШІ (вимагається самостійна праця учня)'}.",
-        f"ПОРІГ ТОЛЕРАНТНОСТІ СИСТЕМИ: {tolerance_percent}% (випадкові збіги термінів, формул, умов завдань чи цитат підручника в межах цього відсотка вважаються допустимими).",
-        "",
-        "ОБОВ'ЯЗКОВО ТА ПРИСКІПЛИВО ПРОАНАЛІЗУЙ УВЕСЬ ЗДАНИЙ МАТЕРІАЛ УЧНЯ (текст, код, прикріплені зображення, слайди, файли, посилання) НА ПРЕДМЕТ ГЕНЕРАЦІЇ ШІ ТА СПРОБ ОБХОДУ:",
-        "",
-        "1. АНАЛІЗ ПРИКРІПЛЕНИХ ЗОБРАЖЕНЬ ТА ГРАФІКИ (DALL-E, Midjourney, Stable Diffusion, Canva AI, Firefly тощо):",
-        "   - Перевір кожне прикріплене зображення (малюнки, схеми, ілюстрації, скріншоти, фото робіт) на ознаки генерації нейромережами:",
-        "     * Характерна синтетична гладкість, пластиковий блиск («airbrushed sheen»), неприродні світлотіні або надмірна розмитість деталей фону;",
-        "     * Анатомічні та структурні артефакти: неприродна форма рук/пальців, спотворена симетрія об'єктів, дивна перспектива;",
-        "     * Нерозбірливий, спотворений або вигаданий текст на зображенні (псевдо-шрифти, характерні для дифузійних моделей);",
-        "     * Водяні знаки або характерні стилізовані патерни ШІ-генераторів;",
-        "     * Якщо вчитель вимагав власноручний малюнок, рукописний конспект/зошит, схему, розв'язок на папері або фото реального досліду, а учень здав згенероване ШІ зображення чи його скріншот — це СТОВІДСОТКОВЕ використання ШІ ('ai_generated_percent': 100).",
-        "",
-        "2. АНАЛІЗ ТЕКСТУ ТА РОЗПІЗНАВАННЯ СЕРВІСІВ ОБХОДУ ДЕТЕКТОРІВ (Anti-AI Bypass, «Humanizers», рерайтери, QuillBot, Undetectable AI, StealthWriter, синонімайзери):",
-        "   - Учні нерідко пропускають згенерований текст через спеціальні сервіси обходу («хуманізатори») та автоматичні перефразувальники, щоб приховати використання ШІ!",
-        "   - Ознаки використання таких сервісів та спроб обману перевірки:",
-        "     * Штучна синонімізація: поява незвичних, рідковживаних або стилістично неприродних слів у простих контекстах замість загальноприйнятих шкільних термінів (артефакти синонімайзерів/спинерів);",
-        "     * Деформація синтаксису: неприродний порядок слів, штучно розірвані або штучно ускладнені конструкції для штучного підвищення метрик 'burstiness' (варіативність довжини) та 'perplexity' (непередбачуваність слів);",
-        "     * Збереження логічного каркаса ШІ: незважаючи на змінені слова, зберігається типова структура нейромережі — однакові за обсягом абзаци, банальні риторичні зачини («У сучасному світі...», «Варто зауважити, що...», «Підсумовуючи зазначене...»), відсутність конкретики, реальних прикладів та живого дитячого стилю;",
-        "     * Артефакти перекладу: текст згенеровано англійською, прогнано через сервіс обходу й машино перекладено українською (з калькованими зворотами).",
-        "   - ПРАВИЛО ДЛЯ ШІ: Будь-який текст, отриманий шляхом перефразування згенерованого ШІ матеріалу через такі сервіси, ВВАЖАЄТЬСЯ ЗГЕНЕРОВАНИМ ШІ!",
-        "",
-        "3. АНАЛІЗ ПРОГРАМНОГО КОДУ ТА РОЗВ'ЯЗКІВ:",
-        "   - Ознаки ШІ в коді: шаблонні коментарі до кожного елементарного рядка, назви функцій/змінних у стилі Copilot/ChatGPT, використання бібліотек або підходів, які не відповідають шкільній програмі даного класу.",
-        "",
-        "4. ПРАВИЛА ОЦІНЮВАННЯ ТА ВПЛИВ НА ОЦІНКУ В ЗАЛЕЖНОСТІ ВІД ПОЛІТИКИ ВЧИТЕЛЯ:",
-    ]
-    if is_ai_allowed:
-        ai_check_instructions.extend([
-            "   🟢 ПОЛІТИКА: ВЧИТЕЛЬ ДОЗВОЛИВ ВИКОРИСТАННЯ ШІ ДЛЯ ЦЬОГО ЗАВДАННЯ.",
-            f"   - Об'єктивно визнач 'ai_generated_percent' (0-100%) та заповни 'ai_generated_details'.",
-            "   - НЕ ЗНИЖУЙ ОЦІНКУ учневі виключно за факт використання ШІ!",
-            "   - Оцінюй, як учень використав цей інструмент: чи перевірив факти, чи адаптував результат під умову, чи проявив власне розуміння теми."
-        ])
-    else:
-        ai_check_instructions.extend([
-            "   🔴 ПОЛІТИКА: ВЧИТЕЛЬ СУВОРО ЗАБОРОНИВ ВИКОРИСТАННЯ ШІ (САМОСТІЙНА РОБОТА).",
-            f"   - Якщо частка згенерованого чи переробленого хуманізаторами матеріалу ПЕРЕВИЩУЄ поріг {tolerance_percent}%:",
-            "     * Встанови 'ai_generated_detected': true, 'ai_generated_confidence': 'high' або 'medium'.",
-            "     * Це є порушенням академічної доброчесності!",
-            "     * КАТЕГОРИЧНО ЗАБОРОНЕНО виставляти високі бали (10-12 балів)! Знизь оцінку до початкового рівня (1-3 бали) або признач 'suggested_grade': 'Доопрацювати'.",
-            "     * У полях 'weaknesses', 'feedback_comment' та 'summary' чітко й прямо попередь учня: «У завданні встановлено заборону на використання штучного інтелекту. Виявлено використання згенерованого контенту, зображень або сервісів обходу детекції (...%). Роботу необхідно виконати самостійно без використання сторонніх генераторів.»",
-            f"   - Якщо частка підозрілого тексту становить {tolerance_percent}% або менше, ВВАЖАЙ РОБОТУ САМОСТІЙНОЮ: 'ai_generated_detected': false, 'ai_generated_confidence': 'none'."
-        ])
-    ai_check_instructions.extend([
-        "",
-        "ОБОВ'ЯЗКОВО поверни в JSON поля:",
-        "- 'ai_generated_percent': ціле число від 0 до 100 (відсоток матеріалу, що має ознаки ШІ або сервісів обходу)",
-        f"- 'ai_generated_detected': true (якщо ШІ > {tolerance_percent}%) або false",
-        "- 'ai_generated_confidence': 'none' | 'low' | 'medium' | 'high'",
-        "- 'ai_generated_details': детальний висновок українською мовою з поясненням виявлених ознак (зокрема по зображеннях або слідах хуманізаторів) або null."
-    ])
-    prompt_lines.append("\n".join(ai_check_instructions))
-    prompt_lines.append("═══════════════════════════════════════════════════════════════════\n")
-
     # ── ПЕРЕВІРКА НА СПІВАВТОРІВ ТА КОЛЕКТИВНУ РОБОТУ ─────────────────────────
     if submission.is_group_work or submission.group_authors or getattr(submission, 'ignore_plagiarism', False):
         authors_str = submission.group_authors or submission.get_student_full_name()
@@ -7204,37 +7143,12 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                     student_feedback_parts.extend(evidence_sections)
                     clean_student_feedback = "\n\n".join(student_feedback_parts) if student_feedback_parts else feedback_comment
 
-                    # Виявлення використання ШІ у роботі з урахуванням порогу толерантності
-                    raw_ai_percent = result_json.get('ai_generated_percent')
-                    ai_generated_percent = None
-                    if raw_ai_percent is not None:
-                        try:
-                            clean_p_str = str(raw_ai_percent).replace('%', '').strip()
-                            ai_generated_percent = int(float(clean_p_str))
-                            ai_generated_percent = max(0, min(100, ai_generated_percent))
-                        except (ValueError, TypeError):
-                            ai_generated_percent = None
-
-                    tolerance = getattr(settings, 'ai_detector_tolerance_percent', 25) or 25
-                    raw_ai_detected = result_json.get('ai_generated_detected')
-                    ai_generated_detected = bool(raw_ai_detected and raw_ai_detected not in ['false', 'False', 0, '0', 'none', 'null'])
-
-                    # Застосування порогу толерантності (якщо скопійовано лише 1-2 фрази чи відсоток <= допустимого)
-                    if ai_generated_percent is not None:
-                        if ai_generated_percent <= tolerance:
-                            ai_generated_detected = False
-                    elif not ai_generated_detected:
-                        ai_generated_percent = 0
-
-                    ai_generated_confidence = str(result_json.get('ai_generated_confidence') or 'none').lower().strip()
-                    if ai_generated_confidence not in ['none', 'low', 'medium', 'high']:
-                        ai_generated_confidence = 'medium' if ai_generated_detected else 'none'
-                    if not ai_generated_detected:
-                        ai_generated_confidence = 'none'
-
-                    ai_generated_details = str(result_json.get('ai_generated_details') or '').strip()
-                    if ai_generated_details.lower() in ['none', 'null', 'false', 'ok', 'none.', 'null.']:
-                        ai_generated_details = ''
+                    from .ai_provenance import normalize_authorship, submission_provenance
+                    authorship = normalize_authorship(result_json, assignment.allow_ai_usage, submission_provenance(submission))
+                    ai_generated_detected = authorship['ai_generated_detected']
+                    ai_generated_percent = authorship['ai_generated_percent']
+                    ai_generated_confidence = authorship['ai_generated_confidence']
+                    ai_generated_details = authorship['ai_generated_details']
 
                     submission.ai_suggested_grade = suggested_grade
                     submission.ai_score_level = level

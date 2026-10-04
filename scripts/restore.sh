@@ -1,152 +1,66 @@
 #!/usr/bin/env bash
-# ==============================================================================
-# Скрипт відновлення бази даних та медіа-файлів із резервної копії SchoolNet
-# ==============================================================================
-
+# Verify first; pause BOTH writers; restore SQL atomically; install staged uploads.
 set -euo pipefail
-
+umask 077
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-
-AUTO_CONFIRM=0
-TARGET_BACKUP=""
-
+TARGET_BACKUP='' AUTO_CONFIRM=0 VERIFY_ONLY=0 LEGACY=()
 for arg in "$@"; do
     case "$arg" in
-        -y|--yes)
-            AUTO_CONFIRM=1
-            ;;
-        *)
-            if [ -z "$TARGET_BACKUP" ]; then
-                TARGET_BACKUP="$arg"
-            fi
-            ;;
+        -y|--yes) AUTO_CONFIRM=1;;
+        --verify-only) VERIFY_ONLY=1;;
+        --allow-legacy) LEGACY=(--allow-legacy);;
+        -*) echo "Невідомий параметр: $arg" >&2; exit 1;;
+        *) [ -z "$TARGET_BACKUP" ] || { echo 'Вкажіть лише один каталог копії.' >&2; exit 1; }; TARGET_BACKUP="$arg";;
     esac
 done
-
-if [ -z "$TARGET_BACKUP" ]; then
-    echo "❌ [ПОМИЛКА] Вкажіть шлях до папки з бекапом!"
-    echo "Використання: ./scripts/restore.sh backups/2026-09-13_18-00-00 [--yes]"
-    exit 1
-fi
-
-if [ ! -d "$TARGET_BACKUP" ]; then
-    echo "❌ [ПОМИЛКА] Папка $TARGET_BACKUP не існує!"
-    exit 1
-fi
-
-echo "=================================================================="
-echo " Відновлення SchoolNet з резервної копії"
-echo " Каталог бекапу: $TARGET_BACKUP"
-echo " УВАГА: Всі поточні дані бази та медіа-файли будуть перезаписані!"
-echo "=================================================================="
-
-if [ "$AUTO_CONFIRM" -ne 1 ]; then
-    REPLY=""
-    read -p "Ви дійсно бажаєте продовжити відновлення? (y/N): " -r REPLY || REPLY="n"
-    echo ""
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        echo "Операцію відновлення скасовано користувачем."
-        exit 0
-    fi
-fi
-
+[ -n "$TARGET_BACKUP" ] && [ -d "$TARGET_BACKUP" ] || { echo 'Використання: scripts/restore.sh КАТАЛОГ [--yes] [--verify-only] [--allow-legacy]' >&2; exit 1; }
+# Resolve before changing cwd, so paths from another directory work.
+TARGET_BACKUP="$(cd "$TARGET_BACKUP" && pwd)"
+python3 "$SCRIPT_DIR/backup_tools.py" validate "$TARGET_BACKUP" "${LEGACY[@]}"
+gzip -t "$TARGET_BACKUP/media.tar.gz"
 cd "$PROJECT_ROOT"
-
-# Зчитування параметрів PostgreSQL із .env (якщо файл існує)
-ENV_PG_USER=""
-ENV_PG_DB=""
-if [ -f "$PROJECT_ROOT/.env" ]; then
-    ENV_PG_USER=$(grep -E '^[[:space:]]*POSTGRES_USER=' "$PROJECT_ROOT/.env" | head -n1 | cut -d '=' -f2- | tr -d '\r\n"' | tr -d "'" | tr -d ' ' || true)
-    ENV_PG_DB=$(grep -E '^[[:space:]]*POSTGRES_DB=' "$PROJECT_ROOT/.env" | head -n1 | cut -d '=' -f2- | tr -d '\r\n"' | tr -d "'" | tr -d ' ' || true)
+docker compose run --rm --no-deps -T --entrypoint pg_restore postgres --list < "$TARGET_BACKUP/database.dump" > /dev/null
+if [ "$VERIFY_ONLY" -eq 1 ]; then echo 'Копія пройшла перевірку; дані не змінено.'; exit 0; fi
+if [ "$AUTO_CONFIRM" -ne 1 ]; then
+    read -r -p 'Поточні БД та медіа будуть замінені. Продовжити? (y/N): ' REPLY || REPLY='n'
+    [[ "$REPLY" =~ ^[Yy]$ ]] || { echo 'Відновлення скасовано.'; exit 0; }
 fi
-DB_USER="${POSTGRES_USER:-${ENV_PG_USER:-schoolnet_user}}"
-DB_NAME="${POSTGRES_DB:-${ENV_PG_DB:-schoolnet_db}}"
-
-# 1. Зупинка контейнера застосунку, щоб уникнути блокувань та нових записів
-echo "🛑 [1/4] Зупинка контейнера застосунку..."
-docker compose stop app 2>/dev/null || true
-
-# Перевірка роботи PostgreSQL
-if ! docker compose ps --status running --services 2>/dev/null | grep -q "postgres"; then
-    echo "⏳ Запуск контейнера PostgreSQL для відновлення..."
-    docker compose up -d postgres
-fi
-
-echo "⏳ Очікування готовності PostgreSQL..."
-READY=0
-for i in {1..30}; do
-    if docker compose exec -T postgres pg_isready -U "$DB_USER" -d "$DB_NAME" >/dev/null 2>&1; then
-        READY=1
-        break
+TIMEOUT="${SCHOOLNET_DEPLOY_TIMEOUT:-240}"
+[[ "$TIMEOUT" =~ ^[1-9][0-9]*$ ]] || { echo 'Некоректний SCHOOLNET_DEPLOY_TIMEOUT' >&2; exit 1; }
+docker compose up -d --wait --wait-timeout "$TIMEOUT" postgres
+# Decode the entire dump BEFORE deleting anything. No secrets are read on the host.
+SQL_FILE=$(mktemp)
+trap 'rm -f "$SQL_FILE"' EXIT
+docker compose exec -T postgres pg_restore --no-owner --no-privileges --file=- < "$TARGET_BACKUP/database.dump" > "$SQL_FILE"
+# Capture the current state for recovery even when restoring an older copy.
+SCHOOLNET_BACKUP_KEEP_STOPPED=1 bash "$SCRIPT_DIR/backup.sh"
+docker compose stop app ai_worker
+on_exit() {
+    status=$?
+    rm -f "$SQL_FILE"
+    if [ "$status" -ne 0 ]; then
+        docker compose stop app ai_worker || true
+        echo 'Відновлення перервано. Вебсервіс і ШІ-воркер залишено зупиненими; поточна копія збережена в backups. Виправте причину або відновіть цю копію.' >&2
     fi
-    sleep 1
-done
-if [ "$READY" -ne 1 ]; then
-    echo "❌ [ПОМИЛКА] PostgreSQL недоступний для відновлення!"
+}
+trap on_exit EXIT
+STAGED=$(docker compose run --rm --no-deps -T \
+    -v "$TARGET_BACKUP:/backup:ro" -v "$SCRIPT_DIR/backup_tools.py:/restore_tools.py:ro" \
+    --entrypoint python app /restore_tools.py stage /backup/media.tar.gz /app/media)
+# DROP and all restored objects/data belong to one transaction. Any SQL error rolls it back.
+{ printf 'DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public;\n'; cat "$SQL_FILE"; } |
+    docker compose exec -T postgres sh -c 'exec psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" --single-transaction -v ON_ERROR_STOP=1' > /dev/null
+docker compose run --rm --no-deps -T -v "$SCRIPT_DIR/backup_tools.py:/restore_tools.py:ro" \
+    --entrypoint python app /restore_tools.py install /app/media "$STAGED"
+# Conversion caches must not refer to files from the previous database.
+docker compose run --rm --no-deps -T --entrypoint python app manage.py shell -c "from django.core.cache import caches; caches['ai_materials'].clear()" > /dev/null
+if ! docker compose up -d --wait --wait-timeout "$TIMEOUT" app ai_worker; then
+    docker compose stop app ai_worker
     exit 1
 fi
-
-# 2. Відновлення бази даних
-if [ -f "$TARGET_BACKUP/database.dump" ]; then
-    echo "🗄️  [2/4] Відновлення бази даних PostgreSQL ($DB_NAME)..."
-    
-    echo "   -> Очищення старої схеми public..."
-    docker compose exec -T postgres psql -U "$DB_USER" -d "$DB_NAME" -v "ON_ERROR_STOP=1" -c \
-      "DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public; GRANT ALL ON SCHEMA public TO \"$DB_USER\"; GRANT ALL ON SCHEMA public TO public;"
-    
-    echo "   -> Завантаження структури та даних з database.dump..."
-    RESTORE_STATUS=0
-    docker compose exec -T postgres pg_restore -U "$DB_USER" -d "$DB_NAME" --no-owner --no-privileges < "$TARGET_BACKUP/database.dump" 2>&1 || RESTORE_STATUS=$?
-    if [ "$RESTORE_STATUS" -eq 0 ] || [ "$RESTORE_STATUS" -eq 1 ]; then
-        echo "   -> Базу даних успішно відновлено."
-    else
-        echo "⚠️ [УВАГА] pg_restore завершився з кодом $RESTORE_STATUS. Перевірте цілісність даних."
-    fi
-else
-    echo "⚠️ [2/4] Файл database.dump не знайдено, пропуск відновлення БД."
-fi
-
-# 3. Відновлення медіа файлів
-if [ -f "$TARGET_BACKUP/media.tar.gz" ]; then
-    echo "📂 [3/4] Відновлення медіа файлів..."
-    MEDIA_VOLUME=$(docker inspect schoolnet_app --format '{{range .Mounts}}{{if eq .Destination "/app/media"}}{{.Name}}{{end}}{{end}}' 2>/dev/null || true)
-    if [ -z "$MEDIA_VOLUME" ]; then
-        PROJ_NAME=$(basename "$PROJECT_ROOT" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9_-')
-        MEDIA_VOLUME="${COMPOSE_PROJECT_NAME:-$PROJ_NAME}_app_media"
-    fi
-
-    # Створюємо volume, якщо він ще не існував
-    if ! docker volume inspect "$MEDIA_VOLUME" >/dev/null 2>&1; then
-        docker volume create "$MEDIA_VOLUME" >/dev/null
-    fi
-
-    echo "   -> Очищення та розпакування архіву у том [$MEDIA_VOLUME]..."
-    docker run --rm \
-      -v "$MEDIA_VOLUME":/target \
-      -v "$(realpath "$TARGET_BACKUP")":/backup:ro \
-      alpine sh -c "rm -rf /target/* && tar -xzf /backup/media.tar.gz -C /target"
-    echo "   -> Медіа-файли успішно відновлено."
-else
-    echo "⚠️ [3/4] Файл media.tar.gz не знайдено, пропуск відновлення медіа."
-fi
-
-# 4. Запуск сервісу
-echo "🚀 [4/4] Запуск контейнера застосунку..."
-docker compose up -d app
-
-echo "⏳ Очікування готовності застосунку..."
-for i in {1..30}; do
-    APP_STATE=$(docker compose ps --status running --services 2>/dev/null || true)
-    if echo "$APP_STATE" | grep -q "app"; then
-        break
-    fi
-    sleep 1
-done
-
-echo "⏳ Застосування міграцій (якщо потрібні)..."
-docker compose exec -T app python manage.py migrate --noinput 2>&1 || true
-
-echo "=================================================================="
-echo "✅ Відновлення успішно завершено!"
-echo "=================================================================="
+docker compose exec -T app python manage.py check
+docker compose exec -T app python manage.py migrate --check
+trap - EXIT
+rm -f "$SQL_FILE"
+echo 'Відновлення завершене: БД, медіа, вебсервіс та ШІ-воркер перевірено.'

@@ -1,3 +1,17 @@
+// Keep large help/history DOM trees inert until the user opens them.
+window.mountDeferredDialog = function (id) {
+    const template = document.getElementById(id);
+    if (template && template.content) {
+        document.body.appendChild(template.content.cloneNode(true));
+        template.remove();
+    }
+};
+if (document.documentElement.classList.contains('sn-lite')) {
+    const style = document.createElement('style');
+    style.textContent = '@view-transition { navigation: none; }';
+    document.head.appendChild(style);
+}
+
 /**
  * SchoolNet — Головний JavaScript (Vanilla JS, без CDN)
  * Функції: перемикач теми, модальне вікно, фільтри, форми
@@ -11,15 +25,18 @@
 
     // Зчитуємо збережену тему або визначаємо системну
     function getInitialTheme() {
-        const saved = localStorage.getItem('sn-theme');
-        if (saved) return saved;
+        let saved;
+        try { saved = localStorage.getItem('sn-theme'); } catch (e) {}
+        if (saved === 'light' || saved === 'dark') return saved;
         return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
     }
 
     // Застосовуємо тему до документу
     function applyTheme(theme) {
         document.documentElement.setAttribute('data-theme', theme);
-        localStorage.setItem('sn-theme', theme);
+        document.documentElement.style.backgroundColor = theme === 'dark' ? '#0f172a' : '#f8fafc';
+        document.documentElement.style.colorScheme = theme;
+        try { localStorage.setItem('sn-theme', theme); } catch (e) {}
 
         // Оновлюємо іконку кнопки
         const btn = document.getElementById('theme-toggle-btn');
@@ -763,9 +780,10 @@ document.addEventListener('submit', function (e) {
         }
 
         // 10. Перевірка внутрішнього посилання
-        const isInternal = href.startsWith('/') ||
-                           href.startsWith('?') ||
-                           href.includes(window.location.host);
+        let destination;
+        try { destination = new URL(href, window.location.href); } catch (err) { return; }
+        if (destination.pathname === location.pathname && destination.search === location.search) return;
+        const isInternal = destination.origin === window.location.origin;
 
         if (isInternal) {
             window.startProgressBar();
@@ -891,8 +909,9 @@ document.addEventListener('submit', function (e) {
             }
 
             const currentPath = window.location.pathname;
-            // Відновлюємо, якщо це та сама сторінка або споріднений розділ вчителя
-            if (state.path === currentPath || (state.path.startsWith('/teacher') && currentPath.startsWith('/teacher'))) {
+            // Лише та сама сторінка й фільтр: нове завдання/розділ відкривається з початку.
+            sessionStorage.removeItem(STORAGE_KEY);
+            if (state.path === currentPath && state.search === location.search && !location.hash) {
                 const targetY = state.scrollY;
 
                 // Багаторазове відновлення для врахування завантаження динамічного контенту (зображень, шрифтів, карток)
@@ -902,18 +921,6 @@ document.addEventListener('submit', function (e) {
                     window.scrollTo({ top: targetY, behavior: 'instant' });
                 });
 
-                setTimeout(function () {
-                    window.scrollTo({ top: targetY, behavior: 'instant' });
-                }, 50);
-
-                setTimeout(function () {
-                    window.scrollTo({ top: targetY, behavior: 'instant' });
-                }, 150);
-
-                setTimeout(function () {
-                    window.scrollTo({ top: targetY, behavior: 'instant' });
-                    sessionStorage.removeItem(STORAGE_KEY);
-                }, 350);
             } else {
                 sessionStorage.removeItem(STORAGE_KEY);
             }
@@ -928,5 +935,3 @@ document.addEventListener('submit', function (e) {
 
     window.addEventListener('load', tryRestoreScroll);
 })();
-
-

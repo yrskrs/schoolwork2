@@ -8,6 +8,15 @@ import traceback
 from datetime import datetime
 from django.utils import timezone
 from threading import Lock
+from django.middleware.gzip import GZipMiddleware
+
+
+class PageCompressionMiddleware(GZipMiddleware):
+    """Compress rendered pages, never streamed student files or already packed media."""
+    def process_response(self, request, response):
+        if response.streaming or not response.get('Content-Type', '').startswith('text/html'):
+            return response
+        return super().process_response(request, response)
 
 # Зберігає {ip: {'timestamp': ts, 'last_path': path, 'last_time_str': '23:45:00'}}
 _active_clients = {}

@@ -2296,14 +2296,8 @@ pre, code {
 }
 
 .assignment-card {
-  animation: fadeInUp 0.3s ease both;
+  animation: none;
 }
-
-.assignment-card:nth-child(1) { animation-delay: 0.05s; }
-.assignment-card:nth-child(2) { animation-delay: 0.1s; }
-.assignment-card:nth-child(3) { animation-delay: 0.15s; }
-.assignment-card:nth-child(4) { animation-delay: 0.2s; }
-.assignment-card:nth-child(5) { animation-delay: 0.25s; }
 
 /* ─── Підсвітка синтаксису коду ────────────────────────────────────────────── */
 .code-comment {
@@ -2327,6 +2321,10 @@ pre, code {
 /* ─── Плавні переходи між сторінками (View Transitions API) ───────────────── */
 @view-transition {
   navigation: auto;
+}
+::view-transition-old(root), ::view-transition-new(root) {
+  animation-duration: .14s;
+  animation-timing-function: ease-out;
 }
 
 /* М'яка поява сторінки при переході без блимання */
@@ -2376,8 +2374,7 @@ body {
   z-index: 9999998;
   pointer-events: none;
   opacity: 0;
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-  backdrop-filter: blur(8px);
+  transition: opacity .2s ease, transform .2s ease;
 }
 .global-loading-indicator.active {
   opacity: 1;
@@ -2395,6 +2392,7 @@ body {
 @keyframes spinRing {
   to { transform: rotate(360deg); }
 }
+.global-loading-indicator:not(.active) .loading-spinner-ring { animation: none; }
 
 /* Легка поява карток без блимання всієї сторінки */
 @keyframes cardGlideIn {

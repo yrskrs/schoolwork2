@@ -87,7 +87,8 @@ body .btn-primary:hover { background: var(--action-primary-hover) !important; bo
     .page-wrapper .feed-layout > :is(.teacher-work-sidebar, .settings-tools-sidebar) { display: block; position: static !important; grid-column: 1; grid-row: 1; width: 100% !important; max-height: none !important; padding: 0; overflow: visible; background: transparent; box-shadow: none; }
     .page-wrapper :is(.teacher-work-sidebar, .settings-tools-sidebar) > .sidebar-card:not(.teacher-tools-card) { display: none; }
     .page-wrapper :is(.teacher-work-sidebar, .settings-tools-sidebar) .teacher-tools-card { margin-bottom: 0; }
-    .page-wrapper .feed-layout:has(> .teacher-work-sidebar, > .settings-tools-sidebar) > .feed-main-content { grid-row: 2; }
+    .page-wrapper .feed-layout:has(> .teacher-work-sidebar, > .settings-tools-sidebar) > .feed-main-content,
+    .page-wrapper .feed-layout.has-work-sidebar > .feed-main-content { grid-row: 2; }
     .home-mobile-class-button { display: inline-flex; }
     .settings-mobile-tabs { display: flex; margin-bottom: 16px; }
     #mobile-menu-btn { display: inline-flex; }
@@ -152,3 +153,28 @@ body .btn-primary:hover { background: var(--action-primary-hover) !important; bo
     .platform-record-table.is-record-layout td { display: table-cell; }
     .platform-record-table.is-record-layout td::before { display: none; }
 }
+
+/* Keep idle pages quiet; animate only interactions and active loading. */
+.nav-badge, .guide-nav-icon, .guide-status-dot, .guide-active-page-badge, .guide-pulsing-dot, .live-dot-pulse, .class-prominent-badge.class-status-now,
+.nav-schedule-pill.status-in-lesson, .nav-schedule-pill.status-in-break {
+    animation: none !important;
+}
+html.sn-lite body { animation: pageSmoothIn .12s ease-out; }
+html.sn-lite :is(.assignment-card, .feed-skeleton-card::after) { animation: none !important; }
+html.sn-lite * { backdrop-filter: none !important; }
+html.sn-lite::view-transition-group(*), html.sn-lite::view-transition-old(*), html.sn-lite::view-transition-new(*) {
+    animation: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+    @view-transition { navigation: none; }
+    ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
+    html { scroll-behavior: auto !important; }
+}
+@media (max-height: 720px) and (min-width: 961px) {
+    body .page-wrapper { padding-top: 10px !important; }
+    .page-wrapper .page-hero { margin-bottom: 12px; }
+}
+.ai-origin-details { white-space: normal; overflow-wrap: anywhere; color: var(--color-text-secondary); font-size: 13px; line-height: 1.6; margin: 8px 0; }
+.ai-origin-note { color: var(--color-text-muted); font-size: 12px; line-height: 1.5; }
+/* Fallback for browsers without :has(), keeping labelled tables and work menu usable. */
+.platform-table-region.is-record-region { overflow-x: visible !important; }

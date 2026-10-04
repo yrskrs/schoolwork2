@@ -3098,8 +3098,8 @@ def _perform_student_ai_check(submission, result):
         'gr_results': [],
         'ai_generated_detected': bool(result.get('ai_generated_detected', submission.ai_generated_detected)),
         'ai_generated_percent': None,
-        'ai_generated_confidence': '',
-        'ai_generated_details': '',  # Деталі аналізу ШІ тільки для вчителя
+        'ai_generated_confidence': submission.ai_generated_confidence,
+        'ai_generated_details': submission.ai_generated_details,
         'allow_ai_usage': bool(assignment.allow_ai_usage),
         'duplicate_info': {
             'is_duplicate': bool(dup_info.get('is_duplicate')),
@@ -6827,10 +6827,7 @@ def teacher_settings_view(request):
 
     # Підозрілі (ai_generated_percent > порогового значення)
     tolerance = getattr(ai_settings, 'ai_detector_tolerance_percent', 70) or 70
-    total_ai_detected = Submission.objects.filter(
-        ai_generated_percent__isnull=False,
-        ai_generated_percent__gte=tolerance,
-    ).count()
+    total_ai_detected = Submission.objects.filter(ai_generated_detected=True).count()
 
     model_stats = []
     for item in models_with_priority:

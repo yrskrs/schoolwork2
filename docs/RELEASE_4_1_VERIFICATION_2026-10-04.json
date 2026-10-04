@@ -1,0 +1,24 @@
+{
+  "chromium_states": 204,
+  "page_overflows": 0,
+  "javascript_errors": 0,
+  "text_overflows": 0,
+  "cpu_throttle": 4,
+  "max_DOM_ready_ms": 418,
+  "firefox_states": 24,
+  "interaction_checks": 16,
+  "django_tests": 379,
+  "filesystem_recovery_tests": 7,
+  "isolated_restore_integration": {
+    "database": "disposable PostgreSQL 16",
+    "relative_backup_path": "passed",
+    "verify_only": "passed",
+    "SQL_error_rolls_back_entire_schema": "passed",
+    "failed_restore_leaves_both_writers_stopped": "passed",
+    "restore_database_and_hidden_media": "passed",
+    "dirty_update_rejected": "passed",
+    "fast_forward_update_with_healthchecks": "passed",
+    "services": "all healthy",
+    "production_data": "untouched"
+  }
+}

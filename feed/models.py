@@ -2175,7 +2175,7 @@ class Submission(models.Model):
         'Деталі та ознаки використання ШІ', blank=True, default=''
     )
     ai_generated_percent = models.IntegerField(
-        'Розрахунковий відсоток генерації ШІ (%)', default=0, blank=True
+        'Історична оцінка частки ШІ (не доказ авторства)', default=None, null=True, blank=True
     )
 
     # ── Повторна здача (робота над помилками / перездача) ────────────────────

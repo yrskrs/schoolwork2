@@ -1075,8 +1075,8 @@ function runSingleAICheck(subId) {
                 var bgStyle = isAllowed ? 'rgba(16,185,129,0.08)' : 'rgba(239,68,68,0.08)';
                 var borderStyle = isAllowed ? '#10b981' : '#ef4444';
                 var titleColor = isAllowed ? 'var(--color-success)' : 'var(--color-danger)';
-                var noteText = isAllowed ? '💡 Дозволено вчителем для цього завдання.' : '⚠️ Не дозволено вчителем (вимагалась повністю самостійна робота)!';
-                var detailsHtml = data.ai_generated_details ? '<div style="color:var(--color-text-secondary);line-height:1.35;margin-bottom:3px;">' + data.ai_generated_details + '</div>' : '';
+                var noteText = isAllowed ? '💡 Дозволено вчителем для цього завдання.' : '⚠️ Не дозволено вчителем. Ознаки потребують уточнення; автоматичного штрафу немає.';
+                var detailsHtml = data.ai_generated_details ? '<div style="color:var(--color-text-secondary);line-height:1.35;margin-bottom:3px;">' + data.ai_generated_details.replace(/\n/g, '<br>') + '</div>' : '';
 
                 aiDetectionBanner = '<div style="background:' + bgStyle + ';border:1px solid ' + borderStyle + ';border-radius:6px;padding:8px 10px;margin-bottom:8px;font-size:11.5px;">' +
                     '<div style="font-weight:800;color:' + titleColor + ';display:flex;align-items:center;gap:5px;margin-bottom:3px;">' +

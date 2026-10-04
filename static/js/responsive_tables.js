@@ -4,6 +4,9 @@
     document.addEventListener('DOMContentLoaded', function () {
         const page = document.querySelector('.page-wrapper');
         if (!page) return;
+        page.querySelectorAll('.feed-layout').forEach(layout => {
+            if (layout.querySelector('.teacher-work-sidebar, .settings-tools-sidebar')) layout.classList.add('has-work-sidebar');
+        });
         const regions = new WeakMap();
         const observer = window.ResizeObserver ? new ResizeObserver(entries => entries.forEach(entry => update(entry.target))) : null;
         function update(region) {
@@ -14,7 +17,9 @@
             if (!width) return;
             const matrix = table.classList.contains('journal-table') || table.classList.contains('printable-schedule-table');
             const needed = matrix ? 160 + Math.max(0, heads.length - 1) * 90 : 0;
-            table.classList.toggle('is-record-layout', width < 680 || (matrix && width < needed));
+            const record = width < 680 || (matrix && width < needed);
+            table.classList.toggle('is-record-layout', record);
+            region.classList.toggle('is-record-region', record);
         }
         function enhance() {
             page.querySelectorAll('table').forEach(table => {

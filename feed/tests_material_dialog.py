@@ -154,7 +154,8 @@ class ReviewQuickStatusTests(TestCase):
         SubmissionComment.objects.create(submission=self.sub, author=self.user, text='Додайте висновок')
         page = self.page()
         toolbar = page.xpath('//*[@class="fv-workspace-toolbar"]')[0]
-        self.assertIn('75%', toolbar.get_element_by_id('fv-quick-ai').text_content())
+        self.assertIn('Ознаки ШІ', toolbar.get_element_by_id('fv-quick-ai').text_content())
+        self.assertNotIn('75%', toolbar.get_element_by_id('fv-quick-ai').text_content())
         self.assertIn('Групова (2)', toolbar.get_element_by_id('fv-quick-group').text_content())
         self.assertEqual(page.get_element_by_id('fv-comment-count').text, '1')
         self.assertNotIn('hidden', page.get_element_by_id('fv-comment-count').attrib)

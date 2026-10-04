@@ -8,10 +8,12 @@ cd "$PROJECT_ROOT"
 mkdir -p "$PROJECT_ROOT/backups"
 BACKUP_PATH=$(mktemp -d "$PROJECT_ROOT/backups/$(date +%Y-%m-%d_%H-%M-%S)_XXXXXX")
 WRITERS=()
+BACKUP_COMPLETE=0
 while IFS= read -r service; do
     case "$service" in app|ai_worker) WRITERS+=("$service");; esac
 done < <(docker compose ps --status running --services)
 resume_writers() {
+    if [ "${SCHOOLNET_BACKUP_KEEP_STOPPED:-0}" = 1 ] && [ "$BACKUP_COMPLETE" = 1 ]; then return; fi
     if [ "${#WRITERS[@]}" -gt 0 ]; then
         docker compose start "${WRITERS[@]}"
     fi
@@ -30,4 +32,5 @@ mv "$BACKUP_PATH/media.tar.gz.partial" "$BACKUP_PATH/media.tar.gz"
 git rev-parse HEAD > "$BACKUP_PATH/code-commit.txt"
 docker compose images -q app > "$BACKUP_PATH/docker-image.txt"
 (cd "$BACKUP_PATH" && sha256sum database.dump media.tar.gz > SHA256SUMS)
+BACKUP_COMPLETE=1
 printf 'Резервна копія перевірена: %s\n' "$BACKUP_PATH"
