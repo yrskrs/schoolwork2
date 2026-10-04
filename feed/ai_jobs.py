@@ -173,13 +173,25 @@ def execute_job(job_id):
             status_code = 200
             if job.kind == 'batch_check':
                 submission.refresh_from_db()
-                result = {'id': submission.pk, 'student_name': submission.get_student_full_name(),
-                          'status': result.get('status'), 'suggested_grade': submission.ai_suggested_grade or '—',
-                          'level': submission.ai_score_level or '', 'feedback': submission.get_formatted_ai_feedback() or '',
-                          'clean_feedback': submission.get_clean_ai_feedback_for_student(),
-                          'gr_results': submission.get_ai_gr_results_list(), 'gr_avg': submission.get_ai_gr_average(),
-                          'format_warning': result.get('format_warning') or '', 'error': submission.ai_error_reason or ''}
-        _finish_job(job_id, result, status_code)
+                result = {
+                    'id': submission.pk,
+                    'student_name': submission.get_student_full_name(),
+                    'status': result.get('status'),
+                    'suggested_grade': submission.ai_suggested_grade or '—',
+                    'level': submission.ai_score_level or '',
+                    'feedback': submission.get_formatted_ai_feedback() or '',
+                    'clean_feedback': submission.get_clean_ai_feedback_for_student(),
+                    'ai_generated_detected': bool(submission.ai_generated_detected),
+                    'ai_generated_percent': submission.ai_generated_percent,
+                    'ai_generated_confidence': submission.get_ai_generated_confidence_display() if hasattr(submission, 'get_ai_generated_confidence_display') else submission.ai_generated_confidence,
+                    'ai_generated_details': submission.ai_generated_details or '',
+                    'is_ai_allowed': bool(submission.is_ai_allowed),
+                    'gr_results': submission.get_ai_gr_results_list(),
+                    'gr_avg': submission.get_ai_gr_average(),
+                    'format_warning': result.get('format_warning') or '',
+                    'error': submission.ai_error_reason or ''
+                }
+            _finish_job(job_id, result, status_code)
     except Exception:
         logger.exception('AI job %s failed', job_id)
         fail_job(job_id, 'ШІ тимчасово недоступний. Спробуйте ще раз.')

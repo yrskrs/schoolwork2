@@ -404,11 +404,22 @@ function renderQueueTable() {
             grPills += '</div>';
         }
 
+        var aiProvenanceBadge = '';
+        if (item.ai_generated_detected) {
+            var pctText = (item.ai_generated_percent !== null && item.ai_generated_percent !== undefined) ? ' ' + item.ai_generated_percent + '%' : '';
+            var confText = item.ai_generated_confidence ? ' (' + item.ai_generated_confidence + ')' : '';
+            var aiBadgeBg = item.is_ai_allowed ? '#ecfdf5' : '#fef2f2';
+            var aiBadgeColor = item.is_ai_allowed ? 'var(--color-success)' : 'var(--color-danger)';
+            var aiBadgeBorder = item.is_ai_allowed ? '#a7f3d0' : '#fecaca';
+            var aiTooltip = (item.is_ai_allowed ? 'Дозволено вчителем: ' : 'Самостійна робота, заборонено: ') + (item.ai_generated_details || 'Виявлено ознаки ШІ');
+            aiProvenanceBadge = '<div style="margin-top:3px;"><span class="badge" style="background:' + aiBadgeBg + ';color:' + aiBadgeColor + ';border:1px solid ' + aiBadgeBorder + ';font-size:10px;font-weight:700;padding:2px 5px;" title="' + aiTooltip.replace(/"/g, '&quot;') + '">🤖 ШІ' + pctText + confText + '</span></div>';
+        }
+
         if (item.ai_status === 'success') {
             if (item.ai_grade === 'Доопрацювати') {
-                statusBadge = '<span class="badge" style="background:var(--color-warning-light);color:var(--color-warning);border:1px solid #fcd34d;font-weight:700;font-size:11px;">🔄 Доопрацювати</span>' + formatBadge + grPills;
+                statusBadge = '<span class="badge" style="background:var(--color-warning-light);color:var(--color-warning);border:1px solid #fcd34d;font-weight:700;font-size:11px;">🔄 Доопрацювати</span>' + formatBadge + aiProvenanceBadge + grPills;
             } else {
-                statusBadge = '<span class="badge" style="background:rgba(16,185,129,0.15);color:var(--color-success);font-weight:800;font-size:13px;">🤖 ' + item.ai_grade + '</span>' + formatBadge + grPills;
+                statusBadge = '<span class="badge" style="background:rgba(16,185,129,0.15);color:var(--color-success);font-weight:800;font-size:13px;">🤖 ' + item.ai_grade + '</span>' + formatBadge + aiProvenanceBadge + grPills;
             }
         } else if (item.ai_status === 'failed') {
             statusBadge = '<span class="badge" style="background:rgba(239,68,68,0.15);color:var(--color-danger);font-size:11px;">❌ Помилка</span>';
@@ -548,6 +559,13 @@ function processQueueIndex(idx) {
         item.gr_results = res.gr_results || [];
         item.has_format_warning = Boolean(res.format_warning || (res.feedback && res.feedback.indexOf('Зауваження до формату файлу') !== -1));
         item.ai_error = res.error || '';
+        item.ai_generated_detected = Boolean(res.ai_generated_detected);
+        item.ai_generated_percent = res.ai_generated_percent;
+        item.ai_generated_confidence = res.ai_generated_confidence || '';
+        item.ai_generated_details = res.ai_generated_details || '';
+        if (res.is_ai_allowed !== undefined) {
+            item.is_ai_allowed = res.is_ai_allowed;
+        }
 
         if (res.status === 'success') {
             successCount++;

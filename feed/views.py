@@ -7247,6 +7247,11 @@ def api_ai_get_batch_queue(request):
             'ai_status': s.ai_status,
             'ai_grade': s.ai_suggested_grade or '—',
             'ai_feedback': s.ai_feedback or '',
+            'ai_generated_detected': bool(s.ai_generated_detected),
+            'ai_generated_percent': s.ai_generated_percent,
+            'ai_generated_confidence': s.get_ai_generated_confidence_display() if hasattr(s, 'get_ai_generated_confidence_display') else s.ai_generated_confidence,
+            'ai_generated_details': s.ai_generated_details or '',
+            'is_ai_allowed': bool(s.is_ai_allowed),
             'gr_results': s.get_ai_gr_results_list(),
             'gr_avg': s.get_ai_gr_average(),
             'has_format_warning': ('Зауваження до формату файлу' in (s.ai_feedback or ''))
