@@ -1,8 +1,8 @@
 <section class="fv-grading-card" id="fv-grading-card" aria-labelledby="fv-grading-title">
     <h3 id="fv-grading-title" class="fv-sr-only">Оцінювання роботи</h3>
     <div class="fv-grading-identity">
-        <strong>{{ submission.get_student_full_name }}</strong> · {{ submission.class_group.name }}
-        <span id="fv-current-grade">Збережена оцінка: {{ submission.grade|default:"ще немає" }}</span>
+        <div class="fv-student-line"><strong title="{{ submission.get_student_full_name }}">{{ submission.get_student_full_name }}</strong><span>· {{ submission.class_group.name }}</span><span id="fv-current-grade">Оцінка: {{ submission.grade|default:"—" }}</span></div>
+        {% include 'feed/components/viewer_quick_status.html' %}
     </div>
     <div class="fv-grade-controls">
         <label for="grade-input" class="fv-sr-only">Оцінка вчителя (1–12 або Доопрацювати)</label>

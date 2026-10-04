@@ -1,7 +1,7 @@
 {% if has_assignment_materials %}
 <section class="assignment-detail-materials" id="assignment-materials-section" aria-labelledby="assignment-materials-title">
 <h2 id="assignment-materials-title">Матеріали до завдання</h2>
-<p class="assignment-detail-section-help">Відкрий потрібний матеріал. Файли можна переглянути тут або завантажити на свій пристрій.</p>
+<p class="assignment-detail-section-help">Відкрий потрібний матеріал. «Відкрити тут» відкриває матеріал у центрі екрана. У вікні можна вибрати інший файл або текстовий вигляд.</p>
                     <!-- Єдиний блок посилань на одному рівні -->
                     {% if assignment.link_url or assignment.additional_links.all %}
                     <div class="assignment-links-card">
@@ -34,374 +34,32 @@
                     </div>
                     {% endif %}
 
-                    <!-- Прикріплені навчальні матеріали (файли вчителя) -->
-                    {% if files_with_preview %}
-                    <div style="margin-bottom:32px;" id="assignment-files-section" class="assignment-detail-files">
-                        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin:0 0 14px;">
-                            <h3 style="font-size:1.15rem;font-weight:800;margin:0;color:var(--color-text-primary);display:flex;align-items:center;gap:8px;">
-                                📁 Файли ({{ files_with_preview|length }})
-                            </h3>
-                            <button type="button" id="btn-collapse-all-previews" onclick="collapseAllInlinePreviews()" class="btn btn-secondary btn-sm" style="display:none;font-weight:700;align-items:center;gap:6px;transition:all 0.25s cubic-bezier(0.4, 0, 0.2, 1);box-shadow:0 1px 4px rgba(0,0,0,0.06);border-color:var(--color-border);background:var(--color-surface);">
-                                📂 Згорнути всі
-                            </button>
-                        </div>
-
-                        <div style="display:flex;flex-direction:column;gap:14px;">
-                            {% for f in files_with_preview %}
-                            <div class="assignment-file-box" id="assignment-file-box-{{ forloop.counter }}" style="background:var(--color-surface);border:1.5px solid var(--color-border);border-radius:var(--radius-lg);overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,0.03);transition:box-shadow 0.2s ease;">
-
-                                <!-- Шапка файлу з діями -->
-                                <div class="assignment-detail-file-header" style="padding:16px 20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:14px;background:var(--color-surface);">
-                                    <div class="assignment-detail-file-identity" style="display:flex;align-items:center;gap:14px;overflow:hidden;">
-                                        <div style="width:46px;height:46px;border-radius:12px;background:var(--color-bg-secondary);border:1px solid var(--color-border);display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0;">
-                                            {{ f.icon }}
-                                        </div>
-                                        <div>
-                                            <div class="assignment-detail-filename" style="font-weight:800;font-size:15px;color:var(--color-text-primary);line-height:1.35;">
-                                                {{ f.original_name }}
-                                            </div>
-                                            <div style="font-size:12px;color:var(--color-text-muted);margin-top:4px;display:flex;align-items:center;gap:8px;">
-                                                <span>{% if f.extension in ".pptx .ppt .odp" %}Презентація{% elif f.extension in ".docx .doc .odt .pdf" %}Документ{% elif f.extension in ".xlsx .xls .ods" %}Таблиця{% elif f.preview_type == "image" %}Зображення{% else %}Файл{% endif %} · {{ f.extension|upper }}</span>
-                                                <span>{{ f.size_display }}</span>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div class="assignment-detail-file-actions" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-                                        {% if f.preview_type != 'download_only' %}
-                                        <button type="button" class="btn btn-primary btn-sm" onclick="toggleFileInlinePreview({{ forloop.counter }})" id="preview-toggle-btn-{{ forloop.counter }}" aria-expanded="false" aria-controls="inline-file-preview-{{ forloop.counter }}" title="Переглянути в браузері" style="font-weight:700;display:inline-flex;align-items:center;gap:6px;">
-                                            👁️ Відкрити тут
-                                        </button>
-                                        {% endif %}
-                                        <a href="{% url 'file_download' f.id %}" class="btn btn-secondary btn-sm" style="font-weight:700;display:inline-flex;align-items:center;gap:6px;">
-                                            ⬇️ Завантажити файл
-                                        </a>
-                                    </div>
-                                </div>
-
-                                <!-- Тіло попереднього перегляду прямо у цій вкладці (з канвасом і реалістичними тінями) -->
-                                {% if f.preview_type != 'download_only' %}
-                                <div id="inline-file-preview-{{ forloop.counter }}" class="file-preview-stage" style="display:none;">
-
-                                    <div class="file-preview-stage-header">
-                                        <span style="font-size:13px;font-weight:700;color:var(--color-primary);display:flex;align-items:center;gap:6px;">
-                                            <span>📖</span> Перегляд документа: {{ f.original_name }}
-                                        </span>
-                                        <div style="display:flex;gap:8px;align-items:center;">
-                                            {% if f.preview_type == 'pdf' %}
-                                            <a href="{% url 'file_view' f.id %}" target="_blank" class="btn btn-secondary btn-sm" style="font-weight:700;">
-                                                ↗ Відкрити на весь екран
-                                            </a>
-                                            {% endif %}
-                                            <button type="button" class="btn btn-secondary btn-sm" onclick="toggleFileInlinePreview({{ forloop.counter }})">
-                                                ✕ Сховати перегляд
-                                            </button>
-                                        </div>
-                                    </div>
-
-                                    <!-- 1. ОФІСНІ ДОКУМЕНТИ (Word, Excel, PowerPoint, ODT) -->
-                                    {% if f.preview_type == 'office' %}
-                                        {% if f.error_preview %}
-                                        <div class="alert alert-warning" style="margin-bottom:12px;">⚠️ {{ f.error_preview }}</div>
-                                        {% endif %}
-
-                                        {% if f.extension in '.pptx .ppt .odp' %}
-                                        <!-- ── PPTX: перемикач між слайдами і текстом ─── -->
-                                        <div class="pptx-tabs" style="margin-bottom:14px;display:flex;gap:10px;border-bottom:2px solid var(--color-border);padding-bottom:10px;align-items:center;flex-wrap:wrap;">
-                                            <button class="pptx-tab-btn active" onclick="switchPptxTab(this, 'slides-{{ forloop.counter }}')"
-                                                style="background:var(--action-primary-bg);color:#fff;border:none;border-radius:8px;padding:7px 18px;font-weight:700;cursor:pointer;font-size:13.5px;display:inline-flex;align-items:center;gap:6px;transition:all 0.2s;">
-                                                🎨 Слайди {% if f.slide_count %}({{ f.slide_count }}){% endif %}
-                                            </button>
-                                            <button class="pptx-tab-btn" onclick="switchPptxTab(this, 'text-{{ forloop.counter }}')"
-                                                style="background:var(--color-bg-secondary);color:var(--color-text-primary);border:1px solid var(--color-border);border-radius:8px;padding:7px 18px;font-weight:600;cursor:pointer;font-size:13.5px;display:inline-flex;align-items:center;gap:6px;transition:all 0.2s;">
-                                                📝 Текстовий вигляд
-                                            </button>
-                                            {% if f.pdf_preview_url %}
-                                            <a href="{{ f.pdf_preview_url }}" target="_blank"
-                                               style="margin-left:auto;text-decoration:none;font-size:12.5px;font-weight:600;color:var(--color-primary);padding:6px 14px;border-radius:6px;background:var(--color-bg-secondary);border:1px solid var(--color-border);display:inline-flex;align-items:center;gap:6px;">
-                                               📄 Завантажити PDF версію
-                                            </a>
-                                            {% endif %}
-                                        </div>
-
-                                        <!-- SLIDES VIEW -->
-                                        <div id="slides-{{ forloop.counter }}" class="pptx-tab-panel">
-                                            <div id="pptx-mount-{{ forloop.counter }}">
-                                            {% if f.slide_urls %}
-                                            <div class="presentation-player" id="pptx-player-{{ forloop.counter }}" data-total="{{ f.slide_count }}" style="background:#0b0f19; border-radius:12px; overflow:hidden; box-shadow:0 8px 32px rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.1);">
-                                                <!-- Верхня панель управління -->
-                                                <div class="player-toolbar" style="display:flex; justify-content:space-between; align-items:center; padding:10px 16px; background:rgba(255,255,255,0.06); border-bottom:1px solid rgba(255,255,255,0.1); color:#fff; flex-wrap:wrap; gap:10px;">
-                                                    <div style="display:flex; align-items:center; gap:8px;">
-                                                        <button type="button" onclick="changeSlide('{{ forloop.counter }}', -1)" title="Попередній слайд (←)"
-                                                            style="background:rgba(255,255,255,0.12); color:#fff; border:none; border-radius:6px; padding:6px 14px; font-weight:700; cursor:pointer; font-size:13px; display:inline-flex; align-items:center; gap:4px; transition:background 0.2s;">
-                                                            ◀ Попередній
-                                                        </button>
-                                                        <span style="font-size:13px; font-weight:700; padding:5px 12px; background:rgba(0,0,0,0.4); border-radius:6px; border:1px solid rgba(255,255,255,0.1);">
-                                                            Слайд <span id="slide-cur-{{ forloop.counter }}">1</span> з <span id="slide-total-{{ forloop.counter }}">{{ f.slide_count }}</span>
-                                                        </span>
-                                                        <button type="button" onclick="changeSlide('{{ forloop.counter }}', 1)" title="Наступний слайд (→)"
-                                                            style="background:rgba(255,255,255,0.12); color:#fff; border:none; border-radius:6px; padding:6px 14px; font-weight:700; cursor:pointer; font-size:13px; display:inline-flex; align-items:center; gap:4px; transition:background 0.2s;">
-                                                            Наступний ▶
-                                                        </button>
-                                                    </div>
-
-                                                    <div style="display:flex; align-items:center; gap:8px;">
-                                                        <button type="button" id="mode-single-{{ forloop.counter }}" onclick="setPlayerMode('{{ forloop.counter }}', 'single')"
-                                                            style="background:var(--action-primary-bg); color:#fff; border:none; border-radius:6px; padding:6px 14px; font-size:12.5px; font-weight:700; cursor:pointer; transition:all 0.2s;">
-                                                            📽️ Показ слайдів
-                                                        </button>
-                                                        <button type="button" id="mode-all-{{ forloop.counter }}" onclick="setPlayerMode('{{ forloop.counter }}', 'all')"
-                                                            style="background:rgba(255,255,255,0.08); color:#cbd5e1; border:none; border-radius:6px; padding:6px 14px; font-size:12.5px; font-weight:600; cursor:pointer; transition:all 0.2s;">
-                                                            📜 Усі слайди
-                                                        </button>
-                                                        <button type="button" onclick="toggleSlideFullscreen('pptx-player-{{ forloop.counter }}')" title="На весь екран (F)"
-                                                            style="background:rgba(255,255,255,0.08); color:#cbd5e1; border:none; border-radius:6px; padding:6px 10px; font-size:13px; cursor:pointer;">
-                                                            ⛶
-                                                        </button>
-                                                    </div>
-                                                </div>
-
-                                                <!-- Режим 1: Показ одного слайду -->
-                                                <div id="player-single-view-{{ forloop.counter }}" style="display:block; padding:16px; background:#080c14;">
-                                                    <div style="display:flex; justify-content:center; align-items:center; min-height:400px; max-height:75vh; position:relative; overflow:hidden;">
-                                                        <img id="main-slide-img-{{ forloop.counter }}" src="{{ f.slide_urls.0 }}" alt="Слайд 1"
-                                                             style="max-width:100%; max-height:75vh; object-fit:contain; border-radius:6px; box-shadow:0 8px 30px rgba(0,0,0,0.6); display:block; margin:0 auto; transition:opacity 0.15s ease;">
-                                                    </div>
-
-                                                    <!-- Стрічка мініатюр знизу -->
-                                                    <div class="thumb-strip-scroll" id="thumb-strip-{{ forloop.counter }}" style="display:flex; gap:8px; overflow-x:auto; padding:12px 4px 4px; margin-top:12px; border-top:1px solid rgba(255,255,255,0.08); scroll-behavior:smooth;">
-                                                        {% for url in f.slide_urls %}
-                                                        <div class="slide-thumb-box" onclick="goToSlide('{{ forloop.parentloop.counter }}', {{ forloop.counter0 }})" id="thumb-{{ forloop.parentloop.counter }}-{{ forloop.counter0 }}"
-                                                             style="flex:0 0 96px; cursor:pointer; border-radius:4px; overflow:hidden; border:2px solid {% if forloop.first %}var(--color-primary){% else %}transparent{% endif %}; opacity:{% if forloop.first %}1{% else %}0.6{% endif %}; transition:all 0.2s;"
-                                                             title="Слайд {{ forloop.counter }}">
-                                                            <img src="{{ url }}" loading="lazy" style="width:100%; height:auto; display:block;" alt="Слайд {{ forloop.counter }}">
-                                                        </div>
-                                                        {% endfor %}
-                                                    </div>
-                                                </div>
-
-                                                <!-- Режим 2: Усі слайди вертикальним списком -->
-                                                <div id="player-all-view-{{ forloop.counter }}" style="display:none; padding:24px 16px; background:#080c14; flex-direction:column; gap:24px; max-height:80vh; overflow-y:auto; -webkit-overflow-scrolling:touch;">
-                                                    {% for url in f.slide_urls %}
-                                                    <div id="all-slide-{{ forloop.parentloop.counter }}-{{ forloop.counter0 }}" style="max-width:880px; margin:0 auto; width:100%; flex:0 0 auto; flex-shrink:0; position:relative; border-radius:8px; overflow:hidden; box-shadow:0 6px 24px rgba(0,0,0,0.5); background:#111827;">
-                                                        <div style="position:absolute; top:10px; left:10px; background:rgba(0,0,0,0.75); color:#fff; padding:3px 10px; border-radius:6px; font-size:12px; font-weight:700; z-index:2; backdrop-filter:blur(4px);">
-                                                            Слайд {{ forloop.counter }} з {{ f.slide_count }}
-                                                        </div>
-                                                        <img src="{{ url }}" style="width:100%; height:auto; display:block;" alt="Слайд {{ forloop.counter }}">
-                                                    </div>
-                                                    {% endfor %}
-                                                </div>
-                                            </div>
-
-                                            <script>
-                                                window.pptxSlides = window.pptxSlides || {};
-                                                window.pptxSlides['{{ forloop.counter }}'] = {{ f.slide_urls|safe }};
-                                                window.pptxCurSlide = window.pptxCurSlide || {};
-                                                window.pptxCurSlide['{{ forloop.counter }}'] = 0;
-                                            </script>
-                                            {% else %}
-                                            <div id="pptx-loading-{{ forloop.counter }}" style="padding:28px 20px;background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:12px;text-align:center;">
-                                                <div style="display:inline-flex;align-items:center;gap:12px;margin-bottom:10px;">
-                                                    <div class="spinner-border text-primary" role="status" style="width:26px;height:26px;border:3px solid var(--color-primary);border-right-color:transparent;border-radius:50%;animation:spin 0.8s linear infinite;"></div>
-                                                    <span style="font-weight:700;font-size:15px;color:var(--color-text-primary);">Підготовка інтерактивного перегляду слайдів...</span>
-                                                </div>
-                                                <p style="margin:0;font-size:13px;color:var(--color-text-secondary);max-width:550px;margin:0 auto 12px;">
-                                                    Слайди генеруються у фоновому режимі. Плеєр з'явиться тут автоматично за кілька секунд.
-                                                </p>
-                                                <div style="display:inline-flex;gap:10px;align-items:center;">
-                                                    <button type="button" class="btn btn-secondary btn-sm" onclick="switchPptxTab(this, 'text-{{ forloop.counter }}')" style="font-weight:600;">
-                                                        📝 Відкрити текстовий вигляд зараз
-                                                    </button>
-                                                </div>
-                                            </div>
-                                            <script>
-                                                (function() {
-                                                    var idx = '{{ forloop.counter }}';
-                                                    var fileId = '{{ f.id }}';
-                                                    var attempts = 0;
-                                                    var maxAttempts = 15;
-                                                    var timer = setInterval(function() {
-                                                        attempts++;
-                                                        if (attempts > maxAttempts) {
-                                                            clearInterval(timer);
-                                                            var l = document.getElementById('pptx-loading-' + idx);
-                                                            if (l) {
-                                                                l.innerHTML = '<div class="alert alert-warning" style="margin:0;">Слайди презентації ще готуються або недоступні для графічного відображення. Перегляньте текстовий вміст на вкладці <strong>«📝 Текстовий вигляд»</strong> або завантажте оригінальний файл.</div>';
-                                                            }
-                                                            return;
-                                                        }
-                                                        fetch('/assignment/file/' + fileId + '/preview/')
-                                                            .then(function(res) { return res.json(); })
-                                                            .then(function(data) {
-                                                                if (!data) return;
-                                                                // Slides player ready (pdftoppm rendered JPEGs)
-                                                                if (data.type === 'slides' && data.slides && data.slides.length > 0) {
-                                                                    clearInterval(timer);
-                                                                    renderSlidePlayer(idx, data.slides, data.pdf_url);
-                                                                }
-                                                                // PDF ready (LibreOffice converted, but pdftoppm not used or ODP)
-                                                                else if (data.type === 'url' && data.url) {
-                                                                    clearInterval(timer);
-                                                                    var mountEl = document.getElementById('pptx-mount-' + idx);
-                                                                    var loadEl = document.getElementById('pptx-loading-' + idx);
-                                                                    if (loadEl) loadEl.style.display = 'none';
-                                                                    if (mountEl) {
-                                                                        mountEl.innerHTML = '<iframe src="' + data.url + '" style="width:100%;height:600px;border:none;border-radius:12px;" allow="fullscreen"></iframe>';
-                                                                    }
-                                                                }
-                                                            })
-                                                            .catch(function() {});
-                                                    }, 2500);
-                                                })();
-                                            </script>
-                                            {% endif %}
-                                            </div>
-                                        </div>
-
-                                        <!-- TEXT VIEW -->
-                                        <div id="text-{{ forloop.counter }}" class="pptx-tab-panel" style="display:none;">
-                                            {% if f.html_preview %}
-                                            <div style="overflow-x:auto;">{{ f.html_preview|safe }}</div>
-                                            {% else %}
-                                            <p class="text-muted">Текстовий вміст відсутній.</p>
-                                            {% endif %}
-                                        </div>
-
-                                        {% elif f.extension in '.docx .doc .odt' %}
-                                        <!-- ── DOCX / DOC / ODT: перемикач між документом (PDF) та текстовим виглядом ─── -->
-                                        <div class="docx-tabs" style="margin-bottom:14px;display:flex;gap:10px;border-bottom:2px solid var(--color-border);padding-bottom:10px;align-items:center;flex-wrap:wrap;">
-                                            <button type="button" class="docx-tab-btn active" onclick="switchDocxTab(this, 'doc-preview-{{ forloop.counter }}')"
-                                                style="background:var(--action-primary-bg);color:#fff;border:none;border-radius:8px;padding:7px 18px;font-weight:700;cursor:pointer;font-size:13px;display:inline-flex;align-items:center;gap:6px;transition:all 0.2s;">
-                                                📄 Перегляд документа
-                                            </button>
-                                            {% if f.html_preview %}
-                                            <button type="button" class="docx-tab-btn" onclick="switchDocxTab(this, 'doc-text-{{ forloop.counter }}')"
-                                                style="background:var(--color-bg-secondary);color:var(--color-text-primary);border:1px solid var(--color-border);border-radius:8px;padding:7px 18px;font-weight:600;cursor:pointer;font-size:13px;display:inline-flex;align-items:center;gap:6px;transition:all 0.2s;">
-                                                📝 Текстовий вигляд
-                                            </button>
-                                            {% endif %}
-                                            <a href="{% url 'file_view' f.id %}" target="_blank"
-                                               style="margin-left:auto;text-decoration:none;font-size:12px;font-weight:600;color:var(--color-primary);padding:6px 12px;border-radius:6px;background:var(--color-bg-secondary);border:1px solid var(--color-border);display:inline-flex;align-items:center;gap:6px;">
-                                               ↗ Відкрити на весь екран
-                                            </a>
-                                        </div>
-
-                                        <!-- Вкладка 1: Повноцінний перегляд документа у високій якості через PDF-конвертер -->
-                                        <div id="doc-preview-{{ forloop.counter }}" class="docx-tab-panel" style="display:block;">
-                                            <div style="height:700px;background:#1e293b;border-radius:var(--radius-md);overflow:hidden;position:relative;box-shadow:0 8px 30px rgba(0,0,0,0.12);">
-                                                <iframe data-src="{% url 'file_view' f.id %}#toolbar=1" width="100%" height="100%" style="border:none;width:100%;height:100%;background:#fff;" title="{{ f.original_name }}"></iframe>
-                                            </div>
-                                        </div>
-
-                                        <!-- Вкладка 2: Текстовий розпарсений вигляд -->
-                                        {% if f.html_preview %}
-                                        <div id="doc-text-{{ forloop.counter }}" class="docx-tab-panel" style="display:none;">
-                                            <div style="overflow-x:auto;padding:20px 24px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);line-height:1.7;box-shadow:0 2px 8px rgba(0,0,0,0.02);">
-                                                {{ f.html_preview|safe }}
-                                            </div>
-                                        </div>
-                                        {% endif %}
-
-                                        {% else %}
-                                        <!-- Excel / ODS та інші офісні таблиці -->
-                                        {% if f.html_preview %}
-                                        <div style="overflow-x:auto;padding:12px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);">
-                                            {{ f.html_preview|safe }}
-                                        </div>
-                                        {% endif %}
-                                        {% endif %}
-
-                                    <!-- 2. PDF ДОКУМЕНТИ -->
-                                    {% elif f.preview_type == 'pdf' %}
-                                    <div style="height:700px;background:#1e293b;border-radius:var(--radius-md);overflow:hidden;position:relative;box-shadow:0 8px 30px rgba(0,0,0,0.12);">
-                                        <iframe data-src="{% url 'file_view' f.id %}#toolbar=1" width="100%" height="100%" style="border:none;width:100%;height:100%;background:#fff;" title="{{ f.original_name }}"></iframe>
-                                    </div>
-
-
-                                    <!-- 3. ЗОБРАЖЕННЯ -->
-                                    {% elif f.preview_type == 'image' %}
-                                    <div style="text-align:center;padding:16px;background:#0f172a;border-radius:var(--radius-md);">
-                                        <img src="{{ f.url }}" alt="{{ f.original_name }}" style="max-width:100%;max-height:70vh;border-radius:6px;box-shadow:0 4px 20px rgba(0,0,0,0.3);">
-                                    </div>
-
-                                    <!-- 4. ТЕКСТОВІ ФАЙЛИ (.txt, .log) -->
-                                    {% elif f.preview_type == 'text' %}
-                                    <div class="fv-text-paper" style="margin:0;max-width:100%;">
-                                        {{ f.text_preview }}
-                                    </div>
-
-                                    <!-- 5. ПРОГРАМНИЙ КОД -->
-                                    {% elif f.preview_type == 'code' %}
-                                    <div style="background:#1e1e2e;border-radius:var(--radius-md);overflow:hidden;border:1px solid rgba(255,255,255,0.1);box-shadow:0 4px 16px rgba(0,0,0,0.15);">
-                                        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 16px;background:rgba(255,255,255,0.05);border-bottom:1px solid rgba(255,255,255,0.1);">
-                                            <span style="font-size:12px;font-weight:700;color:#93c5fd;font-family:'JetBrains Mono',monospace;">💻 {{ f.original_name }} ({{ f.extension|upper }})</span>
-                                            <span style="font-size:11px;color:#94a3b8;">✨ Підсвітка синтаксису увімкнена</span>
-                                        </div>
-                                        <pre style="margin:0;padding:20px;font-family:'JetBrains Mono',Consolas,monospace;font-size:13.5px;line-height:1.65;color:#f8fafc;overflow-x:auto;white-space:pre-wrap;word-break:break-word;"><code class="language-{% if f.extension == '.py' %}python{% elif f.extension == '.js' %}javascript{% elif f.extension == '.html' or f.extension == '.htm' %}markup{% elif f.extension == '.css' %}css{% elif f.extension == '.json' %}json{% elif f.extension == '.cpp' or f.extension == '.c' or f.extension == '.java' or f.extension == '.cs' or f.extension == '.pas' %}clike{% else %}{{ f.extension|slice:'1:' }}{% endif %}">{{ f.text_preview }}</code></pre>
-                                    </div>
-
-                                    <!-- 6. ВІДЕО -->
-                                    {% elif f.preview_type == 'video' %}
-                                    <div style="text-align:center;background:#000;border-radius:var(--radius-md);overflow:hidden;padding:12px;">
-                                        <video src="{{ f.url }}" controls playsinline preload="metadata" style="max-width:100%;max-height:70vh;border-radius:6px;outline:none;display:block;margin:0 auto;"></video>
-                                    </div>
-
-                                    <!-- 7. SCRATCH 3 (.sb3) -->
-                                    {% elif f.preview_type == 'scratch' %}
-                                    <div style="overflow-x:auto;">
-                                        {% if f.error_preview %}
-                                        <div class="alert alert-warning" style="margin-bottom:12px;">⚠️ {{ f.error_preview }}</div>
-                                        {% endif %}
-                                        {% if f.html_preview %}
-                                        {{ f.html_preview|safe }}
-                                        {% endif %}
-                                    </div>
-
-                                    <!-- 8. BBC MICRO:BIT (.hex) -->
-                                    {% elif f.preview_type == 'microbit' %}
-                                    <div style="overflow-x:auto;">
-                                        {% if f.error_preview %}
-                                        <div class="alert alert-warning" style="margin-bottom:12px;">⚠️ {{ f.error_preview }}</div>
-                                        {% endif %}
-                                        {% if f.html_preview %}
-                                        {{ f.html_preview|safe }}
-                                        {% endif %}
-                                    </div>
-
-                                    <!-- 9. АУДІО -->
-                                    {% elif f.preview_type == 'audio' %}
-                                    <div style="padding:20px;text-align:center;background:var(--color-surface);border-radius:var(--radius-md);">
-                                        <audio src="{{ f.url }}" controls style="width:100%;max-width:500px;"></audio>
-                                    </div>
-
-                                    <!-- 10. АРХІВИ -->
-                                    {% elif f.preview_type == 'archive' %}
-                                    <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);overflow:hidden;">
-                                        <div style="padding:10px 16px;background:var(--color-bg-secondary);border-bottom:1px solid var(--color-border);font-weight:700;font-size:13px;">
-                                            📦 Вміст архіву:
-                                        </div>
-                                        <div style="display:flex;flex-direction:column;">
-                                            {% for itm in f.archive_items %}
-                                            <div style="display:flex;justify-content:space-between;padding:8px 16px;border-bottom:1px solid var(--color-border);font-size:13px;">
-                                                <div>{% if itm.is_dir %}📁 <strong>{{ itm.name }}</strong>{% else %}📄 {{ itm.name }}{% endif %}</div>
-                                                <span style="color:var(--color-text-muted);">{{ itm.size|filesizeformat }}</span>
-                                            </div>
-                                            {% empty %}
-                                            <div style="padding:16px;text-align:center;color:var(--color-text-muted);">Архів порожній</div>
-                                            {% endfor %}
-                                        </div>
-                                    </div>
-                                    {% endif %}
-
-                                </div>
-                                {% endif %}
-
-                            </div>
-                            {% endfor %}
-                        </div>
+{% if files_with_preview %}
+<div id="assignment-files-section" class="assignment-detail-files">
+    <h3>📁 Файли ({{ files_with_preview|length }})</h3>
+    <div style="display:flex;flex-direction:column;gap:12px;">
+    {% for f in files_with_preview %}
+        <div class="assignment-file-box">
+            <div class="assignment-detail-file-header" style="padding:14px 16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+                <div class="assignment-detail-file-identity" style="display:flex;align-items:center;gap:12px;min-width:0;">
+                    <span aria-hidden="true" style="font-size:28px;">{{ f.icon }}</span>
+                    <div>
+                        <strong class="assignment-detail-filename">{{ f.original_name }}</strong>
+                        <div class="form-hint">{{ f.extension|upper }} · {{ f.size_display }}</div>
                     </div>
+                </div>
+                <div class="assignment-detail-file-actions" style="display:flex;gap:8px;flex-wrap:wrap;">
+                    {% if f.preview_type != 'download_only' %}
+                    <button type="button" class="btn btn-primary btn-sm" data-material-preview="{{ f.id }}" data-material-name="{{ f.original_name }}" data-material-extension="{{ f.extension }}" data-material-url="{% url 'file_view' f.id %}" data-material-download="{% url 'file_download' f.id %}" aria-haspopup="dialog" aria-controls="assignment-file-modal" title="Переглянути в браузері">👁️ Відкрити тут</button>
                     {% endif %}
-
+                    <a href="{% url 'file_download' f.id %}" class="btn btn-secondary btn-sm">⬇️ Завантажити файл</a>
+                </div>
+            </div>
+        </div>
+    {% endfor %}
+    </div>
+</div>
+{% endif %}
 
                     <!-- YouTube відеоматеріали -->
                     {% if assignment.all_youtube_videos %}

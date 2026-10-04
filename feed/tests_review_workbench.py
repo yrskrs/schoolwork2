@@ -42,7 +42,7 @@ class ReviewWorkbenchTests(TestCase):
         task = page.get_element_by_id('fv-panel-task')
         ai = page.get_element_by_id('fv-panel-ai')
         self.assertIn(self.assignment.description, task.text_content())
-        self.assertTrue(task.xpath('.//button[contains(@onclick,"openAssignmentFileModal")]'))
+        self.assertTrue(task.xpath('.//button[@data-material-preview]'))
         self.assertTrue(task.xpath('.//a[@href="https://example.com/material"]'))
         self.assertIn(reverse('file_view', args=[material.pk]), html.tostring(task).decode())
         self.assertIn('Врахуйте виправлення.', ai.text_content())

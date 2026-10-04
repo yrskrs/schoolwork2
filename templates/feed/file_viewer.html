@@ -256,6 +256,7 @@
 }
 </style>
 <link href="{% static 'css/review_workspace.css' %}" rel="stylesheet">
+<link href="{% static 'css/material_preview.css' %}" rel="stylesheet">
 {% endblock %}
 
 {% block content %}
@@ -269,6 +270,7 @@
 
             <!-- ════ ЛІВА КОЛОНКА: Робоча область переглядача ════════════════════ -->
             <main class="fv-main-card" id="fv-document-card" aria-label="Робота учня" tabindex="-1">
+                <header class="fv-document-heading"><div><strong>📄 Робота учня {% include 'feed/components/viewer_file_kind.html' %}</strong><span id="fv-file-title" class="fv-file-name" title="{{ file_name }}">{{ file_name }}</span></div><button type="button" class="btn btn-secondary btn-sm" id="fv-expand-document" aria-pressed="false">⤢ Розгорнути</button></header>
                 {% include "feed/components/viewer_submission_files.html" %}
 
                 <!-- Рядок формул для Excel / ODS -->
@@ -604,13 +606,13 @@
 
 
             <aside class="fv-sidebar fv-workbench" id="fv-workbench" aria-label="Інструменти перевірки">
-    <div class="fv-workbench-heading"><strong>Інструменти перевірки</strong><button type="button" class="btn btn-secondary btn-sm" id="fv-expand-tools" aria-pressed="false">⤢ Розгорнути</button></div>
+    <div class="fv-workbench-heading"><strong>Інструменти перевірки</strong><div class="fv-pane-actions"><button type="button" class="btn btn-secondary btn-sm" id="fv-expand-tools" aria-pressed="false">⤢ Розгорнути</button><button type="button" class="btn btn-secondary btn-sm" id="fv-collapse-tools" title="Згорнути інструменти й збільшити роботу учня">↤ Згорнути</button></div></div>
     <div class="fv-workbench-tabs" role="tablist" aria-label="Панелі перевірки">
-        <button type="button" role="tab" id="fv-tab-document" aria-controls="fv-document-card" aria-selected="false" tabindex="-1" class="fv-document-tab" data-review-tab="document">📄 Робота учня</button>
-        <button type="button" role="tab" id="fv-tab-task" aria-controls="fv-panel-task" aria-selected="true" data-review-tab="task">📋 Умова й матеріали</button>
-        <button type="button" role="tab" id="fv-tab-ai" aria-controls="fv-panel-ai" aria-selected="false" tabindex="-1" data-review-tab="ai">🤖 ШІ-перевірка</button>
-        <button type="button" role="tab" id="fv-tab-comments" aria-controls="fv-panel-comments" aria-selected="false" tabindex="-1" data-review-tab="comments">💬 Відгук</button>
-        <button type="button" role="tab" id="fv-tab-info" aria-controls="fv-panel-info" aria-selected="false" tabindex="-1" data-review-tab="info">ℹ️ Про роботу</button>
+        <button type="button" role="tab" id="fv-tab-document" aria-controls="fv-document-card" aria-selected="false" tabindex="-1" class="fv-document-tab" data-review-tab="document" title="Робота учня"><span aria-hidden="true">📄</span><span class="fv-tab-label">Робота учня</span></button>
+        <button type="button" role="tab" id="fv-tab-task" aria-controls="fv-panel-task" aria-selected="true" data-review-tab="task" title="Умова й матеріали"><span aria-hidden="true">📋</span><span class="fv-tab-label">Умова й матеріали</span></button>
+        <button type="button" role="tab" id="fv-tab-ai" aria-controls="fv-panel-ai" aria-selected="false" tabindex="-1" data-review-tab="ai" title="ШІ-перевірка"><span aria-hidden="true">🤖</span><span class="fv-tab-label">ШІ-перевірка</span></button>
+        <button type="button" role="tab" id="fv-tab-comments" aria-controls="fv-panel-comments" aria-selected="false" tabindex="-1" data-review-tab="comments" title="Відгук"><span aria-hidden="true">💬</span><span class="fv-tab-label">Відгук</span><span id="fv-comment-count" class="fv-comment-count" {% if not comments %}hidden{% endif %}>{{ comments|length }}</span></button>
+        <button type="button" role="tab" id="fv-tab-info" aria-controls="fv-panel-info" aria-selected="false" tabindex="-1" data-review-tab="info" title="Про роботу"><span aria-hidden="true">ℹ️</span><span class="fv-tab-label">Про роботу</span></button>
     </div>
     <div class="fv-panel-scroll" id="fv-panel-scroll">
         <section class="fv-review-panel" id="fv-panel-task" role="tabpanel" aria-labelledby="fv-tab-task" data-review-panel="task" tabindex="0">{% include 'feed/components/viewer_task_panel.html' %}</section>
@@ -622,41 +624,14 @@
         </div>
     </div>
 
-    <!-- ══ МОДАЛЬНЕ ВІКНО ПЕРЕГЛЯДУ ФАЙЛУ ЗАВДАННЯ ДЛЯ ВЧИТЕЛЯ (З ПІДСВІТКОЮ КОДУ) ══ -->
-    <div id="assignment-file-modal" role="dialog" aria-modal="true" aria-labelledby="assign-modal-title" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:99999;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px);">
-        <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);width:100%;max-width:960px;max-height:90vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.4);">
-            <!-- Шапка модального вікна -->
-            <div style="padding:14px 20px;background:var(--color-bg-secondary);border-bottom:1px solid var(--color-border);display:flex;justify-content:space-between;align-items:center;gap:12px;">
-                <div style="display:flex;align-items:center;gap:10px;overflow:hidden;">
-                    <span id="assign-modal-icon" style="font-size:22px;flex-shrink:0;">📁</span>
-                    <strong id="assign-modal-title" style="font-size:15px;color:var(--color-text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Файл завдання</strong>
-                </div>
-                <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
-                    <a id="assign-modal-newtab" href="#" target="_blank" class="btn btn-secondary btn-sm" style="font-size:12px;font-weight:700;">
-                        ↗ У новій вкладці
-                    </a>
-                    <a id="assign-modal-download" href="#" download class="btn btn-secondary btn-sm" style="font-size:12px;font-weight:700;">
-                        ⬇️ Завантажити
-                    </a>
-                    <button type="button" onclick="closeAssignmentFileModal()" class="btn btn-secondary btn-sm" style="padding:4px 10px;font-weight:800;font-size:14px;" title="Закрити перегляд">✕</button>
-                </div>
-            </div>
-
-            <!-- Тіло модального вікна -->
-            <div id="assign-modal-body" style="padding:0;overflow-y:auto;flex:1;max-height:calc(90vh - 65px);background:var(--color-surface);">
-                <div id="assign-modal-spinner" style="text-align:center;padding:40px;color:var(--color-text-muted);font-size:14px;">
-                    ⏳ Завантаження вмісту файлу...
-                </div>
-                <div id="assign-modal-content" style="display:none;padding:20px;"></div>
-            </div>
-        </div>
-    </div>
+    {% include 'feed/components/material_preview_dialog.html' %}
 
 </div>
 {% endblock %}
 
 {% block extra_scripts %}
 <script src="{% static 'js/review_workspace.js' %}" defer></script>
+<script src="{% static 'js/material_preview.js' %}" defer></script>
 <!-- Prism.js для підсвічування коду -->
 <script src="{% static 'vendor/prism/prism.min.js' %}"></script>
 <script src="{% static 'vendor/prism/prism-python.min.js' %}"></script>
@@ -707,7 +682,7 @@ function markViewerGradeDirty() {
 }
 function rememberViewerGrade(grade) {
     viewerGradeDirty = false;
-    document.getElementById('fv-current-grade').textContent = 'Збережена оцінка: ' + (grade || 'ще немає');
+    document.getElementById('fv-current-grade').textContent = 'Оцінка: ' + (grade || '—');
 }
 async function saveViewerGrade(goNext) {
     const input = document.getElementById('grade-input'), grade = input.value.trim();
@@ -735,7 +710,7 @@ async function saveViewerGrade(goNext) {
     finally {clearTimeout(timer); controls.forEach(control => {control.disabled = false;}); nextButton.disabled = !nextLink; button.removeAttribute('aria-busy');}
 }
 window.addEventListener('beforeunload', event => {if (viewerGradeDirty) {event.preventDefault(); event.returnValue = '';}});
-document.addEventListener('keydown', event => {if ((event.ctrlKey || event.metaKey) && event.key === 'Enter' && !event.isComposing) {event.preventDefault(); saveViewerGrade();}});
+document.addEventListener('keydown', event => {if (!document.getElementById('assignment-file-modal')?.open && (event.ctrlKey || event.metaKey) && event.key === 'Enter' && !event.isComposing) {event.preventDefault(); saveViewerGrade();}});
 document.addEventListener('DOMContentLoaded', function () {
     const container = document.querySelector('.fv-container'), toolbar = document.querySelector('.fv-workspace-toolbar');
     const nextLink = document.getElementById('next-sub-btn'); document.getElementById('save-grade-next-btn').disabled = !nextLink;
@@ -776,17 +751,18 @@ function sendViewerComment() {
             const cardHTML = `
                 <div class="fv-comment-card" id="comment-${c.id}">
                     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px;">
-                        <span style="font-weight:700;color:var(--color-primary);">${c.author}</span>
+                        <span style="font-weight:700;color:var(--color-primary);">${escapeHtmlForViewer(c.author)}</span>
                         <div style="display:flex;align-items:center;gap:6px;">
-                            <span style="font-size:11px;color:var(--color-text-muted);">${c.created_at}</span>
+                            <span style="font-size:11px;color:var(--color-text-muted);">${escapeHtmlForViewer(c.created_at)}</span>
                             <button type="button" onclick="deleteViewerComment(${c.id})" style="background:none;border:none;color:var(--color-danger);cursor:pointer;padding:0;font-size:12px;">✕</button>
                         </div>
                     </div>
-                    <div style="white-space:pre-wrap;line-height:1.5;">${c.text.replace(/</g, '&lt;')}</div>
+                    <div style="white-space:pre-wrap;line-height:1.5;">${escapeHtmlForViewer(c.text)}</div>
                 </div>`;
             container.insertAdjacentHTML('beforeend', cardHTML);
             container.scrollTop = container.scrollHeight;
             textarea.value = '';
+            window.updateReviewCommentCount?.();
         }
     })
     .catch(() => {
@@ -812,6 +788,7 @@ function deleteViewerComment(commentId) {
         if (data.status === 'success') {
             const card = document.getElementById('comment-' + commentId);
             if (card) card.remove();
+            window.updateReviewCommentCount?.();
         }
     })
     .catch(console.error);
@@ -1047,6 +1024,7 @@ function runSingleAICheck(subId) {
         }
         if (data.status === 'success') {
             windowLastAICleanFeedback = rawFeedback;
+            window.updateReviewAIStatus?.(data);
             var gradeVal = data.suggested_grade || 'Оцінено';
             var gradeBadge = '';
             if (gradeVal === 'Доопрацювати') {
@@ -1189,127 +1167,6 @@ function escapeHtmlForViewer(str) {
         .replace(/'/g, '&#039;');
 }
 
-let assignmentMaterialFocus = null;
-function openAssignmentFileModal(fileId, fileName, fileExt, fileUrl) {
-    assignmentMaterialFocus = document.activeElement;
-    const modal = document.getElementById('assignment-file-modal');
-    const titleEl = document.getElementById('assign-modal-title');
-    const iconEl = document.getElementById('assign-modal-icon');
-    const newTabEl = document.getElementById('assign-modal-newtab');
-    const downloadEl = document.getElementById('assign-modal-download');
-    const spinnerEl = document.getElementById('assign-modal-spinner');
-    const contentEl = document.getElementById('assign-modal-content');
-
-    if (!modal) return;
-
-    // Встановлюємо заголовок та іконку
-    titleEl.textContent = fileName;
-    newTabEl.href = fileUrl;
-    downloadEl.href = fileUrl;
-    downloadEl.setAttribute('download', fileName);
-
-    let icon = '📄';
-    const extLower = (fileExt || '').toLowerCase();
-    if (['.py', '.js', '.html', '.css', '.cpp', '.c', '.java', '.json', '.sql', '.sh', '.pas'].includes(extLower)) icon = '💻';
-    else if (['.docx', '.doc', '.odt', '.rtf'].includes(extLower)) icon = '📝';
-    else if (['.xlsx', '.xls', '.ods', '.csv'].includes(extLower)) icon = '📊';
-    else if (['.pptx', '.ppt', '.odp'].includes(extLower)) icon = '📽️';
-    else if (['.jpg', '.jpeg', '.png', '.webp', '.gif', '.svg'].includes(extLower)) icon = '🖼️';
-    else if (['.pdf'].includes(extLower)) icon = '📕';
-    else if (['.zip', '.rar', '.7z', '.tar', '.gz'].includes(extLower)) icon = '📦';
-    iconEl.textContent = icon;
-
-    // Відображаємо модалку
-    modal.style.display = 'flex';
-    modal.dataset.materialId = String(fileId);
-    modal.querySelector('button[onclick="closeAssignmentFileModal()"]').focus();
-    spinnerEl.style.display = 'block';
-    contentEl.style.display = 'none';
-    contentEl.innerHTML = '';
-
-    fetch('/assignment/file/' + fileId + '/preview/')
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-            if (modal.style.display !== 'flex' || modal.dataset.materialId !== String(fileId)) return;
-            spinnerEl.style.display = 'none';
-            contentEl.style.display = 'block';
-
-            if (data.type === 'code') {
-                const lang = data.lang || 'python';
-                contentEl.innerHTML =
-                    '<div style="background:#1e1e2e;border-radius:var(--radius-md);overflow:hidden;border:1px solid rgba(255,255,255,0.1);box-shadow:0 4px 20px rgba(0,0,0,0.25);">' +
-                        '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 16px;background:rgba(255,255,255,0.05);border-bottom:1px solid rgba(255,255,255,0.1);">' +
-                            '<span style="font-size:12px;font-weight:700;color:#93c5fd;font-family:\'JetBrains Mono\',monospace;">💻 ' + escapeHtmlForViewer(fileName) + '</span>' +
-                            '<div style="display:flex;align-items:center;gap:8px;">' +
-                                '<span style="font-size:11px;color:#94a3b8;">✨ Підсвітка синтаксису</span>' +
-                                '<button type="button" class="btn btn-secondary btn-sm" onclick="copyViewerModalCode(this)" style="font-size:11px;padding:2px 8px;font-weight:700;">📋 Скопіювати код</button>' +
-                            '</div>' +
-                        '</div>' +
-                        '<pre style="margin:0;padding:20px;font-family:\'JetBrains Mono\',Consolas,monospace;font-size:13.5px;line-height:1.65;color:#f8fafc;overflow-x:auto;white-space:pre-wrap;word-break:break-word;"><code class="language-' + lang + '">' + escapeHtmlForViewer(data.content) + '</code></pre>' +
-                    '</div>';
-
-                // Запускаємо Prism підсвічування
-                if (window.Prism) {
-                    const codeEl = contentEl.querySelector('pre code');
-                    if (codeEl) Prism.highlightElement(codeEl);
-                }
-            } else if (data.type === 'text') {
-                contentEl.innerHTML =
-                    '<div class="fv-text-paper" style="white-space:pre-wrap;font-size:14px;line-height:1.65;padding:16px 20px;background:var(--color-bg-secondary);border-radius:var(--radius-md);border:1px solid var(--color-border);">' +
-                        escapeHtmlForViewer(data.content) +
-                    '</div>';
-            } else if (data.type === 'html') {
-                contentEl.innerHTML =
-                    '<div class="document-page" style="padding:16px;background:var(--color-surface);border-radius:var(--radius-md);">' +
-                        data.content +
-                    '</div>';
-            } else if (data.type === 'url') {
-                if (data.file_type === 'pdf') {
-                    contentEl.innerHTML = '<iframe src="' + data.url + '#toolbar=1" style="width:100%;height:70vh;border:none;border-radius:var(--radius-md);" title="PDF Viewer"></iframe>';
-                } else if (data.file_type === 'image') {
-                    contentEl.innerHTML = '<div style="text-align:center;padding:10px;"><img src="' + data.url + '" style="max-width:100%;max-height:70vh;border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,0.2);" alt=""></div>';
-                } else if (data.file_type === 'video') {
-                    contentEl.innerHTML = '<div style="text-align:center;background:#000;border-radius:var(--radius-md);overflow:hidden;"><video src="' + data.url + '" controls style="max-width:100%;max-height:70vh;"></video></div>';
-                } else if (data.file_type === 'audio') {
-                    contentEl.innerHTML = '<div style="padding:24px;text-align:center;"><audio src="' + data.url + '" controls style="width:100%;max-width:500px;"></audio></div>';
-                } else {
-                    contentEl.innerHTML = '<iframe src="' + data.url + '" style="width:100%;height:70vh;border:none;border-radius:var(--radius-md);"></iframe>';
-                }
-            } else if (data.type === 'error') {
-                contentEl.innerHTML = '<div class="alert alert-warning" style="padding:14px;background:rgba(234,179,8,0.1);border:1px solid rgba(234,179,8,0.3);color:var(--color-warning);border-radius:var(--radius-md);">⚠️ ' + escapeHtmlForViewer(data.message) + '</div>';
-            }
-        })
-        .catch(function(err) {
-            if (modal.style.display !== 'flex' || modal.dataset.materialId !== String(fileId)) return;
-            spinnerEl.style.display = 'none';
-            contentEl.style.display = 'block';
-            contentEl.innerHTML = '<div class="alert alert-error" style="padding:14px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);color:var(--color-danger);border-radius:var(--radius-md);">⚠️ Помилка завантаження файлу: ' + escapeHtmlForViewer(err.message) + '</div>';
-        });
-}
-
-function copyViewerModalCode(btn) {
-    const modalContent = document.getElementById('assign-modal-content');
-    if (!modalContent) return;
-    const codeEl = modalContent.querySelector('pre code');
-    if (!codeEl) return;
-    navigator.clipboard.writeText(codeEl.innerText).then(function() {
-        const oldText = btn.textContent;
-        btn.textContent = '✓ Скопійовано!';
-        setTimeout(function() { btn.textContent = oldText; }, 2000);
-    });
-}
-
-function closeAssignmentFileModal() {
-    const modal = document.getElementById('assignment-file-modal');
-    if (modal && modal.style.display === 'flex') {
-        modal.style.display = 'none';
-        delete modal.dataset.materialId;
-        const contentEl = document.getElementById('assign-modal-content');
-        if (contentEl) contentEl.innerHTML = '';
-        if (assignmentMaterialFocus && assignmentMaterialFocus.isConnected) assignmentMaterialFocus.focus({preventScroll:true});
-    }
-}
-
 // ── Керування масштабом та поворотом фото зошита ─────────────────────────────
 var currentImageRotation = 0;
 var currentImageZoom = 1;
@@ -1372,13 +1229,6 @@ function toggleMultiImageGalleryMode() {
 }
 
 // Закриття модалки по кліку на фон або Escape
-window.addEventListener('click', function(e) {
-    const modal = document.getElementById('assignment-file-modal');
-    if (modal && e.target === modal) {
-        closeAssignmentFileModal();
-    }
-});
-
 // Гарячі клавіші на клавіатурі:
 // [ або Ctrl+← (Попередній файл учня), ] або Ctrl+→ (Наступний файл учня)
 // Цифри 1..9 (Перейти на файл #N)
@@ -1386,19 +1236,7 @@ window.addEventListener('click', function(e) {
 // Alt + ← (Попередня робота), Alt + → (Наступна робота), Alt + T (Умова), Alt + F (Повний екран)
 document.addEventListener('keydown', function(e) {
     const materialModal = document.getElementById('assignment-file-modal');
-    if (materialModal && materialModal.style.display === 'flex') {
-        if (e.key === 'Escape') { e.preventDefault(); closeAssignmentFileModal(); }
-        if (e.key === 'Tab') {
-            const focusable = Array.from(materialModal.querySelectorAll('a[href],button')).filter(element => element.getClientRects().length && !element.disabled);
-            const first = focusable[0], last = focusable[focusable.length - 1];
-            if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
-            else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
-        }
-        return;
-    }
-    if (e.key === 'Escape') {
-        closeAssignmentFileModal();
-    }
+    if (materialModal && materialModal.open) return;
     if (e.defaultPrevented || e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT' || e.target.isContentEditable) return;
 
     // Швидке перемикання між файлами учня: [ та ] або Ctrl + стрілки

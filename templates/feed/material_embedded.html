@@ -1,0 +1,15 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="uk" data-theme="{{ theme }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ material.original_name }}</title>
+    <link rel="stylesheet" href="{% static 'css/main.css' %}">
+    <style>body{padding:12px;background:var(--color-surface);color:var(--color-text-primary);overflow-wrap:anywhere;}body>div{max-width:100%;min-width:0;}pre{white-space:pre-wrap;overflow-wrap:anywhere;}img,iframe{max-width:100%;}</style>
+</head>
+<body>
+    {% if error %}<p role="status">{{ error }}</p>{% endif %}
+    {% if content %}{{ content|safe }}{% elif not error %}<p>Вміст матеріалу відсутній.</p>{% endif %}
+</body>
+</html>

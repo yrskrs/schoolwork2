@@ -329,7 +329,11 @@ class ComprehensiveScenariosTest(TestCase):
         resp_detail = self.client.get(reverse('assignment_detail', args=[assignment.id]))
         self.assertEqual(resp_detail.status_code, 200)
         self.assertContains(resp_detail, 'lab1_instruction.docx')
-        self.assertContains(resp_detail, 'Лабораторна робота з інформатики')
+        self.assertContains(resp_detail, 'data-material-preview=')
+        preview = self.client.get(reverse('file_preview', args=[file_obj.pk]), {'mode': 'text'}).json()
+        self.assertEqual(preview['type'], 'html')
+        self.assertIn('Лабораторна робота з інформатики', preview['content'])
+        self.assertIn('Текст інструкції для учня', preview['content'])
 
     def test_scenario_13_14_15_16_student_submits_teacher_notification_and_grading(self):
         """

@@ -14,11 +14,11 @@
     <div class="fv-materials-list">
         {% for f in submission.assignment.files.all %}
         <div class="fv-material-row">
-            <button type="button" class="fv-material-preview" onclick="openAssignmentFileModal({{ f.id }}, '{{ f.original_name|escapejs }}', '{{ f.get_extension|escapejs }}', '{% url 'file_view' f.id %}')">
+            <button type="button" class="fv-material-preview" data-material-preview="{{ f.id }}" data-material-name="{{ f.original_name }}" data-material-extension="{{ f.get_extension }}" data-material-url="{% url 'file_view' f.id %}" data-material-download="{% url 'file_download' f.id %}" aria-haspopup="dialog" aria-controls="assignment-file-modal">
                 <span class="fv-material-icon" aria-hidden="true">{{ f.get_file_icon }}</span>
                 <span><strong>{{ f.original_name }}</strong><small>{{ f.get_size_display }} · Переглянути матеріал</small></span>
             </button>
-            <a href="{% url 'file_view' f.id %}" download class="btn btn-secondary btn-sm" aria-label="Завантажити {{ f.original_name }}">⬇️</a>
+            <a href="{% url 'file_download' f.id %}" class="btn btn-secondary btn-sm" aria-label="Завантажити {{ f.original_name }}">⬇️</a>
         </div>
         {% endfor %}
         {% if submission.assignment.link_url %}<a class="fv-material-link" href="{{ submission.assignment.link_url }}" target="_blank" rel="noopener noreferrer">🔗 {{ submission.assignment.link_label|default:"Корисне посилання" }} ↗</a>{% endif %}

@@ -1,0 +1,23 @@
+<dialog id="assignment-file-modal" class="material-dialog" aria-labelledby="assign-modal-title">
+    <header class="material-dialog-header">
+        <strong id="assign-modal-title">Матеріал до завдання</strong>
+        <div class="material-dialog-actions">
+            <a id="assign-modal-newtab" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm">↗ Нова вкладка</a>
+            <a id="assign-modal-download" href="#" class="btn btn-secondary btn-sm">⬇️ Завантажити</a>
+            <button type="button" id="assign-modal-close" class="btn btn-secondary btn-sm" aria-label="Закрити перегляд матеріалу" title="Закрити (Escape)">✕</button>
+        </div>
+    </header>
+    <div class="material-dialog-controls">
+        <label class="material-dialog-picker" for="assign-modal-picker">Матеріал
+            <select id="assign-modal-picker" class="form-input"></select>
+        </label>
+        <div id="assign-modal-modes" class="material-dialog-modes" role="group" aria-label="Режим читання">
+            <button type="button" class="btn btn-secondary btn-sm" data-material-mode="document" aria-pressed="true">📄 Перегляд документа</button>
+            <button type="button" class="btn btn-secondary btn-sm" data-material-mode="text" aria-pressed="false">📝 Текстовий вигляд</button>
+        </div>
+    </div>
+    <div id="assign-modal-body" class="material-dialog-body" aria-busy="false">
+        <p id="assign-modal-spinner" role="status" hidden>⏳ Завантаження матеріалу…</p>
+        <div id="assign-modal-content"></div>
+    </div>
+</dialog>

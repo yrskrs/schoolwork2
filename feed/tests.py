@@ -1820,8 +1820,11 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
         resp_detail = self.client.get(reverse('assignment_detail', kwargs={'pk': self.assignment.pk}))
         self.assertEqual(resp_detail.status_code, 200)
         self.assertContains(resp_detail, 'prism-tomorrow.min.css')
-        self.assertContains(resp_detail, 'language-python')
-        self.assertContains(resp_detail, 'calculate')
+        self.assertContains(resp_detail, 'data-material-preview=')
+        # Both students and teachers read highlighted code from the dialog API.
+        public_preview = self.client.get(reverse('file_preview', args=[af.id])).json()
+        self.assertEqual(public_preview['lang'], 'python')
+        self.assertIn('def calculate', public_preview['content'])
 
         # 2. Перевіряємо ендпоінт file_preview для модального перегляду вчителем
         self.client.login(username='teacher1', password='password123')
@@ -2914,7 +2917,10 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
         # Перевірка відображення плеєра у assignment_detail
         resp_assign = self.client.get(reverse('assignment_detail', args=[self.assignment.pk]))
         self.assertEqual(resp_assign.status_code, 200)
-        self.assertContains(resp_assign, '<video src="')
+        self.assertContains(resp_assign, 'data-material-preview=')
+        preview = self.client.get(reverse('file_preview', args=[af.pk])).json()
+        self.assertEqual(preview['file_type'], 'video')
+        self.assertEqual(preview['url'], reverse('file_view', args=[af.pk]))
 
         # 2. Учень здає відеороботу
         f_student_video = SimpleUploadedFile("student_presentation.webm", dummy_video_bytes, content_type="video/webm")
@@ -4854,8 +4860,9 @@ class AssignmentFilesPreviewOptimizationTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'physics_lesson.pptx')
         self.assertContains(response, 'Урок 1: Закони Ньютона')
-        # Коли слайди ще не згенеровані, показується елемент фонового завантаження та перемикач
-        self.assertContains(response, 'Підготовка інтерактивного перегляду слайдів')
+        # Матеріал відкривається окремо, без інлайнового завантаження слайдів.
+        self.assertContains(response, 'data-material-preview=')
+        self.assertContains(response, 'Текстовий вигляд')
 
     def test_get_presentation_slides_non_blocking_flag(self):
         """get_presentation_slides з wait_if_missing=False повертає пусті списки миттєво без блокування."""

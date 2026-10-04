@@ -1,0 +1,45 @@
+/* One centred reading surface for student and teacher assignment materials. */
+html.material-preview-open { overflow:hidden; }
+.material-dialog { box-sizing:border-box; width:min(1160px,calc(100vw - 40px)); height:min(880px,calc(100dvh - 40px)); max-width:calc(100% - 40px); max-height:calc(100% - 40px); padding:0; margin:auto; border:1px solid var(--color-border); border-radius:var(--radius-lg); background:var(--color-surface); color:var(--color-text-primary); box-shadow:0 20px 70px #0006; }
+.material-dialog[open] { display:flex; flex-direction:column; }
+.material-dialog:not([open]),.material-dialog [hidden] { display:none!important; }
+.material-dialog::backdrop { background:#0f172ab8; backdrop-filter:blur(3px); }
+.material-dialog-header { display:flex; align-items:center; gap:12px; justify-content:space-between; padding:12px 16px; border-bottom:1px solid var(--color-border); }
+.material-dialog-header > strong { flex:1; min-width:0; overflow-wrap:anywhere; font-size:15px; line-height:1.4; }
+.material-dialog-actions { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+.material-dialog .btn { min-height:36px; white-space:normal; }
+.material-dialog-controls { display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:10px 16px; background:var(--color-bg-secondary); border-bottom:1px solid var(--color-border); }
+.material-dialog-picker { display:flex; align-items:center; gap:8px; flex:1; min-width:180px; font-size:12px; font-weight:700; }
+.material-dialog-picker select { min-width:0; width:100%; flex:1; font-size:13px; padding:7px 9px; }
+.material-dialog-modes { display:flex; gap:6px; flex-wrap:wrap; }
+.material-dialog-modes [aria-pressed="true"] { background:var(--color-primary-light); border-color:var(--color-primary); color:var(--color-primary-text); }
+.material-dialog-body { flex:1; min-height:0; overflow:auto; overscroll-behavior:contain; padding:16px; font-size:15px; line-height:1.65; overflow-wrap:anywhere; }
+.material-dialog-body :is(img,video,iframe,table,pre) { max-width:100%; }
+.material-dialog .material-dialog-body :is(pre,code) { white-space:pre-wrap; overflow-wrap:anywhere; }
+.material-dialog-body table { width:100%!important; table-layout:fixed; }
+.material-dialog-body :is(th,td) { overflow-wrap:anywhere; white-space:normal!important; }
+.material-dialog-body :is(div,p,span) { min-width:0; }
+.material-dialog-body iframe { width:100%; height:100%; min-height:300px; border:0; border-radius:var(--radius-sm); }
+#assign-modal-content:has(> iframe),#assign-modal-content:has(> .material-slide-player) { height:100%; }
+.material-dialog-body > [role="status"] { text-align:center; padding:24px; color:var(--color-text-secondary); }
+.material-slide-player { display:flex; flex-direction:column; gap:12px; height:100%; }
+.material-slide-controls { display:flex; justify-content:center; align-items:center; flex-wrap:wrap; gap:8px; }
+.material-slide-controls select { width:auto; max-width:170px; }
+.material-slide-image { display:flex; align-items:center; justify-content:center; min-height:0; flex:1; }
+.material-slide-image img { display:block; width:100%; height:100%; max-height:65dvh; object-fit:contain; }
+.material-preview-notice { padding:16px; border:1px solid var(--color-border); border-radius:var(--radius-sm); background:var(--color-bg-secondary); }
+.material-preview-notice p { margin:0 0 12px; }
+.material-archive-row { display:flex; justify-content:space-between; gap:12px; padding:8px 0; border-bottom:1px solid var(--color-border); }
+.assignment-detail-files .assignment-file-box { background:var(--color-surface); border:1px solid var(--color-border); border-radius:var(--radius-md); }
+@media(max-width:700px) {
+    .material-dialog { width:calc(100vw - 12px); height:calc(100dvh - 12px); max-width:calc(100% - 12px); max-height:calc(100% - 12px); border-radius:10px; }
+    .material-dialog-header { flex-wrap:wrap; gap:8px; padding:10px; }
+    .material-dialog-header > strong { flex-basis:100%; font-size:13px; max-height:3.9em; overflow:auto; }
+    .material-dialog-actions { width:100%; }
+    #assign-modal-close { margin-left:auto; }
+    .material-dialog .btn { padding:6px 8px; font-size:12px; }
+    .material-dialog-controls { padding:8px 10px; gap:8px; }
+    .material-dialog-picker { flex-basis:100%; }
+    .material-dialog-modes { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); width:100%; }
+    .material-dialog-body { padding:10px; }
+}

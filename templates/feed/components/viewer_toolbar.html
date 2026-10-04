@@ -74,40 +74,16 @@
 </div></nav>
     <div class="fv-identity-row">                    <!-- Навігація назад та назва поточного файлу -->
                     <div class="fv-file-identity">
-                        <a href="{{ back_url|default:'/teacher/submissions/' }}" class="btn btn-secondary btn-sm" style="font-weight:700;">
-                            {{ back_label|default:'← До списку здач' }}
-                        </a>
+                        <a href="{{ back_url|default:'/teacher/submissions/' }}" class="btn btn-secondary btn-sm fv-back-link" title="{{ back_label|default:'До списку здач' }}"><span aria-hidden="true">←</span><span class="fv-back-label">
+                            {{ back_label|default:'До списку здач' }}
+                        </span></a>
 
-                        {% if is_filtered %}
-                        <div class="fv-filter-badge" style="display:inline-flex;align-items:center;gap:6px;background:rgba(99,102,241,0.12);border:1px solid rgba(99,102,241,0.3);color:var(--color-primary);padding:3px 10px;border-radius:20px;font-size:11.5px;font-weight:700;" title="Активна фільтрація черги перевірки">
-                            <span>🎯 {{ queue_filter_desc|default:"Фільтр" }}</span>
-                            {% if queue_pos and queue_total %}
-                            <span style="background:var(--action-primary-bg);color:#fff;padding:1px 7px;border-radius:10px;font-size:10.5px;font-weight:800;">{{ queue_pos }} / {{ queue_total }}</span>
-                            {% endif %}
-                        </div>
-                        {% endif %}
 
-                        <span class="fv-active-file-name">
-                            <span id="fv-file-title" class="fv-file-name" title="{{ file_name }}">{{ file_name }}</span>
-                            <span class="badge" style="background:var(--color-bg-secondary);color:var(--color-primary);font-size:11px;border:1px solid var(--color-border);">
-                                {% if file_type == 'code' %}💻 Код
-                                {% elif file_type == 'scratch' %}🐱 Scratch проєкт
-                                {% elif file_type == 'microbit' %}📟 BBC micro:bit
-                                {% elif file_type == 'access_db' %}🗄️ Microsoft Access
-                                {% elif file_type == 'video' %}🎬 Відео
-                                {% elif file_type == 'audio' %}🎵 Аудіо
-                                {% elif file_type == 'office_preview' %}📊 Документ
-                                {% elif file_type == 'archive' %}📦 Архів
-                                {% elif file_type == 'image' %}🖼️ Фото
-                                {% elif file_type == 'pdf' %}📄 PDF
-                                {% elif file_type == 'link' %}🔗 Лінк
-                                {% elif file_type == 'text' %}📝 Текст
-                                {% else %}📎 Файл{% endif %}
-                            </span>
-                        </span>
+
+
                     </div>
 
-<details class="fv-reading-tools"><summary>⚙️ Вигляд</summary>                        <!-- Режими читання та повний екран -->
+<details class="fv-reading-tools"><summary title="Вигляд та повний екран" aria-label="Налаштування вигляду">⚙️<span> Вигляд</span></summary>                        <!-- Режими читання та повний екран -->
                         <div style="display:inline-flex;align-items:center;background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:2px;gap:2px;margin-left:4px;">
                             <button type="button" onclick="setViewerTheme('default')" title="Звичайна тема" style="background:none;border:none;cursor:pointer;font-size:13px;padding:2px 6px;border-radius:3px;">☀️</button>
                             <button type="button" onclick="setViewerTheme('sepia')" title="Тема Сепія для очей" style="background:none;border:none;cursor:pointer;font-size:13px;padding:2px 6px;border-radius:3px;">📜</button>

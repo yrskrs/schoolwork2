@@ -69,7 +69,7 @@ from django.db import transaction
 from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 from django.views.decorators.http import require_POST
-from django.views.decorators.clickjacking import xframe_options_exempt
+from django.views.decorators.clickjacking import xframe_options_exempt, xframe_options_sameorigin
 from django.views.decorators.csrf import csrf_exempt
 
 
@@ -2186,7 +2186,7 @@ def teacher_profile(request):
     return render(request, 'feed/teacher_profile.html', context)
 
 
-from django.views.decorators.clickjacking import xframe_options_exempt
+from django.views.decorators.clickjacking import xframe_options_exempt, xframe_options_sameorigin
 
 
 def _run_libreoffice_convert(input_path, out_dir, convert_to='pdf', timeout=40):
@@ -2576,15 +2576,59 @@ def file_download(request, file_id):
         return HttpResponse(f"Помилка завантаження: {str(e)}", status=500)
 
 
+@xframe_options_sameorigin
 def file_preview(request, file_id):
     """Служба для генерації інлайнового прев'ю файлу (docx, xlsx, pptx, python та інших код-файлів)."""
     file_obj = get_object_or_404(AssignmentFile.objects.select_related("assignment"), pk=file_id)
     require_assignment_access(request, file_obj.assignment)
     ext = file_obj.get_extension()
 
+    # These viewers include their own player/copy controls. Give them a real
+    # document lifecycle instead of inserting scripts into the parent dialog.
+    if ext in {'.sb3', '.hex'}:
+        if request.GET.get('embedded') != '1':
+            return JsonResponse({
+                'type': 'url', 'file_type': 'embedded',
+                'url': reverse('file_preview', args=[file_obj.pk]) + '?embedded=1',
+            })
+        content, error = '', None
+        try:
+            raw_url = request.build_absolute_uri(reverse('file_view', args=[file_obj.pk]))
+            if ext == '.sb3':
+                from .scratch_utils import parse_scratch_sb3
+                content, _, error = parse_scratch_sb3(file_obj.file.path, raw_file_url=raw_url)
+            else:
+                from .microbit_utils import parse_microbit_hex
+                content, _, error = parse_microbit_hex(file_obj.file.path, raw_file_url=raw_url)
+        except Exception:
+            error = 'Не вдалося відкрити матеріал. Завантажте оригінальний файл.'
+        return render(request, 'feed/material_embedded.html', {
+            'material': file_obj, 'content': content, 'error': error,
+            'theme': 'dark' if request.GET.get('theme') == 'dark' else 'light',
+        })
+
+    # The reading mode is independent of PDF/slide preparation and keeps the
+    # same assignment access checks as the graphical preview.
+    reading_converters = {
+        '.docx': convert_docx_to_html, '.doc': convert_docx_to_html,
+        '.xlsx': convert_xlsx_to_html, '.xls': convert_xlsx_to_html,
+        '.pptx': convert_pptx_to_html, '.ppt': convert_pptx_to_html,
+        '.odt': convert_odt_to_html, '.ods': convert_ods_to_html,
+        '.odp': convert_odp_to_html,
+    }
+    if request.GET.get('mode') == 'text' and ext in reading_converters:
+        try:
+            content, error = reading_converters[ext](file_obj.file.path)
+            if content:
+                from .document_html import safe_document_html
+                return JsonResponse({'type': 'html', 'content': safe_document_html(content)})
+            return JsonResponse({'type': 'error', 'message': error or 'Текстовий вміст відсутній.'})
+        except Exception:
+            return JsonResponse({'type': 'error', 'message': 'Не вдалося підготувати текстовий вигляд. Завантажте оригінальний файл.'})
+
     # Для презентацій: спочатку перевіряємо наявність слайдів (JPEG), потім PDF
     if ext in {'.pptx', '.ppt', '.odp'}:
-        slide_urls, pdf_url = get_presentation_slides(file_obj.id, file_obj.file.path if file_obj.file else None)
+        slide_urls, pdf_url = get_presentation_slides(file_obj.id, file_obj.file.path if file_obj.file else None, wait_if_missing=False)
         if slide_urls:
             return JsonResponse({
                 'type': 'slides',
@@ -2604,7 +2648,7 @@ def file_preview(request, file_id):
         return JsonResponse({'type': 'pending'})
 
     # Для Word/Excel — спочатку пробуємо PDF через LibreOffice
-    if ext in {'.docx', '.doc', '.xlsx', '.xls'}:
+    if ext in {'.docx', '.doc', '.xlsx', '.xls', '.odt', '.ods'}:
         pdf_url = get_pdf_preview_url(file_obj)
         if pdf_url:
             return JsonResponse({
@@ -2633,9 +2677,9 @@ def file_preview(request, file_id):
                 'message': f'Помилка конвертації файлу Word: {str(e)}'
             })
 
-    elif ext in ['.xlsx', '.xls']:
+    elif ext in ['.xlsx', '.xls', '.doc', '.odt', '.ods']:
         try:
-            html_content, err_msg = convert_xlsx_to_html(file_obj.file.path, max_rows=100)
+            html_content, err_msg = reading_converters[ext](file_obj.file.path)
             if html_content:
                 return JsonResponse({
                     'type': 'html',
@@ -2643,51 +2687,15 @@ def file_preview(request, file_id):
                 })
             return JsonResponse({
                 'type': 'error',
-                'message': err_msg or 'Помилка конвертації таблиці Excel'
+                'message': err_msg or 'Не вдалося підготувати перегляд документа.'
             })
         except Exception as e:
             return JsonResponse({
                 'type': 'error',
-                'message': f'Помилка конвертації таблиці Excel: {str(e)}'
+                'message': 'Не вдалося підготувати перегляд документа. Завантажте оригінальний файл.'
             })
 
     # Примітка: .pptx, .ppt, .odp вже оброблені на початку функції (ранній return)
-
-    # 4. Обробка Scratch 3 (.sb3) проєктів
-    elif ext == '.sb3':
-        try:
-            from .scratch_utils import parse_scratch_sb3
-            raw_url = request.build_absolute_uri(reverse('file_view', args=[file_obj.id]))
-            s_html, _, s_err = parse_scratch_sb3(file_obj.file.path, raw_file_url=raw_url)
-            if s_html:
-                return JsonResponse({'type': 'html', 'content': s_html})
-            return JsonResponse({
-                'type': 'error',
-                'message': s_err or 'Не вдалося розібрати Scratch 3 (.sb3) проєкт'
-            })
-        except Exception as e:
-            return JsonResponse({
-                'type': 'error',
-                'message': f'Помилка відкриття Scratch проєкту: {str(e)}'
-            })
-
-    # 5. Обробка BBC micro:bit (.hex) файлів
-    elif ext == '.hex':
-        try:
-            from .microbit_utils import parse_microbit_hex
-            raw_url = request.build_absolute_uri(reverse('file_view', args=[file_obj.id]))
-            h_html, _, h_err = parse_microbit_hex(file_obj.file.path, raw_file_url=raw_url)
-            if h_html:
-                return JsonResponse({'type': 'html', 'content': h_html})
-            return JsonResponse({
-                'type': 'error',
-                'message': h_err or 'Не вдалося розібрати BBC micro:bit (.hex) файл'
-            })
-        except Exception as e:
-            return JsonResponse({
-                'type': 'error',
-                'message': f'Помилка відкриття micro:bit файлу: {str(e)}'
-            })
 
     # 6. Обробка текстових файлів та код-файлів (включаючи .py, .js, .css, .json, .sh тощо)
     elif file_obj.get_file_type() == 'text' or ext in {'.py', '.js', '.css', '.json', '.sh', '.cpp', '.h', '.c', '.java', '.pas', '.sql', '.html', '.htm', '.xml', '.ts', '.php', '.md', '.txt', '.log', '.csv', '.cs', '.rb', '.go', '.rs', '.kt', '.swift'}:
@@ -2738,8 +2746,13 @@ def file_preview(request, file_id):
                 'message': f'Не вдалося прочитати файл: {str(e)}'
             })
             
+    elif ext in {'.zip', '.rar', '.7z', '.tar', '.gz', '.tgz'}:
+        items, error = get_archive_content(file_obj.file.path, ext)
+        if error:
+            return JsonResponse({'type': 'error', 'message': error})
+        return JsonResponse({'type': 'archive', 'items': items})
+
     # 7. Дефолтна обробка для інших типів (зображення, pdf, відео, аудіо) -> перенаправляємо на inline-view
-    from django.urls import reverse
     inline_view_url = reverse('file_view', args=[file_obj.id])
     return JsonResponse({
         'type': 'url',
