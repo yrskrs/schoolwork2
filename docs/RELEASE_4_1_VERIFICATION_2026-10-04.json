@@ -20,5 +20,16 @@
     "fast_forward_update_with_healthchecks": "passed",
     "services": "all healthy",
     "production_data": "untouched"
-  }
+  },
+  "native_transition": {
+    "native_navigation_transition": {
+      "pageswap": "true",
+      "pagereveal": "true",
+      "finished": "true",
+      "page": "/pages/dashboard/",
+      "progressStuck": false
+    },
+    "reload_and_back_progress": "passed"
+  },
+  "final_image_test_seconds": 56.589
 }

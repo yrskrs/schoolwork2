@@ -2,6 +2,10 @@
 <html lang="uk" data-theme="light">
 <head>
     <meta charset="UTF-8">
+    <style id="navigation-transition-policy">
+        @view-transition { navigation: auto; }
+        @media (prefers-reduced-motion: reduce) { @view-transition { navigation: none; } }
+    </style>
     <script>
         (function(){
             var t = window.matchMedia && window.matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 'light';
@@ -10,6 +14,7 @@
             if ((navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4) ||
                 (navigator.deviceMemory && navigator.deviceMemory <= 4)) {
                 document.documentElement.classList.add('sn-lite');
+                document.getElementById('navigation-transition-policy').textContent = '@view-transition { navigation: none; }';
             }
             document.documentElement.setAttribute('data-theme', t);
             if (t === 'dark') {

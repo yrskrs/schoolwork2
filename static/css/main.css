@@ -2319,9 +2319,7 @@ pre, code {
 }
 
 /* ─── Плавні переходи між сторінками (View Transitions API) ───────────────── */
-@view-transition {
-  navigation: auto;
-}
+/* Opt-in is declared early in base.html; external CSS can arrive after pagereveal. */
 ::view-transition-old(root), ::view-transition-new(root) {
   animation-duration: .14s;
   animation-timing-function: ease-out;
