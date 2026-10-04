@@ -42,7 +42,11 @@ def validate(folder, legacy=False):
             raise ValueError('Неповний список контрольних сум.')
         for name, expected in checksums.items():
             with (folder / name).open('rb') as source:
-                if hashlib.file_digest(source, 'sha256').hexdigest() != expected:
+                # Support server Python 3.8–3.10 as well as current versions.
+                digest = hashlib.sha256()
+                for chunk in iter(lambda: source.read(1024 * 1024), b''):
+                    digest.update(chunk)
+                if digest.hexdigest() != expected:
                     raise ValueError(f'Контрольна сума не збігається: {name}.')
     for _ in entries(folder / 'media.tar.gz'):
         pass
