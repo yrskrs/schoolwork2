@@ -12,8 +12,8 @@ from pathlib import Path
 
 from django.core.cache import caches
 
-REVISION = 'assessment-4.1.3'
-OFFICE = {'.docx', '.doc', '.odt', '.rtf', '.pptx', '.ppt', '.odp', '.xlsx', '.xls', '.ods'}
+REVISION = 'assessment-4.1.4'
+OFFICE = {'.docx', '.doc', '.odt', '.rtf', '.pptx', '.ppt', '.odp', '.pptm', '.ppsx', '.pps', '.potx', '.xlsx', '.xls', '.ods'}
 IMAGES = {'.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif', '.tiff', '.tif'}
 
 
@@ -50,8 +50,10 @@ def _office_pdf(path):
 def _full_text(path, ext):
     # Imports are lazy: the legacy service uses this module too.
     from . import gemini_service as service
-    if ext in {'.pptx', '.ppt'}:
+    if ext in {'.pptx', '.ppt', '.pptm', '.ppsx', '.pps', '.potx'}:
         return service.extract_text_from_powerpoint(path, max_slides=100000)
+    if ext == '.odp':
+        return service.extract_text_from_odp_presentation(path, max_slides=100000)
     if ext == '.pdf':
         return service.extract_text_from_pdf(path, max_pages=100000, max_chars=10000000)
     if ext in {'.xlsx', '.xls'}:
@@ -81,7 +83,7 @@ def _full_text(path, ext):
                 parts.extend(node.text or '' for node in root.findall('.//w:t', ns))
             parts.extend(' '.join(node.itertext()) for node in root.findall('.//w:txbxContent', ns))
         return '\n'.join(parts)
-    if ext in {'.odt', '.ods', '.odp'}:
+    if ext in {'.odt', '.ods'}:
         return service.extract_text_from_opendocument(path, max_chars=10000000)
     if ext == '.sb3':
         with zipfile.ZipFile(path) as archive:
@@ -133,7 +135,7 @@ def extract_file_evidence(path, ext=None, visual=True):
                 for image in service.extract_images_from_docx(path, max_images=100000):
                     data['media'].append({'mime_type': image['mime_type'], 'data': image['data']})
                     data['text'] += f'\nвбудоване зображення: {image["name"]}'
-            elif ext in {'.pptx', '.ppt'}:
+            elif ext in {'.pptx', '.ppt', '.pptm', '.ppsx', '.pps', '.potx'}:
                 for image in service.extract_images_from_pptx(path, max_images=100000):
                     data['media'].append({'mime_type': image['mime_type'], 'data': image['data']})
                     data['text'] += f'\nвбудоване зображення на слайді: {image["name"]}'

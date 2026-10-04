@@ -200,6 +200,7 @@
 
             <!-- ════ ФОРМА НАЛАШТУВАНЬ ПІДКЛЮЧЕННЯ ТА ПРОМТУ ═══════════════════ -->
             <form method="POST" id="ai-settings-form">
+    <input type="hidden" name="action" value="save_ai_config">
                 {% csrf_token %}
 
                 <!-- Блок 1: API Ключ, Резервний API, Вибір провайдерів та Failover -->
@@ -472,7 +473,7 @@
                                         </span>
                                     </label>
                                 </div>
-                                <input type="range" name="ai_detector_tolerance_percent" id="ai_detector_tolerance_percent" min="0" max="60" step="5"
+                                <input type="range" name="ai_detector_tolerance_percent" id="ai_detector_tolerance_percent" min="0" max="100" step="5"
                                        value="{{ ai_settings.ai_detector_tolerance_percent|default:25 }}" class="form-input" style="padding:0;cursor:pointer;"
                                        oninput="document.getElementById('ai-tol-val').textContent = this.value">
                                 <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--color-text-muted);margin-top:2px;">

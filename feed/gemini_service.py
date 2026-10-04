@@ -711,16 +711,115 @@ def extract_text_from_pdf(file_path, max_pages=40, max_chars=60000):
         return None
 
 
+def extract_text_from_odp_presentation(file_path, max_slides=1000, max_chars=10000000):
+    """
+    Видобуває детальну структуру, слайди, текст, таблиці, зображення та нотатки
+    із презентацій OpenDocument Presentation (.odp).
+    Форматує кожен слайд аналогічно до PowerPoint: «📽️ Слайд X/N: «Заголовок»».
+    """
+    try:
+        import zipfile
+        import xml.etree.ElementTree as ET
+
+        if not os.path.exists(file_path) or not zipfile.is_zipfile(file_path):
+            return ""
+
+        with zipfile.ZipFile(file_path, 'r') as zf:
+            if 'content.xml' not in zf.namelist():
+                return ""
+            xml_bytes = zf.read('content.xml')
+
+        root = ET.fromstring(xml_bytes)
+        pages = [elem for elem in root.iter() if elem.tag.endswith('page')]
+        if not pages:
+            texts = []
+            for elem in root.iter():
+                if elem.tag.endswith(('}p', '}h', '}span', '}a', '}table-cell')):
+                    t = ''.join(elem.itertext()).strip()
+                    if t and t not in texts:
+                        texts.append(t)
+            return '\n'.join(texts)[:max_chars]
+
+        total_slides = len(pages)
+        slides_text = []
+
+        for idx, page in enumerate(pages, 1):
+            if idx > max_slides:
+                break
+
+            title_text = ""
+            p_lines = []
+            img_c = 0
+            tbl_c = 0
+            notes_text = ""
+
+            for elem in page.iter():
+                tag = elem.tag.rsplit('}', 1)[-1]
+                if tag == 'image':
+                    img_c += 1
+                elif tag == 'table':
+                    tbl_c += 1
+                elif tag == 'notes':
+                    n_parts = [''.join(p.itertext()).strip() for p in elem.iter() if p.tag.endswith(('}p', '}h'))]
+                    notes_text = ' '.join(p for p in n_parts if p).strip()
+
+            for child in page.iter():
+                if child.tag.endswith('notes'):
+                    continue
+                if child.tag.endswith(('}p', '}h')):
+                    pt = ''.join(child.itertext()).strip()
+                    if pt and pt not in p_lines and (not notes_text or pt not in notes_text):
+                        if not title_text:
+                            title_text = pt
+                        else:
+                            p_lines.append(f"• {pt}")
+
+            slide_header = f"📽️ Слайд {idx}/{total_slides}"
+            if title_text:
+                slide_header += f": «{title_text}»"
+            else:
+                slide_header += ":"
+
+            slide_lines = [slide_header] + p_lines
+            visuals = []
+            if img_c > 0:
+                visuals.append(f"{img_c} ілюстрацій/зображень")
+            if tbl_c > 0:
+                visuals.append(f"{tbl_c} таблиць")
+            if visuals:
+                slide_lines.append(f"  [Візуальне оформлення слайда: {', '.join(visuals)}]")
+            if notes_text:
+                slide_lines.append(f"  [Нотатки доповідача: {notes_text}]")
+
+            slides_text.append("\n".join(slide_lines))
+
+        overview = f"Всього слайдів у презентації: {total_slides}."
+        if total_slides > max_slides:
+            overview += f" (Опрацьовано перші {max_slides} слайдів)."
+
+        body = overview + "\n\n" + "\n\n".join(slides_text)
+        return body[:max_chars]
+    except Exception as e:
+        return f"[Помилка читання презентації ODP: {e}]"
+
+
 def extract_text_from_opendocument(file_path, max_chars=50000):
     """
     Видобуває текст з файлів OpenDocument (.odt, .ods, .odp) через стандартний zipfile та XML.
+    Для презентацій .odp використовує детальну покадрову екстракцію слайдів.
     """
+    ext_lower = os.path.splitext(file_path)[1].lower() if file_path else ""
+    if ext_lower == '.odp':
+        return extract_text_from_odp_presentation(file_path, max_chars=max_chars)
     try:
         with zipfile.ZipFile(file_path, 'r') as zf:
             if 'content.xml' not in zf.namelist():
                 return None
             xml_bytes = zf.read('content.xml')
             root = ET.fromstring(xml_bytes)
+            pages = [elem for elem in root.iter() if elem.tag.endswith('page')]
+            if pages:
+                return extract_text_from_odp_presentation(file_path, max_chars=max_chars)
             texts = []
             for elem in root.iter():
                 if elem.tag.endswith(('}p', '}h', '}span', '}a', '}table-cell')):
@@ -729,6 +828,7 @@ def extract_text_from_opendocument(file_path, max_chars=50000):
             return '\n'.join(texts)[:max_chars]
     except Exception:
         return None
+
 
 
 def extract_images_from_docx(file_path, max_images=4, max_bytes_per_img=8 * 1024 * 1024):
@@ -2358,11 +2458,11 @@ def extract_submission_content(submission):
                 })
                 text_parts.append(f"[У таблиці OpenDocument ({filename}) виявлено сторінку з графіком: {o_img['name']} ({o_img['size_kb']:.1f} КБ) — передано на візуальний мультимодальний аналіз ШІ]")
 
-        # ── Е. ПРЕЗЕНТАЦІЇ (.pptx, .ppt, .odp) ─────────────────────────────────
-        elif ext in ['.pptx', '.ppt']:
-            pptx_text = extract_text_from_powerpoint(file_path)
-            text_parts.append(f"Вміст презентації PowerPoint ({filename}, {file_size_kb:.1f} КБ):\n{pptx_text}")
-            if ext in ['.pptx', '.ppt']:
+        # ── Е. ПРЕЗЕНТАЦІЇ (.pptx, .ppt, .odp, .pptm, .ppsx, .pps, .potx) ─────
+        elif ext in ['.pptx', '.ppt', '.odp', '.pptm', '.ppsx', '.pps', '.potx']:
+            if ext in ['.pptx', '.ppt', '.pptm', '.ppsx', '.pps', '.potx']:
+                pptx_text = extract_text_from_powerpoint(file_path)
+                text_parts.append(f"Вміст презентації PowerPoint ({filename}, {file_size_kb:.1f} КБ):\n{pptx_text}")
                 pptx_imgs = extract_images_from_pptx(file_path)
                 for p_img in pptx_imgs:
                     inline_media.append({
@@ -2370,17 +2470,17 @@ def extract_submission_content(submission):
                         "data": p_img['data']
                     })
                     text_parts.append(f"[У презентації PowerPoint ({filename}) виявлено вбудоване зображення/слайд: {p_img['name']} ({p_img['size_kb']:.1f} КБ) — передано на візуальний аналіз ШІ]")
+            elif ext == '.odp':
+                odp_text = extract_text_from_odp_presentation(file_path)
+                text_parts.append(f"Вміст презентації OpenDocument (.odp) ({filename}, {file_size_kb:.1f} КБ):\n{odp_text or '[Порожня презентація]'}")
+                odp_imgs = extract_images_from_odt(file_path)
+                for o_img in odp_imgs:
+                    inline_media.append({
+                        "mime_type": o_img['mime_type'],
+                        "data": o_img['data']
+                    })
+                    text_parts.append(f"[У презентації OpenDocument ({filename}) виявлено вбудоване зображення: {o_img['name']} ({o_img['size_kb']:.1f} КБ) — передано на візуальний аналіз ШІ]")
 
-        elif ext == '.odp':
-            odp_text = extract_text_from_opendocument(file_path)
-            text_parts.append(f"Вміст презентації OpenDocument (.odp) ({filename}):\n{odp_text or '[Порожня презентація]'}")
-            odp_imgs = extract_images_from_odt(file_path)
-            for o_img in odp_imgs:
-                inline_media.append({
-                    "mime_type": o_img['mime_type'],
-                    "data": o_img['data']
-                })
-                text_parts.append(f"[У презентації OpenDocument ({filename}) виявлено вбудоване зображення: {o_img['name']} ({o_img['size_kb']:.1f} КБ) — передано на візуальний аналіз ШІ]")
 
         # ── Є. ЗОБРАЖЕННЯ (ФОТО ЗОШИТІВ, СКРІНШОТИ, СХЕМИ) ───────────────────
         elif ext in ['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif', '.tiff', '.tif', '.svg', '.heic', '.heif']:

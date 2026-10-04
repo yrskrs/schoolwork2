@@ -80,3 +80,6 @@ backups/
 
 # Docker Local Data Volumes
 docker_data/
+
+# Test Media
+test_media*/

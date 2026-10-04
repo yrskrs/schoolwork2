@@ -178,3 +178,160 @@ class AIDetectionFormatsTests(TestCase):
         self.assertTrue(item['ai_generated_detected'])
         self.assertEqual(item['ai_generated_percent'], 90)
         self.assertIn('Tome AI', item['ai_generated_details'])
+
+    def test_pptx_chatgpt_prompt_placeholders(self):
+        pptx_path = self.media_dir / 'chatgpt_outline.pptx'
+        slide_xml = (
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+            '<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" '
+            'xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">'
+            '<p:sp><a:p><a:r><a:t>Слайд 1: Вступ до теми</a:t></a:r></p:sp>'
+            '<p:sp><a:p><a:r><a:t>[Зображення: концепція штучного інтелекту в освіті]</a:t></a:r></p:sp>'
+            '</p:sld>'
+        )
+        with zipfile.ZipFile(pptx_path, 'w') as zf:
+            zf.writestr('ppt/slides/slide1.xml', slide_xml.encode('utf-8'))
+
+        prov = file_provenance(pptx_path)
+        signals = prov.get('signals', [])
+        self.assertTrue(len(signals) > 0, "Should detect ChatGPT prompt placeholder in PPTX slide")
+        self.assertEqual(signals[0]['location'], 'Слайд 1')
+        self.assertEqual(signals[0]['basis'], 'text_analysis')
+
+    def test_pptx_speaker_notes_ai_detection(self):
+        pptx_path = self.media_dir / 'notes_generator.pptx'
+        slide_xml = (
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+            '<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" '
+            'xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">'
+            '<p:sp><a:p><a:r><a:t>Чистий заголовок</a:t></a:r></p:sp>'
+            '</p:sld>'
+        )
+        notes_xml = (
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+            '<p:notes xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" '
+            'xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">'
+            '<p:sp><a:p><a:r><a:t>Згенеровано за допомогою ChatGPT для доповіді на уроці.</a:t></a:r></p:sp>'
+            '</p:notes>'
+        )
+        with zipfile.ZipFile(pptx_path, 'w') as zf:
+            zf.writestr('ppt/slides/slide1.xml', slide_xml.encode('utf-8'))
+            zf.writestr('ppt/notesSlides/notesSlide1.xml', notes_xml.encode('utf-8'))
+
+        prov = file_provenance(pptx_path)
+        signals = prov.get('signals', [])
+        notes_sig = [s for s in signals if 'Нотатки' in s.get('location', '')]
+        self.assertTrue(len(notes_sig) > 0, "Should detect AI in speaker notes")
+        self.assertIn('ChatGPT', notes_sig[0]['observation'])
+
+    def test_pptx_comments_generator_detection(self):
+        pptx_path = self.media_dir / 'comments_canva.pptx'
+        comment_xml = (
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+            '<p:cmList xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">'
+            '<p:cm authorId="0"><p:text>Design created with Canva AI Presentation</p:text></p:cm>'
+            '</p:cmList>'
+        )
+        with zipfile.ZipFile(pptx_path, 'w') as zf:
+            zf.writestr('ppt/slides/slide1.xml', b'<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><p:sp><a:p><a:r><a:t>Title</a:t></a:r></p:sp></p:sld>')
+            zf.writestr('ppt/comments/comment1.xml', comment_xml.encode('utf-8'))
+
+        prov = file_provenance(pptx_path)
+        signals = prov.get('signals', [])
+        self.assertTrue(len(signals) > 0, "Should detect Canva generator in PPTX comments")
+        self.assertTrue(any('Canva' in s['observation'] for s in signals))
+
+    def test_odp_slide_ai_marker_detection(self):
+        odp_path = self.media_dir / 'odp_marker.odp'
+        content_xml = (
+            '<?xml version="1.0" encoding="UTF-8"?>\n'
+            '<office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" '
+            'xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0" '
+            'xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0">'
+            '<office:body><office:presentation>'
+            '<draw:page draw:name="page1">'
+            '<draw:frame><text:p>Вступ до теми</text:p></draw:frame>'
+            '</draw:page>'
+            '<draw:page draw:name="page2">'
+            '<draw:frame><text:p>Створено за допомогою ШІ для захисту проєкту</text:p></draw:frame>'
+            '</draw:page>'
+            '</office:presentation></office:body>'
+            '</office:document-content>'
+        )
+        with zipfile.ZipFile(odp_path, 'w') as zf:
+            zf.writestr('content.xml', content_xml.encode('utf-8'))
+
+        prov = file_provenance(odp_path)
+        signals = prov.get('signals', [])
+        self.assertTrue(len(signals) > 0, "Should detect AI marker in ODP slide")
+        slide2_sig = [s for s in signals if s.get('location') == 'Слайд 2']
+        self.assertTrue(len(slide2_sig) > 0, "Signal must indicate Slide 2 specifically")
+
+    def test_odp_notes_ai_detection(self):
+        odp_path = self.media_dir / 'odp_notes.odp'
+        content_xml = (
+            '<?xml version="1.0" encoding="UTF-8"?>\n'
+            '<office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" '
+            'xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0" '
+            'xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" '
+            'xmlns:presentation="urn:oasis:names:tc:opendocument:xmlns:presentation:1.0">'
+            '<office:body><office:presentation>'
+            '<draw:page draw:name="page1">'
+            '<draw:frame><text:p>Звичайний заголовок</text:p></draw:frame>'
+            '<presentation:notes><text:p>Created with Gamma App</text:p></presentation:notes>'
+            '</draw:page>'
+            '</office:presentation></office:body>'
+            '</office:document-content>'
+        )
+        with zipfile.ZipFile(odp_path, 'w') as zf:
+            zf.writestr('content.xml', content_xml.encode('utf-8'))
+
+        prov = file_provenance(odp_path)
+        signals = prov.get('signals', [])
+        notes_sig = [s for s in signals if 'Нотатки' in s.get('location', '')]
+        self.assertTrue(len(notes_sig) > 0, "Should detect Gamma in ODP presenter notes")
+        self.assertIn('Gamma', notes_sig[0]['observation'])
+
+    def test_binary_ppt_ai_marker_detection(self):
+        ppt_path = self.media_dir / 'legacy_presentation.ppt'
+        # Emulate binary PowerPoint containing UTF-16LE text
+        text = "Створено за допомогою ChatGPT для доповіді"
+        data = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1" + text.encode("utf-16le") + b"\x00" * 32
+        ppt_path.write_bytes(data)
+
+        prov = file_provenance(ppt_path)
+        signals = prov.get('signals', [])
+        self.assertTrue(len(signals) > 0, "Should detect AI in binary .ppt file")
+        self.assertIn('.ppt', signals[0]['location'])
+
+    def test_extract_text_from_odp_presentation_structure(self):
+        from feed.gemini_service import extract_text_from_odp_presentation
+        odp_path = self.media_dir / 'odp_structure.odp'
+        content_xml = (
+            '<?xml version="1.0" encoding="UTF-8"?>\n'
+            '<office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" '
+            'xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0" '
+            'xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" '
+            'xmlns:presentation="urn:oasis:names:tc:opendocument:xmlns:presentation:1.0">'
+            '<office:body><office:presentation>'
+            '<draw:page draw:name="page1">'
+            '<draw:frame><text:h>Тема: Екологія планети</text:h></draw:frame>'
+            '<draw:frame><text:p>Головні чинники впливу на довкілля</text:p></draw:frame>'
+            '</draw:page>'
+            '<draw:page draw:name="page2">'
+            '<draw:frame><text:h>Висновки</text:h></draw:frame>'
+            '<draw:frame><text:p>Необхідно сортувати відходи</text:p></draw:frame>'
+            '<presentation:notes><text:p>Звернути увагу слухачів на графік</text:p></presentation:notes>'
+            '</draw:page>'
+            '</office:presentation></office:body>'
+            '</office:document-content>'
+        )
+        with zipfile.ZipFile(odp_path, 'w') as zf:
+            zf.writestr('content.xml', content_xml.encode('utf-8'))
+
+        text = extract_text_from_odp_presentation(str(odp_path))
+        self.assertIn('Всього слайдів у презентації: 2', text)
+        self.assertIn('📽️ Слайд 1/2: «Тема: Екологія планети»', text)
+        self.assertIn('📽️ Слайд 2/2: «Висновки»', text)
+        self.assertIn('[Нотатки доповідача: Звернути увагу слухачів на графік]', text)
+

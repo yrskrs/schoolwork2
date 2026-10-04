@@ -12,7 +12,8 @@ GENERATORS = re.compile(
     r'bing[ _-]?image[ _-]?creator|microsoft[ _-]?designer|copilot|microsoft[ _-]?copilot|'
     r'claude|anthropic|gemini|google[ _-]?ai|deepseek|perplexity|mistral|llama|grok|meta[ _-]?ai|'
     r'flux(\.1)?|ideogram|leonardo(\.ai)?|recraft(\.ai)?|civitai|fooocus|novelai|runway(ml)?|pika(\.art)?|sora|kling|seaart|'
-    r'gamma(\.app)?|tome(\.app)?|canva(\s*ai)?|beautiful\.ai|decktopus|slidesai|popai|pitch\.com|slidesgo|wepik|'
+    r'gamma(\.app)?|tome(\.app)?|canva(\s*magic\s*design|\s*ai|\s*presentation)?|beautiful\.ai|'
+    r'decktopus(\.com)?|slidesai(\.io)?|popai|pitch(\.com)?|slidesgo|wepik|presentations\.ai|plus\s*ai|magic\s*slides|'
     r'elevenlabs|suno|udio|heygen|synthesia|d-id|'
     r'trainedAlgorithmicMedia|compositeWithTrainedAlgorithmicMedia|c2pa|synthid',
     re.I
@@ -22,15 +23,27 @@ IMAGE_SUFFIXES = {'.png', '.jpg', '.jpeg', '.webp', '.tif', '.tiff', '.bmp'}
 AI_TEXT_MARKERS = re.compile(
     r'(?:'
     r'як\s+(?:штучний\s+інтелект|мовна\s+модель)|'
-    r'as\s+an?\s+ai\s+language\s+model|as\s+an?\s+ai\b|'
-    r'ось\s+(?:варіант\s+|текст\s+для\s+)?презентаці[їя]|'
-    r'ось\s+слайди\s+(?:для|до)|here\s+(?:is\s+a\s+presentation|are\s+the\s+slides)|'
-    r'звісно,?\s+ось|звісно!\s*ось|'
-    r'згенеровано\s+(?:за\s+допомогою\s+)?(?:ш[іi]|нейромереж\w*|chatgpt|gamma|tome|canva)|'
-    r'generated\s+by\s+(?:ai|chatgpt|openai|claude|gemini|deepseek|gamma|tome)|'
-    r'created\s+with\s+(?:gamma|tome|beautiful\.ai|slidesai|decktopus|canva)|'
-    r'made\s+with\s+(?:gamma|tome|canva)|'
-    r'дизайн\s+створено\s+в\s+gamma'
+    r'як\s+ai\b|as\s+an?\s+ai\s+language\s+model|as\s+an?\s+ai\b|'
+    r'ось\s+(?:варіант\s+|текст\s+для\s+|план\s+|макет\s+|структура\s+|конспект\s+|чернетка\s+)?(?:презентаці[їя]|слайдів|доповіді)|'
+    r'ось\s+(?:готові\s+)?слайди\s+(?:для|до)|'
+    r'ось\s+(?:готова\s+)?презентація|'
+    r'here\s+(?:is\s+a\s+presentation|are\s+the\s+slides|is\s+the\s+outline)|'
+    r'звісно[!,.]?\s*(?:ось|я\s+можу|нижче|наведено)|'
+    r'безумовно,?\s+ось|радий\s+допомогти|'
+    r'сподіваюсь,?\s+це\s+допоможе|надіюсь,?\s+це\s+допоможе|hope\s+this\s+helps|'
+    r'я\s+(?:створив|підготував|згенерував)\s+(?:для\s+вас\s+)?(?:презентацію|слайди)|'
+    r'(?:підготовлено|створено|згенеровано|зроблено)\s+(?:за\s+допомогою\s+|завдяки\s+|в\s+)?(?:ш[іi]|штучн\w*\s+інтелект\w*|нейромереж\w*|chatgpt|gamma|tome|canva|slidesai|decktopus|beautiful\.ai)|'
+    r'(?:дизайн|оформлення)\s+(?:створено|згенеровано)\s+(?:в|за\s+допомогою)\s+(?:gamma|tome|canva)|'
+    r'generated\s+by\s+(?:ai|chatgpt|openai|claude|gemini|deepseek|gamma|tome|canva)|'
+    r'created\s+with\s+(?:gamma|tome|beautiful\.ai|slidesai|decktopus|canva|ai)|'
+    r'made\s+with\s+(?:gamma|tome|canva|slidesai)|'
+    r'designed\s+with\s+(?:gamma|canva|tome|slidesai)|'
+    r'powered\s+by\s+(?:ai|gamma|tome|chatgpt|openai)|'
+    r'\[\s*(?:зображення|ілюстрація|фото|картинка|опис\s+зображення|image|photo|illustration|prompt)\s*:[^\]\r\n]+\]|'
+    r'(?:\*\*)?(?:слайд|slide)\s+\d+\s*(?:\:|\-|\—|\.)|'
+    r'\[(?:вставте|додайте|замініть)\s+[^\]\r\n]+\]|'
+    r'замініть\s+(?:цей\s+текст|плейсхолдер)|'
+    r'вставте\s+(?:сюди\s+)?(?:зображення|фото|ілюстрацію)'
     r')',
     re.I
 )
@@ -89,25 +102,38 @@ def _image_signals(stream, location):
 def _openxml_signals(package, filename):
     signals = []
     names = package.namelist()
-    for prop_file in ('docProps/app.xml', 'docProps/core.xml', 'docProps/custom.xml'):
-        if prop_file in names:
-            try:
-                with package.open(prop_file) as stream:
-                    content = stream.read().decode('utf-8', errors='replace')[:16384]
-                    match = GENERATORS.search(content)
-                    if match:
-                        signals.append({
-                            'location': f'{prop_file}',
-                            'basis': 'metadata',
-                            'observation': f'Метадані пакета {prop_file} містять назву {match.group(0)}. Це змінюване поле, а не доказ авторства.'
-                        })
-            except Exception:
-                pass
+    prop_files = [
+        f for f in names
+        if f in ('docProps/app.xml', 'docProps/core.xml', 'docProps/custom.xml', 'ppt/presentation.xml')
+        or ('commentAuthors' in f or 'comment' in f or 'authors.xml' in f)
+    ]
+    for prop_file in prop_files:
+        try:
+            with package.open(prop_file) as stream:
+                content = stream.read().decode('utf-8', errors='replace')[:65536]
+                clean_text = re.sub(r'<[^>]+>', ' ', content)
+                match = GENERATORS.search(clean_text) or GENERATORS.search(content)
+                if match:
+                    signals.append({
+                        'location': f'{prop_file}',
+                        'basis': 'metadata',
+                        'observation': f'Метадані пакета {prop_file} містять назву {match.group(0)}. Це змінюване поле, а не доказ авторства.'
+                    })
+                match_txt = AI_TEXT_MARKERS.search(clean_text)
+                if match_txt:
+                    signals.append({
+                        'location': f'{prop_file}',
+                        'basis': 'text_analysis',
+                        'observation': f'Службовий розділ {prop_file} містить маркер ШІ: «{match_txt.group(0)}».'
+                    })
+        except Exception:
+            pass
     return signals
 
 
 def _pptx_slide_signals(package):
     signals = []
+    # 1. Slide contents
     names = [n for n in package.namelist() if n.startswith('ppt/slides/slide') and n.endswith('.xml')]
     names.sort(key=lambda s: int(re.search(r'\d+', s).group(0)) if re.search(r'\d+', s) else 0)
     for idx, name in enumerate(names, 1):
@@ -119,16 +145,201 @@ def _pptx_slide_signals(package):
                     root = ET.fromstring(raw_bytes)
                     text = ' '.join(''.join(node.itertext()) for node in root.findall('.//{http://schemas.openxmlformats.org/drawingml/2006/main}t'))
                 except Exception:
-                    text = raw_bytes.decode('utf-8', errors='replace')
-                match = AI_TEXT_MARKERS.search(text)
-                if match:
+                    clean = re.sub(r'<[^>]+>', ' ', raw_bytes.decode('utf-8', errors='replace'))
+                    text = ' '.join(clean.split())
+
+                match_marker = AI_TEXT_MARKERS.search(text)
+                if match_marker:
                     signals.append({
                         'location': f'Слайд {idx}',
                         'basis': 'text_analysis',
-                        'observation': f'Слайд {idx} містить характерний маркер або преамбулу генеративного ШІ: «{match.group(0)}». Текст слайдів має ознаки чат-бота.'
+                        'observation': f'Слайд {idx} містить характерний маркер або преамбулу генеративного ШІ: «{match_marker.group(0)}». Текст слайдів має ознаки чат-бота.'
+                    })
+                else:
+                    match_gen = GENERATORS.search(text)
+                    if match_gen:
+                        signals.append({
+                            'location': f'Слайд {idx}',
+                            'basis': 'text_analysis',
+                            'observation': f'Слайд {idx} містить назву інструмента генеративного ШІ: «{match_gen.group(0)}». Текст слайдів містить згадки або водяні знаки ШІ-сервісу.'
+                        })
+        except Exception:
+            pass
+
+    # 2. Speaker notes (ppt/notesSlides/notesSlide*.xml)
+    notes_names = [n for n in package.namelist() if n.startswith('ppt/notesSlides/notesSlide') and n.endswith('.xml')]
+    notes_names.sort(key=lambda s: int(re.search(r'\d+', s).group(0)) if re.search(r'\d+', s) else 0)
+    for idx, name in enumerate(notes_names, 1):
+        try:
+            with package.open(name) as stream:
+                raw_bytes = stream.read()
+                text = ''
+                try:
+                    root = ET.fromstring(raw_bytes)
+                    text = ' '.join(''.join(node.itertext()) for node in root.findall('.//{http://schemas.openxmlformats.org/drawingml/2006/main}t'))
+                except Exception:
+                    clean = re.sub(r'<[^>]+>', ' ', raw_bytes.decode('utf-8', errors='replace'))
+                    text = ' '.join(clean.split())
+
+                match_marker = AI_TEXT_MARKERS.search(text)
+                if match_marker:
+                    signals.append({
+                        'location': f'Нотатки доповідача (Слайд {idx})',
+                        'basis': 'text_analysis',
+                        'observation': f'Нотатки доповідача до слайду {idx} містять маркер генеративного ШІ: «{match_marker.group(0)}». Залишено підказки або запити чат-бота.'
+                    })
+                else:
+                    match_gen = GENERATORS.search(text)
+                    if match_gen:
+                        signals.append({
+                            'location': f'Нотатки доповідача (Слайд {idx})',
+                            'basis': 'text_analysis',
+                            'observation': f'Нотатки доповідача до слайду {idx} містять назву генератора ШІ: «{match_gen.group(0)}».'
+                        })
+        except Exception:
+            pass
+
+    return signals
+
+
+def _odp_signals(package):
+    signals = []
+    # 1. Check meta.xml
+    if 'meta.xml' in package.namelist():
+        try:
+            with package.open('meta.xml') as stream:
+                root = ET.parse(stream).getroot()
+            for element in root.iter():
+                field = element.tag.rsplit('}', 1)[-1]
+                if field in {'generator', 'description', 'keyword', 'user-defined', 'title', 'creator'}:
+                    value = ''.join(element.itertext())[:8192]
+                    match = GENERATORS.search(value)
+                    if match:
+                        signals.append({
+                            'location': 'meta.xml/' + field,
+                            'basis': 'metadata',
+                            'observation': f'Метадані містять назву {match.group(0)}. Це змінюване поле, а не доказ авторства.'
+                        })
+        except Exception:
+            pass
+
+    # 2. Check content.xml per-slide
+    if 'content.xml' in package.namelist():
+        try:
+            with package.open('content.xml') as stream:
+                xml_bytes = stream.read()
+            try:
+                root = ET.fromstring(xml_bytes)
+                pages = [elem for elem in root.iter() if elem.tag.endswith('page')]
+            except Exception:
+                pages = []
+
+            if pages:
+                for idx, page in enumerate(pages, 1):
+                    p_texts = []
+                    notes_texts = []
+                    for elem in page.iter():
+                        tag = elem.tag.rsplit('}', 1)[-1]
+                        if tag in ('p', 'h', 'span'):
+                            t = ''.join(elem.itertext()).strip()
+                            if t:
+                                p_texts.append(t)
+                        elif tag == 'notes':
+                            nt = ' '.join(''.join(c.itertext()).strip() for c in elem.iter() if c.tag.rsplit('}', 1)[-1] in ('p', 'h', 'span'))
+                            if nt:
+                                notes_texts.append(nt)
+
+                    slide_body = ' '.join(p_texts)
+                    match_marker = AI_TEXT_MARKERS.search(slide_body)
+                    if match_marker:
+                        signals.append({
+                            'location': f'Слайд {idx}',
+                            'basis': 'text_analysis',
+                            'observation': f'Слайд {idx} презентації ODP містить маркер генеративного ШІ: «{match_marker.group(0)}». Текст слайдів має ознаки чат-бота.'
+                        })
+                    else:
+                        match_gen = GENERATORS.search(slide_body)
+                        if match_gen:
+                            signals.append({
+                                'location': f'Слайд {idx}',
+                                'basis': 'text_analysis',
+                                'observation': f'Слайд {idx} презентації ODP містить назву генератора ШІ: «{match_gen.group(0)}».'
+                            })
+
+                    if notes_texts:
+                        notes_body = ' '.join(notes_texts)
+                        match_nm = AI_TEXT_MARKERS.search(notes_body) or GENERATORS.search(notes_body)
+                        if match_nm:
+                            signals.append({
+                                'location': f'Нотатки доповідача (Слайд {idx})',
+                                'basis': 'text_analysis',
+                                'observation': f'Нотатки доповідача ODP містять маркер або генератор ШІ: «{match_nm.group(0)}».'
+                            })
+            else:
+                clean_content = re.sub(r'<[^>]+>', ' ', xml_bytes.decode('utf-8', errors='replace'))
+                match = AI_TEXT_MARKERS.search(clean_content) or GENERATORS.search(clean_content)
+                if match:
+                    signals.append({
+                        'location': 'Слайди презентації',
+                        'basis': 'text_analysis',
+                        'observation': f'Вміст слайдів містить маркер генеративного ШІ: «{match.group(0)}».'
                     })
         except Exception:
             pass
+
+    return signals
+
+
+def _binary_ppt_signals(path):
+    signals = []
+    # 1. Try LibreOffice conversion to PPTX for deep inspection
+    try:
+        from .document_parsers import convert_ppt_to_pptx
+        converted = convert_ppt_to_pptx(str(path))
+        if converted and os.path.exists(converted) and zipfile.is_zipfile(converted):
+            with zipfile.ZipFile(converted) as package:
+                signals.extend(_openxml_signals(package, Path(path).name))
+                signals.extend(_pptx_slide_signals(package))
+                for entry in package.infolist():
+                    if Path(entry.filename).suffix.lower() in IMAGE_SUFFIXES:
+                        try:
+                            with package.open(entry) as stream:
+                                signals.extend(_image_signals(stream, entry.filename))
+                        except Exception:
+                            pass
+            return signals
+    except Exception:
+        pass
+
+    # 2. Binary text scanning for UTF-16LE, CP1251, UTF-8 markers
+    try:
+        with open(path, 'rb') as f:
+            raw_bytes = f.read(1024 * 1024 * 8)
+
+        for enc in ('utf-16le', 'cp1251', 'utf-8', 'latin1'):
+            try:
+                decoded = raw_bytes.decode(enc, errors='ignore')
+                m_gen = GENERATORS.search(decoded)
+                if m_gen:
+                    signals.append({
+                        'location': 'Метадані / вміст .ppt',
+                        'basis': 'text_analysis',
+                        'observation': f'Бінарний файл презентації .ppt містить згадку генератора {m_gen.group(0)}.'
+                    })
+                    break
+                m_txt = AI_TEXT_MARKERS.search(decoded)
+                if m_txt:
+                    signals.append({
+                        'location': 'Вміст слайдів .ppt',
+                        'basis': 'text_analysis',
+                        'observation': f'Бінарний файл презентації .ppt містить характерний маркер ШІ: «{m_txt.group(0)}».'
+                    })
+                    break
+            except Exception:
+                pass
+    except Exception:
+        pass
+
     return signals
 
 
@@ -157,7 +368,7 @@ def _pdf_signals(path):
 
 def file_provenance(path):
     from .ai_context import evidence_cache, file_cache_key
-    key = file_cache_key(path, purpose='provenance', options='4.1.3')
+    key = file_cache_key(path, purpose='provenance', options='4.1.4')
     cached = evidence_cache().get(key)
     if cached is not None:
         return cached
@@ -166,10 +377,10 @@ def file_provenance(path):
     try:
         if suffix in IMAGE_SUFFIXES:
             result['signals'] = _image_signals(path, 'зображення')
-        elif suffix in {'.docx', '.pptx', '.xlsx'}:
+        elif suffix in {'.docx', '.pptx', '.xlsx', '.pptm', '.ppsx', '.potx'}:
             with zipfile.ZipFile(path) as package:
                 result['signals'].extend(_openxml_signals(package, Path(path).name))
-                if suffix == '.pptx':
+                if suffix in {'.pptx', '.pptm', '.ppsx', '.potx'}:
                     result['signals'].extend(_pptx_slide_signals(package))
                 for entry in package.infolist():
                     if Path(entry.filename).suffix.lower() in IMAGE_SUFFIXES:
@@ -180,27 +391,19 @@ def file_provenance(path):
                             result['limitations'].append(f'Не прочитано метадані зображення: {entry.filename}.')
         elif suffix in {'.odt', '.odp', '.ods'}:
             with zipfile.ZipFile(path) as package:
-                if 'meta.xml' in package.namelist():
+                if suffix == '.odp':
+                    result['signals'].extend(_odp_signals(package))
+                elif 'meta.xml' in package.namelist():
                     with package.open('meta.xml') as stream:
                         root = ET.parse(stream).getroot()
                     for element in root.iter():
                         field = element.tag.rsplit('}', 1)[-1]
-                        if field in {'generator', 'description', 'keyword', 'user-defined'}:
+                        if field in {'generator', 'description', 'keyword', 'user-defined', 'title', 'creator'}:
                             value = ''.join(element.itertext())[:8192]
                             match = GENERATORS.search(value)
                             if match:
                                 result['signals'].append({'location': 'meta.xml/' + field, 'basis': 'metadata',
                                     'observation': f'Метадані містять назву {match.group(0)}. Це змінюване поле, а не доказ авторства.'})
-                if suffix == '.odp' and 'content.xml' in package.namelist():
-                    try:
-                        with package.open('content.xml') as stream:
-                            content = stream.read().decode('utf-8', errors='replace')
-                            match = AI_TEXT_MARKERS.search(content)
-                            if match:
-                                result['signals'].append({'location': 'Слайди презентації', 'basis': 'text_analysis',
-                                    'observation': f'Вміст слайдів містить маркер генеративного ШІ: «{match.group(0)}».'})
-                    except Exception:
-                        pass
                 for entry in package.infolist():
                     if Path(entry.filename).suffix.lower() in IMAGE_SUFFIXES:
                         try:
@@ -208,6 +411,8 @@ def file_provenance(path):
                                 result['signals'].extend(_image_signals(stream, entry.filename))
                         except Exception:
                             result['limitations'].append(f'Не прочитано метадані зображення: {entry.filename}.')
+        elif suffix in {'.ppt', '.pps'}:
+            result['signals'].extend(_binary_ppt_signals(path))
         elif suffix == '.sb3':
             with zipfile.ZipFile(path) as package:
                 for entry in package.infolist():
@@ -228,7 +433,10 @@ def file_provenance(path):
 
 
 def submission_provenance(submission):
-    files = list(submission.files.all()) or ([submission] if submission.file else [])
+    files = list(submission.files.all())
+    file_paths = {f.file.path for f in files if getattr(f, 'file', None) and hasattr(f.file, 'path')}
+    if submission.file and hasattr(submission.file, 'path') and submission.file.path not in file_paths:
+        files.append(submission)
     output = []
     for file in files:
         if file.file and Path(file.file.path).is_file():
@@ -294,8 +502,13 @@ def normalize_authorship(result, allowed, provenance=(), tolerance_percent=25):
         ai_percent = max(ai_percent or 0, 90)
 
     # Content signals from slide inspection / visual
-    has_content_signal = any(item.get('basis') in {'text_analysis', 'visual'} for item in evidence)
-    if has_content_signal and (ai_percent is None or ai_percent < 70) and any(file.get('signals') for file in provenance):
+    has_slide_signal = any(
+        item.get('basis') in {'slide_content', 'presentation'}
+        or any(word in str(item.get('location', '')).lower() for word in ('слайд', 'slide', 'презентац', 'notes', 'нотатк'))
+        or (item.get('basis') in {'text_analysis', 'visual'} and any(file.get('signals') for file in provenance))
+        for item in evidence
+    )
+    if has_slide_signal and any(file.get('signals') for file in provenance) and (ai_percent is None or ai_percent < 70):
         ai_percent = max(ai_percent or 0, 80)
 
     # Determine detection against tolerance
