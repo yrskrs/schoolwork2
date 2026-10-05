@@ -39,13 +39,25 @@ def ooxml_object_evidence(path, prefix='word'):
                     result['limitations'].append(f'Не прочитано XML об’єктів: {name}.')
                     continue
                 if diagram:
-                    nodes = [{'id': point.get('modelId'), 'type': point.get('type'), 'text': _labels(point)}
-                             for point in root.iter(f'{{{DGM}}}pt')]
-                    edges = [{key: edge.get(key) for key in ('srcId', 'destId', 'type', 'srcOrd', 'destOrd')}
-                             for edge in root.iter(f'{{{DGM}}}cxn')]
-                    if nodes or edges:
+                    if any(skip in name for skip in ('layout', 'colors', 'quickStyle')):
+                        continue
+                    raw_nodes = [{'id': point.get('modelId'), 'type': point.get('type'), 'text': _labels(point)}
+                                 for point in root.iter(f'{{{DGM}}}pt')]
+                    meaningful_nodes = [
+                        p for p in raw_nodes
+                        if p.get('text') or p.get('id') in {'root', 'branch'}
+                    ]
+                    meaningful_ids = {p['id'] for p in meaningful_nodes if p.get('id')}
+                    raw_edges = [{key: edge.get(key) for key in ('srcId', 'destId', 'type', 'srcOrd', 'destOrd')}
+                                 for edge in root.iter(f'{{{DGM}}}cxn')]
+                    meaningful_edges = [
+                        e for e in raw_edges
+                        if (e.get('srcId') in meaningful_ids and e.get('destId') in meaningful_ids)
+                        or (e.get('srcId') in {'root', 'branch'} and e.get('destId') in {'root', 'branch'})
+                    ]
+                    if meaningful_nodes:
                         result['text'].append('SmartArt / карта знань (' + name + '), вузли та зв’язки: ' +
-                                              json.dumps({'nodes': nodes, 'connections': edges}, ensure_ascii=False))
+                                              json.dumps({'nodes': meaningful_nodes, 'connections': meaningful_edges}, ensure_ascii=False))
                     elif _labels(root):
                         result['text'].append(f'Підписи схеми ({name}): {_labels(root)}')
                 elif name != 'word/document.xml':

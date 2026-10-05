@@ -261,14 +261,18 @@ def _raw_call_ai_api(prompt_text, system_prompt="", inline_media=None, provider=
     cleaned_groq_model = clean_model_name(model_name, provider)
     groq_limit = _groq_limits.get(cleaned_groq_model)
     if provider == 'groq' and groq_limit:
-        estimated_text_tokens = int(len(prompt_text + (system_prompt or '')) / 2.0)
+        import re as _re
+        full_text = prompt_text + (system_prompt or '')
+        cyrillic_chars = len(_re.findall(r'[\u0400-\u04FF]', full_text))
+        other_chars = len(full_text) - cyrillic_chars
+        estimated_text_tokens = int(cyrillic_chars / 2.2 + other_chars / 3.5)
         estimated_media_tokens = len(inline_media or []) * 1000
         total_estimated = estimated_text_tokens + estimated_media_tokens
         if total_estimated > groq_limit:
             msg = (f"Запит завеликий для безкоштовного тарифу Groq {cleaned_groq_model} "
                    f"(розрахунково {total_estimated} токенів при ліміті {groq_limit} токенів на хвилину). "
                    f"Перемикаюсь на наступну модель.")
-            return 413, {'error': {'message': msg}, '_schoolnet_local_preflight': True}, msg, None
+            return 413, '', msg, {'error': {'message': msg}, '_schoolnet_local_preflight': True}
 
     url, headers, model = get_provider_endpoint(provider, model_name=model_name, api_key=api_key, custom_url=custom_url)
 
@@ -6517,12 +6521,12 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                         error_type=f"HTTP {status_code}" if status_code else "API Error",
                         error_message=fail_reason,
                         prompt_preview=prompt_content[:1500],
-                        raw_response=(raw_text or err_msg or '')[:2000],
+                        raw_response=str(raw_text or err_msg or '')[:2000],
                         failover_triggered=(fallback_happened or (len(attempts_configs) > 1 and cfg_idx < len(attempts_configs) - 1))
                     )
                     break  # Переходимо до наступної моделі / резервного API
 
-                raw_text = raw_text.strip()
+                raw_text = str(raw_text or '').strip()
                 result_json = extract_json_from_text(raw_text)
 
                 model_name = f"{c_model} ({c_provider.title()})" if c_provider != 'gemini' else c_model
@@ -6548,7 +6552,7 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                         error_type='JSON Parsing Error',
                         error_message='ШІ повернув некоректну або неповно структуровану відповідь (не вдалося розпарсити JSON)',
                         prompt_preview=prompt_content[:1500],
-                        raw_response=raw_text[:2000],
+                        raw_response=str(raw_text or '')[:2000],
                         failover_triggered=fallback_happened
                     )
 

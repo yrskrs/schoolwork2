@@ -526,7 +526,7 @@ def _pdf_signals(path):
 
 def file_provenance(path):
     from .ai_context import evidence_cache, file_cache_key
-    key = file_cache_key(path, purpose='provenance', options='4.1.13')
+    key = file_cache_key(path, purpose='provenance', options='4.1.14')
     cached = evidence_cache().get(key)
     if cached is not None:
         return cached

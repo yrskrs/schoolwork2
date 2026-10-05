@@ -207,24 +207,118 @@ def assignment_fingerprint(assignment):
     return hashlib.sha256(json.dumps(value, ensure_ascii=False, default=str).encode()).hexdigest()
 
 
+def compact_reference_material(text, filename=''):
+    """
+    Keep reference and lecture material compact and focused for AI assessment:
+    - Presentations (>4 slides): produce clean slide outline + full content only for
+      slides containing practical tasks, homework, exercises, questions or activities.
+    - Long documents (>3500 chars): strip image asset path noise and prioritize
+      sections with task/criteria keywords rather than endless theoretical lecture text.
+    """
+    if not text:
+        return text
+    # Strip raw embedded image filenames and visual formatting noise from text
+    cleaned = re.sub(r'(?m)^\s*(?:вбудоване зображення.*|Оригінальне вбудоване зображення.*|\[Візуальне оформлення.*\])\s*$\n?', '', text).strip()
+
+    # Check if presentation with multiple slides
+    slides = re.split(r'(?=📽️\s*Слайд\s*\d+)', cleaned)
+    if len(slides) > 4:
+        header = slides[0].strip()
+        outline = []
+        task_slides = []
+        task_kw = re.compile(r'(?i)(?:^|\b)(завдання|вправа|домашн|питання|практичн|робота|працюємо|виконати|інструкці|ребус|квест|увага)(?:\b|$)')
+        for slide in slides[1:]:
+            slide_str = slide.strip()
+            if not slide_str:
+                continue
+            lines = [ln.strip() for ln in slide_str.split('\n') if ln.strip()]
+            first_line = lines[0] if lines else ''
+            outline.append(first_line)
+            content = '\n'.join(lines[1:])
+            # If the slide itself or its content contains practical task keywords, include it
+            if task_kw.search(first_line) or (content and task_kw.search(content[:300])):
+                task_slides.append(slide_str)
+        res = []
+        if header:
+            res.append(header)
+        res.append('📋 ОГЛЯД СЛАЙДІВ ПРЕЗЕНТАЦІЇ:\n' + '\n'.join(f'• {line}' for line in outline))
+        if task_slides:
+            res.append('🎯 СЛАЙДИ З ЗАВДАННЯМИ / ПРАКТИЧНОЮ ЧАСТИНОЮ:\n' + '\n\n'.join(task_slides))
+        else:
+            res.append('ℹ️ (Теоретичні слайди презентації опрацьовано; окремих слайдів із завданнями не виявлено)')
+        return '\n\n'.join(res)
+
+    # If other long reference text (> 3500 chars)
+    if len(cleaned) > 3500:
+        paragraphs = cleaned.split('\n\n')
+        kept = []
+        cur_len = 0
+        task_kw = re.compile(r'(?i)(завдання|вправа|домашн|критері|вимог|оцінюван|робота|інструкці|мета|хід роботи)')
+        for p in paragraphs:
+            p_strip = p.strip()
+            if not p_strip:
+                continue
+            is_task = bool(task_kw.search(p_strip))
+            if cur_len < 1500 or is_task:
+                kept.append(p_strip)
+                cur_len += len(p_strip)
+            if cur_len > 3500:
+                break
+        if len(kept) < len(paragraphs):
+            kept.append('[...довідковий теоретичний матеріал скорочено для ШІ...]')
+        return '\n\n'.join(kept)
+    return cleaned
+
+
 def teacher_materials(assignment, force_refresh_links=False):
     primary, reference, media, coverage = [], [], [], []
-    for file in assignment.files.all():
+    files = list(assignment.files.all()) if assignment and hasattr(assignment, 'files') else []
+
+    # Detect primary task file if teacher has not explicitly set is_task_source_for_ai
+    has_explicit_primary = any(f.is_task_source_for_ai for f in files)
+    auto_primary_id = None
+    if not has_explicit_primary and len(files) > 1:
+        best_score = 0
+        for f in files:
+            name_lower = (f.original_name or '').lower()
+            ext = f.get_extension()
+            score = 0
+            if any(kw in name_lower for kw in ('завдання', 'практичн', 'вправа', 'інструкц', 'task', 'work')):
+                score += 10
+            if ext in ('.docx', '.pdf', '.odt', '.rtf', '.txt'):
+                score += 3
+            elif ext in ('.pptx', '.ppt', '.odp'):
+                score -= 3
+            if score > best_score:
+                best_score = score
+                auto_primary_id = f.pk
+
+    for file in files:
         name = file.original_name or os.path.basename(file.file.name)
         if not file.file or not os.path.exists(file.file.path):
             coverage.append({'file': name, 'limitations': ['Файл недоступний на сервері.']})
             continue
+        is_primary = bool(file.is_task_source_for_ai or (file.pk == auto_primary_id))
         evidence = extract_file_evidence(file.file.path, file.get_extension())
         coverage.append({'file': name, 'limitations': evidence['limitations']})
-        destination = primary if file.is_task_source_for_ai else reference
-        destination.append(f'Матеріал вчителя «{name}» ({file.get_extension()}):\n{evidence["text"]}')
+
+        raw_text = evidence['text']
+        if is_primary:
+            content_text = raw_text
+            destination = primary
+        else:
+            content_text = compact_reference_material(raw_text, name)
+            destination = reference
+
+        destination.append(f'Матеріал вчителя «{name}» ({file.get_extension()}):\n{content_text}')
         if evidence['limitations']:
             destination.append('МЕЖІ ПРОЧИТАНОГО: ' + ' '.join(evidence['limitations']))
         for item in evidence['media']:
-            media.append(dict(item, source=f'Матеріал вчителя: {name} · {item.get("source", "візуальні сторінки")}', is_primary_task=bool(file.is_task_source_for_ai)))
-    links = [(assignment.link_url, assignment.link_label), (assignment.youtube_url, 'Відео уроку')]
-    links.extend(assignment.additional_links.values_list('url', 'label'))
-    links.extend(assignment.youtube_links.values_list('url', 'title'))
+            media.append(dict(item, source=f'Матеріал вчителя: {name} · {item.get("source", "візуальні сторінки")}', is_primary_task=is_primary))
+    links = [(assignment.link_url, assignment.link_label), (assignment.youtube_url, 'Відео уроку')] if assignment else []
+    if assignment:
+        links.extend(assignment.additional_links.values_list('url', 'label'))
+        links.extend(assignment.youtube_links.values_list('url', 'title'))
     seen = set()
     from .gemini_service import fetch_url_content
     for url, label in links:
@@ -308,9 +402,14 @@ def complete_result_groups(rows, active_grs):
             indexed.setdefault(key(row.get('code')), row)
     output = []
     for definition in active_grs:
-        code = definition.get('code', '')
+        if isinstance(definition, dict):
+            code = definition.get('code', '')
+            name = definition.get('name') or code
+        else:
+            code = str(definition)
+            name = str(definition)
         row = dict(indexed.get(key(code)) or {})
-        row.update(code=code, name=definition.get('name') or row.get('name') or code)
+        row.update(code=code, name=row.get('name') or name)
         try:
             grade = float(row.get('grade'))
             if not math.isfinite(grade) or row.get('status') == 'unverifiable':
@@ -392,13 +491,60 @@ def build_assessment_request(submission, preset, active_grs, scope, text_parts, 
         ai_settings = AISettings.objects.first()
     tolerance_percent = getattr(ai_settings, 'ai_detector_tolerance_percent', 25) or 25
     system = custom_prompt or (preset.system_prompt if preset else '')
-    if not system or system.strip() in {p.strip() for p in (
-            DEFAULT_NUS_SYSTEM_PROMPT, DEFAULT_NUS_GR_SYSTEM_PROMPT, DEFAULT_TRADITIONAL_SYSTEM_PROMPT)}:
+    is_boilerplate = (
+        not system
+        or (preset and getattr(preset, 'is_system', False))
+        or system.strip().startswith('Ти — висококваліфікований шкільний педагог-експерт')
+        or system.strip() in {p.strip() for p in (
+            DEFAULT_NUS_SYSTEM_PROMPT, DEFAULT_NUS_GR_SYSTEM_PROMPT, DEFAULT_TRADITIONAL_SYSTEM_PROMPT)}
+    )
+    if is_boilerplate:
         system = 'Ти педагогічний асистент. Оцінка ШІ попередня; остаточне рішення приймає вчитель.'
     else:
         system = re.sub(r'(?i)ФОРМАТ ВІДПОВІДІ[\s\S]*?(?=(?:ТОЧНЕ РОЗУМІННЯ|КРИТЕРІЇ|ПРІОРИТЕТ|ПРАВИЛА ДОКАЗОВОГО|\Z))', '', system).strip()
     system += '\n' + ASSESSMENT_RULES
-    active_codes = [gr['code'] for gr in active_grs]
+    active_codes = []
+    normalized_definitions = []
+    preset_gr_map = {}
+    if preset and hasattr(preset, 'get_gr_list'):
+        try:
+            for item in preset.get_gr_list():
+                if isinstance(item, dict) and item.get('code'):
+                    preset_gr_map[item['code'].casefold()] = item
+        except Exception:
+            pass
+
+    for gr in (active_grs or []):
+        if isinstance(gr, dict):
+            code = gr.get('code') or ''
+            name = gr.get('name') or preset_gr_map.get(code.casefold(), {}).get('name') or code
+        else:
+            code = str(gr)
+            name = preset_gr_map.get(code.casefold(), {}).get('name') or code
+        if code:
+            active_codes.append(code)
+            normalized_definitions.append({'code': code, 'name': name})
+
+    def _compact_task_label(t):
+        if isinstance(t, dict):
+            desc = t.get('description') or ''
+            return (desc.split('.')[0] if '.' in desc else desc[:60]).strip()
+        return str(t).split('.')[0][:60].strip()
+
+    preliminary_scope = {}
+    for key in ('scope_source', 'assigned_task_count', 'assigned_tasks', 'ignored_found_tasks',
+                'task_questions', 'questions_expected', 'teacher_requirements',
+                'mandatory_requirements', 'teacher_criteria', 'ambiguities'):
+        if key in scope:
+            val = scope[key]
+            if key == 'ignored_found_tasks' and isinstance(val, list):
+                val = [_compact_task_label(t) for t in val]
+            elif key == 'assigned_tasks' and isinstance(val, list):
+                val = [{'task_num': t.get('task_num'), 'description': (t.get('description') or '')[:140]} if isinstance(t, dict) else str(t)[:140] for t in val]
+            elif key == 'task_questions' and isinstance(val, list):
+                val = [str(q)[:120] for q in val]
+            preliminary_scope[key] = val
+
     context = {
         'class': submission.class_group.name if submission.class_group else '',
         'grade_year': submission.class_group.grade if submission.class_group else None,
@@ -407,7 +553,7 @@ def build_assessment_request(submission, preset, active_grs, scope, text_parts, 
         'selected_preset': preset.name if preset else 'Загальні критерії',
         'evaluation_type': preset.evaluation_type if preset else 'nus',
         'active_result_groups': active_codes,
-        'result_group_definitions': active_grs,
+        'result_group_definitions': normalized_definitions,
         'preset_description': preset.description if preset else '',
         'is_group_work': submission.is_collective_work() or submission.is_group_work,
         'plagiarism_ignored': bool(submission.ignore_plagiarism),
@@ -415,12 +561,7 @@ def build_assessment_request(submission, preset, active_grs, scope, text_parts, 
         'ai_detector_tolerance_percent': tolerance_percent,
         'submission_provenance': submission_provenance(submission),
         'source_coverage': coverage,
-        # The resolver stores several copies of its interpretation for legacy UI.
-        # Keep all extracted requirements, but send only one copy of each fact.
-        'preliminary_task_scope': {key: scope[key] for key in (
-            'scope_source', 'assigned_task_count', 'assigned_tasks', 'ignored_found_tasks',
-            'task_questions', 'questions_expected', 'teacher_requirements',
-            'mandatory_requirements', 'teacher_criteria', 'ambiguities') if key in scope},
+        'preliminary_task_scope': preliminary_scope,
     }
     cached = assignment.get_ai_task_understanding_data()
     if cached and cached.get('analysis_mode') == 'ai' and cached.get('_source_fingerprint') == assignment_fingerprint(assignment):
@@ -471,7 +612,10 @@ def build_assessment_request(submission, preset, active_grs, scope, text_parts, 
         '\n'.join(ai_check_lines),
     ]
     if preset and preset.extracted_criteria_text:
-        lines.append('ДОКУМЕНТ ОБРАНИХ КРИТЕРІЇВ:\n' + preset.extracted_criteria_text)
+        # For built-in system presets, active result group definitions are already in JSON context.
+        # Only attach document text if custom or under 1500 chars to prevent prompt bloat.
+        if not getattr(preset, 'is_system', False) or len(preset.extracted_criteria_text) < 1500:
+            lines.append('ДОКУМЕНТ ОБРАНИХ КРИТЕРІЇВ:\n' + preset.extracted_criteria_text)
     if context['plagiarism_ignored']:
         lines.append('Вчитель виключив зауваження про збіг: не застосовуй штраф за однаковий файл.')
     if context['is_group_work']:
