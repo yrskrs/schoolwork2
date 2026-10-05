@@ -7,6 +7,7 @@
         const title = document.getElementById('assign-modal-title');
         const picker = document.getElementById('assign-modal-picker');
         const modes = document.getElementById('assign-modal-modes');
+        const slideToolbar = document.getElementById('assign-modal-slides');
         const body = document.getElementById('assign-modal-body');
         const content = document.getElementById('assign-modal-content');
         const spinner = document.getElementById('assign-modal-spinner');
@@ -26,12 +27,14 @@
             button.addEventListener('click', () => open(file.id, button));
             picker.add(new Option(file.name, file.id));
         });
+        picker.closest('label').hidden = files.size < 2;
         function stop() {
             clearTimeout(timer);
             if (request) request.abort();
             generation++;
         }
         function notice(message, retry) {
+            slideToolbar.hidden = true; slides = [];
             const box = document.createElement('div');
             box.className = 'material-preview-notice';
             const paragraph = document.createElement('p');
@@ -50,7 +53,7 @@
         function updateSlide() {
             const image = content.querySelector('.material-slide-image img');
             image.src = slides[slideIndex]; image.alt = 'Слайд ' + (slideIndex + 1);
-            content.querySelector('.material-slide-controls select').value = String(slideIndex);
+            slideToolbar.querySelector('select').value = String(slideIndex);
         }
         function moveSlide(delta) { slideIndex = (slideIndex + delta + slides.length) % slides.length; updateSlide(); }
         function renderSlides(data) {
@@ -64,7 +67,9 @@
             [-1, 1].forEach(delta => {
                 const button = document.createElement('button');
                 button.type = 'button'; button.className = 'btn btn-secondary btn-sm';
-                button.textContent = delta < 0 ? '← Попередній' : 'Наступний →';
+                button.textContent = delta < 0 ? '←' : '→';
+                button.setAttribute('aria-label', delta < 0 ? 'Попередній слайд' : 'Наступний слайд');
+                button.title = delta < 0 ? 'Попередній слайд' : 'Наступний слайд';
                 button.addEventListener('click', () => moveSlide(delta));
                 if (delta > 0) controls.append(selector);
                 controls.append(button);
@@ -72,10 +77,12 @@
             const frame = document.createElement('div'); frame.className = 'material-slide-image';
             const image = document.createElement('img');
             image.addEventListener('error', () => notice('Зображення слайда недоступне. Спробуйте текстовий вигляд або відкрийте матеріал у новій вкладці.', true));
-            frame.append(image); player.append(controls, frame); content.replaceChildren(player); updateSlide();
+            frame.append(image); player.append(frame); content.replaceChildren(player);
+            slideToolbar.replaceChildren(controls); slideToolbar.hidden = false; updateSlide();
         }
         function render(data) {
             slides = [];
+            slideToolbar.replaceChildren(); slideToolbar.hidden = true;
             if (data.type === 'slides' && Array.isArray(data.slides) && data.slides.length) {
                 renderSlides(data);
             } else if (data.type === 'html') {
@@ -118,6 +125,7 @@
         }
         async function load(nextMode, attempt = 0) {
             stop(); const owner = generation;
+            slideToolbar.hidden = true; slides = [];
             mode = nextMode; body.scrollTop = 0;
             modes.querySelectorAll('button').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.materialMode === mode)));
             const key = current.id + ':' + mode;
@@ -149,7 +157,7 @@
         function choose(id) {
             current = files.get(String(id));
             if (!current) return;
-            dialog.dataset.materialId = current.id; title.textContent = current.name; picker.value = current.id;
+            dialog.dataset.materialId = current.id; title.textContent = current.name; title.title = current.name; picker.value = current.id;
             document.getElementById('assign-modal-newtab').href = current.url;
             document.getElementById('assign-modal-download').href = current.download;
             modes.hidden = !readingExtensions.has(current.extension.toLowerCase());
@@ -168,7 +176,7 @@
         modes.querySelectorAll('button').forEach(button => button.addEventListener('click', () => load(button.dataset.materialMode)));
         closeButton.addEventListener('click', () => dialog.close());
         dialog.addEventListener('close', () => {
-            stop(); content.replaceChildren(); slides = []; delete dialog.dataset.materialId;
+            stop(); content.replaceChildren(); slideToolbar.replaceChildren(); slideToolbar.hidden = true; slides = []; delete dialog.dataset.materialId;
             body.setAttribute('aria-busy','false'); document.documentElement.classList.remove('material-preview-open');
             if (opener && opener.isConnected) opener.focus({preventScroll:true});
         });

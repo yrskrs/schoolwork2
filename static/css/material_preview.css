@@ -12,6 +12,8 @@ html.material-preview-open { overflow:hidden; }
 .material-dialog-picker { display:flex; align-items:center; gap:8px; flex:1; min-width:180px; font-size:12px; font-weight:700; }
 .material-dialog-picker select { min-width:0; width:100%; flex:1; font-size:13px; padding:7px 9px; }
 .material-dialog-modes { display:flex; gap:6px; flex-wrap:wrap; }
+.material-mode-short { display:none; }
+.material-slide-toolbar { margin-left:auto; }
 .material-dialog-modes [aria-pressed="true"] { background:var(--color-primary-light); border-color:var(--color-primary); color:var(--color-primary-text); }
 .material-dialog-body { flex:1; min-height:0; overflow:auto; overscroll-behavior:contain; padding:16px; font-size:15px; line-height:1.65; overflow-wrap:anywhere; }
 .material-dialog-body :is(img,video,iframe,table,pre) { max-width:100%; }
@@ -26,20 +28,38 @@ html.material-preview-open { overflow:hidden; }
 .material-slide-controls { display:flex; justify-content:center; align-items:center; flex-wrap:wrap; gap:8px; }
 .material-slide-controls select { width:auto; max-width:170px; }
 .material-slide-image { display:flex; align-items:center; justify-content:center; min-height:0; flex:1; }
-.material-slide-image img { display:block; width:100%; height:100%; max-height:65dvh; object-fit:contain; }
+.material-slide-image img { display:block; width:100%; height:100%; object-fit:contain; }
 .material-preview-notice { padding:16px; border:1px solid var(--color-border); border-radius:var(--radius-sm); background:var(--color-bg-secondary); }
 .material-preview-notice p { margin:0 0 12px; }
 .material-archive-row { display:flex; justify-content:space-between; gap:12px; padding:8px 0; border-bottom:1px solid var(--color-border); }
 .assignment-detail-files .assignment-file-box { background:var(--color-surface); border:1px solid var(--color-border); border-radius:var(--radius-md); }
+@media(max-width:1280px),(max-height:760px) {
+    .material-dialog-header { padding:5px 8px; gap:8px; }
+    .material-dialog-header > strong { font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .material-dialog .btn { min-height:30px; padding:4px 7px; font-size:11px; }
+    .material-dialog-actions,.material-dialog-modes { gap:4px; flex-wrap:nowrap; }
+    .material-dialog-controls { padding:5px 8px; gap:4px 8px; }
+    .material-dialog-picker { gap:5px; min-width:150px; }
+    .material-dialog-picker select,.material-slide-controls select { padding:4px 6px; font-size:12px; height:30px; margin:0; }
+    .material-slide-controls { gap:4px; flex-wrap:nowrap; }
+    .material-slide-controls select { max-width:130px; }
+    .material-dialog-body { padding:6px; }
+    .material-mode-long { display:none; }
+    .material-mode-short { display:inline; }
+}
 @media(max-width:700px) {
     .material-dialog { width:calc(100vw - 12px); height:calc(100dvh - 12px); max-width:calc(100% - 12px); max-height:calc(100% - 12px); border-radius:10px; }
-    .material-dialog-header { flex-wrap:wrap; gap:8px; padding:10px; }
-    .material-dialog-header > strong { flex-basis:100%; font-size:13px; max-height:3.9em; overflow:auto; }
-    .material-dialog-actions { width:100%; }
+    .material-dialog-header { flex-wrap:nowrap; }
+    .material-dialog-actions { flex-shrink:0; }
+    .material-action-label { display:none; }
     #assign-modal-close { margin-left:auto; }
-    .material-dialog .btn { padding:6px 8px; font-size:12px; }
-    .material-dialog-controls { padding:8px 10px; gap:8px; }
+    .material-dialog .btn { min-height:34px; padding:5px 6px; }
     .material-dialog-picker { flex-basis:100%; }
-    .material-dialog-modes { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); width:100%; }
-    .material-dialog-body { padding:10px; }
+    .material-dialog-picker > span { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }
+    .material-dialog-modes { margin-right:auto; }
+    .material-slide-toolbar { margin-left:0; }
+}
+@media(max-width:380px) {
+    .material-dialog-modes .btn { font-size:10px; padding:4px; }
+    .material-slide-controls select { max-width:105px; font-size:11px; }
 }

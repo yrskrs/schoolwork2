@@ -2,19 +2,20 @@
     <header class="material-dialog-header">
         <strong id="assign-modal-title">Матеріал до завдання</strong>
         <div class="material-dialog-actions">
-            <a id="assign-modal-newtab" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm">↗ Нова вкладка</a>
-            <a id="assign-modal-download" href="#" class="btn btn-secondary btn-sm">⬇️ Завантажити</a>
+            <a id="assign-modal-newtab" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm" aria-label="Відкрити матеріал у новій вкладці" title="Нова вкладка">↗ <span class="material-action-label">Нова вкладка</span></a>
+            <a id="assign-modal-download" href="#" class="btn btn-secondary btn-sm" aria-label="Завантажити матеріал" title="Завантажити">⬇️ <span class="material-action-label">Завантажити</span></a>
             <button type="button" id="assign-modal-close" class="btn btn-secondary btn-sm" aria-label="Закрити перегляд матеріалу" title="Закрити (Escape)">✕</button>
         </div>
     </header>
     <div class="material-dialog-controls">
-        <label class="material-dialog-picker" for="assign-modal-picker">Матеріал
+        <label class="material-dialog-picker" for="assign-modal-picker"><span>Матеріал</span>
             <select id="assign-modal-picker" class="form-input"></select>
         </label>
         <div id="assign-modal-modes" class="material-dialog-modes" role="group" aria-label="Режим читання">
-            <button type="button" class="btn btn-secondary btn-sm" data-material-mode="document" aria-pressed="true">📄 Перегляд документа</button>
-            <button type="button" class="btn btn-secondary btn-sm" data-material-mode="text" aria-pressed="false">📝 Текстовий вигляд</button>
+            <button type="button" class="btn btn-secondary btn-sm" data-material-mode="document" aria-pressed="true" aria-label="Перегляд документа">📄 <span class="material-mode-long">Перегляд документа</span><span class="material-mode-short">Документ</span></button>
+            <button type="button" class="btn btn-secondary btn-sm" data-material-mode="text" aria-pressed="false" aria-label="Текстовий вигляд">📝 <span class="material-mode-long">Текстовий вигляд</span><span class="material-mode-short">Текст</span></button>
         </div>
+        <div id="assign-modal-slides" class="material-slide-toolbar" hidden></div>
     </div>
     <div id="assign-modal-body" class="material-dialog-body" aria-busy="false">
         <p id="assign-modal-spinner" role="status" hidden>⏳ Завантаження матеріалу…</p>

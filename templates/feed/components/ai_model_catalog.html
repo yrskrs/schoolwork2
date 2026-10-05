@@ -10,6 +10,7 @@
         <button type="submit" class="btn btn-primary">➕ Додати модель</button>
     </form>
     <p class="form-hint">Модель використовує ключ вибраного підключення. Порядок спільний для всіх постачальників; вимкнені моделі та підключення без ключа пропускаються.</p>
+    <p class="form-hint">Для документів і презентацій обирайте модель з нативною підтримкою PDF та зображень. Текстові моделі, зокрема GPT-OSS у Groq, підходять для текстових робіт і коду. Якщо повний матеріал перевищує допустимий розмір API, перевірка переходить далі за ввімкненою чергою, зберігаючи всі сторінки й об’єкти.</p>
     <details class="ai-settings-disclosure" id="ai-model-catalog"><summary>📚 Каталог моделей та орієнтовні квоти</summary><div class="ai-settings-disclosure-body">
         <p class="form-hint">Показано каталог постачальника вибраного підключення. Дані перевірено {{ catalog_checked_at }}; квоти не встановлюють обмежень на роботи учнів.</p>
         {% for group in provider_catalog %}<section data-catalog-provider="{{ group.provider }}" {% if group.provider != ai_settings.ai_provider %}hidden{% endif %}>

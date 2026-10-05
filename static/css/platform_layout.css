@@ -118,6 +118,35 @@ body .btn-primary:hover { background: var(--action-primary-hover) !important; bo
     .changelog-version-tag { display: none; }
 }
 /* Text wraps in UI cards; narrow tables expose every cell as a labelled record. */
+@media(max-width:1280px),(max-height:760px) {
+    .page-wrapper .page-hero { padding:10px 12px; margin-bottom:10px; gap:6px!important; }
+    .page-wrapper .page-hero h1 { font-size:22px!important; line-height:1.25; }
+    .page-wrapper :is(.form-card-header,.card-header,.form-card-body,.card-body,.sidebar-card,.compact-content-card,.submit-form-card,.login-card) { padding:12px!important; }
+    .page-wrapper :is(.card-footer,.sidebar-header) { padding:8px 12px; }
+    .page-wrapper :is(.form-card,.card,.sidebar-card,.assignment-detail-instructions,.assignment-detail-materials,.submission-context) { margin-bottom:10px; }
+    .page-wrapper :is(.form-row,.stat-grid,.tabs,.assignments-feed) { gap:8px; }
+    .page-wrapper .btn-sm { min-height:30px; padding:4px 8px; }
+    .page-wrapper :is(.assignment-detail-overview,.assignment-detail-help-card,.assignment-detail-completion,.submission-context,.submission-form-card,.assignment-editor-actions,.submission-send-bar,.assignment-detail-send-bar) { padding:10px 12px!important; gap:8px; }
+    .page-wrapper :is(.assignment-detail-overview h1,.submission-context h1) { font-size:21px; margin-bottom:6px; }
+    .page-wrapper :is(.assignment-detail-status,.assignment-detail-jumps) { margin-top:8px; }
+    .page-wrapper .assignment-description-header { padding:8px 12px!important; }
+    .page-wrapper .assignment-full-description { padding:12px!important; font-size:16px; line-height:1.6; }
+    .page-wrapper .assignment-detail-file-header { padding:8px 10px!important; gap:8px!important; }
+    .page-wrapper :is(.teacher-tools-card,.home-filter-disclosure,.submission-side-card,.assignment-editor-disclosure,.ai-settings-disclosure) > summary { padding:8px 12px; }
+    .page-wrapper :is(.ai-settings-intro,.ai-settings-tabs) { margin-bottom:10px; gap:6px; }
+    .page-wrapper .ai-settings-tab { padding:6px 9px; }
+    .page-wrapper .ai-settings-tabs { position:static; }
+    .page-wrapper .ai-request-metadata { padding:8px 10px; }
+    .page-wrapper .ai-request-metadata :is(h3,p) { margin-bottom:4px; }
+    .page-wrapper .ai-request-metadata dl { gap:4px 8px; }
+    .page-wrapper .fv-workspace-toolbar .btn { min-height:30px; padding:4px 7px; }
+    #teacher-schedule-wrapper { padding:12px!important; }
+}
+@media(max-width:600px) {
+    .page-wrapper .btn-sm,.page-wrapper .fv-workspace-toolbar .btn { min-height:36px; }
+    .page-wrapper .page-hero h1 { font-size:20px!important; }
+    .page-wrapper .form-card-body { padding:10px!important; }
+}
 .page-wrapper :is(.form-card-title, .sidebar-header, .page-hero-sub) { overflow-wrap: anywhere; }
 .page-wrapper :is(.form-card-header, .card-header) { flex-wrap: wrap; }
 .page-wrapper :is(.form-card-header, .card-header) > * { max-width: 100%; }

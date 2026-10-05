@@ -12,7 +12,7 @@ from pathlib import Path
 
 from django.core.cache import caches
 
-REVISION = 'assessment-2026-10-05-objects-gr'
+REVISION = 'assessment-2026-10-05-lossless-payload'
 OFFICE = {'.docx', '.doc', '.odt', '.rtf', '.pptx', '.ppt', '.odp', '.pptm', '.ppsx', '.pps', '.potx', '.xlsx', '.xls', '.ods'}
 IMAGES = {'.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif', '.tiff', '.tif'}
 
@@ -244,8 +244,8 @@ def teacher_materials(assignment, force_refresh_links=False):
 
 
 def media_for_provider(media, provider):
-    """Gemini accepts PDF; other chat endpoints receive actual page images, never fake image/PDF URLs."""
-    if provider == 'gemini':
+    """Native PDF endpoints retain files; other endpoints receive every page image."""
+    if provider in ('gemini','openrouter'):
         return media
     converted = []
     for item in media or []:
@@ -448,64 +448,17 @@ def build_assessment_request(submission, preset, active_grs, scope, text_parts, 
         'tasks_completed_count': 0, 'tasks_total_count': 1,
         'gr_results': [{'code': 'тільки обрана ГР', 'name': '', 'grade': '1–12 або null якщо неперевірено', 'level': '', 'comment': ''}] if active_grs else [],
     }
-    ai_policy_str = "🟢 ДОЗВОЛЕНО ВЧИТЕЛЕМ" if assignment.allow_ai_usage else "🔴 ЗАБОРОНЕНО ВЧИТЕЛЕМ (САМОСТІЙНА РОБОТА)"
+    # Policy, threshold and schema already appear once in the context/system.
+    # Keep only format-specific observations not supplied by those rules.
     ai_check_lines = [
-        "═══════════════════════════════════════════════════════════════════",
-        "🛡️ ПЕРЕВІРКА НА САМОСТІЙНІСТЬ ТА ОЗНАКИ ВИКОРИСТАННЯ ШІ (AI DETECTION):",
-        f"ПОЛІТИКА ВЧИТЕЛЯ: {ai_policy_str}.",
-        f"ДОПУСТИМИЙ ПОРІГ ВИКОРИСТАННЯ ШІ: {tolerance_percent}%.",
-        "",
-        "ОБОВ'ЯЗКОВО ТА ПРИСКІПЛИВО ПРОАНАЛІЗУЙ ВСІ ФОРМАТИ ЗДАНОГО МАТЕРІАЛУ УЧНЯ НА ОЗНАКИ ГЕНЕРАЦІЇ ШІ:",
-        "",
-        "1. ПРЕЗЕНТАЦІЇ ТА СЛАЙДИ (.pptx, .ppt, .odp):",
-        "   - Уважно перевір зміст КОЖНОГО слайду презентації (позначеного як «📽️ Слайд X:...»):",
-        "     * Тексти на слайдах презентацій так само підлягають перевірці на використання ШІ, як і звичайні текстові документи!",
-        "     * Ознаки згенерованих слайдів: бездоганно-академічний або канцелярський стиль, неприродний для учнівського віку; шаблонні підзаголовки, штучні вступні конструкції («У сучасному світі...», «Варто зазначити...», «Розглянемо ключові аспекти...»);",
-        "     * Шаблони інструментів автогенерації слайдів (Gamma, Tome, Canva AI, Beautiful.ai, SlidesAI, ChatGPT);",
-        "     * Пряме копіювання з чат-бота із залишеними службовими маркерами («Слайд 1:», «Ось текст для вашої презентації», описи зображень);",
-        "     * ШІ-ілюстрації на слайдах (синтетичний арт Midjourney / DALL-E тощо).",
-        "   - Якщо на слайдах виявлено згенерований текст або графіку ШІ: встанови 'ai_generated_percent' (реальний відсоток ШІ на слайдах), 'ai_generated_detected': true (якщо > порогу), в 'ai_generated_details' та 'ai_authorship_analysis.evidence' чітко вкажи номери слайдів (наприклад, «Слайди 2-4: згенерований текст чат-бота...»).",
-        "",
-        "2. ЗОБРАЖЕННЯ, ФОТО ТА СХЕМИ (.png, .jpg, .webp, .gif):",
-        "   - Проаналізуй прикріплені та вбудовані зображення на ознаки генерації ШІ-дифузійними моделями (Midjourney, DALL-E, Stable Diffusion, Bing Image Creator, Copilot, Adobe Firefly, Flux, Recraft):",
-        "     * Штучна пластикова текстура, аномалії на пальцях/руках/обличчях, деформовані кінцівки, неприродна симетрія чи неприродне освітлення;",
-        "     * Нечитабельні псевдотексти всередині малюнків, розмиті написи, фірмові водяні знаки або характерний стиль цифрового ШІ-арту;",
-        "     * Скріншоти: перевір, чи на зображенні немає тексту, згенерованого ШІ, або вікна діалогу з чат-ботом.",
-        "",
-        "3. ТЕКСТОВІ ДОКУМЕНТИ (.docx, .doc, .odt, .rtf, .pdf, .txt, коментар учня):",
-        "   - Ознаки генерації текстовими моделями (ChatGPT, Claude, Gemini тощо): характерна штучна структура, занадто правильні списки, вступні фрази, відсутність живого учнівського мовлення, типовий вивід чат-бота.",
-        "",
-        "4. ЕЛЕКТРОННІ ТАБЛИЦІ (.xlsx, .ods), КОД (.py, .js, .cpp) ТА ПРОЄКТИ (Scratch .sb3, Access .accdb):",
-        "   - Перевір текстові описи, формули, англомовні або надскладні академічні коментарі в коді та блоках Scratch на наявність шаблонних генерацій.",
-        "",
-        "5. ПРАВИЛА ОЦІНЮВАННЯ ТА ВПЛИВ НА ОЦІНКУ:",
+        "ОЗНАКИ ШІ ЗА ФОРМАТАМИ: перевір кожен слайд, нотатки та службові маркери "
+        "чат-ботів/генераторів презентацій. У фото й схемах перевір синтетичні текстури, "
+        "деформовані деталі, псевдотекст, водяні знаки та видимі діалоги чат-ботів. "
+        "У документах, формулах, коді, Scratch і Access перевір конкретні шаблони "
+        "генерації та надскладні академічні коментарі. Наводь файл і місце ознаки; "
+        "стиль сам по собі не доводить авторства. Правила впливу, дозвіл учителя "
+        "й поріг задані вище; відповідь має дотримуватися наведеної JSON-схеми."
     ]
-    if not assignment.allow_ai_usage:
-        ai_check_lines.extend([
-            "   🔴 ВЧИТЕЛЬ ВИМАГАЄ САМОСТІЙНОГО ВИКОНАННЯ (ШІ СУВОРО ЗАБОРОНЕНО).",
-            f"   - Якщо частка згенерованого матеріалу ПЕРЕВИЩУЄ поріг {tolerance_percent}%:",
-            "     * Встанови 'ai_generated_detected': true, 'ai_generated_confidence': 'high' або 'medium'.",
-            f"     * Заповни 'ai_generated_percent': ціле число від 0 до 100 (реальний відсоток ШІ, наприклад 70-95%).",
-            "     * Це порушення академічної доброчесності та вимоги самостійності!",
-            "     * КАТЕГОРИЧНО ЗАБОРОНЕНО виставляти високі бали (10-12 балів)! Признач 'suggested_grade': 'Доопрацювати' (або 1-3 бали).",
-            "     * У полях 'weaknesses', 'feedback_comment' та 'summary' чітко попередь учня: робота виконана за допомогою ШІ, що заборонено; завдання потрібно виконати самостійно.",
-            f"   - Якщо частка підозрілого тексту становить {tolerance_percent}% або менше: 'ai_generated_detected': false, робота вважається самостійною."
-        ])
-    else:
-        ai_check_lines.extend([
-            "   🟢 ВЧИТЕЛЬ ДОЗВОЛИВ ВИКОРИСТАННЯ ШІ.",
-            "   - Визнач 'ai_generated_percent' (0-100%) та заповни 'ai_generated_details'.",
-            "   - НЕ знижуй оцінку учневі за факт використання ШІ; оцінюй результат виконання завдання."
-        ])
-    ai_check_lines.extend([
-        "",
-        "ОБОВ'ЯЗКОВО поверни в JSON:",
-        "- 'ai_generated_percent': ціле число від 0 до 100",
-        f"- 'ai_generated_detected': true (якщо ШІ > {tolerance_percent}%) або false",
-        "- 'ai_generated_confidence': 'none' | 'low' | 'medium' | 'high'",
-        "- 'ai_generated_details': детальний висновок українською мовою з конкретними виявленими ознаками ШІ та номерами слайдів/файлів або порожньо.",
-        "- 'ai_authorship_analysis': об'єкт з полями 'status' ('signs'/'none'/'unknown') та 'evidence' (масив доказів із 'source', 'location', 'basis', 'observation')."
-    ])
     lines = [
         f'НАЗВА ТА ТЕМА ЗАВДАННЯ: {assignment.title}',
         'УМОВА ТА ВИМОГИ ВЧИТЕЛЯ (ЗАВДАННЯ ДО ВИКОНАННЯ):\n' + assignment.description,

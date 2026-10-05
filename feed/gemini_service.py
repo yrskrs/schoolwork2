@@ -84,10 +84,20 @@ def _http_post_json(url, payload_dict, headers=None, timeout=30):
     або fallback на вбудований urllib з підтримкою кастомних заголовків.
     Повертає (status_code: int, response_data: dict | None, response_text: str).
     """
-    json_bytes = json.dumps(payload_dict).encode('utf-8')
+    from .ai_payload import encode_payload
+    from .changelog import SITE_VERSION
+    json_bytes = encode_payload(payload_dict)
+    from .ai_payload import OPENROUTER_MAX_REQUEST_BYTES
+    if urlparse(url).hostname == 'openrouter.ai' and len(json_bytes) > OPENROUTER_MAX_REQUEST_BYTES:
+        message = (f'Повний запит після стиснення має {len(json_bytes)/1_000_000:.2f} МБ; '
+                   f'безпечна межа OpenRouter — {OPENROUTER_MAX_REQUEST_BYTES/1_000_000:.2f} МБ. '
+                   'Сторінки та об’єкти не вилучено. Використайте наступну модель іншого постачальника '
+                   'у черзі або розділіть матеріал на окремі завдання.')
+        return 413, {'error': {'message': message}, '_schoolnet_local_preflight': True}, message
     req_headers = {
         'Content-Type': 'application/json; charset=utf-8',
-        'Accept': 'application/json'
+        'Accept': 'application/json',
+        'User-Agent': f'SchoolNet/{SITE_VERSION}'
     }
     if headers:
         req_headers.update(headers)
@@ -220,8 +230,10 @@ def log_ai_request_metric(model_name, provider='gemini', action='evaluation', st
 def _raw_call_ai_api(prompt_text, system_prompt="", inline_media=None, provider="gemini", api_key="", model_name="", custom_url="", temperature=0.2, max_output_tokens=3500, timeout=35, json_mode=False, thinking_budget=None):
     provider = (provider or 'gemini').lower().strip()
     from .ai_context import media_for_provider
+    from .ai_payload import optimize_media
     try:
         inline_media = media_for_provider(inline_media or [], provider)
+        inline_media = optimize_media(inline_media, provider)
     except Exception:
         return 0, None, 'Не вдалося прочитати всі візуальні матеріали для цього провайдера. Спробуйте PDF-сумісну модель.', None
     url, headers, model = get_provider_endpoint(provider, model_name=model_name, api_key=api_key, custom_url=custom_url)
@@ -296,7 +308,7 @@ def _raw_call_ai_api(prompt_text, system_prompt="", inline_media=None, provider=
                 return status_code, "", "Порожня відповідь від Gemini", data
             else:
                 err_data = data or {}
-                err_msg = err_data.get('error', {}).get('message', text[:300])
+                err_msg = api_error_message(err_data, text, api_key)
                 return status_code, None, err_msg, data
         except Exception as e:
             return 0, None, str(e), None
@@ -315,12 +327,17 @@ def _raw_call_ai_api(prompt_text, system_prompt="", inline_media=None, provider=
             for item in inline_media:
                 if item.get("source"):
                     user_content.append({"type": "text", "text": item["source"]})
-                user_content.append({
-                    "type": "image_url",
-                    "image_url": {
-                        "url": f"data:{item['mime_type']};base64,{item['data']}"
-                    }
-                })
+                if provider == 'openrouter' and item['mime_type'] == 'application/pdf':
+                    user_content.append({'type':'file','file':{
+                        'filename':f'document-{len(user_content)}.pdf',
+                        'file_data':f"data:application/pdf;base64,{item['data']}"}})
+                else:
+                    user_content.append({
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:{item['mime_type']};base64,{item['data']}"
+                        }
+                    })
 
         # Якщо немає зображень, передаємо простий рядок для максимальної сумісності
         if not inline_media:
@@ -334,6 +351,9 @@ def _raw_call_ai_api(prompt_text, system_prompt="", inline_media=None, provider=
             "temperature": temperature,
             "max_tokens": max_output_tokens,
         }
+        if provider == 'openrouter' and any(item['mime_type'] == 'application/pdf' for item in inline_media):
+            # OCR fallback can silently omit graphics. Require the complete file.
+            payload['plugins'] = [{'id':'file-parser','pdf':{'engine':'native'}}]
 
         # Спроба з response_format, якщо ввімкнено json_mode
         if json_mode:
@@ -359,7 +379,7 @@ def _raw_call_ai_api(prompt_text, system_prompt="", inline_media=None, provider=
                 return status_code, "", "Порожня відповідь від моделі", data
             else:
                 err_data = data or {}
-                err_msg = err_data.get('error', {}).get('message', text[:300])
+                err_msg = api_error_message(err_data, text, api_key)
                 return status_code, None, err_msg, data
         except Exception as e:
             return 0, None, str(e), None
@@ -395,15 +415,16 @@ def call_ai_api(prompt_text, system_prompt="", inline_media=None, provider="gemi
     except Exception:
         resolved_model = model_name
 
-    log_ai_request_metric(
-        model_name=resolved_model or model_name or 'unknown',
-        provider=prov_norm,
-        action=action,
-        status_code=status_code,
-        is_success=(status_code == 200 and reply_text is not None),
-        data=raw_data,
-        latency_ms=latency_ms
-    )
+    if not (isinstance(raw_data, dict) and raw_data.get('_schoolnet_local_preflight')):
+        log_ai_request_metric(
+            model_name=resolved_model or model_name or 'unknown',
+            provider=prov_norm,
+            action=action,
+            status_code=status_code,
+            is_success=(status_code == 200 and reply_text is not None),
+            data=raw_data,
+            latency_ms=latency_ms
+        )
 
     return status_code, reply_text, err_msg, raw_data
 
@@ -437,6 +458,18 @@ def log_ai_error(teacher=None, submission=None, assignment=None, action='evaluat
         )
     except Exception:
         pass
+
+
+def api_error_message(data, text='', api_key=''):
+    """Preserve provider diagnostics, including gateway problem JSON, without secrets."""
+    data = data if isinstance(data, dict) else {}
+    error = data.get('error') or {}
+    message = (error.get('message') or error.get('code')) if isinstance(error, dict) else str(error)
+    message = message or data.get('detail') or data.get('title') or text or 'API не надав пояснення.'
+    message = str(message)
+    if api_key:
+        message = message.replace(api_key, '[ключ приховано]')
+    return re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', ' ', message)).strip()[:700]
 
 
 def test_ai_connection(provider=None, api_key=None, model_name=None, custom_url=None):
@@ -474,10 +507,12 @@ def test_ai_connection(provider=None, api_key=None, model_name=None, custom_url=
 
     if status_code == 200 and reply_text:
         return True, f"Успішно підключено! Відповідь моделі ({model}): {reply_text}", model, prov
-    elif status_code in (401, 403):
-        return False, f"Помилка автентифікації ({status_code}): Недійсний API Key або відсутній доступ до моделі {model}.", model, prov
+    elif status_code == 401:
+        return False, f"API відхилив автентифікацію (401). Перевірте ключ цього підключення. Причина: {api_error_message({}, err_msg, key)}", model, prov
+    elif status_code == 403:
+        return False, f"Доступ заборонено (403). Причина: {api_error_message({}, err_msg, key)}. Перевірте дозволи моделі/проєкту або блокування шлюзом; цей код сам по собі не означає недійсний ключ.", model, prov
     elif status_code == 429:
-        return False, f"Перевищено ліміт запитів (429 Rate Limit) для {model}. Рекомендується використати резервний API.", model, prov
+        return False, f"Перевищено ліміт запитів (429 Rate Limit) для {model}. Зачекайте або оберіть інше підключення в черзі.", model, prov
     elif status_code == 404:
         return False, f"Модель {model} не знайдена в API ({status_code}): {err_msg}", model, prov
     elif status_code == 400:
@@ -6263,7 +6298,8 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
     if selected_preset and selected_preset.document_file and os.path.exists(selected_preset.document_file.path):
         from .ai_context import extract_file_evidence
         rubric_evidence = extract_file_evidence(selected_preset.document_file.path)
-        prompt_content += "\nПОВНИЙ ДОКУМЕНТ ОБРАНИХ КРИТЕРІЇВ:\n" + (rubric_evidence['text'] or '')
+        if (rubric_evidence['text'] or '').strip() != (selected_preset.extracted_criteria_text or '').strip():
+            prompt_content += "\nПОВНИЙ ДОКУМЕНТ ОБРАНИХ КРИТЕРІЇВ:\n" + (rubric_evidence['text'] or '')
         inline_media.extend(dict(item, source='Документ критеріїв учителя') for item in rubric_evidence['media'])
         prompt_content += "\n" + "\n".join(rubric_evidence['limitations'])
 
@@ -6314,8 +6350,10 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                 if status_code != 200 or not raw_text:
                     if status_code == 429:
                         fail_reason = f"Перевищено ліміт запитів для {c_model} (429 Rate Limit)."
-                    elif status_code in (401, 403):
-                        fail_reason = f"Недійсний API Key для {c_provider.title()} ({c_model}) (HTTP {status_code})."
+                    elif status_code == 401:
+                        fail_reason = f"Автентифікацію відхилено для {c_provider.title()} ({c_model}) (401): {api_error_message({}, err_msg, c_key)}"
+                    elif status_code == 403:
+                        fail_reason = f"Доступ заборонено для {c_provider.title()} ({c_model}) (403): {api_error_message({}, err_msg, c_key)}"
                     elif status_code == 503:
                         fail_reason = f"503 High Demand ({err_msg or 'Перевантаження моделі'})"
                     else:
