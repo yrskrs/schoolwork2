@@ -1340,6 +1340,11 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
         ai_set.api_key = 'test-gemini-key'
         ai_set.save()
 
+        from .models import AICriteriaPreset
+        preset = AICriteriaPreset.objects.create(name='Вибір ГР для пакетної перевірки', evaluation_type='nus_gr',
+                    gr_definitions=json.dumps([{'code': 'ГР 1', 'name': 'Інформація'},
+                                                {'code': 'ГР 2', 'name': 'Продукти'}]))
+
         self.client.login(username='teacher1', password='password123')
         sub = Submission.objects.create(
             assignment=self.assignment,
@@ -1372,6 +1377,7 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
         }, "ok")
 
         resp = self.client.post(reverse('api_ai_process_item', kwargs={'submission_id': sub.id}), {
+            'preset_id': preset.pk,
             'selected_gr_codes': json.dumps(['ГР 2'])
         }, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
 
@@ -1389,7 +1395,11 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
         from feed.gemini_service import extract_submission_content
 
         # Створюємо валідний мінімальний docx (zip-архів) із текстом та картинкою у word/media/
-        dummy_png = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15c4\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
+        from io import BytesIO
+        from PIL import Image
+        image_buffer = BytesIO()
+        Image.new('RGB', (8, 8), 'green').save(image_buffer, format='PNG')
+        dummy_png = image_buffer.getvalue()
         dummy_xml = b'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>\xd0\x9f\xd0\xb0\xd1\x80\xd1\x83 \xd1\x81\xd0\xbb\xd1\x96\xd0\xb2 \xd1\x83\xd1\x87\xd0\xbd\xd1\x8f</w:t></w:r></w:p></w:body></w:document>'
 
         with tempfile.NamedTemporaryFile(suffix='.docx', delete=False) as tmp_f:

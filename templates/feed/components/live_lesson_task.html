@@ -1,0 +1,5 @@
+<div style="display:flex;flex-direction:column;gap:3px;">
+    <span style="font-size:11px;color:var(--color-text-secondary);">{{ caption }} · {{ task.lesson_date }}</span>
+    <a href="{{ task.url }}" class="btn btn-secondary btn-sm" style="font-size:12px;font-weight:700;white-space:normal;"
+       title="{% if task.has_task %}Переглянути опубліковане завдання{% else %}Створити завдання для цього уроку{% endif %}">{{ task.label }}</a>
+</div>

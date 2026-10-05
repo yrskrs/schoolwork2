@@ -161,6 +161,15 @@ def _cache_doc_conversion(prefix: str):
 
             res = func(file_path, *args, **kwargs)
             if res and res[0]:
+                if prefix == 'docx' and str(file_path).lower().endswith('.docx'):
+                    from .office_objects import docx_has_complex_graphics
+                    if docx_has_complex_graphics(file_path):
+                        try:
+                            from .review_preview import render_docx_graphics
+                            res = (render_docx_graphics(file_path, res[0]), res[1])
+                        except Exception:
+                            res = (res[0], 'Схеми та фігури цього DOCX не вдалося відтворити у перегляді. '
+                                   'Текстовий вигляд може їх пропускати; відкрийте оригінальний файл.')
                 if preview_assets:
                     from .review_preview import externalize_images
                     try:
@@ -1383,7 +1392,66 @@ def optimize_uploaded_file(uploaded_file):
 # РОЗКЛАД УРОКІВ ТА ЦЕНТР СПОВІЩЕНЬ
 # ═══════════════════════════════════════════════════════════════════════════════
 
+def get_published_tasks_for_lesson(teacher, lesson, lesson_date):
+    """Match the class, subject, date and bell slot of one lesson occurrence."""
+    import datetime
+    from django.utils import timezone
+    from .models import Assignment
+    assignments = Assignment.objects.filter(
+        teacher=teacher, classes=lesson.class_group, status=Assignment.STATUS_PUBLISHED,
+        is_individual=False,
+    )
+    if lesson.subject_id:
+        assignments = assignments.filter(subject_id=lesson.subject_id)
+    assignments = assignments.prefetch_related('schedule_targets').order_by('-published_at', '-pk')
+    matched = []
+    for assignment in assignments:
+        targets = list(assignment.schedule_targets.all())
+        target = next((t for t in targets if t.class_group_id == lesson.class_group_id), None)
+        published = assignment.published_at or assignment.created_at
+        base_date = timezone.localtime(published).date() if published else None
+        if target:
+            target_date = target.target_date
+            if not target_date and target.target_day_of_week and base_date:
+                target_date = base_date + datetime.timedelta(days=(target.target_day_of_week - base_date.isoweekday()) % 7)
+            if target_date == lesson_date and (not target.bell_slot_id or target.bell_slot_id == lesson.bell_slot_id):
+                matched.append(assignment)
+        elif not targets and base_date == lesson_date:
+            matched.append(assignment)
+    return matched
+
+
 def get_teacher_live_lesson_status(teacher, now_dt=None):
+    import datetime
+    from django.utils import timezone
+    from django.urls import reverse
+    from urllib.parse import urlencode
+    now = now_dt or timezone.localtime(timezone.now())
+    status = _get_teacher_live_lesson_status(teacher, now_dt=now)
+    for kind in ('current', 'next'):
+        lesson = status.get(f'{kind}_lesson')
+        task_info = None
+        if lesson:
+            delta = (lesson.day_of_week - now.date().isoweekday()) % 7
+            lesson_date = now.date() + datetime.timedelta(days=delta)
+            tasks = get_published_tasks_for_lesson(teacher, lesson, lesson_date)
+            task_info = {
+                'has_task': bool(tasks), 'count': len(tasks),
+                'class_name': lesson.class_group.name,
+                'lesson_date': lesson_date.isoformat(),
+                'label': (f'✓ Завдання опубліковано · {lesson.class_group.name}' if tasks
+                          else f'➕ Немає завдання · {lesson.class_group.name}'),
+                'url': (reverse('assignment_detail', args=[tasks[0].pk]) if tasks else
+                        reverse('assignment_create') + '?' + urlencode({
+                            'class': lesson.class_group_id, 'subject': lesson.subject_id or '',
+                            'lesson_date': lesson_date.isoformat(), 'bell_slot': lesson.bell_slot_id,
+                        })),
+            }
+        status[f'{kind}_lesson_task'] = task_info
+    return status
+
+
+def _get_teacher_live_lesson_status(teacher, now_dt=None):
     """
     Обчислює стан поточного уроку / перерви для вчителя в реальному часі.
     Повертає словник зі статусом, назвою уроку, залишковим часом тощо.
@@ -1591,16 +1659,7 @@ def get_teacher_upcoming_notifications(teacher, now_dt=None):
             # 1) Явна цільова дата уроку на сьогодні
             # 2) Цільовий день тижня та дзвінковий слот відповідають цьому уроку
             # 3) Або завдання опубліковане сьогодні для цього класу (без перенесення на інший день)
-            has_task = Assignment.objects.filter(
-                teacher=teacher,
-                classes=lesson.class_group,
-                status=Assignment.STATUS_PUBLISHED
-            ).filter(
-                Q(schedule_targets__class_group=lesson.class_group, schedule_targets__target_date=today) |
-                Q(schedule_targets__class_group=lesson.class_group, schedule_targets__target_day_of_week=today_weekday, schedule_targets__bell_slot=lesson.bell_slot) |
-                Q(published_at__date=today, schedule_targets__class_group=lesson.class_group) |
-                Q(published_at__date=today, schedule_targets__isnull=True)
-            ).exists()
+            has_task = bool(get_published_tasks_for_lesson(teacher, lesson, today))
 
             if not has_task:
                 status_text = "зараз триває" if (s_min <= now_min < e_min) else f"почнеться о {slot.start_time.strftime('%H:%M')}"
@@ -1749,4 +1808,3 @@ def format_raw_json_feedback_for_display(text):
         parts.append(f"💬 **Рекомендація учню:**\n{fc}")
 
     return "\n\n".join(parts) if parts else (fc or summary or extract_clean_comment_from_raw_json(work_text))
-

@@ -1314,6 +1314,8 @@ def teacher_live_status(request):
         'current_lesson_class_name': live_status.get('current_lesson').class_group.name if live_status.get('current_lesson') else '',
         'next_lesson_class_id': live_status.get('next_lesson').class_group_id if live_status.get('next_lesson') else None,
         'next_lesson_class_name': live_status.get('next_lesson').class_group.name if live_status.get('next_lesson') else '',
+        'current_lesson_task': live_status.get('current_lesson_task'),
+        'next_lesson_task': live_status.get('next_lesson_task'),
     }
 
     return JsonResponse({
@@ -1336,6 +1338,14 @@ def assignment_create(request):
     """Створення нового завдання."""
     teacher = request.user.teacher_profile
     form = AssignmentForm(teacher=teacher)
+
+    if request.method == 'GET':
+        class_id = request.GET.get('class') or request.GET.get('class_group')
+        subject_id = request.GET.get('subject')
+        if class_id and str(class_id).isdigit() and form.fields['classes'].queryset.filter(pk=class_id).exists():
+            form.initial['classes'] = [int(class_id)]
+        if subject_id and str(subject_id).isdigit() and form.fields['subject'].queryset.filter(pk=subject_id).exists():
+            form.initial['subject'] = int(subject_id)
 
     if request.method == 'POST':
         form = AssignmentForm(teacher=teacher, data=request.POST, files=request.FILES)
@@ -1461,6 +1471,21 @@ def assignment_create(request):
     criteria_presets = AICriteriaPreset.objects.all()
 
     teacher_lesson_schedules = list(TeacherLessonSchedule.objects.filter(teacher=teacher).select_related('bell_slot', 'class_group').order_by('day_of_week', 'bell_slot__lesson_number'))
+    initial_target_dates = {}
+    if request.method == 'GET' and form.initial.get('classes') and request.GET.get('lesson_date'):
+        try:
+            from datetime import date
+            lesson_date = date.fromisoformat(request.GET['lesson_date'])
+        except ValueError:
+            lesson_date = None
+        if lesson_date:
+            for schedule in teacher_lesson_schedules:
+                if (schedule.class_group_id in form.initial['classes'] and
+                        str(schedule.bell_slot_id) == request.GET.get('bell_slot') and
+                        schedule.day_of_week == lesson_date.isoweekday() and
+                        (not form.initial.get('subject') or schedule.subject_id == form.initial['subject'])):
+                    schedule.is_selected_for_assignment = True
+                    initial_target_dates[schedule.class_group_id] = lesson_date.isoformat()
 
     last_preset_id = request.session.get('last_ai_preset_id')
     last_grs_json = '[]'
@@ -1483,6 +1508,7 @@ def assignment_create(request):
         'last_ai_grs': last_grs_json,
         'submitted_ai_grs': request.POST.getlist('default_ai_grs'),
         'teacher_lesson_schedules': teacher_lesson_schedules,
+        'existing_target_dates': initial_target_dates,
     }
     return render(request, 'feed/assignment_form.html', context)
 
@@ -7127,6 +7153,51 @@ def api_test_gemini_connection(request):
     })
 
 
+def _teacher_ai_selection(request, submission):
+    """Validate both teacher entry points and freeze the displayed class policy."""
+    preset_id = request.POST.get('preset_id') or request.GET.get('preset_id')
+    preset, policy_codes = submission.assignment.get_ai_policy(submission.class_group) if submission.assignment else (None, [])
+    if preset_id:
+        if not str(preset_id).isdigit():
+            raise ValueError('Невірний шаблон критеріїв.')
+        preset = AICriteriaPreset.objects.filter(pk=preset_id).first()
+        if not preset:
+            raise ValueError('Шаблон критеріїв не знайдено.')
+        policy_preset = submission.assignment.get_ai_policy(submission.class_group)[0] if submission.assignment else None
+        if preset != policy_preset:
+            policy_codes = []
+    if not preset:
+        AICriteriaPreset.ensure_default_presets()
+        preset = AICriteriaPreset.objects.filter(is_default=True).first() or AICriteriaPreset.objects.first()
+    values = request.POST.getlist('selected_gr_codes')
+    codes = None
+    if values:
+        if len(values) > 1:
+            codes = values
+        else:
+            try:
+                codes = json.loads(values[0])
+            except (ValueError, TypeError):
+                codes = [value.strip() for value in values[0].split(',') if value.strip()]
+        if not isinstance(codes, list) or not all(isinstance(code, str) for code in codes):
+            raise ValueError('ГР потрібно передати списком кодів.')
+    definitions = preset.get_gr_list() if preset and preset.evaluation_type != 'traditional' else []
+    if definitions:
+        valid_codes = {gr['code'] for gr in definitions}
+        if codes is None:
+            codes = policy_codes or [gr['code'] for gr in definitions]
+        if not codes or any(code not in valid_codes for code in codes):
+            raise ValueError('Оберіть хоча б одну ГР із цього шаблону.')
+        codes = [gr['code'] for gr in definitions if gr['code'] in codes]
+    elif preset and preset.evaluation_type == 'traditional':
+        codes = []
+    elif codes:
+        raise ValueError('У цьому шаблоні немає визначених ГР. Оберіть шаблон із групами результатів.')
+    else:
+        codes = []
+    return str(preset.pk) if preset else None, codes
+
+
 @teacher_required
 @require_POST
 def ai_check_single_submission(request, submission_id):
@@ -7141,31 +7212,10 @@ def ai_check_single_submission(request, submission_id):
         return JsonResponse({'status': 'error', 'message': 'Немає доступу'}, status=403)
 
     custom_prompt = request.POST.get('custom_prompt', '').strip() or None
-    preset_id = request.POST.get('preset_id') or request.GET.get('preset_id')
-    selected_gr_codes_raw = request.POST.get('selected_gr_codes')
-    selected_gr_codes = None
-    if selected_gr_codes_raw:
-        try:
-            selected_gr_codes = json.loads(selected_gr_codes_raw)
-        except Exception:
-            selected_gr_codes = [c.strip() for c in selected_gr_codes_raw.split(',') if c.strip()]
-    elif request.POST.getlist('selected_gr_codes'):
-        selected_gr_codes = request.POST.getlist('selected_gr_codes')
-
-    if selected_gr_codes is not None:
-        if not isinstance(selected_gr_codes, list) or not all(isinstance(code, str) for code in selected_gr_codes):
-            return JsonResponse({'status': 'error', 'error': 'ГР потрібно передати списком кодів.'}, status=400)
-        chosen_preset = submission.assignment.get_ai_policy(submission.class_group)[0] if submission.assignment else None
-        if preset_id:
-            if not str(preset_id).isdigit():
-                return JsonResponse({'status': 'error', 'error': 'Невірний шаблон критеріїв.'}, status=400)
-            chosen_preset = AICriteriaPreset.objects.filter(pk=preset_id).first()
-            if not chosen_preset:
-                return JsonResponse({'status': 'error', 'error': 'Шаблон критеріїв не знайдено.'}, status=400)
-        if chosen_preset and chosen_preset.evaluation_type != 'traditional' and chosen_preset.get_gr_list():
-            valid_codes = {gr.get('code') for gr in chosen_preset.get_gr_list()}
-            if not selected_gr_codes or any(code not in valid_codes for code in selected_gr_codes):
-                return JsonResponse({'status': 'error', 'error': 'Оберіть хоча б одну ГР із цього шаблону.'}, status=400)
+    try:
+        preset_id, selected_gr_codes = _teacher_ai_selection(request, submission)
+    except ValueError as exc:
+        return JsonResponse({'status': 'error', 'error': str(exc)}, status=400)
 
     force_thinking_raw = request.POST.get('force_thinking')
     force_thinking = None
@@ -7377,14 +7427,10 @@ def api_ai_process_item(request, submission_id):
     if not can_manage_submission(request, submission):
         return JsonResponse({'status': 'error', 'message': 'Немає доступу'}, status=403)
 
-    preset_id = request.POST.get('preset_id') or None
-    selected_gr_codes_raw = request.POST.get('selected_gr_codes')
-    selected_gr_codes = None
-    if selected_gr_codes_raw:
-        try:
-            selected_gr_codes = json.loads(selected_gr_codes_raw)
-        except Exception:
-            selected_gr_codes = [c.strip() for c in selected_gr_codes_raw.split(',') if c.strip()]
+    try:
+        preset_id, selected_gr_codes = _teacher_ai_selection(request, submission)
+    except ValueError as exc:
+        return JsonResponse({'status': 'error', 'error': str(exc)}, status=400)
 
     from .ai_jobs import enqueue_submission_job, job_response, SelfCheckUnavailable
     try:

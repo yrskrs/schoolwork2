@@ -12,7 +12,7 @@ from pathlib import Path
 
 from django.core.cache import caches
 
-REVISION = 'assessment-4.1.4'
+REVISION = 'assessment-2026-10-05-objects-gr'
 OFFICE = {'.docx', '.doc', '.odt', '.rtf', '.pptx', '.ppt', '.odp', '.pptm', '.ppsx', '.pps', '.potx', '.xlsx', '.xls', '.ods'}
 IMAGES = {'.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif', '.tiff', '.tif'}
 
@@ -50,6 +50,12 @@ def _office_pdf(path):
 def _full_text(path, ext):
     # Imports are lazy: the legacy service uses this module too.
     from . import gemini_service as service
+    if ext in {'.pptx', '.pptm', '.ppsx', '.potx', '.xlsx'}:
+        from .office_objects import ooxml_object_evidence
+        prefix = 'xl' if ext == '.xlsx' else 'ppt'
+        text = (service.extract_text_from_excel(path, max_rows=1000000, max_cols=16384) if prefix == 'xl'
+                else service.extract_text_from_powerpoint(path, max_slides=100000))
+        return text + '\n' + '\n'.join(ooxml_object_evidence(path, prefix)['text'])
     if ext in {'.pptx', '.ppt', '.pptm', '.ppsx', '.pps', '.potx'}:
         return service.extract_text_from_powerpoint(path, max_slides=100000)
     if ext == '.odp':
@@ -59,6 +65,7 @@ def _full_text(path, ext):
     if ext in {'.xlsx', '.xls'}:
         return service.extract_text_from_excel(path, max_rows=1000000, max_cols=16384)
     if ext == '.docx':
+        from .office_objects import docx_object_evidence
         import docx
         parts = []
         try:
@@ -82,6 +89,15 @@ def _full_text(path, ext):
             if not parts:
                 parts.extend(node.text or '' for node in root.findall('.//w:t', ns))
             parts.extend(' '.join(node.itertext()) for node in root.findall('.//w:txbxContent', ns))
+            # Nested tables, content controls and hyperlinks may be absent from
+            # python-docx's top-level paragraph/table API.
+            represented = '\n'.join(parts)
+            missing_text = [node.text for node in root.findall('.//w:t', ns)
+                            if node.text and node.text not in represented]
+            if missing_text:
+                parts.append('Додатковий текст об’єктів DOCX: ' + '\n'.join(missing_text))
+        objects = docx_object_evidence(path)
+        parts.extend(objects['text'])
         return '\n'.join(parts)
     if ext in {'.odt', '.ods'}:
         return service.extract_text_from_opendocument(path, max_chars=10000000)
@@ -131,22 +147,32 @@ def extract_file_evidence(path, ext=None, visual=True):
                     raise ValueError('image')
         except Exception:
             data['limitations'].append('Візуальний вигляд не прочитано; не роби висновків про відсутність графіки.')
-            if ext == '.docx':
-                for image in service.extract_images_from_docx(path, max_images=100000):
-                    data['media'].append({'mime_type': image['mime_type'], 'data': image['data']})
-                    data['text'] += f'\nвбудоване зображення: {image["name"]}'
-            elif ext in {'.pptx', '.ppt', '.pptm', '.ppsx', '.pps', '.potx'}:
+            if ext in {'.ppt', '.pps'}:
                 for image in service.extract_images_from_pptx(path, max_images=100000):
                     data['media'].append({'mime_type': image['mime_type'], 'data': image['data']})
                     data['text'] += f'\nвбудоване зображення на слайді: {image["name"]}'
-            elif ext == '.odp':
-                for image in service.extract_images_from_odt(path, max_images=100000):
-                    data['media'].append({'mime_type': image['mime_type'], 'data': image['data']})
-                    data['text'] += f'\nвбудоване зображення на слайді: {image["name"]}'
-            elif ext in {'.xlsx', '.xls', '.ods'}:
+            elif ext == '.xls':
                 for image in service.extract_images_from_xlsx(path, max_images=100000):
                     data['media'].append({'mime_type': image['mime_type'], 'data': image['data']})
                     data['text'] += f'\nвбудоване зображення в таблиці: {image["name"]}'
+    package_prefixes = {'.docx': 'word', '.pptx': 'ppt', '.pptm': 'ppt', '.ppsx': 'ppt', '.potx': 'ppt', '.xlsx': 'xl'}
+    if ext in package_prefixes:
+        from .office_objects import ooxml_object_evidence, embedded_raster_evidence
+        prefix = package_prefixes[ext]
+        objects = ooxml_object_evidence(path, prefix)
+        data['limitations'].extend(objects['limitations'])
+        if visual:
+            # PDF conversion can silently lose a drawing. Keep original raster
+            # images as independent evidence even when conversion succeeds.
+            images, limitations = embedded_raster_evidence(path, prefix + '/media/')
+            data['media'].extend(images)
+            data['limitations'].extend(limitations)
+            data['text'] += ''.join('\n' + image['source'] for image in images)
+    elif ext in {'.odt', '.ods', '.odp'} and visual:
+        from .office_objects import embedded_raster_evidence
+        images, limitations = embedded_raster_evidence(path, 'Pictures/')
+        data['media'].extend(images)
+        data['limitations'].extend(limitations)
     if any(marker in (data['text'] or '').lower() for marker in ['показано перші', 'ще рядки', 'опрацьовано перші', 'обрізано', 'truncated']):
         data['limitations'].append('Текстовий витяг частковий. Використай візуальні сторінки або познач неперевірені вимоги.')
     if ext in {'.mdb', '.accdb'}:
@@ -195,7 +221,7 @@ def teacher_materials(assignment, force_refresh_links=False):
         if evidence['limitations']:
             destination.append('МЕЖІ ПРОЧИТАНОГО: ' + ' '.join(evidence['limitations']))
         for item in evidence['media']:
-            media.append(dict(item, source=f'Матеріал вчителя: {name}'))
+            media.append(dict(item, source=f'Матеріал вчителя: {name} · {item.get("source", "візуальні сторінки")}'))
     links = [(assignment.link_url, assignment.link_label), (assignment.youtube_url, 'Відео уроку')]
     links.extend(assignment.additional_links.values_list('url', 'label'))
     links.extend(assignment.youtube_links.values_list('url', 'title'))
@@ -253,6 +279,7 @@ ASSESSMENT_RULES = '''ПРАВИЛА ДОКАЗОВОГО ОЦІНЮВАННЯ (
 Розділяй зміст, практичні вміння й формат результату. Презентація замість бюлетеня з правильними відомостями — часткове виконання: зарахуй зміст, окремо поясни недотримання формату за критерієм. Не став автоматично 1–3 бали лише за розширення; PDF-експорт може бути допустимим аналогом, якщо збережено потрібний результат.
 Прочитай усі матеріали, включно з візуальними сторінками. Знайди задану вправу і зазнач файл, сторінку/слайд. Інші вправи — контекст, якщо їх не задавали. Якщо дозволено вибір — зістав із вибраним варіантом; не штрафуй за відсутність номера, якщо це не вимога вчителя.
 Недоступне, непрочитане, обрізане чи неперевірене позначай unverifiable. Це не доказ відсутності або помилки учня. Не вигадуй докази. За недостатніх даних для балу поверни assessment_blocked=true та пояснення замість оцінки; спроба самоперевірки не витрачається.
+SmartArt, карта знань, фігури й підписи можуть бути в окремих XML-частинах, а не в звичайних абзацах. Зістав вузли, зв’язки, вбудовані зображення та візуальні сторінки. Якщо структура містить карту або схему, не оголошуй її відсутньою через порожній витяг абзаців. Наявність об’єкта не доводить правильність його змісту чи оформлення; неперевірений вигляд познач unverifiable.
 Не роби висновків про виконання програми за статичним кодом. Не називай підозру на ШІ/плагіат доведеним фактом і не знижуй бал лише за стиль/ймовірність детектора.
 ОЗНАКИ ШІ ТА САМОСТІЙНІСТЬ: обов'язково перевір всі матеріали роботи: презентації (.pptx/.ppt/.odp — на кожному окремому слайді), текстові документи, зображення та схеми (на генерацію Midjourney/DALL-E тощо), таблиці, код та Scratch на використання генеративного ШІ (шаблонні фрази, синтетична структура слайдів, тексти генераторів Gamma/Tome/Canva AI/ChatGPT, артефакти дифузійних моделей, відсутність живого авторського стилю учня). Оціни відсоток використання ШІ у зданому матеріалі: 'ai_generated_percent' (ціле число 0–100%). Якщо ai_generated_percent перевищує поріг tolerance_percent, встанови 'ai_generated_detected': true, інакше false. Обов'язково вкажи конкретний файл/номер слайду/зображення та детальні спостереження у ai_generated_details та ai_authorship_analysis.evidence.
 ПРАВИЛА ВЧИТЕЛЯ: ai_usage_allowed=true — не штрафуй за використання ШІ саме по собі, оцінюй результат за критеріями. Якщо false — вчитель вимагає самостійного виконання (ШІ заборонено). Якщо використання ШІ перевищує поріг tolerance_percent (ai_generated_detected=true), це є порушенням академічної доброчесності: оцінка не може бути високою (10-12 балів), її необхідно знизити до початкового рівня (1-3 бали) або встановити suggested_grade='Доопрацювати', а у полях 'weaknesses', 'feedback_comment' та 'summary' чітко попередити учня про заборону використання ШІ. Якщо ai_generated_percent <= tolerance_percent, оцінювати як самостійну роботу. Не вигадуй автоматичний штраф за стиль, якщо явних ознак ШІ не виявлено або відсоток нижче порогу.
@@ -371,6 +398,7 @@ def build_assessment_request(submission, preset, active_grs, scope, text_parts, 
     else:
         system = re.sub(r'(?i)ФОРМАТ ВІДПОВІДІ[\s\S]*?(?=(?:ТОЧНЕ РОЗУМІННЯ|КРИТЕРІЇ|ПРІОРИТЕТ|ПРАВИЛА ДОКАЗОВОГО|\Z))', '', system).strip()
     system += '\n' + ASSESSMENT_RULES
+    active_codes = [gr['code'] for gr in active_grs]
     context = {
         'class': submission.class_group.name if submission.class_group else '',
         'grade_year': submission.class_group.grade if submission.class_group else None,
@@ -378,8 +406,8 @@ def build_assessment_request(submission, preset, active_grs, scope, text_parts, 
         'teacher_custom_criteria': assignment.custom_criteria,
         'selected_preset': preset.name if preset else 'Загальні критерії',
         'evaluation_type': preset.evaluation_type if preset else 'nus',
-        'active_result_groups': active_grs,
-        'result_group_definitions': [gr for gr in preset.get_gr_list() if gr['code'] in active_grs] if preset else [],
+        'active_result_groups': active_codes,
+        'result_group_definitions': active_grs,
         'preset_description': preset.description if preset else '',
         'is_group_work': submission.is_collective_work() or submission.is_group_work,
         'plagiarism_ignored': bool(submission.ignore_plagiarism),

@@ -178,6 +178,27 @@
             if (liveWidgets.length > 0 && data.live_status && data.live_status.has_schedule) {
                 var ls = data.live_status;
                 liveWidgets.forEach(function(liveWidget) {
+                    var taskActions = liveWidget.querySelector('.live-lesson-task-actions');
+                    if (taskActions) {
+                        taskActions.replaceChildren();
+                        ['current', 'next'].forEach(function(kind) {
+                            var task = ls[kind + '_lesson_task'];
+                            if (!task) return;
+                            var row = document.createElement('div');
+                            row.style.cssText = 'display:flex;flex-direction:column;gap:3px;';
+                            var caption = document.createElement('span');
+                            caption.style.cssText = 'font-size:11px;color:var(--color-text-secondary);';
+                            caption.textContent = (kind === 'current' ? 'Поточний урок' : 'Наступний урок') + ' · ' + task.lesson_date;
+                            var link = document.createElement('a');
+                            link.className = 'btn btn-secondary btn-sm';
+                            link.style.cssText = 'font-size:12px;font-weight:700;white-space:normal;';
+                            link.href = task.url;
+                            link.textContent = task.label;
+                            link.title = task.has_task ? 'Переглянути опубліковане завдання' : 'Створити завдання для цього уроку';
+                            row.append(caption, link);
+                            taskActions.append(row);
+                        });
+                    }
                     var timeInfoEl = liveWidget.querySelector('#live-lesson-time-info') || liveWidget.querySelector('.live-lesson-time-info');
                     if (timeInfoEl && ls.time_info) {
                         timeInfoEl.textContent = ls.time_info;

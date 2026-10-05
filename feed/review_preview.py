@@ -61,6 +61,20 @@ def assets_available(file_path, value):
     return all((directory / name).is_file() for name in names)
 
 
+def render_docx_graphics(file_path, text_html):
+    """Use actual pages for Word drawings that paragraph HTML would hide."""
+    from .ai_context import _office_pdf, media_for_provider
+    pdf = _office_pdf(file_path)
+    pages = media_for_provider([{'mime_type': 'application/pdf', 'data': base64.b64encode(pdf).decode()}], 'openai')
+    output = ['<div class="fv-rendered-document">']
+    for number, page in enumerate(pages, 1):
+        output.append(f'<div class="document-page"><img src="data:{page["mime_type"]};base64,{page["data"]}" '
+                      f'alt="Сторінка {number} документа зі схемами та фігурами" '
+                      'style="width:100%;height:auto;" loading="lazy"></div>')
+    output.append('<details class="fv-document-text"><summary>Текст документа для читання та копіювання</summary>' + text_html + '</details></div>')
+    return '\n'.join(output)
+
+
 @contextmanager
 def preview_conversion_lock(file_path):
     # Hover prefetch and actual opening can overlap in different web workers.

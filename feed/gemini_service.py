@@ -2264,11 +2264,18 @@ def extract_submission_content(submission):
             })
 
     # 3. Прикріплені файли (один або декілька)
-    submission_files = list(submission.files.all()) if hasattr(submission, 'files') and submission.files.exists() else ([submission] if submission.file else [])
+    submission_files = list(submission.files.all()) if hasattr(submission, 'files') else []
+    if submission.file and not any(sf.file.name == submission.file.name for sf in submission_files):
+        submission_files.insert(0, submission)
 
     for sf in submission_files:
         f_obj = getattr(sf, 'file', None)
         if not f_obj or not hasattr(f_obj, 'path') or not os.path.exists(f_obj.path):
+            filename = getattr(sf, 'original_name', '') or os.path.basename(getattr(f_obj, 'name', '') or 'файл')
+            unreadable_files.append(filename)
+            reason = 'Прикріплений файл недоступний на сервері; його вміст не перевірено.'
+            inaccessible_materials.append({'type': 'file', 'target': filename, 'reason': reason})
+            text_parts.append(f'МЕЖІ ПРОЧИТАНОГО ({filename}): {reason}')
             continue
         file_path = f_obj.path
         filename = getattr(sf, 'original_name', '') or os.path.basename(file_path)
@@ -2281,7 +2288,7 @@ def extract_submission_content(submission):
             if not evidence['text'] and not evidence['media']:
                 unreadable_files.append(filename)
             text_parts.append(f"Вміст роботи учня ({filename}):\n{evidence['text']}")
-            inline_media.extend(dict(item, source=f"Робота учня: {filename}") for item in evidence['media'])
+            inline_media.extend(dict(item, source=f"Робота учня: {filename} · {item.get('source', 'візуальні сторінки')}") for item in evidence['media'])
             for limitation in evidence['limitations']:
                 inaccessible_materials.append({'type': 'file', 'target': filename, 'reason': limitation})
                 text_parts.append(f"МЕЖІ ПРОЧИТАНОГО ({filename}): {limitation}")
@@ -5567,7 +5574,7 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
     is_traditional = False
     if selected_preset and selected_preset.evaluation_type == 'traditional':
         is_traditional = True
-    elif custom_prompt and ('класичн' in custom_prompt.lower() or 'традиційн' in custom_prompt.lower()) and 'груп' not in custom_prompt.lower():
+    elif not selected_preset and custom_prompt and ('класичн' in custom_prompt.lower() or 'традиційн' in custom_prompt.lower()) and 'груп' not in custom_prompt.lower():
         is_traditional = True
 
     # Визначаємо перелік груп результатів для оцінювання (з урахуванням вибору вчителя)

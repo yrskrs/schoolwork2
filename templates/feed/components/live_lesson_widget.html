@@ -54,20 +54,15 @@
             </div>
 
             <!-- Кнопки швидкого переходу -->
-            <div style="display: flex; align-items: center; gap: 8px;">
-                {% if live_lesson_status.current_lesson %}
-                <a href="{% url 'assignment_create' %}?class_group={{ live_lesson_status.current_lesson.class_group_id }}" 
-                   class="btn btn-primary btn-sm" 
-                   style="font-size: 12px; font-weight: 700; border-radius: var(--radius-sm); white-space: nowrap;">
-                    ➕ Завдання для {{ live_lesson_status.current_lesson.class_group.name }}
-                </a>
-                {% elif live_lesson_status.next_lesson %}
-                <a href="{% url 'assignment_create' %}?class_group={{ live_lesson_status.next_lesson.class_group_id }}" 
-                   class="btn btn-secondary btn-sm" 
-                   style="font-size: 12px; font-weight: 700; border-radius: var(--radius-sm); white-space: nowrap;">
-                    ➕ Завдання для {{ live_lesson_status.next_lesson.class_group.name }}
-                </a>
-                {% endif %}
+            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                <div class="live-lesson-task-actions" style="display:flex;gap:8px;flex-wrap:wrap;">
+                    {% if live_lesson_status.current_lesson_task %}
+                    {% include 'feed/components/live_lesson_task.html' with task=live_lesson_status.current_lesson_task caption='Поточний урок' %}
+                    {% endif %}
+                    {% if live_lesson_status.next_lesson_task %}
+                    {% include 'feed/components/live_lesson_task.html' with task=live_lesson_status.next_lesson_task caption='Наступний урок' %}
+                    {% endif %}
+                </div>
 
                 {% if current_tab == 'schedule' or request.GET.tab == 'schedule' %}
                 <button type="button" 
