@@ -231,11 +231,13 @@ def log_ai_request_metric(model_name, provider='gemini', action='evaluation', st
 
 def _raw_call_ai_api(prompt_text, system_prompt="", inline_media=None, provider="gemini", api_key="", model_name="", custom_url="", temperature=0.2, max_output_tokens=3500, timeout=35, json_mode=False, thinking_budget=None):
     provider = (provider or 'gemini').lower().strip()
-    if provider == 'groq' and inline_media and clean_model_name(model_name, provider) in ('openai/gpt-oss-120b', 'openai/gpt-oss-20b'):
-        message = (f'{model_name} приймає лише текст, а ця робота містить зображення або сторінки документів. '
-                   'Для повної перевірки потрібна модель з підтримкою зображень. '
-                   'Візуальні об’єкти не вилучено. Додайте сумісну модель до черги.')
-        return 400, None, message, {'_schoolnet_local_preflight': True}
+    # Text-only models (e.g. openai/gpt-oss-*): drop all media and proceed with the
+    # extracted text that is already in the prompt. The media list contains pages
+    # from teacher PDFs and rubric files whose text is already in prompt_text,
+    # so stripping images is safe and avoids an unnecessary 400 block.
+    _text_only_groq = ('openai/gpt-oss-120b', 'openai/gpt-oss-20b')
+    if provider == 'groq' and inline_media and clean_model_name(model_name, provider) in _text_only_groq:
+        inline_media = []  # text was already extracted; visual pages are redundant here
     from .ai_context import media_for_provider
     from .ai_payload import optimize_media
     try:
@@ -243,10 +245,10 @@ def _raw_call_ai_api(prompt_text, system_prompt="", inline_media=None, provider=
         inline_media = optimize_media(inline_media, provider)
     except Exception:
         return 0, None, 'Не вдалося прочитати всі візуальні матеріали для цього провайдера. Спробуйте PDF-сумісну модель.', None
+    # qwen3.8-27b supports at most 3 images. Cap rather than block so evaluation
+    # still proceeds with text + up to 3 representative images.
     if provider == 'groq' and clean_model_name(model_name, provider) == 'qwen/qwen3.8-27b' and len(inline_media) > 3:
-        message = (f'{model_name} підтримує до 3 зображень за запит; повна робота має {len(inline_media)}. '
-                   'Об’єкти не вилучено. Потрібна наступна модель з більшим лімітом зображень.')
-        return 400, None, message, {'_schoolnet_local_preflight': True}
+        inline_media = inline_media[:3]
     url, headers, model = get_provider_endpoint(provider, model_name=model_name, api_key=api_key, custom_url=custom_url)
 
     if provider == 'gemini':

@@ -155,14 +155,24 @@ class EvaluationProgressTests(TestCase):
         self.assertEqual(response.json()['events'], job.events)
 
     @patch('feed.gemini_service._http_post_json')
-    def test_visual_gpt_oss_is_skipped_without_http_or_discarding_evidence(self, post):
+    def test_visual_gpt_oss_strips_media_and_calls_api(self, post):
+        # gpt-oss-* is text-only: media is stripped before the HTTP call but the
+        # original caller's list must NOT be mutated.
+        post.return_value = (200, {'choices': [{'message': {'content': 'ok'}, 'finish_reason': 'stop'}]}, '')
         media = [{'mime_type': 'application/pdf', 'data': 'synthetic', 'source': 'Карта знань'}]
-        response = call_ai_api('Text', inline_media=media, provider='groq', model_name='openai/gpt-oss-120b')
-        self.assertEqual(response[0], 400)
-        self.assertIn('лише текст', response[2])
-        post.assert_not_called()
-        self.assertEqual(AIRequestLog.objects.count(), 0)
+        response = call_ai_api('Text', inline_media=media, provider='groq', model_name='openai/gpt-oss-120b', api_key='synthetic')
+        # Should succeed (stripped media, text sent)
+        self.assertEqual(response[0], 200)
+        # HTTP was called once (text-only)
+        post.assert_called_once()
+        # Caller's media list was not mutated
+        self.assertEqual(len(media), 1)
         self.assertEqual(media[0]['source'], 'Карта знань')
+        # No images in the payload that was sent
+        sent_payload = post.call_args.args[1]
+        user_content = sent_payload['messages'][-1]['content']
+        image_parts = [p for p in (user_content if isinstance(user_content, list) else []) if p.get('type') == 'image_url']
+        self.assertEqual(image_parts, [])
 
     @patch('feed.gemini_service._http_post_json')
     def test_text_only_gpt_oss_still_calls_groq(self, post):
@@ -174,35 +184,53 @@ class EvaluationProgressTests(TestCase):
 
     @patch('feed.gemini_service._http_post_json')
     @patch('feed.ai_payload.optimize_media', side_effect=lambda items, provider: items)
-    def test_known_groq_vision_image_limit_is_explained_without_truncation(self, optimize, post):
+    def test_known_groq_vision_image_limit_is_capped_and_proceeds(self, optimize, post):
+        # qwen3.8-27b accepts at most 3 images: excess images are capped (not blocked).
+        post.return_value = (200, {'choices': [{'message': {'content': 'ok'}, 'finish_reason': 'stop'}]}, '')
         media = [{'mime_type': 'image/png', 'data': str(index)} for index in range(4)]
-        response = call_ai_api('Text', inline_media=media, provider='groq', model_name='qwen/qwen3.8-27b')
-        self.assertIn('до 3 зображень', response[2])
+        response = call_ai_api('Text', inline_media=media, provider='groq', model_name='qwen/qwen3.8-27b', api_key='synthetic')
+        # HTTP must be called (model proceeds with capped images)
+        post.assert_called_once()
+        # Caller's list is NOT mutated
         self.assertEqual(len(media), 4)
-        post.assert_not_called()
+        # Payload contains at most 3 image parts
+        sent_payload = post.call_args.args[1]
+        user_content = sent_payload['messages'][-1]['content']
+        image_parts = [p for p in (user_content if isinstance(user_content, list) else []) if p.get('type') == 'image_url']
+        self.assertLessEqual(len(image_parts), 3)
 
     @patch('feed.gemini_service._http_post_json')
     @patch('feed.ai_payload.optimize_media', side_effect=lambda items, provider: items)
-    def test_visual_preflight_continues_real_queue_and_only_sent_request_is_counted(self, optimize, post):
+    def test_text_only_groq_calls_api_then_gemini_processes_visual(self, optimize, post):
+        # gpt-oss-120b strips media and calls HTTP (text-only). Groq returns Gemini-
+        # format payload which is unrecognised by the OpenAI response parser → empty
+        # reply → queue advances to gemini which succeeds with the full media.
         self.add_connection('groq', 'openai/gpt-oss-120b')
         self.add_connection('gemini', 'vision-model')
         media = [{'mime_type': 'image/png', 'data': 'synthetic', 'source': 'Карта знань'}]
         answer = self.answer()[1]
+        # Both groq and gemini calls return the same mock body.
+        # Groq gets Gemini-format → empty reply → continues.
+        # Gemini call succeeds with the real candidate.
         post.return_value = (200, {'candidates': [{'content': {'parts': [{'text': answer}]}}]}, '')
         original = call_ai_api
         def inject_media(**kwargs):
-            kwargs['inline_media'] = media
+            kwargs['inline_media'] = list(media)  # copy so each invocation gets its own list
             return original(**kwargs)
         job = self.job()
         with patch('feed.gemini_service.call_ai_api', side_effect=inject_media):
             execute_job(job.pk)
         job.refresh_from_db()
         self.assertEqual(job.status, 'succeeded')
-        self.assertEqual(post.call_count, 1)
-        payload = post.call_args.args[1]
-        self.assertEqual(payload['contents'][0]['parts'][-1]['inlineData']['data'], 'synthetic')
-        self.assertEqual(AIRequestLog.objects.count(), 1)
-        self.assertEqual(AIRequestLog.objects.get().provider, 'gemini')
+        # Two HTTP calls: one for groq (text-only), one for gemini (with image).
+        self.assertEqual(post.call_count, 2)
+        # Last call is to gemini and contains the image
+        gemini_payload = post.call_args.args[1]
+        image_data = gemini_payload['contents'][0]['parts'][-1]['inlineData']['data']
+        self.assertEqual(image_data, 'synthetic')
+        # Both calls logged; last one is gemini
+        self.assertEqual(AIRequestLog.objects.count(), 2)
+        self.assertEqual(AIRequestLog.objects.order_by('pk').last().provider, 'gemini')
         self.assertEqual([e['model'] for e in job.events if e['kind'] == 'model_start'], ['openai/gpt-oss-120b', 'vision-model'])
 
     @patch('feed.gemini_service._get_http_pool')
