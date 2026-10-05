@@ -147,6 +147,8 @@ class EvaluationProgressTests(TestCase):
         self.add_connection('gemini', 'first')
         call.return_value = (503, '', 'High demand', {})
         job = enqueue_submission_job(self.sub, 'student_check')
+        execute_job(job.pk)
+        job.refresh_from_db()
         self.assertEqual(job.status, 'failed')
         self.assertFalse(job.reservations.filter(used=True).exists())
         self.assertTrue(any(e['kind'] == 'model_error' for e in job.events))

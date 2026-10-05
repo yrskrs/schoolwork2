@@ -221,7 +221,7 @@ def teacher_materials(assignment, force_refresh_links=False):
         if evidence['limitations']:
             destination.append('МЕЖІ ПРОЧИТАНОГО: ' + ' '.join(evidence['limitations']))
         for item in evidence['media']:
-            media.append(dict(item, source=f'Матеріал вчителя: {name} · {item.get("source", "візуальні сторінки")}'))
+            media.append(dict(item, source=f'Матеріал вчителя: {name} · {item.get("source", "візуальні сторінки")}', is_primary_task=bool(file.is_task_source_for_ai)))
     links = [(assignment.link_url, assignment.link_label), (assignment.youtube_url, 'Відео уроку')]
     links.extend(assignment.additional_links.values_list('url', 'label'))
     links.extend(assignment.youtube_links.values_list('url', 'title'))

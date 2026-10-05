@@ -249,6 +249,27 @@ def _raw_call_ai_api(prompt_text, system_prompt="", inline_media=None, provider=
     # still proceeds with text + up to 3 representative images.
     if provider == 'groq' and clean_model_name(model_name, provider) == 'qwen/qwen3.8-27b' and len(inline_media) > 3:
         inline_media = inline_media[:3]
+
+    # Preflight check for Groq token limits on free tier
+    _groq_limits = {
+        'qwen/qwen3.8-27b': 7000,
+        'openai/gpt-oss-120b': 8000,
+        'openai/gpt-oss-20b': 8000,
+        'llama-3.3-70b-versatile': 6000,
+        'llama-3.1-8b-instant': 20000,
+    }
+    cleaned_groq_model = clean_model_name(model_name, provider)
+    groq_limit = _groq_limits.get(cleaned_groq_model)
+    if provider == 'groq' and groq_limit:
+        estimated_text_tokens = int(len(prompt_text + (system_prompt or '')) / 2.0)
+        estimated_media_tokens = len(inline_media or []) * 1000
+        total_estimated = estimated_text_tokens + estimated_media_tokens
+        if total_estimated > groq_limit:
+            msg = (f"Запит завеликий для безкоштовного тарифу Groq {cleaned_groq_model} "
+                   f"(розрахунково {total_estimated} токенів при ліміті {groq_limit} токенів на хвилину). "
+                   f"Перемикаюсь на наступну модель.")
+            return 413, {'error': {'message': msg}, '_schoolnet_local_preflight': True}, msg, None
+
     url, headers, model = get_provider_endpoint(provider, model_name=model_name, api_key=api_key, custom_url=custom_url)
 
     if provider == 'gemini':
@@ -372,6 +393,38 @@ def _raw_call_ai_api(prompt_text, system_prompt="", inline_media=None, provider=
         if json_mode:
             payload["response_format"] = {"type": "json_object"}
 
+        if provider == 'openrouter':
+            from .ai_payload import OPENROUTER_MAX_REQUEST_BYTES, encode_payload
+            try:
+                if len(encode_payload(payload)) > OPENROUTER_MAX_REQUEST_BYTES:
+                    # Prune teacher/rubric reference media to preserve student work within size limit
+                    non_teacher_media = [m for m in (inline_media or []) if not any(ts in m.get('source', '') for ts in ('Матеріал вчителя', 'Документ критеріїв'))]
+                    if len(non_teacher_media) < len(inline_media or []):
+                        retry_user_content = []
+                        if prompt_text:
+                            retry_user_content.append({"type": "text", "text": prompt_text})
+                        for item in non_teacher_media:
+                            if item.get("source"):
+                                retry_user_content.append({"type": "text", "text": item["source"]})
+                            if item['mime_type'] == 'application/pdf':
+                                retry_user_content.append({'type':'file','file':{
+                                    'filename':f'document-{len(retry_user_content)}.pdf',
+                                    'file_data':f"data:application/pdf;base64,{item['data']}"}})
+                            else:
+                                retry_user_content.append({
+                                    "type": "image_url",
+                                    "image_url": {"url": f"data:{item['mime_type']};base64,{item['data']}"}
+                                })
+                        payload["messages"] = [{"role": "system", "content": system_prompt}] if system_prompt else []
+                        if not non_teacher_media:
+                            payload["messages"].append({"role": "user", "content": prompt_text})
+                        else:
+                            payload["messages"].append({"role": "user", "content": retry_user_content})
+                        if not any(item['mime_type'] == 'application/pdf' for item in non_teacher_media):
+                            payload.pop('plugins', None)
+            except Exception:
+                pass
+
         try:
             status_code, data, text = _http_post_json(url, payload, headers=headers, timeout=timeout)
 
@@ -379,6 +432,27 @@ def _raw_call_ai_api(prompt_text, system_prompt="", inline_media=None, provider=
             if status_code == 400 and json_mode and ('response_format' in text or 'json_object' in text):
                 del payload["response_format"]
                 status_code, data, text = _http_post_json(url, payload, headers=headers, timeout=timeout)
+
+            # Якщо OpenRouter або провайдер моделі не підтримує native PDF type: 'file' (400/501),
+            # конвертуємо PDF у візуальні зображення сторінок і повторюємо
+            if status_code in (400, 501) and provider == 'openrouter' and any(item.get('mime_type') == 'application/pdf' for item in (inline_media or [])):
+                if any(kw in text.lower() for kw in ('unknown part type: file', 'part type', 'file-parser', 'notimplemented', 'bad request', 'unsupported', 'did not match any variant')):
+                    from .ai_context import media_for_provider
+                    converted_media = media_for_provider(inline_media, 'groq')
+                    retry_user_content = []
+                    if prompt_text:
+                        retry_user_content.append({"type": "text", "text": prompt_text})
+                    for item in converted_media:
+                        if item.get("source"):
+                            retry_user_content.append({"type": "text", "text": item["source"]})
+                        retry_user_content.append({
+                            "type": "image_url",
+                            "image_url": {"url": f"data:{item['mime_type']};base64,{item['data']}"}
+                        })
+                    payload["messages"] = [{"role": "system", "content": system_prompt}] if system_prompt else []
+                    payload["messages"].append({"role": "user", "content": retry_user_content})
+                    payload.pop('plugins', None)
+                    status_code, data, text = _http_post_json(url, payload, headers=headers, timeout=timeout)
 
             if status_code == 200 and data:
                 choices = data.get('choices', [])
@@ -5818,7 +5892,12 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
     material_coverage = []
     if assignment and assignment.files.exists():
         primary_task_content, teacher_files_content, teacher_media, material_coverage = teacher_materials(assignment)
-        inline_media.extend(teacher_media)
+        # Safeguard: prevent multi-slide presentations from bloating visual media to megabytes.
+        # Primary task materials take precedence; reference materials are capped.
+        primary_media = [m for m in teacher_media if m.get('is_primary_task')]
+        other_media = [m for m in teacher_media if not m.get('is_primary_task')]
+        safe_teacher_media = (primary_media[:3] + other_media)[:3]
+        inline_media.extend(safe_teacher_media)
         if primary_task_content:
             prompt_lines.append("\n═══════════════════════════════════════════════════════════════════")
             prompt_lines.append("🎯 ОСНОВНИЙ ФАЙЛ З УМОВОЮ ЗАВДАННЯ ДЛЯ ШІ (ВКАЗАНО ВЧИТЕЛЕМ):")
@@ -6337,7 +6416,7 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
         rubric_evidence = extract_file_evidence(selected_preset.document_file.path)
         if (rubric_evidence['text'] or '').strip() != (selected_preset.extracted_criteria_text or '').strip():
             prompt_content += "\nПОВНИЙ ДОКУМЕНТ ОБРАНИХ КРИТЕРІЇВ:\n" + (rubric_evidence['text'] or '')
-        inline_media.extend(dict(item, source='Документ критеріїв учителя') for item in rubric_evidence['media'])
+        inline_media.extend(dict(item, source='Документ критеріїв учителя') for item in rubric_evidence['media'][:2])
         prompt_content += "\n" + "\n".join(rubric_evidence['limitations'])
 
     attempts_configs = settings.get_request_configs()
