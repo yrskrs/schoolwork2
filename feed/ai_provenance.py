@@ -15,6 +15,7 @@ GENERATORS = re.compile(
     r'gamma(\.app)?|tome(\.app)?|canva(\s*magic\s*design|\s*ai|\s*presentation)?|beautiful\.ai|'
     r'decktopus(\.com)?|slidesai(\.io)?|popai|pitch(\.com)?|slidesgo|wepik|presentations\.ai|plus\s*ai|magic\s*slides|'
     r'elevenlabs|suno|udio|heygen|synthesia|d-id|'
+    r'чатбот\w*|chatbot\w*|'
     r'trainedAlgorithmicMedia|compositeWithTrainedAlgorithmicMedia|c2pa|synthid',
     re.I
 )
@@ -43,7 +44,14 @@ AI_TEXT_MARKERS = re.compile(
     r'(?:\*\*)?(?:слайд|slide)\s+\d+\s*(?:\:|\-|\—|\.)|'
     r'\[(?:вставте|додайте|замініть)\s+[^\]\r\n]+\]|'
     r'замініть\s+(?:цей\s+текст|плейсхолдер)|'
-    r'вставте\s+(?:сюди\s+)?(?:зображення|фото|ілюстрацію)'
+    r'вставте\s+(?:сюди\s+)?(?:зображення|фото|ілюстрацію)|'
+    r'дайте\s+відповідь\s+на\s+запитання|'
+    r'порівняйте\s+(?:їхню|вашу)\s+поведінку|'
+    r'виконайте\s+(?:наступні|такі)\s+(?:дії|кроки)|'
+    r'ось\s+(?:алгоритм|інструкція|покроковий\s+план)|'
+    r'розглянемо\s+детальніше|'
+    r'підсумовуючи\s+(?:вищезазначене|викладене)|'
+    r'у\s+підсумку\s+варто\s+зазначити'
     r')',
     re.I
 )
@@ -128,6 +136,55 @@ def _openxml_signals(package, filename):
                     })
         except Exception:
             pass
+
+    # Word document body check
+    if 'word/document.xml' in names:
+        try:
+            with package.open('word/document.xml') as stream:
+                raw_bytes = stream.read()
+            try:
+                root = ET.fromstring(raw_bytes)
+                text = ' '.join(''.join(node.itertext()) for node in root.findall('.//{http://schemas.openxmlformats.org/wordprocessingml/2006/main}t'))
+            except Exception:
+                clean = re.sub(r'<[^>]+>', ' ', raw_bytes.decode('utf-8', errors='replace'))
+                text = ' '.join(clean.split())
+            match_marker = AI_TEXT_MARKERS.search(text)
+            if match_marker:
+                signals.append({
+                    'location': 'Вміст документа Word (.docx)',
+                    'basis': 'text_analysis',
+                    'observation': f'Текст документа Word містить характерний маркер або директиву чат-бота: «{match_marker.group(0)}». Текст має ознаки генеративного ШІ.'
+                })
+            else:
+                match_gen = GENERATORS.search(text)
+                if match_gen:
+                    signals.append({
+                        'location': 'Вміст документа Word (.docx)',
+                        'basis': 'text_analysis',
+                        'observation': f'Текст документа Word містить пряму згадку генератора ШІ: «{match_gen.group(0)}».'
+                    })
+        except Exception:
+            pass
+
+    # Word TotalTime editing duration check
+    if 'docProps/app.xml' in names:
+        try:
+            with package.open('docProps/app.xml') as stream:
+                app_content = stream.read().decode('utf-8', errors='replace')
+            m_time = re.search(r'<TotalTime>(\d+)</TotalTime>', app_content)
+            m_words = re.search(r'<Words>(\d+)</Words>', app_content)
+            if m_time and m_words:
+                total_time = int(m_time.group(1))
+                words = int(m_words.group(1))
+                if total_time <= 1 and words >= 100:
+                    signals.append({
+                        'location': 'docProps/app.xml/TotalTime',
+                        'basis': 'metadata',
+                        'observation': f'Загальний час редагування документа Word становить лише {total_time} хв для {words} слів, що свідчить про швидку вставку стороннього тексту.'
+                    })
+        except Exception:
+            pass
+
     return signals
 
 
@@ -290,6 +347,107 @@ def _odp_signals(package):
     return signals
 
 
+def _parse_iso_duration(val):
+    """Parse ISO 8601 duration like PT6S, PT1M20S, PT1H2M3S into seconds."""
+    if not val or not isinstance(val, str):
+        return None
+    m = re.match(r'^P(?:(\d+)D)?T?(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?$', val.strip())
+    if not m:
+        return None
+    days = int(m.group(1) or 0)
+    hours = int(m.group(2) or 0)
+    minutes = int(m.group(3) or 0)
+    seconds = float(m.group(4) or 0)
+    return int(days * 86400 + hours * 3600 + minutes * 60 + seconds)
+
+
+def _odt_signals(package):
+    signals = []
+    # 1. Check meta.xml for generators and editing duration
+    if 'meta.xml' in package.namelist():
+        try:
+            with package.open('meta.xml') as stream:
+                meta_bytes = stream.read()
+            try:
+                root = ET.fromstring(meta_bytes)
+                for element in root.iter():
+                    field = element.tag.rsplit('}', 1)[-1]
+                    if field in {'generator', 'description', 'keyword', 'user-defined', 'title', 'creator'}:
+                        value = ''.join(element.itertext())[:8192]
+                        match = GENERATORS.search(value)
+                        if match:
+                            signals.append({
+                                'location': 'meta.xml/' + field,
+                                'basis': 'metadata',
+                                'observation': f'Метадані містять назву {match.group(0)}. Це змінюване поле, а не доказ авторства.'
+                            })
+                # Check editing duration and word count in ODT
+                dur_elem = None
+                stat_elem = None
+                for elem in root.iter():
+                    t = elem.tag.rsplit('}', 1)[-1]
+                    if t == 'editing-duration':
+                        dur_elem = elem
+                    elif t == 'document-statistic':
+                        stat_elem = elem
+
+                dur_str = ''.join(dur_elem.itertext()).strip() if dur_elem is not None else ''
+                words = 0
+                if stat_elem is not None:
+                    for k, v in stat_elem.attrib.items():
+                        if k.rsplit('}', 1)[-1] == 'word-count':
+                            try:
+                                words = int(v)
+                            except (ValueError, TypeError):
+                                pass
+
+                if dur_str:
+                    dur_sec = _parse_iso_duration(dur_str)
+                    if dur_sec is not None and dur_sec <= 90 and words >= 80:
+                        signals.append({
+                            'location': 'meta.xml/editing-duration',
+                            'basis': 'metadata',
+                            'observation': f'Загальний час редагування документа ODT становить лише {dur_sec} с для {words} слів, що свідчить про швидку вставку згенерованого або стороннього тексту.'
+                        })
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+    # 2. Check content.xml for AI text markers and generator mentions
+    if 'content.xml' in package.namelist():
+        try:
+            with package.open('content.xml') as stream:
+                content_bytes = stream.read()
+            try:
+                root = ET.fromstring(content_bytes)
+                p_texts = [''.join(elem.itertext()).strip() for elem in root.iter() if elem.tag.rsplit('}', 1)[-1] in ('p', 'h', 'span')]
+                text = ' '.join(t for t in p_texts if t)
+            except Exception:
+                clean = re.sub(r'<[^>]+>', ' ', content_bytes.decode('utf-8', errors='replace'))
+                text = ' '.join(clean.split())
+
+            match_marker = AI_TEXT_MARKERS.search(text)
+            if match_marker:
+                signals.append({
+                    'location': 'Вміст документа ODT',
+                    'basis': 'text_analysis',
+                    'observation': f'Текст документа ODT містить характерний маркер або директиву чат-бота: «{match_marker.group(0)}». Текст має ознаки генеративного ШІ.'
+                })
+            else:
+                match_gen = GENERATORS.search(text)
+                if match_gen:
+                    signals.append({
+                        'location': 'Вміст документа ODT',
+                        'basis': 'text_analysis',
+                        'observation': f'Текст документа ODT містить пряму згадку генератора ШІ: «{match_gen.group(0)}».'
+                    })
+        except Exception:
+            pass
+
+    return signals
+
+
 def _binary_ppt_signals(path):
     signals = []
     # 1. Try LibreOffice conversion to PPTX for deep inspection
@@ -368,7 +526,7 @@ def _pdf_signals(path):
 
 def file_provenance(path):
     from .ai_context import evidence_cache, file_cache_key
-    key = file_cache_key(path, purpose='provenance', options='4.1.4')
+    key = file_cache_key(path, purpose='provenance', options='4.1.11')
     cached = evidence_cache().get(key)
     if cached is not None:
         return cached
@@ -393,6 +551,8 @@ def file_provenance(path):
             with zipfile.ZipFile(path) as package:
                 if suffix == '.odp':
                     result['signals'].extend(_odp_signals(package))
+                elif suffix == '.odt':
+                    result['signals'].extend(_odt_signals(package))
                 elif 'meta.xml' in package.namelist():
                     with package.open('meta.xml') as stream:
                         root = ET.parse(stream).getroot()
@@ -510,6 +670,14 @@ def normalize_authorship(result, allowed, provenance=(), tolerance_percent=25):
     )
     if has_slide_signal and any(file.get('signals') for file in provenance) and (ai_percent is None or ai_percent < 70):
         ai_percent = max(ai_percent or 0, 80)
+
+    # Text markers in documents / provenance files (e.g. chatbot prompt artifacts)
+    has_text_marker_signal = any(
+        item.get('basis') == 'text_analysis' and any(file.get('signals') for file in provenance)
+        for item in evidence
+    )
+    if has_text_marker_signal and (ai_percent is None or ai_percent < 80):
+        ai_percent = max(ai_percent or 0, 90)
 
     # Determine detection against tolerance
     if ai_percent is not None:

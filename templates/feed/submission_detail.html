@@ -4,7 +4,6 @@
 {% block title %}Деталі здачі — {{ submission.last_name }} {{ submission.first_name }} | {{ submission.assignment.title|default:"Шкільні Завдання" }}{% endblock %}
 
 {% block content %}
-{% include "feed/components/ai_job_status.html" %}
 <div class="page-wrapper">
 
     <!-- ── Двоколонковий layout сайту ────────────────────────────────────── -->
@@ -104,6 +103,7 @@
 
         <!-- ════ ЦЕНТРАЛЬНА ЧАСТИНА (ВМІСТ ЗДАЧІ ТА КОМЕНТАРІ) ════════════════ -->
         <div class="feed-main-content">
+            {% include "feed/components/ai_job_status.html" %}
 
             <div class="compact-content-card" style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.05);margin-bottom:24px;padding:28px 32px;">
 

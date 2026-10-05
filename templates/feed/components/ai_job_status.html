@@ -1,11 +1,16 @@
 {% if active_ai_job %}
-<div class="ai-job-status" role="status" aria-live="polite" data-ai-job-status="{% url 'ai_job_status' active_ai_job.pk %}">
-    {% if active_ai_job.status == 'running' %}ШІ перевіряє роботу. Результат з’явиться автоматично.
-    {% else %}Робота в черзі на перевірку ШІ. Можна залишити сторінку й повернутися пізніше.{% endif %}
+<div class="ai-job-status" role="status" aria-live="polite" data-ai-job-status="{% url 'ai_job_status' active_ai_job.pk %}" style="display:flex;align-items:center;gap:8px;padding:9px 12px;margin:8px 0 10px;border-left:4px solid var(--color-primary);border-radius:var(--radius-sm);background:var(--color-surface);font-size:12px;font-weight:600;color:var(--color-text-primary);">
+    <span style="font-size:14px;display:inline-block;">⏳</span>
+    <span>{% if active_ai_job.status == 'running' %}ШІ перевіряє роботу. Результат з’явиться автоматично.{% else %}Робота в черзі на перевірку ШІ. Можна залишити сторінку й повернутися пізніше.{% endif %}</span>
 </div>
 {% elif last_ai_event_job %}
-<details class="ai-event-history">
-    <summary>Події останньої перевірки ШІ · {{ last_ai_event_job.finished_at|date:"d.m H:i" }}</summary>
-    <ol>{% for event in last_ai_event_job.events %}<li data-kind="{{ event.kind }}">{{ event.message }}</li>{% endfor %}</ol>
+<details class="ai-event-history" style="margin:8px 0 12px;border:1px solid var(--color-border);border-radius:var(--radius-sm);background:var(--color-surface);font-size:11.5px;">
+    <summary style="cursor:pointer;font-weight:700;color:var(--color-text-secondary);padding:6px 10px;display:flex;align-items:center;gap:6px;">
+        <span>⚡</span>
+        <span>Події останньої перевірки ШІ · {{ last_ai_event_job.finished_at|date:"d.m H:i" }}</span>
+    </summary>
+    <ol style="margin:0;padding:6px 12px 8px 28px;max-height:160px;overflow-y:auto;border-top:1px dashed var(--color-border);background:var(--color-bg-secondary);">
+        {% for event in last_ai_event_job.events %}<li data-kind="{{ event.kind }}" style="padding:2px 0;">{{ event.message }}</li>{% endfor %}
+    </ol>
 </details>
 {% endif %}

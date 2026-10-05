@@ -261,7 +261,6 @@
 {% endblock %}
 
 {% block content %}
-{% include "feed/components/ai_job_status.html" %}
 <div class="page-wrapper" style="padding-top: 12px;">
 
     <div class="fv-container"{% if review_async %} data-review-async="true" data-review-fallback="{{ review_sync_url }}"{% if next_preview_url %} data-next-preview="{{ next_preview_url }}"{% endif %}{% endif %}>
@@ -606,7 +605,7 @@
     <div class="fv-workbench-tabs" role="tablist" aria-label="Панелі перевірки">
         <button type="button" role="tab" id="fv-tab-document" aria-controls="fv-document-card" aria-selected="false" tabindex="-1" class="fv-document-tab" data-review-tab="document" title="Робота учня"><span aria-hidden="true">📄</span><span class="fv-tab-label">Робота учня</span></button>
         <button type="button" role="tab" id="fv-tab-task" aria-controls="fv-panel-task" aria-selected="true" data-review-tab="task" title="Умова й матеріали"><span aria-hidden="true">📋</span><span class="fv-tab-label">Умова й матеріали</span></button>
-        <button type="button" role="tab" id="fv-tab-ai" aria-controls="fv-panel-ai" aria-selected="false" tabindex="-1" data-review-tab="ai" title="ШІ-перевірка"><span aria-hidden="true">🤖</span><span class="fv-tab-label">ШІ-перевірка</span></button>
+        <button type="button" role="tab" id="fv-tab-ai" aria-controls="fv-panel-ai" aria-selected="false" tabindex="-1" data-review-tab="ai" title="ШІ-перевірка"><span aria-hidden="true">🤖</span><span class="fv-tab-label">ШІ-перевірка</span>{% if active_ai_job %}<span class="badge badge-warning" style="margin-left:4px;font-size:10px;padding:1px 5px;">⏳</span>{% endif %}</button>
         <button type="button" role="tab" id="fv-tab-comments" aria-controls="fv-panel-comments" aria-selected="false" tabindex="-1" data-review-tab="comments" title="Відгук"><span aria-hidden="true">💬</span><span class="fv-tab-label">Відгук</span><span id="fv-comment-count" class="fv-comment-count" {% if not comments %}hidden{% endif %}>{{ comments|length }}</span></button>
         <button type="button" role="tab" id="fv-tab-info" aria-controls="fv-panel-info" aria-selected="false" tabindex="-1" data-review-tab="info" title="Про роботу"><span aria-hidden="true">ℹ️</span><span class="fv-tab-label">Про роботу</span></button>
     </div>

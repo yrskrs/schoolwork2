@@ -2284,6 +2284,22 @@ def extract_submission_content(submission):
 
     for sf in submission_files:
         f_obj = getattr(sf, 'file', None)
+        if f_obj and hasattr(f_obj, 'path') and not os.path.exists(f_obj.path):
+            base_fname = os.path.basename(f_obj.path)
+            orig_fname = getattr(sf, 'original_name', '') or base_fname
+            for candidate_dir in ('/home/flinux/Документи', '/home/flinux/Завантажене'):
+                for name_variant in (base_fname, orig_fname, base_fname.replace('_', ' '), orig_fname.replace(' ', '_')):
+                    c_path = os.path.join(candidate_dir, name_variant)
+                    if os.path.isfile(c_path):
+                        try:
+                            os.makedirs(os.path.dirname(f_obj.path), exist_ok=True)
+                            import shutil
+                            shutil.copy2(c_path, f_obj.path)
+                            break
+                        except Exception:
+                            pass
+                if os.path.exists(f_obj.path):
+                    break
         if not f_obj or not hasattr(f_obj, 'path') or not os.path.exists(f_obj.path):
             filename = getattr(sf, 'original_name', '') or os.path.basename(getattr(f_obj, 'name', '') or 'файл')
             unreadable_files.append(filename)
@@ -5774,6 +5790,14 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
         "- 📊 ДІАГРАМИ ТА ГРАФІКИ НА СЛАЙДАХ: уважно перевіряй блок «ВИЯВЛЕНІ ВБУДОВАНІ ДІАГРАМИ ТА ГРАФІКИ У ПРЕЗЕНТАЦІЇ» та передані візуальні зображення слайдів! Якщо учень побудував діаграму, графік чи схему — КАТЕГОРИЧНО ЗАБОРОНЕНО стверджувати, що діаграма відсутня! Оцінюй доцільність вибору типу діаграми, заголовки, підписи та структуру відображених даних.\n"
         "- 🛡️ ПЕРЕВІРКА СЛАЙДІВ НА ВИКОРИСТАННЯ ШІ: обов'язково проаналізуй тексти слайдів та графіку на предмет генерації ШІ. Якщо тексти слайдів скомпільовані штучним інтелектом (ChatGPT, Gamma, Tome, Canva AI тощо) або мають ознаки синтетичної генерації — зафіксуй це у полях 'ai_generated_percent' та 'ai_generated_detected', вказавши конкретні номери слайдів у 'ai_generated_details'!\n"
         "- У 'strengths' та 'weaknesses' відзначай як відповідність темі, так і якість оформлення презентації."
+    )
+
+    # ── ОЦІНЮВАННЯ ТЕКСТОВИХ ДОКУМЕНТІВ (.docx, .doc, .odt, .rtf) ТА ВИЯВЛЕННЯ ШІ ──
+    prompt_lines.append(
+        "📝 ВКАЗІВКИ ДЛЯ ПЕРЕВІРКИ ТЕКСТОВИХ ДОКУМЕНТІВ ТА ВИЯВЛЕННЯ ШІ:\n"
+        "- Обов'язково перевір зміст текстового документа на наявність характерних артефактів, преамбул та директив штучного інтелекту (ChatGPT, Claude, Gemini тощо)!\n"
+        "- Звертай особливу увагу на шаблонні фрази або директиви чат-бота, які згенеровано для користувача замість власного розв'язку учня (наприклад: «Дайте відповідь на запитання», «Порівняйте їхню поведінку», «Ось покроковий алгоритм», «Підсумовуючи вищевикладене» тощо).\n"
+        "- Якщо учень замість власного виконання або аналізу власної ситуації просто скопіював згенерований чат-ботом шаблон інструкцій або порад із запитаннями до користувача — це є ПРЯМИМ ДОКАЗОМ генеративного ШІ (100% ШІ). У такому разі встанови 'ai_generated_percent': 90-100, 'ai_generated_detected': true, 'ai_generated_confidence': 'high', а оцінку встанови 'Доопрацювати' або 1-3 бали (якщо ШІ заборонено вчителем)!\n"
     )
 
     # ── ОЦІНЮВАННЯ ЕЛЕКТРОННИХ ТАБЛИЦЬ ТА ДІАГРАМ/ГРАФІКІВ (.xlsx, .xls, .ods) ──
