@@ -4,6 +4,7 @@
 {% block title %}Перевірка роботи — {{ submission.last_name }} {{ submission.first_name }} | {{ submission.assignment.title|default:"Шкільні Завдання" }}{% endblock %}
 
 {% block extra_head %}
+<link href="{% static 'css/ai_request_metadata.css' %}" rel="stylesheet">
 <!-- Prism.js для локального підсвічування коду -->
 <link href="{% static 'vendor/prism/prism-tomorrow.min.css' %}" rel="stylesheet" />
 <style>
@@ -628,6 +629,7 @@
 {{ default_gr_codes|json_script:"assignment-default-grs" }}
 {{ viewer_gr_codes|json_script:"viewer-selected-grs" }}
 {{ default_preset.id|json_script:"assignment-default-preset" }}
+<script src="{% static 'js/ai_request_metadata.js' %}"></script>
 <script src="{% static 'js/review_workspace.js' %}" defer></script>
 <script src="{% static 'js/review_loading.js' %}" defer></script>
 <script src="{% static 'js/material_preview.js' %}" defer></script>
@@ -1028,6 +1030,7 @@ function runSingleAICheck(subId) {
     })
     .then(function(data) {
         if (box) box.setAttribute('aria-busy', 'false');
+        var rawRequestMetadata = data.request_metadata;
         var rawFeedback = data.clean_feedback || "";
         data = SchoolNetAI.escapeResult(data);
         if (btn) {
@@ -1109,7 +1112,7 @@ function runSingleAICheck(subId) {
                 lastGrs.textContent = 'Останній результат: ' + data.gr_results.map(function(gr) { return gr.code; }).join(', ') + '. Прапорці визначають наступну перевірку.';
             }
 
-            box.innerHTML = '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:8px;">' +
+            box.innerHTML = SchoolNetAIRequestMetadata.html(rawRequestMetadata) + '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:8px;">' +
                 '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">' +
                     '<span style="font-size:11px;font-weight:700;color:var(--color-text-muted);text-transform:uppercase;">Попередня оцінка:</span>' +
                     gradeBadge +

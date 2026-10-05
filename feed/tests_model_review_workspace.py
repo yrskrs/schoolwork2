@@ -148,7 +148,7 @@ class ModelAndReviewWorkspaceTests(TestCase):
         catalog=json.loads(page.get_element_by_id('ai-provider-catalog-data').text)
         self.assertEqual({g['provider'] for g in catalog}, {'gemini','openai','deepseek','groq','openrouter','custom'})
         form=page.get_element_by_id('ai-add-model-form')
-        self.assertTrue(form.xpath('.//select[@name="model_provider"]'))
+        self.assertTrue(form.xpath('.//select[@name="connection_id"]/option[@data-provider="openai"]'))
         self.assertTrue(form.xpath('.//input[@name="new_model_name"]'))
         rows=page.xpath('//table//tr[td]')
         self.assertTrue(any(row.xpath('.//input[@name="model_provider" and @value="openai"]') for row in rows))

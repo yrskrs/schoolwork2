@@ -150,19 +150,6 @@ def clean_model_name(name, provider='gemini'):
     if (provider or 'gemini').lower() == 'gemini':
         if name.startswith('models/'):
             name = name[7:]
-        # Автоматичне перенаправлення застарілих / вимкнених Google моделей на актуальні
-        legacy_flash = [
-            'gemini-1.5-flash', 'gemini-1.5-flash-latest', 'gemini-1.5-flash-8b',
-            'gemini-1.5-pro', 'gemini-1.5-pro-latest',
-            'gemini-2.0-flash', 'gemini-2.0-flash-exp', 'gemini-2.0-flash-001',
-            'gemini-2.5-flash', 'gemini-2.0-pro', 'gemini-2.0-pro-exp-02-05',
-        ]
-        if name in legacy_flash:
-            return 'gemini-3.8-flash'
-        if name in ['gemini-2.5-pro', 'gemini-pro-latest']:
-            return 'gemini-3.1-pro-preview'
-        if name in ['gemini-2.0-flash-lite', 'gemini-2.5-flash-lite', 'gemini-3.0-flash-lite', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite-preview']:
-            return 'gemini-3.1-flash-lite'
     return name
 
 
@@ -211,28 +198,8 @@ def log_ai_request_metric(model_name, provider='gemini', action='evaluation', st
     """
     try:
         from .models import AIRequestLog
-        p_tokens = 0
-        c_tokens = 0
-        t_tokens = 0
-
-        if isinstance(data, dict):
-            # Google Gemini metadata
-            if 'usageMetadata' in data and isinstance(data['usageMetadata'], dict):
-                um = data['usageMetadata']
-                p_tokens = int(um.get('promptTokenCount') or 0)
-                c_tokens = int(um.get('candidatesTokenCount') or 0)
-                t_tokens = int(um.get('totalTokenCount') or (p_tokens + c_tokens))
-            # OpenAI / DeepSeek / Groq metadata
-            elif 'usage' in data and isinstance(data['usage'], dict):
-                u = data['usage']
-                p_tokens = int(u.get('prompt_tokens') or 0)
-                c_tokens = int(u.get('completion_tokens') or 0)
-                t_tokens = int(u.get('total_tokens') or (p_tokens + c_tokens))
-
-        if t_tokens == 0 and status_code == 200:
-            p_tokens = 850
-            c_tokens = 380
-            t_tokens = 1230
+        from .ai_request_metadata import parse_usage
+        usage = parse_usage(data)
 
         AIRequestLog.objects.create(
             model_name=str(model_name or '')[:100],
@@ -240,9 +207,10 @@ def log_ai_request_metric(model_name, provider='gemini', action='evaluation', st
             action=str(action or 'evaluation')[:100],
             status_code=int(status_code or 200),
             is_success=bool(is_success),
-            prompt_tokens=p_tokens,
-            completion_tokens=c_tokens,
-            total_tokens=t_tokens,
+            prompt_tokens=usage['prompt_tokens'] or 0,
+            completion_tokens=usage['completion_tokens'] or 0,
+            total_tokens=usage['total_tokens'] or 0,
+            usage_reported=usage['total_tokens'] is not None,
             latency_ms=int(latency_ms or 0)
         )
     except Exception:
@@ -5535,7 +5503,8 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                 act_provider, act_key, act_model, act_url = b_prov, b_key, b_model, b_url
                 is_backup_active = not is_backup_active
         if not act_key and act_provider != 'custom':
-            error_msg = f"API Key для {act_provider.title()} не налаштовано в системі. Вкажіть ключ у Налаштуваннях ШІ."
+            error_msg = ("Додайте підключення та хоча б одну ввімкнену модель у Налаштуваннях ШІ." if settings.unified_model_queue else
+                         f"API Key для {act_provider.title()} не налаштовано в системі. Вкажіть ключ у Налаштуваннях ШІ.")
             submission.ai_status = 'failed'
             submission.ai_error_reason = error_msg
             submission.save(update_fields=['ai_status', 'ai_error_reason'])
@@ -6311,7 +6280,7 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
 
         is_failover_call = (c_is_backup != is_backup_active)
         fallback_happened = is_failover_call or (cfg_idx > 0)
-        max_retries = 1 if len(attempts_configs) > 1 else 2
+        max_retries = 0 if settings.unified_model_queue else (1 if len(attempts_configs) > 1 else 2)
 
         for attempt in range(max_retries + 1):
             try:
@@ -7297,13 +7266,22 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                     submission.ai_generated_details = ai_generated_details
                     submission.ai_generated_percent = ai_generated_percent
                     submission.ai_model_used = model_name
+                    from .ai_request_metadata import request_metadata
+                    metadata = request_metadata(c_provider, c_model, raw_data)
+                    submission.ai_provider_used = metadata['provider']
+                    submission.ai_request_model = metadata['model']
+                    submission.ai_prompt_tokens = metadata['prompt_tokens']
+                    submission.ai_completion_tokens = metadata['completion_tokens']
+                    submission.ai_total_tokens = metadata['total_tokens']
                     submission.ai_status = 'success'
                     submission.ai_error_reason = ''
                     submission.ai_reviewed_at = timezone.now()
                     submission.save(update_fields=[
                         'ai_suggested_grade', 'ai_score_level', 'ai_feedback', 'ai_gr_results',
                         'ai_generated_detected', 'ai_generated_confidence', 'ai_generated_details',
-                        'ai_generated_percent', 'ai_model_used', 'ai_status', 'ai_error_reason', 'ai_reviewed_at'
+                        'ai_generated_percent', 'ai_model_used', 'ai_provider_used', 'ai_request_model',
+                        'ai_prompt_tokens', 'ai_completion_tokens', 'ai_total_tokens',
+                        'ai_status', 'ai_error_reason', 'ai_reviewed_at'
                     ])
 
                     return {
@@ -7348,6 +7326,7 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                         'task_understanding_confidence': result_json.get('task_understanding_confidence') or scope.get('task_understanding_confidence', 1.0),
                         'ambiguities': result_json.get('ambiguities') or scope.get('ambiguities') or [],
                         'model_used': model_name,
+                        'request_metadata': metadata,
                         'fallback_activated': fallback_happened
                     }
                 else:
@@ -7384,7 +7363,7 @@ def generate_criteria_with_gemini(teacher_notes, assignment_title='', assignment
                 act_provider, act_key, act_model, act_url = b_prov, b_key, b_model, b_url
                 is_backup_active = not is_backup_active
         if not act_key and act_provider != 'custom':
-            return {'status': 'error', 'message': f'API-ключ для {act_provider.title()} не налаштовано в системі.'}
+            return {'status': 'error', 'message': ('Додайте підключення та хоча б одну ввімкнену модель у Налаштуваннях ШІ.' if settings.unified_model_queue else f'API-ключ для {act_provider.title()} не налаштовано в системі.')}
 
     teacher_notes = (teacher_notes or '').strip()
     assignment_title = (assignment_title or '').strip()
@@ -7437,13 +7416,13 @@ def generate_criteria_with_gemini(teacher_notes, assignment_title='', assignment
 
     attempted_errors = []
 
-    for cfg in attempts_configs:
+    for cfg_idx, cfg in enumerate(attempts_configs):
         c_provider = cfg['provider']
         c_key = cfg['api_key']
         c_model = cfg['model']
         c_url = cfg['custom_url']
         c_is_backup = cfg['is_backup']
-        is_failover = (c_is_backup != is_backup_active)
+        is_failover = (cfg_idx > 0) or (c_is_backup != is_backup_active)
 
         try:
             thinking_budget_val = 0 if ('flash' in c_model.lower() and c_provider == 'gemini') else None
@@ -7476,7 +7455,7 @@ def generate_criteria_with_gemini(teacher_notes, assignment_title='', assignment
                     if is_failover:
                         try:
                             settings.last_failover_at = timezone.now()
-                            settings.last_failover_reason = f"Автоматичне перемикання на резервний {c_provider.title()} ({c_model}) при генерації критеріїв."
+                            settings.last_failover_reason = f"Автоматичний перехід до {c_provider.title()} ({c_model}) при генерації критеріїв."
                             settings.save(update_fields=['last_failover_at', 'last_failover_reason'])
                         except Exception:
                             pass

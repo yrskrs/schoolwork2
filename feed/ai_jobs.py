@@ -188,6 +188,8 @@ def execute_job(job_id):
                     'is_ai_allowed': bool(submission.is_ai_allowed),
                     'gr_results': submission.get_ai_gr_results_list(),
                     'gr_avg': submission.get_ai_gr_average(),
+                    'model_used': submission.ai_model_used,
+                    'request_metadata': submission.get_ai_request_metadata(),
                     'format_warning': result.get('format_warning') or '',
                     'error': submission.ai_error_reason or ''
                 }

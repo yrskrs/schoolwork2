@@ -3050,6 +3050,12 @@ def _perform_student_ai_check(submission, result):
     submission.ai_error_reason = ''
     submission.ai_reviewed_at = submission.student_ai_checked_at
     submission.ai_model_used = result.get('model_used') or 'Google Gemini AI'
+    metadata = result.get('request_metadata') or {}
+    submission.ai_provider_used = metadata.get('provider') or ''
+    submission.ai_request_model = metadata.get('model') or ''
+    submission.ai_prompt_tokens = metadata.get('prompt_tokens')
+    submission.ai_completion_tokens = metadata.get('completion_tokens')
+    submission.ai_total_tokens = metadata.get('total_tokens')
 
     submission.save(update_fields=[
         'student_ai_checked', 'student_ai_checked_at',
@@ -3058,7 +3064,8 @@ def _perform_student_ai_check(submission, result):
         'ai_generated_detected', 'ai_generated_percent',
         'ai_generated_confidence', 'ai_generated_details',
         'ai_suggested_grade', 'ai_score_level', 'ai_feedback', 'ai_gr_results',
-        'ai_status', 'ai_error_reason', 'ai_reviewed_at', 'ai_model_used'
+        'ai_status', 'ai_error_reason', 'ai_reviewed_at', 'ai_model_used',
+        'ai_provider_used', 'ai_request_model', 'ai_prompt_tokens', 'ai_completion_tokens', 'ai_total_tokens'
     ])
 
     # Детектор дублікатів та плагіату для учня
@@ -3090,6 +3097,9 @@ def _perform_student_ai_check(submission, result):
             ai_error_reason='',
             ai_reviewed_at=submission.ai_reviewed_at,
             ai_model_used=submission.ai_model_used,
+            ai_provider_used=submission.ai_provider_used, ai_request_model=submission.ai_request_model,
+            ai_prompt_tokens=submission.ai_prompt_tokens, ai_completion_tokens=submission.ai_completion_tokens,
+            ai_total_tokens=submission.ai_total_tokens,
         )
 
     # Готуємо відповідь для учня (без технічних полів)
@@ -6477,6 +6487,8 @@ def teacher_settings_view(request):
     """
     teacher = request.user.teacher_profile
     ai_settings = AISettings.get_solo()
+    if request.method == 'GET' and request.GET.get('tab') == 'ai':
+        ai_settings.import_legacy_connections()
     school = School.objects.first()
     if not school:
         school = School.objects.create(name="Наш Заклад Освіти", admin=request.user)
@@ -6722,6 +6734,15 @@ def teacher_settings_view(request):
             return redirect(f"{reverse('teacher_settings')}?tab=environment")
 
         # ── 3. ДІЇ ШТУЧНОГО ІНТЕЛЕКТУ ТА ПРІОРИТЕТІВ МОДЕЛЕЙ ─────────────────
+        elif action in ('save_ai_connection', 'delete_ai_connection'):
+            from .ai_connections import save_connection
+            try:
+                save_connection(ai_settings.pk, request.POST, delete=action == 'delete_ai_connection')
+                messages.success(request, 'Підключення видалено разом із його моделями.' if action == 'delete_ai_connection' else 'Підключення збережено. Порядок використання змінюється на вкладці «Моделі».')
+            except ValueError as error:
+                messages.error(request, str(error))
+            return redirect(ai_settings_url(request))
+
         elif action == 'save_ai_config' or (not action and ('api_key' in request.POST or 'temperature' in request.POST or 'system_prompt' in request.POST or 'ai_detector_tolerance_percent' in request.POST or 'backup_api_key' in request.POST)):
             ai_provider = request.POST.get('ai_provider', 'gemini').strip()
             api_key = request.POST.get('api_key', '').strip()
@@ -6745,20 +6766,21 @@ def teacher_settings_view(request):
             is_enabled = bool(request.POST.get('is_enabled'))
             tolerance_val = request.POST.get('ai_detector_tolerance_percent')
 
-            ai_settings.ai_provider = ai_provider or 'gemini'
-            ai_settings.api_key = api_key
-            if model_name:
-                ai_settings.model_name = model_name
-                ai_settings.add_saved_model(model_name, provider=ai_settings.ai_provider)
-            ai_settings.custom_api_url = custom_api_url
+            if not ai_settings.unified_model_queue:
+                ai_settings.ai_provider = ai_provider or 'gemini'
+                ai_settings.api_key = api_key
+                if model_name:
+                    ai_settings.model_name = model_name
+                    ai_settings.add_saved_model(model_name, provider=ai_settings.ai_provider)
+                ai_settings.custom_api_url = custom_api_url
 
-            ai_settings.backup_ai_provider = backup_ai_provider or 'gemini'
-            ai_settings.backup_api_key = backup_api_key
-            ai_settings.backup_model_name = backup_model_name
-            ai_settings.backup_custom_api_url = backup_custom_api_url
+                ai_settings.backup_ai_provider = backup_ai_provider or 'gemini'
+                ai_settings.backup_api_key = backup_api_key
+                ai_settings.backup_model_name = backup_model_name
+                ai_settings.backup_custom_api_url = backup_custom_api_url
 
-            if active_api_type in ['primary', 'backup']:
-                ai_settings.active_api_type = active_api_type
+                if active_api_type in ['primary', 'backup']:
+                    ai_settings.active_api_type = active_api_type
             ai_settings.auto_failover_enabled = auto_failover_enabled
 
             ai_settings.system_prompt = system_prompt
@@ -6770,13 +6792,20 @@ def teacher_settings_view(request):
                     ai_settings.ai_detector_tolerance_percent = max(0, min(100, int(tolerance_val)))
                 except (ValueError, TypeError):
                     pass
-            ai_settings.save()
-            messages.success(request, "Параметри модуля ШІ (включаючи резервний API та провайдерів) успішно збережено! 🤖")
+            if ai_settings.unified_model_queue:
+                ai_settings.save(update_fields=['auto_failover_enabled', 'system_prompt', 'temperature', 'is_enabled',
+                    'default_thinking_mode', 'ai_detector_tolerance_percent', 'updated_at'])
+            else:
+                ai_settings.save()
+            messages.success(request, "Параметри модуля ШІ збережено! 🤖")
             if request.path == reverse('ai_settings'):
                 return redirect('ai_settings')
             return redirect(ai_settings_url(request))
 
         elif action == 'switch_active_api':
+            if ai_settings.unified_model_queue:
+                messages.info(request, 'Порядок використання змінюється на вкладці «Моделі».')
+                return redirect(ai_settings_url(request))
             target_api = request.POST.get('target_api', '').strip()
             if target_api in ['primary', 'backup']:
                 ai_settings.active_api_type = target_api
@@ -6790,40 +6819,49 @@ def teacher_settings_view(request):
             return redirect(ai_settings_url(request))
 
         elif action in ['add_custom_model', 'move_model_priority', 'toggle_model_enabled', 'delete_model', 'switch_model']:
-            provider = request.POST.get('model_provider', '').strip() or None
-            try:
-                if provider and provider not in dict(AI_PROVIDER_CHOICES):
-                    raise ValueError('Оберіть підтримуваного провайдера.')
-                if action == 'add_custom_model':
-                    name = request.POST.get('new_model_name', '').strip()
-                    if not name or len(name) > 100 or any(ch.isspace() for ch in name):
-                        raise ValueError('Вкажіть ідентифікатор моделі без пробілів, до 100 символів.')
-                    raw_priority = request.POST.get('priority', '')
-                    priority = int(raw_priority) if raw_priority.isdigit() else None
-                    if request.POST.get('make_active'): priority = 1
-                    ai_settings.add_saved_model(name, priority=priority, provider=provider)
-                    messages.success(request, f'Модель «{name}» додано до черги.')
-                    resolved = ai_settings._model_provider(name, provider)
-                    if not ai_settings.get_provider_config(resolved):
-                        messages.info(request, 'Модель збережено. Щоб використовувати її, налаштуйте цей провайдер у «Підключення».')
-                elif action == 'move_model_priority':
-                    ai_settings.move_model_priority(request.POST.get('model_name', ''), request.POST.get('direction'), provider=provider)
-                    messages.info(request, 'Порядок моделей оновлено.')
-                elif action == 'toggle_model_enabled':
-                    ai_settings.toggle_model_enabled(request.POST.get('model_name', ''), provider=provider)
-                    messages.info(request, 'Участь моделі у fallback змінено.')
-                elif action == 'delete_model':
-                    ai_settings.remove_saved_model(request.POST.get('model_to_delete', ''), provider=provider)
-                    messages.info(request, 'Модель видалено з черги.')
-                else:
-                    name = request.POST.get('switch_to_model', '').strip()
-                    if not name: raise ValueError('Оберіть модель.')
-                    ai_settings.activate_saved_model(name, provider)
-                    ai_settings.add_saved_model(name, priority=1, provider=provider)
-                    messages.success(request, f'Активну модель змінено на «{name}».')
-            except (ValueError, TypeError) as error:
-                messages.error(request, str(error))
-            return redirect(ai_settings_url(request))
+            with transaction.atomic():
+                ai_settings = AISettings.objects.select_for_update().get(pk=ai_settings.pk)
+                provider = request.POST.get('model_provider', '').strip() or None
+                connection_id = request.POST.get('connection_id', '').strip() or None
+                if ai_settings.unified_model_queue:
+                    connection = ai_settings.get_connection(connection_id)
+                    if not connection:
+                        messages.error(request, 'Оберіть підключення для моделі.')
+                        return redirect(ai_settings_url(request))
+                    provider = connection['provider']
+                try:
+                    if provider and provider not in dict(AI_PROVIDER_CHOICES):
+                        raise ValueError('Оберіть підтримуваного провайдера.')
+                    if action == 'add_custom_model':
+                        name = request.POST.get('new_model_name', '').strip()
+                        if not name or len(name) > 100 or any(ch.isspace() for ch in name):
+                            raise ValueError('Вкажіть ідентифікатор моделі без пробілів, до 100 символів.')
+                        raw_priority = request.POST.get('priority', '')
+                        priority = int(raw_priority) if raw_priority.isdigit() else None
+                        if request.POST.get('make_active'): priority = 1
+                        ai_settings.add_saved_model(name, priority=priority, provider=provider, connection_id=connection_id)
+                        messages.success(request, f'Модель «{name}» додано до черги.')
+                        resolved = ai_settings._model_provider(name, provider)
+                        if not ai_settings.get_provider_config(resolved, connection_id=connection_id):
+                            messages.info(request, 'Модель збережено. Щоб використовувати її, налаштуйте цей провайдер у «Підключення».')
+                    elif action == 'move_model_priority':
+                        ai_settings.move_model_priority(request.POST.get('model_name', ''), request.POST.get('direction'), provider=provider, connection_id=connection_id)
+                        messages.info(request, 'Порядок моделей оновлено.')
+                    elif action == 'toggle_model_enabled':
+                        ai_settings.toggle_model_enabled(request.POST.get('model_name', ''), provider=provider, connection_id=connection_id)
+                        messages.info(request, 'Участь моделі у fallback змінено.')
+                    elif action == 'delete_model':
+                        ai_settings.remove_saved_model(request.POST.get('model_to_delete', ''), provider=provider, connection_id=connection_id)
+                        messages.info(request, 'Модель видалено з черги.')
+                    else:
+                        name = request.POST.get('switch_to_model', '').strip()
+                        if not name: raise ValueError('Оберіть модель.')
+                        ai_settings.activate_saved_model(name, provider, connection_id=connection_id)
+                        ai_settings.add_saved_model(name, priority=1, provider=provider, connection_id=connection_id)
+                        messages.success(request, f'Активну модель змінено на «{name}».')
+                except (ValueError, TypeError) as error:
+                    messages.error(request, str(error))
+                return redirect(ai_settings_url(request))
 
         elif action == 'reset_prompt':
             ai_settings.system_prompt = DEFAULT_NUS_SYSTEM_PROMPT
@@ -6990,8 +7028,8 @@ def teacher_settings_view(request):
         display_name = item['name'] if item['provider'] == 'gemini' else f"{item['name']} ({item['provider'].title()})"
         checks = Submission.objects.filter(ai_model_used=display_name)
         model_stats.append({**item, 'is_saved': True,
-                            'configured': bool(ai_settings.get_provider_config(item['provider'])),
-                            'is_active': (item['provider'], item['name']) == (ai_settings.get_active_config()[0], ai_settings.get_active_config()[2]),
+                            'configured': bool(ai_settings.get_provider_config(item['provider'], connection_id=item.get('connection_id'))),
+                            'is_active': bool(ai_settings.get_request_configs()) and (item.get('connection_id'), item['name']) == (ai_settings.get_request_configs()[0].get('connection_id'), ai_settings.get_request_configs()[0]['model']),
                             'total_checks': checks.count(), 'success_checks': checks.filter(ai_status='success').count(),
                             'failed_checks': checks.filter(ai_status='failed').count()})
 
@@ -7081,6 +7119,7 @@ def teacher_settings_view(request):
         'models_with_priority': models_with_priority,
         'active_fallback_chain': active_fallback_chain,
         'model_stats': model_stats,
+        'ai_connections': ai_settings.public_connections(),
         'provider_catalog': PROVIDER_CATALOG,
         'catalog_checked_at': CATALOG_CHECKED_AT,
         'stats_view': stats_view,
@@ -7138,6 +7177,18 @@ def api_test_gemini_connection(request):
     api_key = request.POST.get('api_key')
     model_name = request.POST.get('model_name', '').strip()
     custom_url = request.POST.get('custom_url')
+
+    connection_id = request.POST.get('connection_id', '').strip()
+    if connection_id:
+        settings = AISettings.get_solo()
+        connection = settings.get_connection(connection_id)
+        if not connection:
+            return JsonResponse({'success': False, 'message': 'Підключення більше не існує.'}, status=400)
+        if provider and provider != connection['provider']:
+            return JsonResponse({'success': False, 'message': 'Постачальник не відповідає підключенню.'}, status=400)
+        provider = connection['provider']
+        api_key = (api_key or '').strip() or connection['api_key']
+        custom_url = custom_url if custom_url is not None else connection['custom_url']
 
     success, message, model_used, prov_used = test_ai_connection(
         provider=provider,
@@ -7395,6 +7446,7 @@ def api_ai_get_batch_queue(request):
     for s in qs.order_by('-submitted_at')[:300]:
         items.append({
             'id': s.id,
+            'request_metadata': s.get_ai_request_metadata() if s.ai_status == 'success' else None,
             'student_name': s.get_student_full_name(),
             'class_name': s.class_group.name if s.class_group else '—',
             'assignment_title': s.assignment.title if s.assignment else '—',

@@ -1,13 +1,9 @@
 /* Provider-aware model controls and visible results. No credentials are written to the DOM result. */
 (function () {
     'use strict';
-    const slotProviders = new Map(), slotCredentials = new Map();
-    function field(id) {const el = document.getElementById(id); return el ? el.value.trim() : '';}
-    function connection(slot) {
-        const backup = slot === 'backup';
-        return {provider: field(backup ? 'backup_ai_provider' : 'ai_provider'),
-            api_key: field(backup ? 'backup_api_key' : 'api_key'), model_name: field(backup ? 'backup_model_name' : 'model_name'),
-            custom_url: field(backup ? 'backup_custom_api_url' : 'custom_api_url')};
+    function savedConnections() {
+        const source = document.getElementById('ai-connections-data');
+        return source ? JSON.parse(source.textContent) : [];
     }
     function resultFor(button) {
         const container = button.closest('[data-model-record]') || button.closest('td') || button.parentElement;
@@ -22,7 +18,7 @@
     }
     async function runTest(config, button, result) {
         if (button && button.disabled) return;
-        if ((config.provider !== 'custom' && !config.api_key) || (config.provider === 'custom' && !config.custom_url)) {
+        if (!config.connection_id && ((config.provider !== 'custom' && !config.api_key) || (config.provider === 'custom' && !config.custom_url))) {
             status(result, '⚠️ Налаштуйте ключ або Base URL для ' + config.provider.toUpperCase() + ' у «Підключення».', 'error'); return;
         }
         const original = button ? button.textContent : '';
@@ -39,60 +35,32 @@
         } catch (error) {status(result, error.name === 'AbortError' ? '⚠️ Час очікування відповіді минув. Спробуйте ще раз.' : '⚠️ Не вдалося отримати результат тесту: ' + error.message, 'error');}
         finally {clearTimeout(timer); if (button) {button.disabled = false; button.textContent = original; button.removeAttribute('aria-busy');}}
     }
-    window.refreshProviderModels = function(slot, reset) {
-        const backup = slot === 'backup', provider = field(backup ? 'backup_ai_provider' : 'ai_provider');
-        const select = document.getElementById(backup ? 'backup_model_select' : 'primary_model_select');
-        const input = document.getElementById(backup ? 'backup_model_name' : 'model_name');
-        const wrap = document.getElementById(backup ? 'backup_model_input_wrap' : 'primary_model_input_wrap');
-        const keyInput = document.getElementById(backup ? 'backup_api_key' : 'api_key');
-        const urlInput = document.getElementById(backup ? 'backup_custom_api_url' : 'custom_api_url');
-        const previous = slotProviders.get(slot);
-        let restoredModel = '';
-        if (reset && previous && previous !== provider) {
-            slotCredentials.set(slot + ':' + previous, {key: keyInput.value, url: urlInput.value, model: input.value});
-            const stored = slotCredentials.get(slot + ':' + provider) || {key: '', url: ''};
-            keyInput.value = stored.key; urlInput.value = stored.url; restoredModel = stored.model || '';
-        }
-        slotProviders.set(slot, provider);
-        const catalog = JSON.parse(document.getElementById('ai-provider-catalog-data').textContent);
-        const saved = JSON.parse(document.getElementById('ai-saved-models-data').textContent);
-        const group = catalog.find(group => group.provider === provider);
-        const names = Array.from(new Set([...(group ? group.models.map(model => model.name) : []), ...saved.filter(model => model.provider === provider).map(model => model.name)]));
-        const current = reset ? (restoredModel || names[0] || '') : input.value.trim();
-        select.replaceChildren();
-        if (backup && !current) {const option = document.createElement('option'); option.value = ''; option.textContent = 'За замовчуванням для провайдера'; select.append(option);}
-        if (current && !names.includes(current)) names.unshift(current);
-        names.forEach(name => {const option = document.createElement('option'); option.value = name; option.textContent = name; select.append(option);});
-        const custom = document.createElement('option'); custom.value = '__custom__'; custom.textContent = '✏️ Ввести ідентифікатор вручну'; select.append(custom);
-        input.value = current; select.value = current || (backup ? '' : '__custom__');
-        wrap.style.display = select.value === '__custom__' ? 'block' : 'none';
-    };
-    window.testConnection = function (slot, callerBtn) {
-        const backup = slot === 'backup';
-        const button = callerBtn || document.getElementById(backup ? 'btn-test-backup' : 'btn-test-primary');
-        const result = document.getElementById(backup ? 'backup-test-result' : 'primary-test-result');
-        runTest(connection(slot), button, result);
-    };
-    window.testModelDirect = function (name, button, provider) {
-        const active = document.querySelector('[name="active_api_type"]:checked');
-        const order = active && active.value === 'backup' ? ['backup','primary'] : ['primary','backup'];
-        const configs = order.map(connection);
-        const config = configs.find(item => item.provider === provider && (item.api_key || (provider === 'custom' && item.custom_url))) || configs.find(item => item.provider === provider);
+    window.testModelDirect = function (name, button, provider, connectionId) {
+        const candidates = savedConnections().filter(item => item.provider === provider && (!connectionId || item.id === connectionId));
         const result = resultFor(button);
-        if (!config) {status(result, '⚠️ Для ' + provider.toUpperCase() + ' немає підключення. Налаштуйте його на вкладці «Підключення».', 'error'); return;}
-        runTest({...config, model_name: name}, button, result);
+        if (candidates.length !== 1) {
+            status(result, 'Оберіть підключення та натисніть «Тест» біля моделі на вкладці «Моделі».', 'error'); return;
+        }
+        runTest({connection_id: candidates[0].id, provider: provider, model_name: name}, button, result);
     };
     document.addEventListener('DOMContentLoaded', function () {
-        if (document.getElementById('ai-provider-catalog-data')) {refreshProviderModels('primary', false); refreshProviderModels('backup', false);}
-        const provider = document.getElementById('new_model_provider');
+        const newProvider = document.getElementById('connection-provider-new');
+        if (newProvider) {
+            const url = document.querySelector('[data-new-connection-url]');
+            const toggleUrl = () => {url.hidden = newProvider.value !== 'custom';};
+            newProvider.addEventListener('change', toggleUrl); toggleUrl();
+        }
+        const provider = document.getElementById('new_model_connection');
         const catalogSource = document.getElementById('ai-provider-catalog-data');
         if (provider && catalogSource) {
             const catalog = JSON.parse(catalogSource.textContent);
             function selectProvider(clear) {
+                const selected = provider.options[provider.selectedIndex];
+                const providerName = selected ? selected.dataset.provider : '';
                 if (clear) document.getElementById('new_model_name').value = '';
-                document.querySelectorAll('[data-catalog-provider]').forEach(group => {group.hidden = group.dataset.catalogProvider !== provider.value;});
+                document.querySelectorAll('[data-catalog-provider]').forEach(group => {group.hidden = group.dataset.catalogProvider !== providerName;});
                 const suggestions = document.getElementById('ai-model-suggestions'); suggestions.replaceChildren();
-                const group = catalog.find(group => group.provider === provider.value);
+                const group = catalog.find(group => group.provider === providerName);
                 (group ? group.models : []).forEach(model => {const option = document.createElement('option'); option.value = model.name; suggestions.append(option);});
             }
             provider.addEventListener('change', () => selectProvider(true)); selectProvider(false);

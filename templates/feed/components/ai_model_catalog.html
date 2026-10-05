@@ -2,22 +2,22 @@
     <h3>➕ Додати модель</h3>
     <form method="post" class="ai-add-model-form" id="ai-add-model-form">
         {% csrf_token %}<input type="hidden" name="action" value="add_custom_model">
-        <div><label class="form-label" for="new_model_provider">Провайдер</label><select id="new_model_provider" name="model_provider" class="form-input">
-            {% for value,label in ai_providers %}<option value="{{ value }}" {% if value == ai_settings.ai_provider %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        <div><label class="form-label" for="new_model_connection">Підключення</label><select id="new_model_connection" name="connection_id" class="form-input" required>
+            {% for connection in ai_connections %}<option value="{{ connection.id }}" data-provider="{{ connection.provider }}">{{ connection.label }} · {{ connection.provider|upper }}{% if not connection.configured %} · потрібен ключ{% endif %}</option>{% endfor %}
         </select></div>
         <div><label class="form-label" for="new_model_name">Ідентифікатор моделі</label><input name="new_model_name" id="new_model_name" class="form-input" maxlength="100" list="ai-model-suggestions" required placeholder="Точна назва з API провайдера"><datalist id="ai-model-suggestions"></datalist></div>
-        <div><label class="form-label" for="new_model_priority">Пріоритет</label><select id="new_model_priority" name="priority" class="form-input"><option value="99">У кінець черги</option><option value="1">#1 · Основна</option><option value="2">#2 · Резервна</option><option value="3">#3 · Резервна</option></select></div>
+        <div><label class="form-label" for="new_model_priority">Пріоритет</label><select id="new_model_priority" name="priority" class="form-input"><option value="99">У кінець черги</option><option value="1">#1 · Перша</option><option value="2">#2 · Друга</option><option value="3">#3 · Третя</option></select></div>
         <button type="submit" class="btn btn-primary">➕ Додати модель</button>
     </form>
-    <p class="form-hint">Модель використовує підключення свого провайдера. Налаштуйте його в основному або резервному API на вкладці «Підключення». Моделі без підключення зберігаються в списку й пропускаються під час fallback.</p>
+    <p class="form-hint">Модель використовує ключ вибраного підключення. Порядок спільний для всіх постачальників; вимкнені моделі та підключення без ключа пропускаються.</p>
     <details class="ai-settings-disclosure" id="ai-model-catalog"><summary>📚 Каталог моделей та орієнтовні квоти</summary><div class="ai-settings-disclosure-body">
-        <p class="form-hint">Показано каталог провайдера, вибраного вище. Дані перевірено {{ catalog_checked_at }}; квоти не встановлюють обмежень на роботи учнів.</p>
+        <p class="form-hint">Показано каталог постачальника вибраного підключення. Дані перевірено {{ catalog_checked_at }}; квоти не встановлюють обмежень на роботи учнів.</p>
         {% for group in provider_catalog %}<section data-catalog-provider="{{ group.provider }}" {% if group.provider != ai_settings.ai_provider %}hidden{% endif %}>
             <h3>{{ group.title }}</h3><p class="form-hint">{{ group.quota_note }}</p>
             {% if group.source %}<p class="form-hint"><a href="{{ group.source }}" target="_blank" rel="noopener noreferrer">Офіційний каталог ↗</a> · <a href="{{ group.limits_url }}" target="_blank" rel="noopener noreferrer">Квоти провайдера ↗</a></p>{% endif %}
             <div class="ai-catalog-grid">{% for model in group.models %}<article class="ai-catalog-card">
                 <code>{{ model.name }}</code><p>{{ model.description }}</p><p class="form-hint"><strong>{{ model.quota }}</strong></p>
-                <div class="ai-catalog-actions"><button type="button" class="btn btn-primary btn-sm" onclick="selectModelToInput('{{ model.name|escapejs }}','queue','{{ group.provider|escapejs }}')">➕ У форму</button><button type="button" class="btn btn-secondary btn-sm" onclick="selectModelToInput('{{ model.name|escapejs }}','primary','{{ group.provider|escapejs }}')">⭐ Основний API</button><button type="button" class="btn btn-secondary btn-sm" onclick="selectModelToInput('{{ model.name|escapejs }}','backup','{{ group.provider|escapejs }}')">🛡️ Резервний API</button></div>
+                <div class="ai-catalog-actions"><button type="button" class="btn btn-primary btn-sm" onclick="selectModelToInput('{{ model.name|escapejs }}','queue','{{ group.provider|escapejs }}')">➕ У форму</button></div>
             </article>{% empty %}<p>Вкажіть ідентифікатор моделі вашого сервера у формі вище.</p>{% endfor %}</div>
         </section>{% endfor %}
     </div></details>

@@ -471,19 +471,17 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, 'Налаштування модуля')
 
-        # Збереження налаштувань
+        # Підключення зберігається окремо від загальних параметрів.
         post_resp = self.client.post(reverse('ai_settings'), {
-            'api_key': 'AIzaTestFakeKey123',
-            'model_name': 'gemini-2.5-flash',
-            'system_prompt': DEFAULT_NUS_SYSTEM_PROMPT,
-            'temperature': '0.3',
-            'is_enabled': '1'
+            'action': 'save_ai_connection', 'connection_provider': 'gemini',
+            'connection_key': 'AIzaTestFakeKey123', 'connection_model': 'gemini-2.5-flash',
         }, follow=True)
         self.assertEqual(post_resp.status_code, 200)
-
+        self.client.post(reverse('ai_settings'), {'action': 'save_ai_config',
+            'system_prompt': DEFAULT_NUS_SYSTEM_PROMPT, 'temperature': '0.3', 'is_enabled': '1'})
         settings = AISettings.get_solo()
-        self.assertEqual(settings.api_key, 'AIzaTestFakeKey123')
-        self.assertEqual(settings.model_name, 'gemini-2.5-flash')
+        self.assertEqual(settings.get_active_config()[:3], ('gemini', 'AIzaTestFakeKey123', 'gemini-2.5-flash'))
+        self.assertEqual(settings.api_key, '')
         self.assertTrue(settings.is_enabled)
 
 
@@ -971,10 +969,14 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
         """Тест додавання моделей з пріоритетами, зміни пріоритетів та видалення моделі."""
         from .models import AISettings
         self.client.login(username='teacher1', password='password123')
+        from .ai_connections import save_connection
         settings = AISettings.get_solo()
+        settings = save_connection(settings.pk, {'connection_provider': 'gemini', 'connection_key': 'synthetic-key'})
+        connection_id = settings.provider_connections[-1]['id']
 
         # 1. Додавання нової власної моделі з пріоритетом 1 (зробити основною)
         post_resp = self.client.post(reverse('teacher_settings'), {
+            'connection_id': connection_id,
             'action': 'add_custom_model',
             'new_model_name': 'gemini-custom-model-v1',
             'priority': '1',
@@ -983,13 +985,14 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
         self.assertEqual(post_resp.status_code, 200)
 
         settings.refresh_from_db()
-        self.assertEqual(settings.model_name, 'gemini-custom-model-v1')
+        self.assertEqual(settings.get_active_config()[2], 'gemini-custom-model-v1')
         models_list = settings.get_models_with_priority()
         self.assertEqual(models_list[0]['name'], 'gemini-custom-model-v1')
         self.assertEqual(models_list[0]['priority'], 1)
 
         # 2. Додавання другої моделі
         self.client.post(reverse('teacher_settings'), {
+            'connection_id': connection_id,
             'action': 'add_custom_model',
             'new_model_name': 'gemini-backup-model-v2',
             'priority': '2'
@@ -1001,6 +1004,7 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
 
         # 3. Переміщення пріоритету (вгору / вниз)
         self.client.post(reverse('teacher_settings'), {
+            'connection_id': connection_id,
             'action': 'move_model_priority',
             'model_name': 'gemini-backup-model-v2',
             'direction': 'up'
@@ -1011,6 +1015,7 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
 
         # 4. Видалення моделі зі списку
         del_resp = self.client.post(reverse('teacher_settings'), {
+            'connection_id': connection_id,
             'action': 'delete_model',
             'model_to_delete': 'gemini-custom-model-v1'
         }, follow=True)
@@ -5192,8 +5197,8 @@ class MultiProviderAndFailoverAITests(TestCase):
         ok, msg, model, prov = test_ai_connection(provider='gemini', api_key='AIzaTest', model_name='gemini-2.5-flash')
         self.assertTrue(ok)
         self.assertEqual(prov, 'gemini')
-        # gemini-2.5-flash is redirected to gemini-3.8-flash by clean_model_name
-        self.assertEqual(model, 'gemini-3.8-flash')
+        # The API receives the model chosen by the teacher, without silent substitutions.
+        self.assertEqual(model, 'gemini-2.5-flash')
 
         # 2. OpenAI успіх
         mock_http.return_value = (200, {

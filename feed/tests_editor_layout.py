@@ -166,6 +166,7 @@ class AssignmentEditorLayoutTests(TestCase):
         model_name = 'gemini-3.1-flash-lite-preview-long-model-name'
         config = AISettings.get_solo()
         config.model_name = model_name
+        config.api_key = 'synthetic-key'
         config.save()
         AIRequestLog.objects.create(model_name=model_name, prompt_tokens=500, total_tokens=500)
         page = self.page(reverse('teacher_settings') + '?tab=ai&ai_section=statistics')

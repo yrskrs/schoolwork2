@@ -3,6 +3,8 @@
 
 {% block title %}Пакетна ШІ-перевірка робіт (Gemini AI) — Шкільні Завдання{% endblock %}
 
+{% block extra_head %}<link href="{% static 'css/ai_request_metadata.css' %}" rel="stylesheet"><script src="{% static 'js/ai_request_metadata.js' %}"></script>{% endblock %}
+
 {% block content %}
 <div class="page-wrapper">
 
@@ -21,11 +23,11 @@
                 <h1>Пакетна ШІ-перевірка</h1>
             </div>
 
-            {% if not ai_settings.api_key %}
+            {% if not ai_settings.has_usable_models %}
             <div class="alert alert-warning" style="margin-bottom:20px;padding:16px 20px;border-radius:var(--radius-md);background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.3);color:var(--color-warning);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
                 <div>
-                    <strong>⚠️ Google Gemini API Key не налаштовано.</strong>
-                    <div style="font-size:13px;margin-top:2px;">Введіть ваш безкоштовний ключ у налаштуваннях для активації автоматичного оцінювання.</div>
+                    <strong>⚠️ Немає доступної моделі для перевірки.</strong>
+                    <div style="font-size:13px;margin-top:2px;">Додайте підключення та ввімкнену модель на вкладці «Моделі» у налаштуваннях ШІ.</div>
                 </div>
                 <a href="{% url 'teacher_settings' %}?tab=ai" class="btn btn-warning btn-sm" style="font-weight:700;color:#fff;">
                     Ввести ключ →
@@ -388,6 +390,7 @@ function renderQueueTable() {
 
     var html = '';
     pageItems.forEach(function(item, i) {
+        var requestMetadata = item.request_metadata;
         item = SchoolNetAI.escapeResult(item);
         var globalIdx = startIdx + i + 1;
         var statusBadge = '';
@@ -431,10 +434,12 @@ function renderQueueTable() {
             statusBadge = '<span class="badge" style="background:var(--color-bg-secondary);color:var(--color-text-muted);font-size:11px;">⏳ В черзі</span>';
         }
 
+        var requestDetails = item.ai_status === 'success' ? SchoolNetAIRequestMetadata.html(requestMetadata) : '';
         var feedbackDisplay = item.ai_feedback ?
             '<span title="' + item.ai_feedback.replace(/"/g, '&quot;') + '">' + item.ai_feedback.substring(0, 110) + '...</span>' :
             (item.ai_error ? '<span style="color:var(--color-danger);font-size:12px;">' + item.ai_error + '</span>' : '—');
 
+        feedbackDisplay += requestDetails;
         var isProcessingRow = (item.ai_status === 'processing');
         var rowBg = isProcessingRow ? 'background:rgba(99,102,241,0.06);' : '';
 
@@ -559,6 +564,7 @@ function processQueueIndex(idx) {
         item.gr_results = res.gr_results || [];
         item.has_format_warning = Boolean(res.format_warning || (res.feedback && res.feedback.indexOf('Зауваження до формату файлу') !== -1));
         item.ai_error = res.error || '';
+        item.request_metadata = res.request_metadata;
         item.ai_generated_detected = Boolean(res.ai_generated_detected);
         item.ai_generated_percent = res.ai_generated_percent;
         item.ai_generated_confidence = res.ai_generated_confidence || '';

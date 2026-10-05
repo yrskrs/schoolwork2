@@ -1,0 +1,7 @@
+.ai-request-metadata { padding: 10px 12px; margin: 8px 0; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-bg-secondary); text-align: left; min-width: 0; }
+.ai-request-metadata h3 { font-size: 12px; margin: 0 0 8px; color: var(--color-text-primary); }
+.ai-request-metadata dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 130px), 1fr)); gap: 8px; margin: 0; }
+.ai-request-metadata dl > div { min-width: 0; }
+.ai-request-metadata dt { font-size: 11px; color: var(--color-text-muted); }
+.ai-request-metadata dd { margin: 2px 0 0; font-size: 12px; font-weight: 700; overflow-wrap: anywhere; color: var(--color-text-primary); }
+.ai-request-metadata p { margin: 8px 0 0; font-size: 10px; line-height: 1.4; color: var(--color-text-muted); }

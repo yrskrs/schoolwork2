@@ -2116,6 +2116,12 @@ class Submission(models.Model):
     ai_feedback = models.TextField('Педагогічний відгук ШІ', blank=True, default='')
     ai_gr_results = models.TextField('Оцінки за групами результатів (ГР)', blank=True, default='')
     ai_model_used = models.CharField('Використана модель ШІ', max_length=100, blank=True, default='')
+    ai_provider_used = models.CharField('Постачальник перевірки ШІ', max_length=50, blank=True, default='')
+    ai_request_model = models.CharField('Модель у відповіді API', max_length=200, blank=True, default='')
+    ai_prompt_tokens = models.PositiveIntegerField('Вхідні токени перевірки', null=True, blank=True)
+    ai_completion_tokens = models.PositiveIntegerField('Вихідні токени перевірки', null=True, blank=True)
+    ai_total_tokens = models.PositiveIntegerField('Всього токенів перевірки', null=True, blank=True)
+
     ai_status = models.CharField(
         'Статус перевірки ШІ',
         max_length=20,
@@ -2218,6 +2224,11 @@ class Submission(models.Model):
         db_index=True,
         help_text='Дозволяє вчителю вимкнути попередження про дублікати та плагіат, якщо учні виконували роботу спільно, але не зазначили співавторів при здачі.'
     )
+
+    def get_ai_request_metadata(self):
+        return {'provider': self.ai_provider_used, 'model': self.ai_request_model or self.ai_model_used,
+                'prompt_tokens': self.ai_prompt_tokens, 'completion_tokens': self.ai_completion_tokens,
+                'total_tokens': self.ai_total_tokens}
 
     def is_coauthor_with(self, other_sub):
         """
@@ -3335,10 +3346,43 @@ ACTIVE_KEY_CHOICES = [
 class AISettings(models.Model):
     """
     Глобальні налаштування модуля штучного інтелекту (Google Gemini, OpenAI, DeepSeek, Groq тощо) для школи.
-    Підтримує основний та резервний API ключі, автоматичний failover при помилках та чергу пріоритетів моделей.
+    Підтримує список підключень і спільну чергу моделей усіх постачальників.
+    Історичні поля двох API залишено лише для перенесення старих налаштувань.
     """
     AI_PROVIDER_CHOICES = AI_PROVIDER_CHOICES
     ACTIVE_KEY_CHOICES = ACTIVE_KEY_CHOICES
+    provider_connections = models.JSONField('Підключення до постачальників ШІ', default=list, blank=True)
+    unified_model_queue = models.BooleanField('Налаштування перенесено до єдиної черги', default=False, editable=False)
+
+    def import_legacy_connections(self):
+        if self.unified_model_queue:
+            return
+        from .ai_connections import legacy_configuration
+        from django.db import transaction
+        with transaction.atomic():
+            current = type(self).objects.select_for_update().get(pk=self.pk)
+            if not current.unified_model_queue:
+                current.provider_connections, queue = legacy_configuration(current)
+                current.saved_models_list = json.dumps(queue, ensure_ascii=False)
+                current.unified_model_queue = True
+                # Historical columns remain for compatibility, without duplicate keys.
+                current.api_key = current.backup_api_key = ''
+                current.custom_api_url = current.backup_custom_api_url = ''
+                current.save(update_fields=['provider_connections', 'saved_models_list', 'unified_model_queue',
+                                           'api_key', 'backup_api_key', 'custom_api_url', 'backup_custom_api_url', 'updated_at'])
+            self.refresh_from_db()
+
+    def get_connection(self, connection_id):
+        return next((c for c in self.provider_connections if c['id'] == connection_id), None)
+
+    @property
+    def has_usable_models(self):
+        return bool(self.get_request_configs())
+
+    def public_connections(self):
+        from .ai_connections import configured
+        return [{k: c[k] for k in ('id', 'provider', 'label', 'custom_url')} |
+                {'configured': configured(c), 'has_key': bool(c.get('api_key'))} for c in self.provider_connections]
 
     # ── Основний API ──────────────────────────────────────────────────────────
     ai_provider = models.CharField(
@@ -3462,6 +3506,12 @@ class AISettings(models.Model):
         Повертає конфігурацію поточного активного API:
         (provider: str, api_key: str, model_name: str, custom_url: str, is_backup: bool)
         """
+        if self.unified_model_queue:
+            configs = self.get_request_configs()
+            if not configs:
+                return ('', '', '', '', False)
+            first = configs[0]
+            return (first['provider'], first['api_key'], first['model'], first['custom_url'], False)
         if self.active_api_type == 'backup' and (self.backup_api_key.strip() or (self.backup_ai_provider == 'custom' and self.backup_custom_api_url.strip())):
             return (
                 self.backup_ai_provider or 'gemini',
@@ -3483,6 +3533,8 @@ class AISettings(models.Model):
         Повертає конфігурацію альтернативного/резервного API:
         (provider: str, api_key: str, model_name: str, custom_url: str) | None
         """
+        if self.unified_model_queue:
+            return None
         if self.active_api_type == 'backup':
             # Якщо активним є резервний, то резервом для нього стає основний (якщо заповнений)
             if self.api_key.strip() or (self.ai_provider == 'custom' and self.custom_api_url.strip()):
@@ -3509,6 +3561,8 @@ class AISettings(models.Model):
 
     def __str__(self):
         active_provider, active_key, active_model, _, is_backup = self.get_active_config()
+        if self.unified_model_queue:
+            return f"ШІ: {len(self.provider_connections)} підключень, {len(self.get_models_with_priority())} моделей"
         status = "Увімкнено" if (self.is_enabled and active_key) else "Вимкнено"
         key_label = "Резервний" if is_backup else "Основний"
         return f"{active_provider.title()} AI ({active_model}, {key_label}) — {status}"
@@ -3518,8 +3572,16 @@ class AISettings(models.Model):
         obj, _ = cls.objects.get_or_create(id=1)
         return obj
 
-    def get_provider_config(self, provider, include_alternative=True):
+    def get_provider_config(self, provider, include_alternative=True, connection_id=None):
         """Resolve a model to its provider's credentials, never another provider's key."""
+        if self.unified_model_queue:
+            from .ai_connections import configured
+            connection = next((c for c in self.provider_connections if c['provider'] == provider
+                               and (not connection_id or c['id'] == connection_id) and configured(c)), None)
+            if not connection:
+                return None
+            model = next((m['name'] for m in self.get_models_with_priority() if m['connection_id'] == connection['id']), '')
+            return {**connection, 'connection_id': connection['id'], 'model': model, 'is_backup': False}
         slots = [
             {'provider': self.ai_provider, 'api_key': self.api_key.strip(), 'model': self.model_name,
              'custom_url': self.custom_api_url.strip(), 'is_backup': False},
@@ -3532,6 +3594,9 @@ class AISettings(models.Model):
                      (slot['api_key'] or (provider == 'custom' and slot['custom_url']))), None)
 
     def get_models_with_priority(self):
+        if self.unified_model_queue:
+            from .ai_connections import model_queue
+            return model_queue(self)
         from .ai_model_catalog import infer_model_provider
         result, seen = [], set()
         try:
@@ -3563,6 +3628,8 @@ class AISettings(models.Model):
         return [item['name'] for item in self.get_models_with_priority()]
 
     def get_active_fallback_chain(self, provider=None):
+        if self.unified_model_queue:
+            return [c['model'] for c in self.get_request_configs() if not provider or c['provider'] == provider]
         provider = provider or self.get_active_config()[0]
         chain = [m['name'] for m in self.get_models_with_priority() if m['enabled'] and m['provider'] == provider]
         active_provider, _, current, _, _ = self.get_active_config()
@@ -3573,6 +3640,9 @@ class AISettings(models.Model):
 
     def get_request_configs(self, custom_model=None):
         """Ordered attempts with matching keys, enabled models, and optional failover."""
+        if self.unified_model_queue:
+            from .ai_connections import request_configs
+            return request_configs(self, custom_model)
         from .gemini_service import clean_model_name, get_default_model_for_provider
         provider, key, model, url, is_backup = self.get_active_config()
         configs, seen = [], set()
@@ -3598,7 +3668,10 @@ class AISettings(models.Model):
         return provider or next((m['provider'] for m in self.get_models_with_priority() if m['name'] == name),
                                 infer_model_provider(name, self.ai_provider))
 
-    def activate_saved_model(self, name, provider=None):
+    def activate_saved_model(self, name, provider=None, connection_id=None):
+        if self.unified_model_queue:
+            from .ai_connections import mutate_model
+            return mutate_model(self, 'activate', name, provider, connection_id)
         provider = self._model_provider(name, provider)
         config = self.get_provider_config(provider)
         # The currently selected provider can be edited before entering its key.
@@ -3616,7 +3689,10 @@ class AISettings(models.Model):
         self.saved_models_list = json.dumps(items, ensure_ascii=False)
         self.save(update_fields=['saved_models_list', 'updated_at'])
 
-    def add_saved_model(self, name, priority=None, enabled=True, provider=None):
+    def add_saved_model(self, name, priority=None, enabled=True, provider=None, connection_id=None):
+        if self.unified_model_queue:
+            from .ai_connections import mutate_model
+            return mutate_model(self, 'add', name, provider, connection_id, priority, enabled)
         name = str(name).strip()
         if not name: return
         provider = self._model_provider(name, provider)
@@ -3630,7 +3706,10 @@ class AISettings(models.Model):
         if priority == 1 and (provider == self.ai_provider or self.get_provider_config(provider)):
             self.activate_saved_model(name, provider)
 
-    def remove_saved_model(self, name, provider=None):
+    def remove_saved_model(self, name, provider=None, connection_id=None):
+        if self.unified_model_queue:
+            from .ai_connections import mutate_model
+            return mutate_model(self, 'remove', name, provider, connection_id)
         provider = self._model_provider(name, provider)
         items = [m for m in self.get_models_with_priority() if (m['provider'], m['name']) != (provider, name)]
         if (provider, name) == (self.ai_provider, self.model_name):
@@ -3642,7 +3721,10 @@ class AISettings(models.Model):
         self.save(update_fields=['model_name', 'backup_model_name', 'updated_at'])
         self._save_model_queue(items)
 
-    def move_model_priority(self, name, direction, provider=None):
+    def move_model_priority(self, name, direction, provider=None, connection_id=None):
+        if self.unified_model_queue:
+            from .ai_connections import mutate_model
+            return mutate_model(self, 'move', name, provider, connection_id, direction=direction)
         if direction not in ['up', 'down']: return
         provider = self._model_provider(name, provider)
         items = self.get_models_with_priority()
@@ -3655,7 +3737,10 @@ class AISettings(models.Model):
         if first['enabled'] and (first['provider'] == self.ai_provider or self.get_provider_config(first['provider'])):
             self.activate_saved_model(first['name'], first['provider'])
 
-    def toggle_model_enabled(self, name, enabled=None, provider=None):
+    def toggle_model_enabled(self, name, enabled=None, provider=None, connection_id=None):
+        if self.unified_model_queue:
+            from .ai_connections import mutate_model
+            return mutate_model(self, 'toggle', name, provider, connection_id, enabled=enabled)
         provider = self._model_provider(name, provider)
         items = self.get_models_with_priority()
         for item in items:
@@ -3731,6 +3816,7 @@ class AIRequestLog(models.Model):
     prompt_tokens = models.IntegerField('Вхідні токени (Prompt)', default=0)
     completion_tokens = models.IntegerField('Вихідні токени (Candidates)', default=0)
     total_tokens = models.IntegerField('Всього токенів', default=0)
+    usage_reported = models.BooleanField('API повернув кількість токенів', default=False)
     latency_ms = models.IntegerField('Тривалість (мс)', default=0)
     created_at = models.DateTimeField('Час запиту', auto_now_add=True, db_index=True)
 

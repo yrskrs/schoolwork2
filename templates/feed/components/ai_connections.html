@@ -1,0 +1,35 @@
+<div class="ai-connections-list">
+    {% for connection in ai_connections %}
+    <article class="ai-connection-card">
+        <h3>{{ connection.label }} · {{ connection.provider|upper }}</h3>
+        <p class="form-hint">{% if connection.configured %}Підключення налаштовано{% else %}Потрібно вказати ключ або адресу API{% endif %}</p>
+        <form method="post" class="ai-connection-form" data-ai-connection-form>
+            {% csrf_token %}
+            <input type="hidden" name="action" value="save_ai_connection">
+            <input type="hidden" name="connection_id" value="{{ connection.id }}">
+            <input type="hidden" name="connection_provider" value="{{ connection.provider }}">
+            <div><label class="form-label" for="connection-label-{{ connection.id }}">Назва підключення</label><input id="connection-label-{{ connection.id }}" class="form-input" name="connection_label" maxlength="80" value="{{ connection.label }}" required></div>
+            <div><label class="form-label" for="connection-key-{{ connection.id }}">API ключ</label><input id="connection-key-{{ connection.id }}" class="form-input" name="connection_key" type="password" maxlength="4096" autocomplete="new-password" placeholder="{% if connection.has_key %}Ключ збережено; залиште порожнім, щоб зберегти його{% else %}Вставте API ключ{% endif %}"></div>
+            {% if connection.provider == 'custom' %}<div><label class="form-label" for="connection-url-{{ connection.id }}">Base URL</label><input id="connection-url-{{ connection.id }}" class="form-input" name="connection_url" type="url" maxlength="255" value="{{ connection.custom_url }}" required></div>{% else %}<input type="hidden" name="connection_url" value="{{ connection.custom_url }}">{% endif %}
+            <div><label class="form-label" for="connection-model-{{ connection.id }}">Додати модель до черги (необов’язково)</label><input id="connection-model-{{ connection.id }}" class="form-input" name="connection_model" maxlength="100" placeholder="Точний ідентифікатор моделі з API"></div>
+            <div class="ai-connection-actions"><button class="btn btn-primary" type="submit">Зберегти підключення</button><button class="btn btn-danger" type="submit" name="action" value="delete_ai_connection" formnovalidate onclick="return confirm('Видалити підключення разом із його моделями?');">Видалити</button></div>
+        </form>
+    </article>
+    {% empty %}<p>Додайте підключення, щоб використовувати ШІ для перевірки робіт.</p>{% endfor %}
+</div>
+<details class="ai-settings-disclosure" {% if not ai_connections %}open{% endif %}>
+    <summary>➕ Додати підключення до постачальника</summary>
+    <div class="ai-settings-disclosure-body">
+        <form method="post" class="ai-connection-form">
+            {% csrf_token %}<input type="hidden" name="action" value="save_ai_connection">
+            <div><label class="form-label" for="connection-provider-new">Постачальник</label><select class="form-input" id="connection-provider-new" name="connection_provider">{% for value,label in ai_providers %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></div>
+            <div><label class="form-label" for="connection-label-new">Назва підключення</label><input id="connection-label-new" class="form-input" name="connection_label" maxlength="80" placeholder="Наприклад, Groq — шкільний ключ"></div>
+            <div><label class="form-label" for="connection-key-new">API ключ</label><input id="connection-key-new" class="form-input" name="connection_key" type="password" maxlength="4096" autocomplete="new-password" placeholder="Вставте ключ постачальника"></div>
+            <div data-new-connection-url hidden><label class="form-label" for="connection-url-new">Base URL власного API</label><input id="connection-url-new" class="form-input" name="connection_url" type="url" maxlength="255" placeholder="http://localhost:11434/v1"></div>
+            <div><label class="form-label" for="connection-model-new">Ідентифікатор моделі (необов’язково)</label><input id="connection-model-new" class="form-input" name="connection_model" maxlength="100" placeholder="Точна назва з API постачальника"></div>
+            <div class="ai-connection-actions"><button class="btn btn-primary" type="submit">Додати підключення</button></div>
+        </form>
+    </div>
+</details>
+<p class="form-hint">Можна додати кілька постачальників або кілька ключів одного постачальника. Для кожної моделі оберіть підключення на вкладці «Моделі» й установіть порядок використання.</p>
+{{ ai_connections|json_script:'ai-connections-data' }}

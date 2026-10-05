@@ -1,0 +1,11 @@
+<section class="ai-request-metadata" aria-label="Дані запиту ШІ">
+    <h3>Дані запиту ШІ</h3>
+    <dl>
+        <div><dt>Постачальник</dt><dd>{{ submission.ai_provider_used|default:"Не збережено"|upper }}</dd></div>
+        <div><dt>Модель</dt><dd>{{ submission.ai_request_model|default:submission.ai_model_used|default:"Не збережено" }}</dd></div>
+        <div><dt>Вхідні токени</dt><dd>{{ submission.ai_prompt_tokens|default_if_none:"Немає даних" }}</dd></div>
+        <div><dt>Вихідні токени</dt><dd>{{ submission.ai_completion_tokens|default_if_none:"Немає даних" }}</dd></div>
+        <div><dt>Усього токенів</dt><dd>{{ submission.ai_total_tokens|default_if_none:"Немає даних" }}</dd></div>
+    </dl>
+    <p>{% if submission.ai_total_tokens is None %}Постачальник не повернув статистику токенів або її не було збережено під час старої перевірки.{% else %}Дані запиту, що сформував оцінку. Загальна кількість — за відповіддю API; вона може включати токени міркувань.{% endif %}</p>
+</section>
