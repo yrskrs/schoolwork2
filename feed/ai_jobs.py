@@ -94,10 +94,15 @@ def job_response(job, is_teacher=False):
         result['events'] = job.events
         result['job_id'] = str(job.pk)
         if job.kind == 'student_check':
-            from .ai_context import strip_teacher_criteria
+            from .ai_student_feedback import compact_student_feedback, student_feedback_parts
+            public_parts = student_feedback_parts(result=result)
             for field in ('feedback', 'clean_feedback', 'feedback_comment'):
                 if field in result:
-                    result[field] = strip_teacher_criteria(result[field])
+                    result[field] = compact_student_feedback(text=result[field])
+            result.update(summary=public_parts['summary'], strengths=public_parts['strengths'],
+                          weaknesses=public_parts['weaknesses'], revision_advice=public_parts['weaknesses'])
+            result.pop('grade_explanation', None)
+            result.pop('raw_json', None)
             result.pop('criteria_results', None)
         if job.kind == 'understanding':
             result['is_teacher'] = is_teacher

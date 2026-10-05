@@ -2450,29 +2450,8 @@ class Submission(models.Model):
         return str(avg)
 
     def get_clean_ai_feedback_for_student(self):
-        """
-        Повертає відгук ШІ, очищений від списку оцінок за групами результатів
-        (для відгуку/коментаря вчителя, щоб не розкривати детальні бали іншим учням).
-        Гарантує відсутність сирого JSON чи технічних полів у коментарях для учнів.
-        """
-        if not self.ai_feedback:
-            return ""
-        text = str(self.ai_feedback).strip()
-        # Захист: якщо ai_feedback містить сирий JSON
-        if text.startswith('{') or '"feedback_comment"' in text or '"suggested_grade"' in text or '"summary"' in text:
-            from feed.utils import extract_clean_comment_from_raw_json
-            extracted = extract_clean_comment_from_raw_json(text)
-            if extracted:
-                from .ai_context import strip_teacher_criteria
-                return strip_teacher_criteria(extracted)
-
-        # Вирізаємо секцію Оцінювання за групами результатів
-        pattern = r"📊\s*\*\*Оцінювання за групами результатів.*?(?=(\n\s*\n[✅💡💬⚠️📌]|\Z))"
-        cleaned = re.sub(pattern, "", text, flags=re.DOTALL | re.IGNORECASE).strip()
-        # Прибираємо окремі рядки оцінок ГР якщо є
-        cleaned = re.sub(r"^[•*]\s*ГР\s*\d+:[^\n]+→[^\n]+\n?", "", cleaned, flags=re.MULTILINE | re.IGNORECASE).strip()
-        from .ai_context import strip_teacher_criteria
-        return strip_teacher_criteria(cleaned)
+        from .ai_student_feedback import compact_student_feedback
+        return compact_student_feedback(text=self.ai_feedback)
 
     def get_formatted_ai_feedback(self):
         """
@@ -2488,119 +2467,23 @@ class Submission(models.Model):
         return self.ai_feedback
 
     def get_student_ai_weaknesses_list(self):
-        """
-        Повертає список зауважень та рекомендацій «Що потрібно доробити» з відгуку ШІ для учня.
-        """
-        text = str(self.student_ai_feedback or '').strip()
-        if not text:
-            text = str(self.ai_feedback or '').strip()
-        if not text:
-            return []
-
-        # Спроба розпарсити JSON
-        if text.startswith('{') or '"weaknesses"' in text:
-            try:
-                import json as _json
-                data = _json.loads(text)
-                if isinstance(data, dict) and data.get('weaknesses') and isinstance(data['weaknesses'], list):
-                    return [w.strip() for w in data['weaknesses'] if str(w).strip()]
-            except Exception:
-                pass
-
-        # Парсинг із форматованого тексту
-        lines = []
-        in_weaknesses = False
-        for line in text.splitlines():
-            line_s = line.strip()
-            if any(marker in line_s for marker in ['💡 **Зауваження', '💡 **Що потрібно доробити', 'Зауваження та неточності', 'Що доробити']):
-                in_weaknesses = True
-                continue
-            elif in_weaknesses and line_s.startswith(('✅', '📌', '💬', '⚠️', '📊', '🎯', '📋', '🛠️')):
-                break
-            elif in_weaknesses and line_s.startswith(('•', '-', '*')):
-                item = line_s.lstrip('•-* ').strip()
-                if item:
-                    lines.append(item)
-            elif in_weaknesses and line_s:
-                lines.append(line_s)
-        return lines
+        from .ai_student_feedback import student_feedback_parts
+        return student_feedback_parts(text=self.student_ai_feedback or self.ai_feedback)['weaknesses']
 
     def get_student_ai_strengths_list(self):
-        """
-        Повертає список сильних сторін із відгуку ШІ для учня.
-        """
-        text = str(self.student_ai_feedback or '').strip()
-        if not text:
-            text = str(self.ai_feedback or '').strip()
-        if not text:
-            return []
-
-        if text.startswith('{') or '"strengths"' in text:
-            try:
-                import json as _json
-                data = _json.loads(text)
-                if isinstance(data, dict) and data.get('strengths') and isinstance(data['strengths'], list):
-                    return [s.strip() for s in data['strengths'] if str(s).strip()]
-            except Exception:
-                pass
-
-        lines = []
-        in_strengths = False
-        for line in text.splitlines():
-            line_s = line.strip()
-            if '✅ **Сильні сторони' in line_s:
-                in_strengths = True
-                continue
-            elif in_strengths and line_s.startswith(('💡', '📌', '💬', '⚠️', '📊', '🎯', '📋', '🛠️')):
-                break
-            elif in_strengths and line_s.startswith(('•', '-', '*')):
-                item = line_s.lstrip('•-* ').strip()
-                if item:
-                    lines.append(item)
-            elif in_strengths and line_s:
-                lines.append(line_s)
-        return lines
+        from .ai_student_feedback import student_feedback_parts
+        return student_feedback_parts(text=self.student_ai_feedback or self.ai_feedback)['strengths']
 
     def get_student_ai_clean_feedback(self):
-        """
-        Повертає загальну пораду/відгук без службових маркерів списку.
-        """
-        text = str(self.student_ai_feedback or '').strip()
-        for marker in ('🎯 **Чому така оцінка:**', '📋 **Перевірка критеріїв:**', '🛠️ **Як покращити роботу:**'):
-            text = text.split(marker, 1)[0].strip()
-        if not text:
-            return ""
-        for line in text.splitlines():
-            line_s = line.strip()
-            if line_s.startswith('💬'):
-                clean = line_s.lstrip('💬 ').replace('**Рекомендація учню:**', '').replace('**Рекомендація:**', '').strip()
-                if clean:
-                    return clean
-        # Якщо немає префікса 💬, повертаємо текст, якщо він не є суто списком
-        if not text.startswith(('✅', '💡', '📌')):
-            return text
-        return ""
+        return self.get_student_ai_public_feedback()
 
     def get_student_ai_evidence_sections(self):
-        """Show persisted reasoning after reload, alongside the legacy feedback cards."""
-        headings = {'🎯 **Чому така оцінка:**': '🎯 Чому така оцінка',
-                    '📋 **Перевірка критеріїв:**': '📋 Перевірка критеріїв',
-                    '🛠️ **Як покращити роботу:**': '🛠️ Як покращити роботу'}
-        sections, current = [], None
-        from .ai_context import strip_teacher_criteria
-        for line in strip_teacher_criteria(self.student_ai_feedback).splitlines():
-            title = headings.get(line.strip())
-            if title:
-                current = {'title': title, 'lines': []}
-                sections.append(current)
-            elif current is not None:
-                current['lines'].append(line)
-        return [{'title': section['title'], 'text': '\n'.join(section['lines']).strip()}
-                for section in sections if any(line.strip() for line in section['lines'])]
+        # Detailed grading evidence belongs to the teacher's assessment.
+        return []
 
     def get_student_ai_public_feedback(self):
-        from .ai_context import strip_teacher_criteria
-        return strip_teacher_criteria(self.student_ai_feedback)
+        from .ai_student_feedback import compact_student_feedback
+        return compact_student_feedback(text=self.student_ai_feedback)
 
     def get_ai_grade_group_info(self):
         """
@@ -3020,6 +2903,10 @@ class SubmissionComment(models.Model):
         verbose_name_plural = 'Коментарі до здач'
         ordering = ['created_at']
 
+    def get_public_text(self):
+        from .ai_student_feedback import public_ai_comment
+        return public_ai_comment(self.text)
+
     def get_author_name(self):
         if self.author:
             try:
@@ -3032,7 +2919,10 @@ class SubmissionComment(models.Model):
 
     def save(self, *args, **kwargs):
         # Захист: якщо в коментар потрапив сирий JSON ШІ, автоматично очищаємо до чистого тексту
-        if self.text and (str(self.text).strip().startswith('{') or '"feedback_comment"' in self.text or '"suggested_grade"' in self.text):
+        from .ai_student_feedback import public_ai_comment
+        if str(self.text or '').lstrip().startswith('🤖 ['):
+            self.text = public_ai_comment(self.text)
+        elif self.text and (str(self.text).strip().startswith('{') or '"feedback_comment"' in self.text or '"suggested_grade"' in self.text):
             from feed.utils import extract_clean_comment_from_raw_json
             self.text = extract_clean_comment_from_raw_json(self.text)
         super().save(*args, **kwargs)

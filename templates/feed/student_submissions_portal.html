@@ -270,7 +270,7 @@
                                     <strong style="color:var(--color-primary);">{{ comment.get_author_name }}</strong>
                                     <span style="font-size:11px;color:var(--color-text-muted);">{{ comment.created_at|date:"d.m.Y H:i" }}</span>
                                 </div>
-                                <div style="white-space:pre-wrap;color:var(--color-text-primary);line-height:1.5;">{{ comment.text }}</div>
+                                <div style="white-space:pre-wrap;color:var(--color-text-primary);line-height:1.5;">{{ comment.get_public_text }}</div>
                             </div>
                             {% endfor %}
                         </div>

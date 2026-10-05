@@ -3014,21 +3014,8 @@ def _perform_student_ai_check(submission, result):
     strengths = result.get('strengths') or []
     weaknesses = result.get('weaknesses') or []
 
-    clean_fb = result.get('clean_feedback')
-    if not clean_fb:
-        parts = []
-        if strengths and isinstance(strengths, list) and len(strengths) > 0:
-            parts.append("✅ **Сильні сторони:**\n" + "\n".join(f"• {s}" for s in strengths))
-        if weaknesses and isinstance(weaknesses, list) and len(weaknesses) > 0:
-            parts.append("💡 **Зауваження:**\n" + "\n".join(f"• {w}" for w in weaknesses))
-        if result.get('feedback_comment'):
-            parts.append(f"💬 {result.get('feedback_comment')}")
-        clean_fb = "\n\n".join(parts) if parts else (result.get('feedback_comment') or '')
-
-    from .ai_context import feedback_evidence_sections, strip_teacher_criteria
-    clean_fb = strip_teacher_criteria(clean_fb)
-    if '🎯 **Чому така оцінка:**' not in clean_fb:
-        clean_fb = '\n\n'.join([clean_fb, *feedback_evidence_sections(result, include_criteria=False)]).strip()
+    from .ai_student_feedback import compact_student_feedback, student_feedback_parts
+    clean_fb = compact_student_feedback(result=result)
     submission.student_ai_feedback = clean_fb
     submission.student_ai_gr_results = _json.dumps(gr_results, ensure_ascii=False) if (gr_results and not is_traditional) else ''
 
@@ -3113,21 +3100,19 @@ def _perform_student_ai_check(submission, result):
                 'comment': gr.get('comment', ''),
             })
 
-    strengths = result.get('strengths') or []
-    weaknesses = result.get('weaknesses') or []
-    from .ai_context import feedback_evidence_sections
-    feedback_text = strip_teacher_criteria('\n\n'.join([
-        result.get('feedback_comment') or '', *feedback_evidence_sections(result, include_criteria=False)])) or clean_fb
+    public_parts = student_feedback_parts(result=result)
+    strengths = public_parts['strengths']
+    weaknesses = public_parts['weaknesses']
+    feedback_text = clean_fb
 
     return JsonResponse({
         'ok': True,
         'grade': submission.student_ai_grade,
         'level': submission.student_ai_level,
         'grade_group': submission.get_ai_grade_group_info(),
-        'summary': submission.student_ai_summary,
+        'summary': public_parts['summary'],
         'feedback': feedback_text,
-        'grade_explanation': result.get('grade_explanation') or summary_text,
-        'revision_advice': result.get('revision_advice') or [],
+        'revision_advice': weaknesses,
         'strengths': strengths,
         'weaknesses': weaknesses,
         'unclear_task': unclear_task,
@@ -7118,6 +7103,9 @@ def teacher_settings_view(request):
     active_provider, _, active_model, _, _ = ai_settings.get_active_config()
     used_model_usage_stats = build_model_usage_stats(AIRequestLog.objects.all(), now, start_date, period_days_count, active_provider, active_model)
     ai_usage_chart = build_usage_chart(AIRequestLog.objects.all(), now, start_date)
+    error_logs = AIErrorLog.objects.all()
+    if start_date is not None:
+        error_logs = error_logs.filter(created_at__gte=start_date)
     stats_view = request.GET.get('stats_view', 'usage')
     if stats_view not in ['usage', 'models', 'overview']: stats_view = 'usage'
 
@@ -7173,8 +7161,8 @@ def teacher_settings_view(request):
         'level_medium': level_medium,
         'level_initial': level_initial,
         'level_rework': level_rework,
-        'ai_error_logs': AIErrorLog.objects.select_related('teacher', 'submission', 'assignment').order_by('-created_at')[:100],
-        'total_ai_errors_count': AIErrorLog.objects.count(),
+        'ai_error_logs': error_logs.select_related('teacher', 'submission', 'assignment').order_by('-created_at')[:100],
+        'total_ai_errors_count': error_logs.count(),
     }
     return render(request, 'feed/settings.html', context)
 

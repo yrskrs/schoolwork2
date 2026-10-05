@@ -1085,9 +1085,23 @@
                             </h2>
                             <div style="font-size:12px;color:var(--color-text-muted);margin-top:2px;">
                                 Записуються виключно запити, що призвели до помилки (HTTP статуси, вичерпання лімітів, таймаути, збої парсингу JSON та причини переходу до наступної моделі). Успішні перевірки сюди не потрапляють.
+                                Період: {{ stats_days_label }}. Показано до 100 останніх записів; старі записи не означають, що збій повторюється зараз.
                             </div>
                         </div>
 
+                        <form method="GET" style="margin:0;">
+                            <input type="hidden" name="tab" value="ai">
+                            <input type="hidden" name="ai_section" value="errors">
+                            <label for="ai-errors-period">Період:</label>
+                            <select name="stats_days" id="ai-errors-period" onchange="this.form.submit()">
+                                <option value="1" {% if stats_days == '1' %}selected{% endif %}>24 години</option>
+                                <option value="3" {% if stats_days == '3' %}selected{% endif %}>3 дні</option>
+                                <option value="7" {% if stats_days == '7' %}selected{% endif %}>7 днів</option>
+                                <option value="14" {% if stats_days == '14' %}selected{% endif %}>14 днів</option>
+                                <option value="30" {% if stats_days == '30' %}selected{% endif %}>30 днів</option>
+                                <option value="all" {% if stats_days == 'all' %}selected{% endif %}>Весь час</option>
+                            </select>
+                        </form>
                         {% if total_ai_errors_count %}
                         <form method="POST" style="margin:0;" onsubmit="return confirm('Ви дійсно бажаєте очистити весь журнал помилок ШІ?');">
                             {% csrf_token %}

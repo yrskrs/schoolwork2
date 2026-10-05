@@ -1309,7 +1309,8 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
         self.assertNotIn("Оцінювання за групами результатів", clean_feedback)
         self.assertNotIn("→ 10 б.", clean_feedback)
         self.assertNotIn("→ 8 б.", clean_feedback)
-        self.assertIn("Чудова робота, продовжуй у тому ж дусі!", clean_feedback)
+        self.assertIn("Робота виконана якісно та структуровано.", clean_feedback)
+        self.assertLessEqual(len(clean_feedback), 700)
         self.assertIn("Чіткий алгоритм", clean_feedback)
 
         # Перевірка застосування оцінки через ai_apply_suggested_grade
@@ -3690,7 +3691,7 @@ class AssignmentFileAIAndCoauthorTests(TestCase):
         self.assertNotContains(detail_resp, '85%')  # Відсоток ШІ приховано для учня
         self.assertNotContains(detail_resp, 'Google Gemini')  # Згадування конкретно Google Gemini прибрано
         self.assertNotContains(detail_resp, 'Оцінки за групами результатів')  # Оцінки за ГР приховано
-        self.assertContains(detail_resp, 'Що потрібно доробити, щоб покращити роботу (Зауваження ШІ):')
+        self.assertContains(detail_resp, '💡')
         self.assertContains(detail_resp, 'Немає власного висновку в документі')
 
         # Перевірка підказки щодо висновків на сторінці здачі роботи submit_assignment

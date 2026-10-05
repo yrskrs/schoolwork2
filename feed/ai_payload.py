@@ -3,10 +3,92 @@ import base64
 import hashlib
 import io
 import json
+import math
+import re
 
 from PIL import Image
 
 OPENROUTER_MAX_REQUEST_BYTES = 7_500_000
+
+# These are planning targets, not account quotas or context-window limits.
+# Only the provider can decide whether an organization may send a request.
+GROQ_TOKEN_TARGETS = {
+    'qwen/qwen3.8-27b': 7000,
+    'openai/gpt-oss-120b': 8000,
+    'openai/gpt-oss-20b': 8000,
+    'llama-3.3-70b-versatile': 6000,
+    'llama-3.1-8b-instant': 20000,
+}
+QWEN_IMAGE_TOKENS = 2048
+
+
+def pack_document_pages(media):
+    """Join adjacent PDF pages at their exact decoded resolution, never photos.
+
+    Qwen charges a fixed token count per image. A labelled two-page canvas keeps
+    all page pixels while avoiding paying twice for one short document. Large or
+    uncertain inputs remain separate rather than being resized or discarded.
+    """
+    result = []
+    index = 0
+    while index < len(media):
+        first = media[index]
+        if index + 1 >= len(media):
+            result.append(first)
+            break
+        second = media[index + 1]
+        same_document = (first.get('document_id') and first.get('document_id') == second.get('document_id')
+                         and isinstance(first.get('page_number'), int)
+                         and second.get('page_number') == first['page_number'] + 1)
+        if not same_document:
+            result.append(first)
+            index += 1
+            continue
+        try:
+            with Image.open(io.BytesIO(base64.b64decode(first['data']))) as a, \
+                    Image.open(io.BytesIO(base64.b64decode(second['data']))) as b:
+                width, height = a.width + b.width + 16, max(a.height, b.height)
+                if width * height > 6_000_000 or max(width / height, height / width) > 3:
+                    raise ValueError('Canvas too large')
+                # PDF page extraction produces opaque RGB rasters. Do not merge
+                # animated/translucent images if metadata was supplied externally.
+                if a.mode != 'RGB' or b.mode != 'RGB' or getattr(a, 'is_animated', False) or getattr(b, 'is_animated', False):
+                    raise ValueError('Unsupported page raster')
+                sheet = Image.new('RGB', (width, height), 'white')
+                sheet.paste(a, (0, 0))
+                sheet.paste(b, (a.width + 16, 0))
+                buffer = io.BytesIO()
+                sheet.save(buffer, format='PNG', optimize=True)
+                packed = dict(first, mime_type='image/png', data=base64.b64encode(buffer.getvalue()).decode(),
+                              source=f'Сторінки {first["page_number"]} і {second["page_number"]} одного документа, '
+                                     f'ліворуч і праворуч, без зменшення роздільності.\n'
+                                     f'Ліворуч: {first.get("source", "")}\nПраворуч: {second.get("source", "")}',
+                              packed_pages=[first['page_number'], second['page_number']])
+            result.append(packed)
+            index += 2
+        except (OSError, ValueError, KeyError, Image.DecompressionBombError):
+            result.append(first)
+            index += 1
+    return result
+
+
+def estimate_text_tokens(text):
+    cyrillic = len(re.findall(r'[\u0400-\u04FF]', text or ''))
+    return math.ceil(cyrillic / 2.2 + (len(text or '') - cyrillic) / 3.5)
+
+
+def groq_output_budget(model, prompt, system, media, requested):
+    target = GROQ_TOKEN_TARGETS.get(model)
+    if not target:
+        return requested
+    # Leave room for framing, but never squeeze a structured Ukrainian assessment
+    # into 1800 tokens: live Qwen responses truncate there. An ITPM limit caps only
+    # input; subtracting output does not fix it. These remain soft planning targets,
+    # never a claim that input + output must fit an account's ITPM allowance.
+    labels = '\n'.join(item.get('source', '') for item in media)
+    image_tokens = QWEN_IMAGE_TOKENS if model == 'qwen/qwen3.8-27b' else 1000
+    available = target - estimate_text_tokens(prompt + system + labels) - image_tokens * len(media) - 350
+    return min(requested, max(3500, available))
 
 
 def encode_payload(payload):

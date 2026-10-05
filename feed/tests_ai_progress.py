@@ -20,6 +20,92 @@ class EvaluationProgressTests(TestCase):
     def job(self, kind='teacher_check'):
         return AIJob.objects.create(kind=kind, submission=self.sub, requested_by=self.user)
 
+    @patch('feed.gemini_service.time.sleep')
+    @patch('feed.gemini_service.call_ai_api')
+    def test_free_router_retries_received_gateway_failure_once_then_succeeds(self,call,sleep):
+        self.add_connection('openrouter','openrouter/free')
+        self.add_connection('groq','never-called')
+        call.side_effect=[(502,'','Provider returned error',{}),self.answer()]
+        job=self.job()
+        execute_job(job.pk)
+        job.refresh_from_db()
+        self.assertEqual(job.status,'succeeded')
+        self.assertEqual([c.kwargs['model_name'] for c in call.call_args_list],['openrouter/free']*2)
+        self.assertEqual(sum(e['kind']=='retry' for e in job.events),1)
+
+    @patch('feed.gemini_service.time.sleep')
+    @patch('feed.gemini_service.call_ai_api')
+    def test_free_router_legacy_configuration_still_has_only_one_retry(self,call,sleep):
+        self.settings.unified_model_queue=False
+        self.settings.api_key='synthetic'
+        self.settings.save()
+        config={'provider':'openrouter','api_key':'synthetic','model':'openrouter/free',
+                'custom_url':'','is_backup':False}
+        call.return_value=(200,'User Safety: safe',None,{})
+        with patch.object(type(self.settings),'get_request_configs',return_value=[config]):
+            result=evaluate_submission_with_gemini(self.sub)
+        self.assertEqual(result['status'],'failed')
+        self.assertEqual(call.call_count,2)
+
+    @patch('feed.gemini_service.time.sleep')
+    @patch('feed.gemini_service.call_ai_api')
+    def test_free_router_retries_safety_classification_once_without_inventing_grade(self,call,sleep):
+        self.add_connection('openrouter','openrouter/free')
+        call.side_effect=[(200,'User Safety: safe',None,{}),self.answer()]
+        result=evaluate_submission_with_gemini(self.sub)
+        self.assertEqual(result['status'],'success')
+        self.assertEqual(call.call_count,2)
+        self.assertTrue(self.sub.ai_error_logs.filter(error_type='Unexpected Assessment Format').exists())
+
+    @patch('feed.gemini_service.time.sleep')
+    @patch('feed.gemini_service.call_ai_api')
+    def test_free_router_invalid_json_retry_budget_is_shared_and_then_fails_over(self,call,sleep):
+        self.add_connection('openrouter','openrouter/free')
+        self.add_connection('groq','second')
+        call.side_effect=[(502,'','gateway',{}),(200,'User Safety: safe',None,{}),self.answer()]
+        result=evaluate_submission_with_gemini(self.sub)
+        self.assertEqual(result['status'],'success')
+        self.assertEqual(call.call_count,3)
+        self.assertEqual([c.kwargs['model_name'] for c in call.call_args_list],['openrouter/free','openrouter/free','second'])
+
+    @patch('feed.gemini_service.call_ai_api')
+    def test_truncated_json_cannot_create_grade_from_recovered_fields(self,call):
+        self.add_connection('groq','single')
+        call.return_value=(200,'{"suggested_grade":12,"summary":"unfinished',None,{})
+        result=evaluate_submission_with_gemini(self.sub)
+        self.assertEqual(result['status'],'failed')
+        self.sub.refresh_from_db()
+        self.assertFalse(self.sub.ai_suggested_grade)
+
+    @patch('feed.gemini_service.time.sleep')
+    @patch('feed.gemini_service.call_ai_api')
+    def test_free_router_retries_empty_cold_start_once_then_succeeds(self,call,sleep):
+        self.add_connection('openrouter','openrouter/free')
+        call.side_effect=[(200,'','Порожня відповідь від моделі',{}),self.answer()]
+        job=self.job()
+        execute_job(job.pk)
+        job.refresh_from_db()
+        self.assertEqual(job.status,'succeeded')
+        self.assertEqual(call.call_count,2)
+        self.assertEqual(sum(e['kind']=='retry' for e in job.events),1)
+        self.assertEqual(call.call_args.kwargs['thinking_budget'],0)
+        self.assertEqual(call.call_args.kwargs['timeout'],90)
+        self.assertLess(len(call.call_args.kwargs['system_prompt']),4000)
+
+    @patch('feed.gemini_service.time.sleep')
+    @patch('feed.gemini_service.call_ai_api')
+    def test_free_router_timeout_and_rate_limit_are_not_retried(self,call,sleep):
+        self.add_connection('openrouter','openrouter/free')
+        self.add_connection('groq','second')
+        for code in [0,429,200]:
+            call.reset_mock()
+            call.side_effect=[(code,'','MAX_TOKENS: reasoning exhausted' if code == 200 else 'synthetic failure',{}),self.answer()]
+            result=evaluate_submission_with_gemini(self.sub)
+            self.assertEqual(result['status'],'success')
+            self.assertEqual(call.call_count,2)
+            self.assertEqual(call.call_args_list[-1].kwargs['model_name'],'second')
+        sleep.assert_not_called()
+
     @patch('feed.gemini_service.call_ai_api')
     def test_exact_reported_six_model_sequence_is_exhausted_once(self, call):
         models = ['gemini-3.1-flash-lite', 'gemini-3.6-flash', 'gemini-3.8-flash',

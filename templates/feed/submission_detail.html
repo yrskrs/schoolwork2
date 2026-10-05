@@ -255,57 +255,9 @@
                         </div>
                         {% endif %}
 
-                        {% if submission.student_ai_summary %}
-                        <div style="font-size:13px;color:var(--color-text-secondary);line-height:1.5;margin-bottom:10px;padding:10px 14px;background:var(--color-bg-secondary);border-radius:var(--radius-sm);">
-                            <strong>📌 Резюме:</strong> {{ submission.student_ai_summary }}
-                        </div>
-                        {% endif %}
-
-                        <!-- Блок «Що потрібно доробити» -->
-                        {% with weaknesses=submission.get_student_ai_weaknesses_list %}
-                        {% if weaknesses %}
-                        <div style="margin-bottom:12px;padding:14px 18px;background:rgba(245,158,11,0.08);border:2px solid #f59e0b;border-radius:var(--radius-md);box-shadow:0 3px 12px rgba(245,158,11,0.12);">
-                            <div style="display:flex;align-items:center;gap:8px;font-weight:900;font-size:13.5px;color:var(--color-warning);margin-bottom:8px;">
-                                <span style="font-size:18px;">💡</span>
-                                <span>Що потрібно доробити, щоб покращити роботу (Зауваження ШІ):</span>
-                            </div>
-                            <ul style="margin:0;padding-left:20px;font-size:12.5px;color:var(--color-text-primary);line-height:1.5;display:flex;flex-direction:column;gap:5px;">
-                                {% for w in weaknesses %}
-                                <li>{{ w }}</li>
-                                {% endfor %}
-                            </ul>
-                        </div>
-                        {% elif submission.student_ai_feedback and not submission.get_student_ai_strengths_list %}
-                        <div style="margin-bottom:12px;padding:12px 16px;background:rgba(245,158,11,0.06);border:1.5px solid rgba(245,158,11,0.4);border-radius:var(--radius-sm);font-size:12.5px;color:var(--color-text-primary);line-height:1.45;">
-                            <div style="font-weight:800;color:var(--color-warning);margin-bottom:4px;display:flex;align-items:center;gap:6px;">
-                                <span>💡</span> <span>Зауваження та поради ШІ:</span>
-                            </div>
-                            <div style="white-space:pre-wrap;">{{ submission.get_student_ai_public_feedback }}</div>
-                        </div>
-                        {% endif %}
-                        {% endwith %}
-
-                        <!-- Блок «Сильні сторони» -->
-{% with strengths=submission.get_student_ai_strengths_list %}
-                        {% if strengths %}
-                        <div style="margin-bottom:12px;padding:12px 16px;background:rgba(16,185,129,0.06);border:1.5px solid #10b981;border-radius:var(--radius-sm);">
-                            <div style="display:flex;align-items:center;gap:6px;font-weight:800;font-size:13px;color:var(--color-success);margin-bottom:6px;">
-                                <span>✅</span> <span>Що зроблено добре (Сильні сторони):</span>
-                            </div>
-                            <ul style="margin:0;padding-left:20px;font-size:12.5px;color:var(--color-text-secondary);line-height:1.45;display:flex;flex-direction:column;gap:4px;">
-                                {% for s in strengths %}
-                                <li>{{ s }}</li>
-                                {% endfor %}
-                            </ul>
-                        </div>
-                        {% endif %}
-                        {% endwith %}
-
-                        {% with clean_fb=submission.get_student_ai_clean_feedback %}
-                        {% if clean_fb %}
-                        <div style="margin-top:8px;padding:10px 14px;background:var(--color-bg-secondary);border-left:4px solid var(--color-primary);border-radius:0 var(--radius-sm) var(--radius-sm) 0;font-size:12.5px;color:var(--color-text-primary);line-height:1.45;">
-                            <strong style="color:var(--color-primary);">💬 Порада від ШІ:</strong> {{ clean_fb }}
-                        </div>
+                        {% with feedback=submission.get_student_ai_public_feedback %}
+                        {% if feedback %}
+                        <div style="font-size:13px;line-height:1.5;white-space:pre-wrap;color:var(--color-text-primary);">{{ feedback }}</div>
                         {% endif %}
                         {% endwith %}
                     </div>
@@ -438,7 +390,7 @@
                                 <span style="font-size:11px;color:var(--color-text-muted);">{{ comment.created_at|date:"d.m.Y H:i" }}</span>
                             </div>
                             <div style="white-space:pre-wrap;color:var(--color-text-primary);line-height:1.6;font-size:13px;">
-                                {{ comment.text }}
+                                {{ comment.get_public_text }}
                             </div>
                         </div>
                         {% empty %}
@@ -555,46 +507,9 @@ function runStudentAICheck(subId) {
             '</div>';
         }
 
-        var weaknessesHtml = '';
-        if (data.weaknesses && data.weaknesses.length > 0) {
-            weaknessesHtml = '<div style="margin-bottom:12px;padding:14px 18px;background:rgba(245,158,11,0.08);border:2px solid #f59e0b;border-radius:var(--radius-md);box-shadow:0 3px 12px rgba(245,158,11,0.12);">' +
-                '<div style="display:flex;align-items:center;gap:8px;font-weight:900;font-size:13.5px;color:var(--color-warning);margin-bottom:8px;">' +
-                    '<span style="font-size:18px;">💡</span>' +
-                    '<span>Що потрібно доробити, щоб покращити роботу (Зауваження ШІ):</span>' +
-                '</div>' +
-                '<ul style="margin:0;padding-left:20px;font-size:12.5px;color:var(--color-text-primary);line-height:1.5;display:flex;flex-direction:column;gap:5px;">';
-            data.weaknesses.forEach(function(w) {
-                weaknessesHtml += '<li>' + w + '</li>';
-            });
-            weaknessesHtml += '</ul></div>';
-        }
-
-        var strengthsHtml = '';
-        if (data.strengths && data.strengths.length > 0) {
-            strengthsHtml = '<div style="margin-bottom:12px;padding:12px 16px;background:rgba(16,185,129,0.06);border:1.5px solid #10b981;border-radius:var(--radius-sm);">' +
-                '<div style="display:flex;align-items:center;gap:6px;font-weight:800;font-size:13px;color:var(--color-success);margin-bottom:6px;">' +
-                    '<span>✅</span> <span>Що зроблено добре (Сильні сторони):</span>' +
-                '</div>' +
-                '<ul style="margin:0;padding-left:20px;font-size:12.5px;color:var(--color-text-secondary);line-height:1.45;display:flex;flex-direction:column;gap:4px;">';
-            data.strengths.forEach(function(s) {
-                strengthsHtml += '<li>' + s + '</li>';
-            });
-            strengthsHtml += '</ul></div>';
-        }
-
-        var feedbackCommentHtml = '';
-        if (data.feedback && (!data.weaknesses || data.weaknesses.length === 0) && (!data.strengths || data.strengths.length === 0)) {
-            feedbackCommentHtml = '<div style="margin-bottom:12px;padding:12px 16px;background:rgba(245,158,11,0.06);border:1.5px solid rgba(245,158,11,0.4);border-radius:var(--radius-sm);font-size:12.5px;color:var(--color-text-primary);line-height:1.45;">' +
-                '<div style="font-weight:800;color:var(--color-warning);margin-bottom:4px;display:flex;align-items:center;gap:6px;">' +
-                    '<span>💡</span> <span>Зауваження та поради ШІ:</span>' +
-                '</div>' +
-                '<div style="white-space:pre-wrap;">' + data.feedback + '</div>' +
-            '</div>';
-        } else if (data.feedback) {
-            feedbackCommentHtml = '<div style="margin-top:8px;padding:10px 14px;background:var(--color-bg-secondary);border-left:4px solid var(--color-primary);border-radius:0 var(--radius-sm) var(--radius-sm) 0;font-size:12.5px;color:var(--color-text-primary);line-height:1.45;">' +
-                '<strong style="color:var(--color-primary);">💬 Порада від ШІ:</strong> ' + data.feedback +
-            '</div>';
-        }
+        var feedbackCommentHtml = data.feedback
+            ? '<div style="font-size:13px;line-height:1.5;white-space:pre-wrap;">' + data.feedback + '</div>'
+            : '';
 
         var unclearTaskHtml = '';
         var isUnclear = Boolean(
@@ -697,9 +612,6 @@ function runStudentAICheck(subId) {
             unclearTaskHtml +
             duplicateHtml +
             aiDetectionHtml +
-            (data.summary ? '<div style="font-size:12.5px;color:var(--color-text-secondary);line-height:1.45;margin-bottom:8px;padding:8px 12px;background:var(--color-bg-secondary);border-radius:var(--radius-sm);"><strong>📌 Резюме:</strong> ' + data.summary + '</div>' : '') +
-            weaknessesHtml +
-            strengthsHtml +
             feedbackCommentHtml +
             '</div>' +
             '<div style="padding:10px 20px;background:rgba(16,185,129,0.05);border-top:1px solid var(--color-border);font-size:11.5px;color:var(--color-text-muted);">ℹ️ Попередня оцінка від ШІ. Остаточну оцінку виставляє вчитель.</div>' +

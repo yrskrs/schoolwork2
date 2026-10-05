@@ -78,6 +78,28 @@ def _get_http_pool():
     return _HTTP_POOL
 
 
+def _read_api_body(response, deadline):
+    """Read available bytes so whitespace keepalives cannot extend a job forever."""
+    parts = []
+    if hasattr(response, 'read1'):
+        def chunks():
+            while True:
+                chunk = response.read1(65536)
+                if not chunk:
+                    return
+                yield chunk
+        incoming = chunks()
+    else:
+        incoming = response.stream(amt=65536, decode_content=True)
+    for chunk in incoming:
+        if time.monotonic() >= deadline:
+            raise TimeoutError('Перевищено загальний час очікування відповіді API; повторний POST не здійснювався.')
+        parts.append(chunk)
+    if time.monotonic() >= deadline:
+        raise TimeoutError('Перевищено загальний час очікування відповіді API; повторний POST не здійснювався.')
+    return b''.join(parts)
+
+
 def _http_post_json(url, payload_dict, headers=None, timeout=30):
     """
     Виконує HTTP POST запит із JSON тілом через пул з'єднань urllib3 (з Keep-Alive та gzip)
@@ -87,6 +109,7 @@ def _http_post_json(url, payload_dict, headers=None, timeout=30):
     from .ai_payload import encode_payload
     from .changelog import SITE_VERSION
     json_bytes = encode_payload(payload_dict)
+    deadline = time.monotonic() + float(timeout)
     from .ai_payload import OPENROUTER_MAX_REQUEST_BYTES
     if urlparse(url).hostname == 'openrouter.ai' and len(json_bytes) > OPENROUTER_MAX_REQUEST_BYTES:
         message = (f'Повний запит після стиснення має {len(json_bytes)/1_000_000:.2f} МБ; '
@@ -111,10 +134,17 @@ def _http_post_json(url, payload_dict, headers=None, timeout=30):
                 body=json_bytes,
                 headers=req_headers,
                 timeout=float(timeout),
-                retries=False
+                retries=False,
+                preload_content=False
             )
-            status = resp.status
-            body_text = resp.data.decode('utf-8', errors='replace')
+            try:
+                status = resp.status
+                body_text = _read_api_body(resp, deadline).decode('utf-8', errors='replace')
+            except Exception:
+                resp.close()
+                raise
+            finally:
+                resp.release_conn()
             try:
                 data = json.loads(body_text)
                 return status, data, body_text
@@ -134,7 +164,7 @@ def _http_post_json(url, payload_dict, headers=None, timeout=30):
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             status = resp.getcode()
-            body_bytes = resp.read()
+            body_bytes = _read_api_body(resp, deadline)
             body_text = body_bytes.decode('utf-8', errors='replace')
             try:
                 data = json.loads(body_text)
@@ -143,7 +173,7 @@ def _http_post_json(url, payload_dict, headers=None, timeout=30):
                 return status, None, body_text
     except urllib.error.HTTPError as e:
         status = e.code
-        err_bytes = e.read()
+        err_bytes = _read_api_body(e, deadline)
         err_text = err_bytes.decode('utf-8', errors='replace')
         try:
             err_data = json.loads(err_text)
@@ -152,6 +182,29 @@ def _http_post_json(url, payload_dict, headers=None, timeout=30):
             return status, None, err_text
     except urllib.error.URLError as e:
         raise Exception(f"Мережева помилка підключення: {e.reason}")
+
+
+def _normalize_chat_error(status, data):
+    """OpenRouter can return HTTP 200 with an upstream error, even partial JSON."""
+    if not isinstance(data, dict):
+        return status, data
+    error = data.get('error')
+    choices = data.get('choices') or []
+    if not error and choices and isinstance(choices[0], dict):
+        error = choices[0].get('error')
+        if not error and choices[0].get('finish_reason') == 'error':
+            error = {'code': 502, 'message': 'Постачальник перервав формування відповіді.'}
+    if not error:
+        return status, data
+    if not isinstance(error, dict):
+        error = {'message': str(error)}
+    try:
+        effective = int(error.get('code'))
+    except (ValueError, TypeError):
+        effective = 502 if status == 200 else status
+    if not 400 <= effective <= 599:
+        effective = 502 if status == 200 else status
+    return effective, dict(data, error=error, _schoolnet_http_status=status)
 
 
 def clean_model_name(name, provider='gemini'):
@@ -217,7 +270,7 @@ def log_ai_request_metric(model_name, provider='gemini', action='evaluation', st
             model_name=str(model_name or '')[:100],
             provider=str(provider or 'gemini')[:50],
             action=str(action or 'evaluation')[:100],
-            status_code=int(status_code or 200),
+            status_code=int(200 if status_code is None else status_code),
             is_success=bool(is_success),
             prompt_tokens=usage['prompt_tokens'] or 0,
             completion_tokens=usage['completion_tokens'] or 0,
@@ -231,17 +284,27 @@ def log_ai_request_metric(model_name, provider='gemini', action='evaluation', st
 
 def _raw_call_ai_api(prompt_text, system_prompt="", inline_media=None, provider="gemini", api_key="", model_name="", custom_url="", temperature=0.2, max_output_tokens=3500, timeout=35, json_mode=False, thinking_budget=None):
     provider = (provider or 'gemini').lower().strip()
-    # Text-only models (e.g. openai/gpt-oss-*): drop all media and proceed with the
-    # extracted text that is already in the prompt. The media list contains pages
-    # from teacher PDFs and rubric files whose text is already in prompt_text,
-    # so stripping images is safe and avoids an unnecessary 400 block.
+    system_prompt = system_prompt or ''
+    # Readable reference text replaces redundant teacher/rubric visual copies.
+    # Unreadable references, primary tasks and student evidence remain required.
+    if provider in ('groq', 'openrouter'):
+        inline_media = [m for m in (inline_media or [])
+                        if not (m.get('evidence_role') in ('reference', 'rubric') and m.get('text_available'))]
     _text_only_groq = ('openai/gpt-oss-120b', 'openai/gpt-oss-20b')
     if provider == 'groq' and inline_media and clean_model_name(model_name, provider) in _text_only_groq:
-        inline_media = []  # text was already extracted; visual pages are redundant here
+        system_prompt += ('\nМЕЖІ ВХОДУ: ця модель отримує тільки витяг тексту, без зображень і PDF-сторінок. '
+                          'Візуальні критерії, оформлення та непрочитані об’єкти познач unverifiable. '
+                          'Не заявляй про їх відсутність; якщо без них неможливий бал, assessment_blocked=true.')
+        inline_media = []
     from .ai_context import media_for_provider
-    from .ai_payload import optimize_media
+    from .ai_payload import optimize_media, pack_document_pages
     try:
-        inline_media = media_for_provider(inline_media or [], provider)
+        # The free router selects vision models from image input. Native PDF
+        # processing unnecessarily restricts that pool; send actual page images.
+        media_provider = 'openai' if provider == 'openrouter' and clean_model_name(model_name, provider) == 'openrouter/free' else provider
+        inline_media = media_for_provider(inline_media or [], media_provider)
+        if provider == 'groq' and clean_model_name(model_name, provider) == 'qwen/qwen3.8-27b':
+            inline_media = pack_document_pages(inline_media)
         inline_media = optimize_media(inline_media, provider)
     except Exception:
         return 0, None, 'Не вдалося прочитати всі візуальні матеріали для цього провайдера. Спробуйте PDF-сумісну модель.', None
@@ -249,30 +312,14 @@ def _raw_call_ai_api(prompt_text, system_prompt="", inline_media=None, provider=
     # still proceeds with text + up to 3 representative images.
     if provider == 'groq' and clean_model_name(model_name, provider) == 'qwen/qwen3.8-27b' and len(inline_media) > 3:
         inline_media = inline_media[:3]
+        system_prompt += ('\nМЕЖІ ВХОДУ: передано тільки перші 3 візуальні об’єкти через ліміт моделі. '
+                          'Решту візуальних доказів не перевірено; залежні від них критерії — unverifiable, '
+                          'за недостатності доказів для балу — assessment_blocked=true.')
 
-    # Preflight check for Groq token limits on free tier
-    _groq_limits = {
-        'qwen/qwen3.8-27b': 7000,
-        'openai/gpt-oss-120b': 8000,
-        'openai/gpt-oss-20b': 8000,
-        'llama-3.3-70b-versatile': 6000,
-        'llama-3.1-8b-instant': 20000,
-    }
-    cleaned_groq_model = clean_model_name(model_name, provider)
-    groq_limit = _groq_limits.get(cleaned_groq_model)
-    if provider == 'groq' and groq_limit:
-        import re as _re
-        full_text = prompt_text + (system_prompt or '')
-        cyrillic_chars = len(_re.findall(r'[\u0400-\u04FF]', full_text))
-        other_chars = len(full_text) - cyrillic_chars
-        estimated_text_tokens = int(cyrillic_chars / 2.2 + other_chars / 3.5)
-        estimated_media_tokens = len(inline_media or []) * 1000
-        total_estimated = estimated_text_tokens + estimated_media_tokens
-        if total_estimated > groq_limit:
-            msg = (f"Запит завеликий для безкоштовного тарифу Groq {cleaned_groq_model} "
-                   f"(розрахунково {total_estimated} токенів при ліміті {groq_limit} токенів на хвилину). "
-                   f"Перемикаюсь на наступну модель.")
-            return 413, '', msg, {'error': {'message': msg}, '_schoolnet_local_preflight': True}
+    if provider == 'groq':
+        from .ai_payload import groq_output_budget
+        max_output_tokens = groq_output_budget(clean_model_name(model_name, provider),
+                                               prompt_text, system_prompt or '', inline_media, max_output_tokens)
 
     url, headers, model = get_provider_endpoint(provider, model_name=model_name, api_key=api_key, custom_url=custom_url)
 
@@ -353,6 +400,11 @@ def _raw_call_ai_api(prompt_text, system_prompt="", inline_media=None, provider=
 
     else:
         # OpenAI Chat Completions формат
+        def post_chat(payload):
+            status, data, text = _http_post_json(url, payload, headers=headers, timeout=timeout)
+            status, data = _normalize_chat_error(status, data)
+            return status, data, text
+
         messages = []
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
@@ -389,6 +441,17 @@ def _raw_call_ai_api(prompt_text, system_prompt="", inline_media=None, provider=
             "temperature": temperature,
             "max_tokens": max_output_tokens,
         }
+        if provider == 'groq':
+            payload['max_completion_tokens'] = payload.pop('max_tokens')
+            if thinking_budget == 0:
+                if model == 'qwen/qwen3.8-27b':
+                    payload['reasoning_effort'] = 'none'
+                elif model in _text_only_groq:
+                    payload['reasoning_effort'] = 'low'
+        if provider == 'openrouter' and thinking_budget == 0:
+            # Merely hiding reasoning still spends the answer budget. Disable it
+            # in fast mode; the gateway normalizes this for the selected backend.
+            payload['reasoning'] = {'enabled': False}
         if provider == 'openrouter' and any(item['mime_type'] == 'application/pdf' for item in inline_media):
             # OCR fallback can silently omit graphics. Require the complete file.
             payload['plugins'] = [{'id':'file-parser','pdf':{'engine':'native'}}]
@@ -397,50 +460,18 @@ def _raw_call_ai_api(prompt_text, system_prompt="", inline_media=None, provider=
         if json_mode:
             payload["response_format"] = {"type": "json_object"}
 
-        if provider == 'openrouter':
-            from .ai_payload import OPENROUTER_MAX_REQUEST_BYTES, encode_payload
-            try:
-                if len(encode_payload(payload)) > OPENROUTER_MAX_REQUEST_BYTES:
-                    # Prune teacher/rubric reference media to preserve student work within size limit
-                    non_teacher_media = [m for m in (inline_media or []) if not any(ts in m.get('source', '') for ts in ('Матеріал вчителя', 'Документ критеріїв'))]
-                    if len(non_teacher_media) < len(inline_media or []):
-                        retry_user_content = []
-                        if prompt_text:
-                            retry_user_content.append({"type": "text", "text": prompt_text})
-                        for item in non_teacher_media:
-                            if item.get("source"):
-                                retry_user_content.append({"type": "text", "text": item["source"]})
-                            if item['mime_type'] == 'application/pdf':
-                                retry_user_content.append({'type':'file','file':{
-                                    'filename':f'document-{len(retry_user_content)}.pdf',
-                                    'file_data':f"data:application/pdf;base64,{item['data']}"}})
-                            else:
-                                retry_user_content.append({
-                                    "type": "image_url",
-                                    "image_url": {"url": f"data:{item['mime_type']};base64,{item['data']}"}
-                                })
-                        payload["messages"] = [{"role": "system", "content": system_prompt}] if system_prompt else []
-                        if not non_teacher_media:
-                            payload["messages"].append({"role": "user", "content": prompt_text})
-                        else:
-                            payload["messages"].append({"role": "user", "content": retry_user_content})
-                        if not any(item['mime_type'] == 'application/pdf' for item in non_teacher_media):
-                            payload.pop('plugins', None)
-            except Exception:
-                pass
-
         try:
-            status_code, data, text = _http_post_json(url, payload, headers=headers, timeout=timeout)
+            status_code, data, text = post_chat(payload)
 
             # Якщо endpoint не підтримує response_format (400), пробуємо повторити без нього
             if status_code == 400 and json_mode and ('response_format' in text or 'json_object' in text):
                 del payload["response_format"]
-                status_code, data, text = _http_post_json(url, payload, headers=headers, timeout=timeout)
+                status_code, data, text = post_chat(payload)
 
             # Якщо OpenRouter або провайдер моделі не підтримує native PDF type: 'file' (400/501),
             # конвертуємо PDF у візуальні зображення сторінок і повторюємо
             if status_code in (400, 501) and provider == 'openrouter' and any(item.get('mime_type') == 'application/pdf' for item in (inline_media or [])):
-                if any(kw in text.lower() for kw in ('unknown part type: file', 'part type', 'file-parser', 'notimplemented', 'bad request', 'unsupported', 'did not match any variant')):
+                if any(kw in text.lower() for kw in ('unknown part type: file', 'part type', 'file-parser', 'pdf', 'did not match any variant')):
                     from .ai_context import media_for_provider
                     converted_media = media_for_provider(inline_media, 'groq')
                     retry_user_content = []
@@ -456,16 +487,28 @@ def _raw_call_ai_api(prompt_text, system_prompt="", inline_media=None, provider=
                     payload["messages"] = [{"role": "system", "content": system_prompt}] if system_prompt else []
                     payload["messages"].append({"role": "user", "content": retry_user_content})
                     payload.pop('plugins', None)
-                    status_code, data, text = _http_post_json(url, payload, headers=headers, timeout=timeout)
+                    status_code, data, text = post_chat(payload)
 
             if status_code == 200 and data:
                 choices = data.get('choices', [])
                 if choices:
                     if choices[0].get('finish_reason') == 'length':
-                        return status_code, '', 'MAX_TOKENS: відповідь неповна; оцінку не збережено.', data
+                        usage = data.get('usage') or {}
+                        reasoning = (usage.get('completion_tokens_details') or {}).get('reasoning_tokens')
+                        detail = f' Модель {data.get("model") or model}.'
+                        if reasoning is not None:
+                            detail += f' Токени міркувань: {reasoning}.'
+                        return status_code, '', 'MAX_TOKENS: відповідь неповна; оцінку не збережено.' + detail, data
                     msg = choices[0].get('message', {})
-                    raw_reply = msg.get('content', '') or msg.get('reasoning_content', '')
-                    raw_reply = raw_reply.strip()
+                    if choices[0].get('finish_reason') == 'content_filter' or msg.get('refusal'):
+                        return 403, '', 'Постачальник відмовив у відповіді або заблокував її фільтром вмісту; оцінку не збережено.', data
+                    raw_reply = msg.get('content', '')
+                    if isinstance(raw_reply, list):
+                        raw_reply = '\n'.join(p.get('text', '') for p in raw_reply
+                                              if isinstance(p, dict) and p.get('type') == 'text')
+                    raw_reply = raw_reply.strip() if isinstance(raw_reply, str) else ''
+                    if not raw_reply:
+                        return status_code, '', 'Порожня кінцева відповідь від моделі (міркування не є результатом оцінювання).', data
                     return status_code, raw_reply, None, data
                 return status_code, "", "Порожня відповідь від моделі", data
             else:
@@ -512,7 +555,7 @@ def call_ai_api(prompt_text, system_prompt="", inline_media=None, provider="gemi
             provider=prov_norm,
             action=action,
             status_code=status_code,
-            is_success=(status_code == 200 and reply_text is not None),
+            is_success=(status_code == 200 and bool(reply_text) and not err_msg),
             data=raw_data,
             latency_ms=latency_ms
         )
@@ -2686,7 +2729,7 @@ def extract_submission_content(submission):
     return text_parts, inline_media, None
 
 
-def extract_json_from_text(text):
+def extract_json_from_text(text, allow_partial=True):
     """
     Надійно видобуває JSON-об'єкт із будь-якого тексту чи markdown-блоку відповіді Gemini.
     Підтримує виправлення невалідних escape-послідовностей (наприклад \'), незакритих лапок/дужок
@@ -2729,6 +2772,9 @@ def extract_json_from_text(text):
             return json.loads(candidate, strict=False)
         except Exception:
             pass
+
+    if not allow_partial:
+        return None
 
     # 4. Спроба відновлення обірваного/обрізаного JSON (наприклад через ліміт токенів)
     if first_brace != -1:
@@ -5894,13 +5940,13 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
     from .ai_context import teacher_materials, ASSESSMENT_RULES, feedback_evidence_sections
     teacher_files_content = []
     material_coverage = []
-    if assignment and assignment.files.exists():
+    if assignment:
         primary_task_content, teacher_files_content, teacher_media, material_coverage = teacher_materials(assignment)
-        # Safeguard: prevent multi-slide presentations from bloating visual media to megabytes.
-        # Primary task materials take precedence; reference materials are capped.
+        # Keep source roles until the provider prepares its supported input.
+        # Required pages must not disappear behind a blanket teacher-media cap.
         primary_media = [m for m in teacher_media if m.get('is_primary_task')]
         other_media = [m for m in teacher_media if not m.get('is_primary_task')]
-        safe_teacher_media = (primary_media[:3] + other_media)[:3]
+        safe_teacher_media = primary_media + other_media
         inline_media.extend(safe_teacher_media)
         if primary_task_content:
             prompt_lines.append("\n═══════════════════════════════════════════════════════════════════")
@@ -6410,17 +6456,34 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
         )
 
     from .ai_context import build_assessment_request
+    # Keep media only for the exercise actually assigned. A task with a visual
+    # sample or dependency retains its visual source; selecting text never alters
+    # student work. Provider adapters also discard readable reference duplicates.
+    from .ai_context import focus_assigned_material
+    assigned_numbers = parse_teacher_specific_task_numbers(assignment.description)
+    for source in primary_task_content if 'primary_task_content' in locals() else []:
+        focused, selected = focus_assigned_material(source, assigned_numbers)
+        if selected and not re.search(r'(?i)рисун|зображен|схем|таблиц|діаграм|малюн|скрін|фото', focused):
+            # Source labels contain the original filename as emitted by teacher_materials.
+            match = re.search(r'Матеріал вчителя «([^»]+)»', source)
+            if match:
+                inline_media = [m for m in inline_media if not
+                                (m.get('evidence_role') == 'task' and m.get('text_available')
+                                 and m.get('source', '').startswith(f'Матеріал вчителя: {match[1]} ·'))]
     prompt_content, system_instruction = build_assessment_request(
         submission, selected_preset, active_grs, scope, text_parts,
         primary_task_content if 'primary_task_content' in locals() else [],
         teacher_files_content, material_coverage, custom_prompt=custom_prompt,
         ai_settings=settings)
+    base_prompt_length = len(prompt_content)
     if selected_preset and selected_preset.document_file and os.path.exists(selected_preset.document_file.path):
         from .ai_context import extract_file_evidence
         rubric_evidence = extract_file_evidence(selected_preset.document_file.path)
-        if (rubric_evidence['text'] or '').strip() != (selected_preset.extracted_criteria_text or '').strip():
+        if not selected_preset.is_system and (rubric_evidence['text'] or '').strip() != (selected_preset.extracted_criteria_text or '').strip():
             prompt_content += "\nПОВНИЙ ДОКУМЕНТ ОБРАНИХ КРИТЕРІЇВ:\n" + (rubric_evidence['text'] or '')
-        inline_media.extend(dict(item, source='Документ критеріїв учителя') for item in rubric_evidence['media'][:2])
+        inline_media.extend(dict(item, source='Документ критеріїв учителя', evidence_role='rubric',
+                                 text_available=bool((rubric_evidence['text'] or '').strip()) and not rubric_evidence['limitations'])
+                            for item in rubric_evidence['media'])
         prompt_content += "\n" + "\n".join(rubric_evidence['limitations'])
 
     attempts_configs = settings.get_request_configs()
@@ -6459,6 +6522,25 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
         is_failover_call = (c_is_backup != is_backup_active)
         fallback_happened = is_failover_call or (cfg_idx > 0)
         max_retries = 0 if settings.unified_model_queue else (1 if len(attempts_configs) > 1 else 2)
+        # A received 502 from the free router can come from one selected backend.
+        # Give the router one new selection; network timeouts are never retried.
+        router_retry = c_provider == 'openrouter' and clean_model_name(c_model, c_provider) == 'openrouter/free'
+        if router_retry:
+            max_retries = 1
+
+        provider_prompt, provider_system = prompt_content, system_instruction
+        if c_provider in ('groq', 'openrouter'):
+            provider_prompt, provider_system = build_assessment_request(
+                submission, selected_preset, active_grs, scope, text_parts,
+                primary_task_content if 'primary_task_content' in locals() else [],
+                teacher_files_content, material_coverage, custom_prompt=custom_prompt,
+                ai_settings=settings, compact=True)
+            # Extra rubric extraction and its limitations are mandatory too.
+            provider_prompt += prompt_content[base_prompt_length:]
+        emit_event('context_prepared',
+                   f'{c_provider}/{c_model}: підготовлено {len(provider_prompt)} символів контексту '
+                   f'і {len(provider_system)} символів правил; текст роботи учня збережено повністю.',
+                   provider=c_provider, model=c_model, position=cfg_idx + 1, total=len(attempts_configs))
 
         for attempt in range(max_retries + 1):
             try:
@@ -6468,25 +6550,32 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                 else:
                     # Оптимізація швидкодії: для Flash-моделей вимикаємо тривалий ланцюжок роздумів (thinkingBudget=0),
                     # що скорочує час очікування відповіді з 25-40 секунд до 2-4 секунд!
-                    thinking_budget_val = 0 if ('flash' in c_model.lower() and c_provider == 'gemini') else None
+                    thinking_budget_val = 0 if (c_provider in ('groq', 'openrouter') or ('flash' in c_model.lower() and c_provider == 'gemini')) else None
 
                 status_code, raw_text, err_msg, raw_data = call_ai_api(
-                    prompt_text=prompt_content,
-                    system_prompt=system_instruction,
+                    prompt_text=provider_prompt,
+                    system_prompt=provider_system,
                     inline_media=inline_media,
                     provider=c_provider,
                     api_key=c_key,
                     model_name=c_model,
                     custom_url=c_url,
                     temperature=float(settings.temperature if settings.temperature is not None else 0.2),
-                    max_output_tokens=min(10000, 4000 + 300 * len(active_grs) + 180 * len(scope.get("assigned_tasks") or [])),
-                    timeout=35,
+                    max_output_tokens=min(10000, (2200 if c_provider == 'groq' else 4000) + 300 * len(active_grs) + 180 * len(scope.get("assigned_tasks") or [])),
+                    timeout=90 if router_retry else 35,
                     json_mode=True,
                     thinking_budget=thinking_budget_val
                 )
 
-                if status_code in (429, 500, 502, 503, 504) and attempt < max_retries:
-                    emit_event('retry', f'{c_provider}/{c_model}: HTTP {status_code}. Повторюю спробу.',
+                retryable = (status_code in (502, 503) if router_retry
+                             else status_code in (429, 500, 502, 503, 504))
+                # Cold starts can return 200 with no content. Do not repeat an
+                # exhausted reasoning budget, moderation block or network timeout.
+                if router_retry and status_code == 200 and not raw_text and (err_msg or '').startswith('Порожня'):
+                    retryable = True
+                if retryable and attempt < max_retries:
+                    retry_reason = 'Порожня відповідь' if status_code == 200 else f'HTTP {status_code}'
+                    emit_event('retry', f'{c_provider}/{c_model}: {retry_reason}. Повторюю спробу.',
                                provider=c_provider, model=c_model, position=cfg_idx + 1, total=len(attempts_configs), status_code=status_code)
                     time.sleep(1.5 * (attempt + 1))
                     continue
@@ -6527,7 +6616,25 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                     break  # Переходимо до наступної моделі / резервного API
 
                 raw_text = str(raw_text or '').strip()
-                result_json = extract_json_from_text(raw_text)
+                result_json = extract_json_from_text(raw_text, allow_partial=False)
+                if not isinstance(result_json, dict):
+                    result_json = None
+                # Some free routes return a safety classification instead of an
+                # assessment. Retry one completed but unusable response, sharing
+                # the existing retry budget; never invent a grade from fragments.
+                unusable_format = (not result_json or
+                                   ('suggested_grade' not in result_json and not result_json.get('assessment_blocked')))
+                if router_retry and unusable_format and attempt < max_retries:
+                    reason = 'Модель повернула непридатний формат замість оцінювання. Повторюю вибір маршруту один раз.'
+                    log_ai_error(teacher=teacher, submission=submission, action='evaluation',
+                                 provider=c_provider, model_name=c_model, status_code=200,
+                                 error_type='Unexpected Assessment Format', error_message=reason,
+                                 raw_response=raw_text[:2000], failover_triggered=True)
+                    emit_event('retry', f'{c_provider}/{c_model}: {reason}',
+                               provider=c_provider, model=c_model, position=cfg_idx + 1,
+                               total=len(attempts_configs), status_code=200)
+                    time.sleep(1.5 * (attempt + 1))
+                    continue
 
                 model_name = f"{c_model} ({c_provider.title()})" if c_provider != 'gemini' else c_model
 
@@ -7430,20 +7537,10 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                     combined_feedback = "\n\n".join(full_feedback_parts) if full_feedback_parts else feedback_comment
 
                     # Формуємо чистий відгук для публічних коментарів учневі (БЕЗ оцінок ГР)
-                    student_feedback_parts = []
-                    if format_warning:
-                        student_feedback_parts.append(f"⚠️ **Зауваження до формату:** {format_warning}")
-                    if summary:
-                        student_feedback_parts.append(f"📌 {summary}")
-                    if strengths and isinstance(strengths, list) and len(strengths) > 0:
-                        student_feedback_parts.append("✅ **Сильні сторони:**\n" + "\n".join(f"• {s}" for s in strengths))
-                    if weaknesses and isinstance(weaknesses, list) and len(weaknesses) > 0:
-                        student_feedback_parts.append("💡 **Зауваження:**\n" + "\n".join(f"• {w}" for w in weaknesses))
-                    if feedback_comment:
-                        student_feedback_parts.append(f"💬 {feedback_comment}")
-                    student_feedback_parts.extend(feedback_evidence_sections(result_json, include_criteria=False))
-                    from .ai_context import strip_teacher_criteria
-                    clean_student_feedback = strip_teacher_criteria("\n\n".join(student_feedback_parts) if student_feedback_parts else feedback_comment)
+                    from .ai_student_feedback import compact_student_feedback
+                    clean_student_feedback = compact_student_feedback(result=dict(
+                        result_json, summary=summary, strengths=strengths,
+                        weaknesses=weaknesses, feedback_comment=feedback_comment))
 
                     submission.ai_suggested_grade = suggested_grade
                     submission.ai_score_level = level

@@ -57,7 +57,7 @@ class FeedbackV411Tests(TestCase):
         self.assertIn('Додай приклад', public)
         self.sub.student_ai_feedback = text
         self.sub.ai_feedback = text
-        self.assertEqual(len(self.sub.get_student_ai_evidence_sections()), 2)
+        self.assertEqual(self.sub.get_student_ai_evidence_sections(), [])
         self.assertNotIn('критерій', self.sub.get_clean_ai_feedback_for_student())
         self.assertIn('Службовий критерій', self.sub.get_formatted_ai_feedback())
 

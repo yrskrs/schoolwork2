@@ -66,6 +66,26 @@ class AssessmentV4Tests(TestCase):
         result.update(changes)
         return result
 
+    def test_compact_request_preserves_student_work_criteria_and_explicit_custom_prompt(self):
+        self.assignment.description='Виконати вправу 6.'
+        self.assignment.custom_criteria='Формат — 3 бали; зміст — 9 балів.'
+        self.preset.is_system=True
+        self.preset.extracted_criteria_text=''
+        student='Повна робота учня.\n'+'Код і відповідь. '*1000+'ОСТАННІЙ РЯДОК'
+        primary='Матеріал вчителя «task.docx»:\nВправа 1. Незадана.\nВправа 6. Задана повна умова.\nВправа 7. Незадана.'
+        refs=''.join(f'📽️ Слайд {i}\nВправа {i}\nУмова на слайді {i}.\n' for i in range(1,9))
+        prompt,system=build_assessment_request(self.sub,self.preset,[{'code':'ГР 1','name':'Зміст'}],
+                    {},[student],[primary],[refs],[],custom_prompt='Збережи мою особливу інструкцію.',
+                    ai_settings=AISettings.get_solo(),compact=True)
+        self.assertIn(student,prompt)
+        self.assertIn(self.assignment.custom_criteria,prompt)
+        self.assertIn('Задана повна умова.',prompt)
+        self.assertNotIn('Вправа 7. Незадана.',prompt)
+        self.assertNotIn('Умова на слайді 7.',prompt)
+        self.assertIn('Збережи мою особливу інструкцію.',system)
+        self.assertIn('assessment_blocked=true',system)
+        self.assertIn('active_result_groups',system)
+
     def test_class_policy_is_used_in_student_teacher_and_viewer(self):
         self.sub.class_group = self.older
         self.sub.save()
@@ -122,26 +142,26 @@ class AssessmentV4Tests(TestCase):
              patch('feed.gemini_service.call_ai_api', return_value=(200, 'suggested_grade: 12 broken', None, {})):
             self.assertEqual(evaluate_submission_with_gemini(self.sub)['status'], 'failed')
 
-    def test_successful_self_check_explains_grade_and_cannot_repeat_after_resubmission(self):
+    def test_successful_self_check_is_concise_and_cannot_repeat_after_resubmission(self):
         from .views import _perform_student_ai_check
         with patch('feed.views._evaluate_student_submission', return_value=dict(self.result(), status='success')):
             job = enqueue_submission_job(self.sub, 'student_check')
         self.assertEqual(job.status, 'succeeded')
-        self.assertIn('Чому така оцінка', job.result['feedback'])
+        self.assertNotIn('Чому така оцінка', job.result['feedback'])
         self.sub.refresh_from_db()
         # Mocked results still persist the useful explanations through the view.
         self.assertTrue(self.sub.student_ai_checked)
-        self.assertIn('Чому така оцінка', self.sub.student_ai_feedback)
+        self.assertNotIn('Чому така оцінка', self.sub.student_ai_feedback)
         self.assertEqual(self.sub.grade, '11')
         session = self.client.session
         session['last_submission_id'] = self.sub.pk
         session.save()
         page = self.client.get(reverse('submit_success', args=[self.assignment.pk]))
-        self.assertContains(page, 'Чому така оцінка')
+        self.assertNotContains(page, 'Чому така оцінка')
         self.assertNotContains(page, '📋 Перевірка критеріїв')
-        self.assertContains(page, 'Як покращити роботу')
+        self.assertContains(page, '💡')
         self.assertContains(page, 'Розмісти текст у колонках бюлетеня')
-        self.assertEqual(len(self.sub.get_student_ai_evidence_sections()), 2)
+        self.assertEqual(self.sub.get_student_ai_evidence_sections(), [])
         later = Submission.objects.create(assignment=self.assignment, teacher=self.teacher, class_group=self.group,
                                           first_name=self.sub.first_name, last_name=self.sub.last_name)
         from .ai_jobs import SelfCheckUnavailable
