@@ -125,6 +125,22 @@ body .btn-primary:hover { background: var(--action-primary-hover) !important; bo
 .platform-record-table :is(th, td) { overflow-wrap: anywhere; white-space: normal !important; }
 .platform-record-table :is(th, td) :is(code, a, strong, span) { max-width: 100%; overflow-wrap: anywhere; }
 .platform-record-table :is(th, td) .btn { white-space: normal !important; }
+.page-wrapper .platform-matrix-region { min-width: 0; max-width: 100%; overflow: auto; max-height: 72dvh; isolation: isolate; }
+.platform-matrix-table { border-collapse: separate; border-spacing: 0; table-layout: auto; }
+.platform-matrix-table thead th { position: sticky; top: 0; z-index: 10; background: var(--color-bg-secondary); }
+.platform-matrix-table :is(th,td):first-child { position: sticky; left: 0; z-index: 5; background: var(--color-surface); box-shadow: 2px 0 0 var(--color-border); }
+.platform-matrix-table thead th:first-child { z-index: 12; background: var(--color-bg-secondary); }
+.platform-matrix-table.schedule-matrix { table-layout: fixed; }
+.platform-matrix-table.schedule-matrix :is(th,td):first-child { width: 125px; background: var(--color-bg-secondary); }
+.platform-matrix-table.schedule-matrix :is(select,input) { width: 100%; min-width: 0; }
+.matrix-scroll-hint { margin: 6px 10px; font-size: 11px; color: var(--color-text-muted); }
+.journal-pagination { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--color-border); }
+.journal-pagination p { margin: 0; flex: 1 1 200px; font-size: 12px; }
+.journal-page-links { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+.journal-page-links :is(a,span) { padding: 5px 8px; font-size: 12px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); }
+.journal-page-links [aria-current] { background: var(--color-primary-light); font-weight: 800; }
+@media(max-width:600px) { .platform-matrix-table.journal-table :is(th,td):first-child { min-width: 130px; max-width: 160px; padding: 5px 8px; } #teacher-schedule-wrapper { padding: 12px!important; } }
+@media print { .page-wrapper .platform-matrix-region { max-height: none; overflow: visible; } .platform-matrix-table :is(th,td) { position: static!important; box-shadow: none; } .matrix-scroll-hint,.journal-pagination { display: none; } }
 .platform-table-region:has(> .is-record-layout) { overflow-x: visible !important; }
 .platform-record-table.is-record-layout { display: block; min-width: 0 !important; max-width: 100%; border-collapse: separate; }
 .platform-record-table.is-record-layout thead { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); }

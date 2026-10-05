@@ -5523,6 +5523,31 @@ def gradebook(request):
             continue
         filtered_dates.append(d)
 
+    view_mode = request.GET.get('view_mode', 'journal')
+    if view_mode not in ('journal', 'table'):
+        view_mode = 'journal'
+    journal_paginator = Paginator(filtered_dates, 15)
+    try:
+        page_number = int(request.GET.get('journal_page', journal_paginator.num_pages))
+    except (ValueError, TypeError):
+        page_number = journal_paginator.num_pages
+    journal_page = journal_paginator.get_page(max(1, min(page_number, journal_paginator.num_pages)))
+    displayed_dates = list(journal_page) if view_mode == 'journal' else filtered_dates
+    displayed_date_set = set(displayed_dates)
+
+    def journal_page_url(number):
+        params = request.GET.copy()
+        params['class_group'] = str(selected_class_id)
+        params['view_mode'] = 'journal'
+        params['journal_page'] = str(number)
+        return '?' + params.urlencode()
+
+    journal_page_links = [
+        {'label': str(number), 'url': journal_page_url(number), 'current': number == journal_page.number}
+        if isinstance(number, int) else {'label': str(number), 'url': None, 'current': False}
+        for number in journal_paginator.get_elided_page_range(journal_page.number, on_each_side=1, on_ends=1)
+    ]
+
     def match_grade_filter(item, g_filt):
         if not g_filt or g_filt == 'all':
             return True
@@ -5555,10 +5580,8 @@ def gradebook(request):
         for d in filtered_dates:
             raw_items = cl['grades_by_date'].get(d, [])
             filtered_items = [it for it in raw_items if match_grade_filter(it, grade_filter)]
-            cells.append({
-                'date': d,
-                'items': filtered_items,
-            })
+            if d in displayed_date_set:
+                cells.append({'date': d, 'items': filtered_items})
             for it in filtered_items:
                 if it.get('grade'):
                     legacy_grade_list.append([it['grade']])
@@ -5594,7 +5617,7 @@ def gradebook(request):
     class_avg = round(sum(class_all_numeric_grades) / len(class_all_numeric_grades), 1) if class_all_numeric_grades else None
 
     dates_meta = []
-    for d in filtered_dates:
+    for d in displayed_dates:
         titles = date_assignments.get(d, [])
         title_str = ", ".join(titles) if titles else f"Заняття {d.strftime('%d.%m.%Y')}"
         dates_meta.append({
@@ -5602,7 +5625,6 @@ def gradebook(request):
             'title': title_str,
         })
 
-    view_mode = request.GET.get('view_mode', 'journal')
 
     return render(request, 'feed/gradebook.html', {
         'class_groups': class_groups,
@@ -5610,10 +5632,15 @@ def gradebook(request):
         'selected_class_id': selected_class_id,
         'students': student_list,
         'student_list': student_list,
-        'dates': filtered_dates,
-        'sorted_dates': filtered_dates,
+        'dates': displayed_dates,
+        'sorted_dates': displayed_dates,
         'all_available_dates': sorted_dates,
         'dates_meta': dates_meta,
+        'journal_page': journal_page,
+        'journal_dates_count': len(filtered_dates),
+        'journal_page_links': journal_page_links,
+        'journal_previous_url': journal_page_url(journal_page.previous_page_number()) if journal_page.has_previous() else None,
+        'journal_next_url': journal_page_url(journal_page.next_page_number()) if journal_page.has_next() else None,
         'date_assignments': {d: ", ".join(titles) for d, titles in date_assignments.items()},
         'class_avg': class_avg,
         'view_mode': view_mode,

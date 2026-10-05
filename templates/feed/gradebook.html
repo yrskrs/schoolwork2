@@ -214,8 +214,10 @@
                             </div>
                         </div>
 
-                        <div class="journal-scroll-area">
-                            <table class="journal-table">
+                        {% include 'feed/components/journal_pagination.html' %}
+                        <p class="matrix-scroll-hint">↔ Прокручуйте журнал убік, щоб переглянути всі дати. Імена учнів залишаються зліва.</p>
+                        <div class="journal-scroll-area platform-matrix-region" tabindex="0" role="region" aria-label="Оцінки за датами">
+                            <table class="journal-table platform-matrix-table" data-table-layout="matrix">
                                 <thead>
                                     <tr>
                                         <th class="journal-th-student">
@@ -240,7 +242,7 @@
                                         <!-- Ліва фіксована колонка з учнем -->
                                         <td class="journal-td-student">
                                             <span style="color:var(--color-text-muted);font-weight:normal;font-size:11px;margin-right:4px;">{{ forloop.counter }}.</span>
-                                            <a href="{% url 'student_detail' student_name=student.name_key %}" style="color:var(--color-text-primary);text-decoration:none;font-weight:700;font-size:12.5px;">
+                                            <a href="{% url 'student_detail' student_name=student.name_key %}" title="{{ student.full_name }}" style="color:var(--color-text-primary);text-decoration:none;font-weight:700;font-size:12.5px;">
                                                 {{ student.full_name }}
                                             </a>
                                         </td>

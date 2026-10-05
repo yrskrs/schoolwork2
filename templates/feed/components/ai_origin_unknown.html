@@ -1,4 +1,4 @@
-{% if not submission.ai_generated_detected %}
+{% if is_teacher and not submission.ai_generated_detected %}
 <div class="ai-origin-details" style="margin-bottom:12px;padding:12px 16px;background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:var(--radius-sm);">
     <strong>🤖 Походження роботи не встановлено</strong>
     <p>{{ submission.ai_generated_details|default:"Виразних ознак ШІ не знайдено, але це не підтверджує самостійність. Бал оцінює наданий результат."|linebreaksbr }}</p>

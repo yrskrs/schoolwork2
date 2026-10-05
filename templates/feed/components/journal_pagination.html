@@ -1,0 +1,10 @@
+<nav class="journal-pagination" aria-label="Сторінки розгортки журналу">
+    <p>Сторінка {{ journal_page.number }} із {{ journal_page.paginator.num_pages }} · {% if dates %}{{ dates.0|date:"d.m.Y" }} — {{ dates|last|date:"d.m.Y" }} · {% endif %}{{ dates|length }} із {{ journal_dates_count }} дат</p>
+    {% if journal_page.paginator.num_pages > 1 %}
+    <div class="journal-page-links">
+        {% if journal_previous_url %}<a href="{{ journal_previous_url }}" rel="prev">← Попередня</a>{% endif %}
+        {% for link in journal_page_links %}{% if link.url %}<a href="{{ link.url }}" {% if link.current %}aria-current="page"{% endif %}>{{ link.label }}</a>{% else %}<span>{{ link.label }}</span>{% endif %}{% endfor %}
+        {% if journal_next_url %}<a href="{{ journal_next_url }}" rel="next">Наступна →</a>{% endif %}
+    </div>
+    {% endif %}
+</nav>
