@@ -3,4 +3,9 @@
     {% if active_ai_job.status == 'running' %}ШІ перевіряє роботу. Результат з’явиться автоматично.
     {% else %}Робота в черзі на перевірку ШІ. Можна залишити сторінку й повернутися пізніше.{% endif %}
 </div>
+{% elif last_ai_event_job %}
+<details class="ai-event-history">
+    <summary>Події останньої перевірки ШІ · {{ last_ai_event_job.finished_at|date:"d.m H:i" }}</summary>
+    <ol>{% for event in last_ai_event_job.events %}<li data-kind="{{ event.kind }}">{{ event.message }}</li>{% endfor %}</ol>
+</details>
 {% endif %}

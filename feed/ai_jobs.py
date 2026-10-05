@@ -91,6 +91,8 @@ def enqueue_understanding_job(assignment, user=None, force_refresh=False, eager=
 def job_response(job, is_teacher=False):
     if job.status in ('succeeded', 'failed'):
         result = dict(job.result)
+        result['events'] = job.events
+        result['job_id'] = str(job.pk)
         if job.kind == 'student_check':
             from .ai_context import strip_teacher_criteria
             for field in ('feedback', 'clean_feedback', 'feedback_comment'):
@@ -101,6 +103,7 @@ def job_response(job, is_teacher=False):
             result['is_teacher'] = is_teacher
         return JsonResponse(result, status=job.http_status)
     return JsonResponse({'status': job.status, 'job_id': str(job.pk),
+                         'events': job.events,
                          'status_url': reverse('ai_job_status', args=[job.pk])}, status=202)
 
 
@@ -109,6 +112,8 @@ def fail_job(job_id, message):
         job = AIJob.objects.select_for_update().get(pk=job_id)
         if job.status in ('succeeded', 'failed'):
             return
+        from .ai_progress import emit_event
+        emit_event('failed', message, job_id=job_id)
         job.status = 'failed'
         job.result = {'ok': False, 'status': 'failed', 'error': message}
         job.http_status = 503
@@ -133,6 +138,12 @@ def claim_next_job():
 
 
 def execute_job(job_id):
+    from .ai_progress import track_job
+    with track_job(job_id):
+        _execute_job(job_id)
+
+
+def _execute_job(job_id):
     with transaction.atomic():
         job = AIJob.objects.select_for_update().get(pk=job_id)
         if job.status in ('succeeded', 'failed'):
@@ -141,6 +152,8 @@ def execute_job(job_id):
             job.status, job.started_at = 'running', timezone.now()
             job.save(update_fields=['status', 'started_at'])
     try:
+        from .ai_progress import emit_event
+        emit_event('preparing', 'Читаю завдання, критерії та всі матеріали роботи.')
         if job.kind == 'understanding':
             from .gemini_service import analyze_assignment_task_understanding
             result = analyze_assignment_task_understanding(job.assignment, **job.parameters)
@@ -203,6 +216,10 @@ def _finish_job(job_id, result, status_code):
     success = status_code < 400 and (result.get('ok') is True or result.get('status') in ('success', 'ok'))
     with transaction.atomic():
         job = AIJob.objects.select_for_update().get(pk=job_id)
+        from .ai_progress import emit_event
+        emit_event('completed' if success else 'failed',
+                   'Перевірку завершено. Результат збережено.' if success else
+                   'Перевірку завершено без оцінки. Перегляньте причини нижче.', job_id=job_id)
         job.status = 'succeeded' if success else 'failed'
         job.result, job.http_status, job.finished_at = result, status_code, timezone.now()
         job.save(update_fields=['status', 'result', 'http_status', 'finished_at'])

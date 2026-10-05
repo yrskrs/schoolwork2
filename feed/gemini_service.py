@@ -110,7 +110,8 @@ def _http_post_json(url, payload_dict, headers=None, timeout=30):
                 url,
                 body=json_bytes,
                 headers=req_headers,
-                timeout=float(timeout)
+                timeout=float(timeout),
+                retries=False
             )
             status = resp.status
             body_text = resp.data.decode('utf-8', errors='replace')
@@ -119,9 +120,10 @@ def _http_post_json(url, payload_dict, headers=None, timeout=30):
                 return status, data, body_text
             except json.JSONDecodeError:
                 return status, None, body_text
-        except Exception:
-            # Якщо виникла помилка підключення через пул — пробуємо нижче через стандартний urllib
-            pass
+        except Exception as exc:
+            # A timeout may follow a processed request. Do not resend it through
+            # another transport; the model queue owns the next attempt.
+            raise Exception(f'Мережева помилка підключення: {exc}') from exc
 
     req = urllib.request.Request(
         url,
@@ -229,6 +231,11 @@ def log_ai_request_metric(model_name, provider='gemini', action='evaluation', st
 
 def _raw_call_ai_api(prompt_text, system_prompt="", inline_media=None, provider="gemini", api_key="", model_name="", custom_url="", temperature=0.2, max_output_tokens=3500, timeout=35, json_mode=False, thinking_budget=None):
     provider = (provider or 'gemini').lower().strip()
+    if provider == 'groq' and inline_media and clean_model_name(model_name, provider) in ('openai/gpt-oss-120b', 'openai/gpt-oss-20b'):
+        message = (f'{model_name} приймає лише текст, а ця робота містить зображення або сторінки документів. '
+                   'Для повної перевірки потрібна модель з підтримкою зображень. '
+                   'Візуальні об’єкти не вилучено. Додайте сумісну модель до черги.')
+        return 400, None, message, {'_schoolnet_local_preflight': True}
     from .ai_context import media_for_provider
     from .ai_payload import optimize_media
     try:
@@ -236,6 +243,10 @@ def _raw_call_ai_api(prompt_text, system_prompt="", inline_media=None, provider=
         inline_media = optimize_media(inline_media, provider)
     except Exception:
         return 0, None, 'Не вдалося прочитати всі візуальні матеріали для цього провайдера. Спробуйте PDF-сумісну модель.', None
+    if provider == 'groq' and clean_model_name(model_name, provider) == 'qwen/qwen3.8-27b' and len(inline_media) > 3:
+        message = (f'{model_name} підтримує до 3 зображень за запит; повна робота має {len(inline_media)}. '
+                   'Об’єкти не вилучено. Потрібна наступна модель з більшим лімітом зображень.')
+        return 400, None, message, {'_schoolnet_local_preflight': True}
     url, headers, model = get_provider_endpoint(provider, model_name=model_name, api_key=api_key, custom_url=custom_url)
 
     if provider == 'gemini':
@@ -6307,12 +6318,34 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
 
     attempted_errors = []
 
+    from .ai_progress import emit_event
+
+    def safe_failure(reason):
+        text = str(reason or 'Модель не повернула відповіді.')
+        for config in attempts_configs:
+            if config.get('api_key'):
+                text = text.replace(config['api_key'], '[приховано]')
+        return text[:800]
+
+    def report_failure(reason, status_code=None):
+        reason = safe_failure(reason)
+        context = dict(provider=c_provider, model=c_model, position=cfg_idx + 1, total=len(attempts_configs))
+        emit_event('model_error', f'{c_provider}/{c_model}: {reason}', status_code=status_code, **context)
+        if cfg_idx + 1 < len(attempts_configs):
+            next_config = attempts_configs[cfg_idx + 1]
+            emit_event('switching', f'Перемикаюсь на {next_config["provider"]}/{next_config["model"]}.', **context)
+        else:
+            emit_event('exhausted', 'Наступної моделі у ввімкненій черзі немає.', **context)
+        return reason
+
     for cfg_idx, cfg in enumerate(attempts_configs):
         c_provider = cfg['provider']
         c_key = cfg['api_key']
         c_model = cfg['model']
         c_url = cfg['custom_url']
         c_is_backup = cfg['is_backup']
+        emit_event('model_start', f'Спроба {cfg_idx + 1}/{len(attempts_configs)}: {c_provider}/{c_model}. Очікую відповідь.',
+                   provider=c_provider, model=c_model, position=cfg_idx + 1, total=len(attempts_configs))
 
         is_failover_call = (c_is_backup != is_backup_active)
         fallback_happened = is_failover_call or (cfg_idx > 0)
@@ -6344,6 +6377,8 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                 )
 
                 if status_code in (429, 500, 502, 503, 504) and attempt < max_retries:
+                    emit_event('retry', f'{c_provider}/{c_model}: HTTP {status_code}. Повторюю спробу.',
+                               provider=c_provider, model=c_model, position=cfg_idx + 1, total=len(attempts_configs), status_code=status_code)
                     time.sleep(1.5 * (attempt + 1))
                     continue
 
@@ -6356,9 +6391,15 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                         fail_reason = f"Доступ заборонено для {c_provider.title()} ({c_model}) (403): {api_error_message({}, err_msg, c_key)}"
                     elif status_code == 503:
                         fail_reason = f"503 High Demand ({err_msg or 'Перевантаження моделі'})"
+                    elif status_code == 413:
+                        fail_reason = ('413: запит завеликий для постачальника; це обмеження розміру, а не квоти. '
+                                       'Потрібна модель з більшим лімітом або менший обсяг матеріалів. ' + (err_msg or ''))
+                    elif status_code == 200:
+                        fail_reason = err_msg or 'Модель повернула порожню відповідь; оцінку не збережено.'
                     else:
                         fail_reason = f"HTTP {status_code}: {err_msg}" if (status_code and err_msg) else (err_msg or f"Помилка HTTP {status_code}")
 
+                    fail_reason = report_failure(fail_reason, status_code)
                     attempted_errors.append(f"[{c_provider}/{c_model}]: {fail_reason}")
                     log_ai_error(
                         teacher=teacher,
@@ -6408,10 +6449,9 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
 
                 if result_json:
                     if result_json.get('assessment_blocked') is True or result_json.get('suggested_grade') is None:
-                        reason = str(result_json.get('grade_explanation') or result_json.get('summary') or 'Недостатньо прочитаних даних для оцінювання.')
-                        submission.ai_status, submission.ai_error_reason = 'failed', reason
-                        submission.save(update_fields=['ai_status', 'ai_error_reason'])
-                        return {'status': 'failed', 'error': reason, 'assessment_blocked': True}
+                        reason = report_failure('Модель не змогла оцінити роботу або не повернула бал. Оцінку не збережено.')
+                        attempted_errors.append(f'[{c_provider}/{c_model}]: {reason}')
+                        break
                     suggested_grade = str(result_json.get('suggested_grade', '')).strip()
                     if suggested_grade != 'Доопрацювати':
                         try:
@@ -6420,8 +6460,9 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                                 raise ValueError('grade out of scale')
                             suggested_grade = str(math.ceil(numeric_grade))
                         except (TypeError, ValueError):
-                            attempted_errors.append(f"[{c_provider}/{c_model}] Некоректний бал у відповіді; оцінку не збережено.")
-                            continue
+                            reason = report_failure('Некоректний бал у відповіді; оцінку не збережено.')
+                            attempted_errors.append(f"[{c_provider}/{c_model}] {reason}")
+                            break
 
                     level = str(result_json.get('level', '')).strip()
                     format_warning = str(result_json.get('format_warning') or '').strip()
@@ -7322,6 +7363,9 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                         'ai_status', 'ai_error_reason', 'ai_reviewed_at'
                     ])
 
+                    emit_event('model_success', f'{c_provider}/{c_model}: відповідь отримано, оцінку збережено.',
+                               provider=c_provider, model=c_model, position=cfg_idx + 1, total=len(attempts_configs), status_code=200)
+
                     return {
                         'status': 'success',
                         'suggested_grade': suggested_grade,
@@ -7368,11 +7412,13 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                         'fallback_activated': fallback_happened
                     }
                 else:
-                    attempted_errors.append(f"[{c_provider}/{c_model}] Неповна відповідь JSON; оцінку не збережено.")
-                    continue
+                    reason = report_failure('Неповна або некоректна відповідь JSON; оцінку не збережено.')
+                    attempted_errors.append(f"[{c_provider}/{c_model}] {reason}")
+                    break
 
             except Exception as e:
-                attempted_errors.append(f"[{c_provider}/{c_model} виняток]: {str(e)}")
+                reason = report_failure(f'Помилка запиту або обробки відповіді: {e}')
+                attempted_errors.append(f"[{c_provider}/{c_model} виняток]: {reason}")
                 break
 
     # Якщо всі спроби (включаючи резервний API) зазнали невдачі

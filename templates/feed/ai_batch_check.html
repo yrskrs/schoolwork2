@@ -157,7 +157,7 @@
             <!-- Прогрес-бар пакетної обробки -->
             <div id="progress-container" style="display:none;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:20px 24px;margin-bottom:20px;">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-weight:700;">
-                    <span id="progress-status-text">Виконується обробка робіт через Google Gemini...</span>
+                    <span id="progress-status-text">Виконується перевірка робіт через чергу моделей ШІ...</span>
                     <span id="progress-percent-text" style="color:var(--color-primary);">0%</span>
                 </div>
 
@@ -537,26 +537,9 @@ function processQueueIndex(idx) {
             'X-Requested-With': 'XMLHttpRequest',
             'Accept': 'application/json'
         }
-    })
+    }, {anchor: document.getElementById('progress-container')})
     .then(function(r) { return r.json(); })
     .then(function(res) {
-        // Перевірка на помилку Rate Limit 429
-        if (res.status === 'failed' && res.error && (res.error.indexOf('429') !== -1 || res.error.indexOf('Rate Limit') !== -1)) {
-            var gradeCell = document.getElementById('cell-grade-' + item.id);
-            var feedbackCell = document.getElementById('cell-feedback-' + item.id);
-            if (gradeCell) {
-                gradeCell.innerHTML = '<span class="badge" style="background:var(--color-warning-light);color:var(--color-warning);border:1px solid #fcd34d;font-size:11px;">⏳ Ліміт API (чекаємо 10 сек)...</span>';
-            }
-            if (feedbackCell) {
-                feedbackCell.innerHTML = '<span style="color:var(--color-warning);font-size:12px;">Тимчасовий ліміт запитів Gemini Free. Автоматичний повтор через 10 секунд...</span>';
-            }
-            document.getElementById('progress-status-text').textContent = '⏳ Пауза 10 секунд через ліміт запитів Gemini Free Tier...';
-            setTimeout(function() {
-                if (!shouldStop) processQueueIndex(idx);
-            }, 10000);
-            return;
-        }
-
         processedCount++;
         item.ai_status = res.status;
         item.ai_grade = res.suggested_grade || '—';

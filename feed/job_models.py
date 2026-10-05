@@ -14,6 +14,7 @@ class AIJob(models.Model):
     requested_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL)
     parameters = models.JSONField(default=dict)
     result = models.JSONField(default=dict)
+    events = models.JSONField(default=list)
     http_status = models.PositiveSmallIntegerField(default=200)
     created_at = models.DateTimeField(auto_now_add=True)
     started_at = models.DateTimeField(null=True, blank=True)

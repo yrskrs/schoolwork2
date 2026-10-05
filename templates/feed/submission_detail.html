@@ -475,7 +475,7 @@ function runStudentAICheck(subId) {
             'X-CSRFToken': '{{ csrf_token }}',
             'X-Requested-With': 'XMLHttpRequest',
         },
-    })
+    }, {anchor: resultBox})
     .then(function(r) { return r.json(); })
     .then(function(data) {
         var selfCheckBlock = document.getElementById('student-selfcheck-block');

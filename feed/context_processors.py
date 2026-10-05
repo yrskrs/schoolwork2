@@ -83,11 +83,13 @@ def teacher_stats_context(request):
         if submission_id:
             job_filter = {'submission_id': submission_id, 'submission__assignment_id': match.kwargs.get('pk')}
     if job_filter:
-        jobs = AIJob.objects.filter(**job_filter, status__in=['queued', 'running'])
+        jobs = AIJob.objects.filter(**job_filter)
         if not request.user.is_authenticated:
             jobs = jobs.filter(kind='student_check')
         else:
             from .permissions import teacher_submissions
             jobs = jobs.filter(Q(kind='student_check') | Q(submission__in=teacher_submissions(request, Submission.objects.all())))
-        context['active_ai_job'] = jobs.first()
+        context['active_ai_job'] = jobs.filter(status__in=['queued', 'running']).first()
+        if not context['active_ai_job']:
+            context['last_ai_event_job'] = jobs.filter(status__in=['succeeded', 'failed']).exclude(events=[]).order_by('-created_at').first()
     return context

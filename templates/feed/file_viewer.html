@@ -1015,7 +1015,7 @@ function runSingleAICheck(subId) {
             'X-Requested-With': 'XMLHttpRequest',
             'Accept': 'application/json'
         }
-    })
+    }, {anchor: box})
     .then(function(r) {
         return r.text().then(function(text) {
             try {
