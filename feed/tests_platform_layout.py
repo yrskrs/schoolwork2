@@ -107,6 +107,12 @@ class PlatformNavigationTests(TestCase):
                 page = self.page(self.client.get(url))
                 styles = page.xpath('//head/link[@rel="stylesheet"]/@href')
                 self.assertEqual(styles[-1], '/static/css/platform_layout.css')
+                switch = page.get_element_by_id('simplified-site-toggle')
+                self.assertEqual(switch.get('role'), 'switch')
+                self.assertTrue(switch.xpath('ancestor::nav[@aria-label="Головна навігація"]'))
+                self.assertIn('Спрощений сайт', switch.text_content())
+                self.assertIn('Вибір зберігається', page.get_element_by_id(switch.get('aria-describedby')).text_content())
+                self.assertTrue(page.xpath('//head/script[@src="/static/js/site_preferences.js"]'))
                 self.assertEqual(len(page.xpath('//*[contains(concat(" ", @class, " "), " page-wrapper ")]')), 1)
 
     def test_teacher_mobile_navigation_has_read_only_links_and_is_not_on_student_pages(self):

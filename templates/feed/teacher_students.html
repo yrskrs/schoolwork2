@@ -985,6 +985,55 @@ body .page-wrapper {
                 <!-- ═════════════════════════════════════════════════════════════ -->
                 <!-- 3.1. РЕЖИМ ПЕРЕГЛЯДУ (VIEW MODE) — ЧИСТИЙ І ЗРУЧНИЙ ВИГЛЯД   -->
                 <!-- ═════════════════════════════════════════════════════════════ -->
+                <!-- 🌟 Інформаційна плашка: сьогоднішній день та поточний урок 🌟 -->
+                <div class="schedule-live-indicator-card" style="background:var(--color-bg-secondary);border:1px solid var(--color-border);border-left:5px solid {% if live_lesson_status.status_type == 'in_lesson' %}#10b981{% elif live_lesson_status.status_type == 'in_break' %}#f59e0b{% elif live_lesson_status.status_type == 'before_school' %}#3b82f6{% else %}var(--color-primary){% endif %};border-radius:var(--radius-md);padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;box-shadow:0 1px 4px rgba(0,0,0,0.03);">
+                    <div style="display:flex;align-items:center;gap:14px;min-width:0;flex:1 1 auto;">
+                        <div style="width:42px;height:42px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;background:{% if live_lesson_status.status_type == 'in_lesson' %}rgba(16,185,129,0.15){% elif live_lesson_status.status_type == 'in_break' %}rgba(245,158,11,0.15){% elif live_lesson_status.status_type == 'before_school' %}rgba(59,130,246,0.15){% else %}rgba(99,102,241,0.12){% endif %};">
+                            {% if live_lesson_status.status_type == 'in_lesson' %}🔔
+                            {% elif live_lesson_status.status_type == 'in_break' %}☕
+                            {% elif live_lesson_status.status_type == 'before_school' %}🌅
+                            {% elif live_lesson_status.status_type == 'after_school' %}🏁
+                            {% else %}📅{% endif %}
+                        </div>
+                        <div style="min-width:0;">
+                            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                                <span style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:0.04em;color:var(--color-text-muted);">
+                                    Сьогодні: <strong style="color:var(--color-text-primary);">{{ today_weekday_name }}</strong>, {{ today_date_str }}
+                                </span>
+                                <span style="font-size:12px;color:var(--color-text-muted);">•</span>
+                                <span style="font-size:12px;font-weight:700;color:var(--color-text-secondary);display:inline-flex;align-items:center;gap:4px;">
+                                    🕒 Поточний час: <span id="schedule-live-clock" style="font-family:monospace;font-weight:800;color:var(--color-primary);font-size:13px;">{{ today_time_str }}</span>
+                                </span>
+                                {% if live_lesson_status.badge_text %}
+                                <span class="badge" style="font-size:11px;font-weight:800;padding:2px 8px;border-radius:10px;
+                                    {% if live_lesson_status.status_type == 'in_lesson' %}background:rgba(16,185,129,0.15);color:var(--color-success);border:1px solid rgba(16,185,129,0.3);
+                                    {% elif live_lesson_status.status_type == 'in_break' %}background:rgba(245,158,11,0.15);color:var(--color-warning);border:1px solid rgba(245,158,11,0.3);
+                                    {% elif live_lesson_status.status_type == 'before_school' %}background:rgba(59,130,246,0.15);color:var(--color-info);border:1px solid rgba(59,130,246,0.3);
+                                    {% else %}background:var(--color-surface);color:var(--color-text-secondary);border:1px solid var(--color-border);{% endif %}">
+                                    {{ live_lesson_status.badge_text }}
+                                </span>
+                                {% endif %}
+                            </div>
+                            <div style="margin-top:4px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                                <span style="font-size:14px;font-weight:800;color:var(--color-text-primary);">
+                                    {{ live_lesson_status.title }}
+                                </span>
+                                {% if live_lesson_status.time_info %}
+                                <span style="font-size:12.5px;color:var(--color-text-muted);">
+                                    ({{ live_lesson_status.time_info }})
+                                </span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+                        <span style="font-size:11.5px;color:var(--color-text-muted);background:var(--color-surface);padding:5px 10px;border-radius:6px;border:1px solid var(--color-border);display:inline-flex;align-items:center;gap:6px;">
+                            <span>💡</span>
+                            <span>Колонка «{{ today_weekday_name }}» та поточний урок підсвічені в таблиці</span>
+                        </span>
+                    </div>
+                </div>
+
                 <p class="matrix-scroll-hint">↔ На вузькому екрані прокручуйте розклад убік. Номер і час уроку залишаються зліва.</p>
                 <div id="schedule-view-mode-container" class="table-responsive platform-matrix-region" tabindex="0" role="region" aria-label="Розклад уроків" style="overflow-x:auto;border-radius:var(--radius-md);border:1px solid var(--color-border);">
                     <table class="student-table printable-schedule-table platform-matrix-table schedule-matrix" data-table-layout="matrix" style="width:100%;min-width:780px;">
@@ -994,8 +1043,13 @@ body .page-wrapper {
                                     № Уроку / Час
                                 </th>
                                 {% for day_num, day_name in days_of_week %}
-                                <th style="text-align:center;background:var(--color-bg-secondary);">
-                                    {{ day_name }}
+                                <th style="text-align:center;background:{% if day_num == today_weekday %}rgba(99,102,241,0.12){% else %}var(--color-bg-secondary){% endif %};border-bottom:{% if day_num == today_weekday %}3px solid var(--color-primary){% else %}1px solid var(--color-border){% endif %};">
+                                    <div style="display:flex;align-items:center;justify-content:center;gap:6px;">
+                                        <span>{{ day_name }}</span>
+                                        {% if day_num == today_weekday %}
+                                        <span class="badge" style="background:var(--color-primary);color:#fff;font-size:10px;padding:2px 6px;border-radius:4px;font-weight:800;letter-spacing:0.02em;">СЬОГОДНІ</span>
+                                        {% endif %}
+                                    </div>
                                 </th>
                                 {% endfor %}
                             </tr>
@@ -1003,7 +1057,12 @@ body .page-wrapper {
                         <tbody>
                             {% for row in schedule_rows %}
                             <tr>
-                                <td style="text-align:center;vertical-align:middle;background:var(--color-bg-secondary);border-right:1px solid var(--color-border);padding:12px 8px;">
+                                <td style="text-align:center;vertical-align:middle;background:{% if row.is_current_slot and today_weekday <= 6 %}rgba(16,185,129,0.08){% else %}var(--color-bg-secondary){% endif %};border-right:1px solid var(--color-border);border-left:{% if row.is_current_slot and today_weekday <= 6 %}3px solid #10b981{% else %}none{% endif %};padding:12px 8px;">
+                                    {% if row.is_current_slot and today_weekday <= 6 %}
+                                    <span class="badge" style="background:#10b981;color:#fff;font-size:10px;font-weight:800;padding:2px 6px;border-radius:4px;margin-bottom:4px;display:inline-block;">
+                                        🟢 ЗАРАЗ
+                                    </span>
+                                    {% endif %}
                                     <div style="font-weight:900;font-size:14px;color:var(--color-text-primary);">
                                         {{ row.slot.lesson_number }}-й урок
                                     </div>
@@ -1016,9 +1075,16 @@ body .page-wrapper {
                                 </td>
 
                                 {% for day in row.days %}
-                                <td style="vertical-align:middle;padding:10px 8px;border-right:1px solid var(--color-border);text-align:center;background:{% if day.entry %}rgba(99,102,241,0.04){% else %}transparent{% endif %};">
+                                <td style="vertical-align:middle;padding:10px 8px;border-right:1px solid var(--color-border);text-align:center;background:{% if day.is_current_lesson %}rgba(16,185,129,0.09){% elif day.is_today %}rgba(99,102,241,0.04){% elif day.entry %}rgba(99,102,241,0.02){% else %}transparent{% endif %};{% if day.is_today %}border-left:1px dashed rgba(99,102,241,0.22);border-right:1px dashed rgba(99,102,241,0.22);{% endif %}">
                                     {% if day.entry %}
-                                    <div style="background:var(--color-surface);border:1px solid rgba(99,102,241,0.22);border-left:4px solid {{ day.entry.subject.color|default:'var(--color-primary)' }};border-radius:6px;padding:8px 10px;text-align:left;box-shadow:0 1px 4px rgba(0,0,0,0.04);">
+                                    <div style="background:var(--color-surface);border:{% if day.is_current_lesson %}2px solid #10b981{% else %}1px solid rgba(99,102,241,0.22){% endif %};border-left:4px solid {% if day.is_current_lesson %}#10b981{% else %}{{ day.entry.subject.color|default:'var(--color-primary)' }}{% endif %};border-radius:6px;padding:8px 10px;text-align:left;box-shadow:{% if day.is_current_lesson %}0 0 14px rgba(16,185,129,0.35){% else %}0 1px 4px rgba(0,0,0,0.04){% endif %};position:relative;">
+                                        {% if day.is_current_lesson %}
+                                        <div style="display:flex;align-items:center;gap:4px;margin-bottom:6px;">
+                                            <span class="badge" style="background:#10b981;color:#fff;font-size:10px;font-weight:800;padding:2px 7px;border-radius:4px;letter-spacing:0.02em;">
+                                                🟢 ТРИВАЄ ЗАРАЗ
+                                            </span>
+                                        </div>
+                                        {% endif %}
                                         <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
                                             <span class="class-tag" style="font-size:12px;font-weight:800;padding:2px 8px;">
                                                 {{ day.entry.class_group.name }}
@@ -1034,9 +1100,15 @@ body .page-wrapper {
                                         {% endif %}
                                     </div>
                                     {% else %}
-                                    <div style="color:var(--color-text-muted);font-size:12px;opacity:0.35;">
-                                        —
-                                    </div>
+                                        {% if day.is_current_lesson %}
+                                        <div style="background:rgba(245,158,11,0.1);border:1px dashed #f59e0b;border-radius:6px;padding:6px 8px;font-size:11px;color:var(--color-warning);font-weight:700;">
+                                            ☕ Зараз вікно (вільний час)
+                                        </div>
+                                        {% else %}
+                                        <div style="color:var(--color-text-muted);font-size:12px;opacity:0.35;">
+                                            —
+                                        </div>
+                                        {% endif %}
                                     {% endif %}
                                 </td>
                                 {% endfor %}
@@ -1062,8 +1134,13 @@ body .page-wrapper {
                                             № Уроку / Час
                                         </th>
                                         {% for day_num, day_name in days_of_week %}
-                                        <th style="text-align:center;background:var(--color-bg-secondary);">
-                                            {{ day_name }}
+                                        <th style="text-align:center;background:{% if day_num == today_weekday %}rgba(99,102,241,0.12){% else %}var(--color-bg-secondary){% endif %};border-bottom:{% if day_num == today_weekday %}3px solid var(--color-primary){% else %}1px solid var(--color-border){% endif %};">
+                                            <div style="display:flex;align-items:center;justify-content:center;gap:6px;">
+                                                <span>{{ day_name }}</span>
+                                                {% if day_num == today_weekday %}
+                                                <span class="badge" style="background:var(--color-primary);color:#fff;font-size:10px;padding:2px 6px;border-radius:4px;font-weight:800;letter-spacing:0.02em;">СЬОГОДНІ</span>
+                                                {% endif %}
+                                            </div>
                                         </th>
                                         {% endfor %}
                                     </tr>
@@ -1071,7 +1148,12 @@ body .page-wrapper {
                                 <tbody>
                                     {% for row in schedule_rows %}
                                     <tr>
-                                        <td style="text-align:center;vertical-align:middle;background:var(--color-bg-secondary);border-right:1px solid var(--color-border);padding:10px 8px;">
+                                        <td style="text-align:center;vertical-align:middle;background:{% if row.is_current_slot and today_weekday <= 6 %}rgba(16,185,129,0.08){% else %}var(--color-bg-secondary){% endif %};border-right:1px solid var(--color-border);border-left:{% if row.is_current_slot and today_weekday <= 6 %}3px solid #10b981{% else %}none{% endif %};padding:10px 8px;">
+                                            {% if row.is_current_slot and today_weekday <= 6 %}
+                                            <span class="badge" style="background:#10b981;color:#fff;font-size:10px;font-weight:800;padding:2px 6px;border-radius:4px;margin-bottom:4px;display:inline-block;">
+                                                🟢 ЗАРАЗ
+                                            </span>
+                                            {% endif %}
                                             <div style="font-weight:800;font-size:13.5px;color:var(--color-text-primary);">
                                                 {{ row.slot.lesson_number }}-й урок
                                             </div>
@@ -1084,8 +1166,15 @@ body .page-wrapper {
                                         </td>
 
                                         {% for day in row.days %}
-                                        <td class="schedule-cell-td" style="vertical-align:top;padding:8px;border-right:1px solid var(--color-border);background:{% if day.class_id %}rgba(99,102,241,0.06){% else %}transparent{% endif %};">
-                                            <div class="schedule-cell-box" style="position:relative;border-radius:6px;padding:4px;border:1px solid {% if day.class_id %}var(--color-primary){% else %}transparent{% endif %};transition:all 0.15s ease;">
+                                        <td class="schedule-cell-td" style="vertical-align:top;padding:8px;border-right:1px solid var(--color-border);background:{% if day.is_current_lesson %}rgba(16,185,129,0.09){% elif day.is_today %}rgba(99,102,241,0.04){% elif day.class_id %}rgba(99,102,241,0.06){% else %}transparent{% endif %};{% if day.is_today %}border-left:1px dashed rgba(99,102,241,0.22);border-right:1px dashed rgba(99,102,241,0.22);{% endif %}">
+                                            <div class="schedule-cell-box" style="position:relative;border-radius:6px;padding:4px;border:{% if day.is_current_lesson %}2px solid #10b981{% elif day.class_id %}1px solid var(--color-primary){% else %}1px solid transparent{% endif %};transition:all 0.15s ease;">
+                                                {% if day.is_current_lesson %}
+                                                <div style="margin-bottom:4px;">
+                                                    <span class="badge" style="background:#10b981;color:#fff;font-size:9.5px;font-weight:800;padding:2px 6px;border-radius:4px;">
+                                                        🟢 Зараз триває цей слот
+                                                    </span>
+                                                </div>
+                                                {% endif %}
                                                 
                                                 <!-- Випадаючий список вибору класу -->
                                                 <div style="position:relative;">
@@ -1553,6 +1642,19 @@ document.addEventListener('DOMContentLoaded', function() {
     } catch(e) {
         setScheduleViewMode('view');
     }
+
+    // Живий годинник розкладу
+    function updateScheduleClock() {
+        var clockEl = document.getElementById('schedule-live-clock');
+        if (clockEl) {
+            var now = new Date();
+            var hours = String(now.getHours()).padStart(2, '0');
+            var minutes = String(now.getMinutes()).padStart(2, '0');
+            clockEl.textContent = hours + ':' + minutes;
+        }
+    }
+    updateScheduleClock();
+    setInterval(updateScheduleClock, 10000);
 });
 </script>
 {% endblock %}

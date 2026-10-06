@@ -6,16 +6,12 @@
         @view-transition { navigation: auto; }
         @media (prefers-reduced-motion: reduce) { @view-transition { navigation: none; } }
     </style>
+    <script src="{% static 'js/site_preferences.js' %}"></script>
     <script>
         (function(){
             var t = window.matchMedia && window.matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 'light';
             try { t = localStorage.getItem('sn-theme') || t; } catch(e) {}
             if (t !== 'dark') t = 'light';
-            if ((navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4) ||
-                (navigator.deviceMemory && navigator.deviceMemory <= 4)) {
-                document.documentElement.classList.add('sn-lite');
-                document.getElementById('navigation-transition-policy').textContent = '@view-transition { navigation: none; }';
-            }
             document.documentElement.setAttribute('data-theme', t);
             if (t === 'dark') {
                 document.documentElement.style.backgroundColor = '#0f172a';
@@ -27,7 +23,9 @@
             try {
                 var fs = localStorage.getItem('sn-font-scale') || '100';
                 var scaleVal = parseInt(fs, 10);
-                if (isNaN(scaleVal) || scaleVal < 60 || scaleVal > 180) scaleVal = 100;
+                if (isNaN(scaleVal) || scaleVal < 85 || scaleVal > 125) {
+                    scaleVal = Math.max(85, Math.min(125, isNaN(scaleVal) ? 100 : scaleVal));
+                }
                 document.documentElement.setAttribute('data-font-scale', scaleVal.toString());
                 document.documentElement.style.zoom = (scaleVal / 100).toString();
             } catch(e) {}
@@ -83,6 +81,12 @@
         </form>
 
         <div class="navbar-actions">
+            <button id="simplified-site-toggle" class="simplified-site-toggle" type="button" role="switch"
+                    aria-checked="false" aria-describedby="simplified-site-help"
+                    title="Спрощений сайт: вимкнути анімації, розмиття та декоративні тіні для старих ноутбуків">
+                <span class="simplified-site-label">Спрощений сайт</span>
+                <span class="simplified-site-track" aria-hidden="true"></span>
+            </button>
             <button id="mobile-menu-btn" class="theme-toggle" type="button" aria-label="Відкрити меню" aria-expanded="false">☰</button>
 
             {% if not user.is_authenticated or not user.teacher_profile %}
@@ -92,28 +96,28 @@
 
             <!-- 🔤 Масштабування шрифтів сайту (для учнів/гостей) -->
             <div class="font-scale-wrapper" style="position:relative;display:inline-flex;align-items:center;">
-                <button type="button" id="font-scale-toggle-btn" class="theme-toggle" aria-label="Змінити розмір шрифту" title="Розмір тексту (Шрифт: 60% - 180%)" onclick="toggleFontScaleMenu(event)">
+                <button type="button" id="font-scale-toggle-btn" class="theme-toggle" aria-label="Змінити розмір шрифту" title="Розмір тексту (безпечний діапазон: 85% - 125%)" onclick="toggleFontScaleMenu(event)">
                     <span style="font-size:13px;font-weight:800;letter-spacing:-0.5px;">A<span style="font-size:10.5px;font-weight:700;">a</span></span>
                 </button>
                 <div id="font-scale-dropdown" class="font-scale-dropdown" style="display:none;position:absolute;top:calc(100% + 6px);right:0;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);box-shadow:0 10px 25px rgba(0,0,0,0.18);padding:8px 10px;min-width:210px;z-index:1050;">
                     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
                         <span style="font-size:10.5px;font-weight:800;color:var(--color-text-muted);text-transform:uppercase;letter-spacing:0.04em;">Розмір тексту</span>
                         <div style="display:flex;align-items:center;gap:4px;">
-                            <button type="button" onclick="stepFontScale(-10)" class="btn btn-sm btn-secondary" style="font-size:11px;padding:1px 6px;line-height:1.2;" title="Зменшити">−</button>
+                            <button type="button" data-font-scale-step="-5" onclick="stepFontScale(-5)" class="btn btn-sm btn-secondary font-scale-step-btn" style="font-size:11px;padding:1px 6px;line-height:1.2;" title="Зменшити">−</button>
                             <span id="font-scale-active-badge-guest" class="font-scale-val-badge">100%</span>
-                            <button type="button" onclick="stepFontScale(10)" class="btn btn-sm btn-secondary" style="font-size:11px;padding:1px 6px;line-height:1.2;" title="Збільшити">+</button>
+                            <button type="button" data-font-scale-step="5" onclick="stepFontScale(5)" class="btn btn-sm btn-secondary font-scale-step-btn" style="font-size:11px;padding:1px 6px;line-height:1.2;" title="Збільшити">+</button>
                         </div>
                     </div>
                     <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:4px;margin-bottom:6px;">
-                        <button type="button" onclick="applyFontScale(75)" class="btn btn-sm font-scale-choice-btn" data-scale="75" title="75%" style="font-size:11px;padding:4px 2px;font-weight:700;">75%</button>
+                        <button type="button" onclick="applyFontScale(85)" class="btn btn-sm font-scale-choice-btn" data-scale="85" title="85%" style="font-size:11px;padding:4px 2px;font-weight:700;">85%</button>
                         <button type="button" onclick="applyFontScale(90)" class="btn btn-sm font-scale-choice-btn" data-scale="90" title="90%" style="font-size:11px;padding:4px 2px;font-weight:700;">90%</button>
                         <button type="button" onclick="applyFontScale(100)" class="btn btn-sm font-scale-choice-btn" data-scale="100" title="100%" style="font-size:11px;padding:4px 2px;font-weight:700;">100%</button>
                         <button type="button" onclick="applyFontScale(110)" class="btn btn-sm font-scale-choice-btn" data-scale="110" title="110%" style="font-size:11px;padding:4px 2px;font-weight:700;">110%</button>
+                        <button type="button" onclick="applyFontScale(120)" class="btn btn-sm font-scale-choice-btn" data-scale="120" title="120%" style="font-size:11px;padding:4px 2px;font-weight:700;">120%</button>
                         <button type="button" onclick="applyFontScale(125)" class="btn btn-sm font-scale-choice-btn" data-scale="125" title="125%" style="font-size:11px;padding:4px 2px;font-weight:700;">125%</button>
-                        <button type="button" onclick="applyFontScale(150)" class="btn btn-sm font-scale-choice-btn" data-scale="150" title="150%" style="font-size:11px;padding:4px 2px;font-weight:700;">150%</button>
                     </div>
                     <div style="display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--color-border);padding-top:6px;font-size:11px;">
-                        <span style="color:var(--color-text-muted);">Діапазон 60%–180%</span>
+                        <span style="color:var(--color-text-muted);">Безпечний ліміт 85%–125%</span>
                         <button type="button" onclick="applyFontScale(100)" style="background:none;border:none;color:var(--color-primary);cursor:pointer;font-weight:700;font-size:11px;padding:0;">Скинути (100%)</button>
                     </div>
                 </div>
@@ -339,18 +343,22 @@
                         <div class="user-menu-font-header">
                             <span>🔤 Масштаб тексту</span>
                             <div style="display:flex;align-items:center;gap:4px;">
-                                <button type="button" onclick="stepFontScale(-10)" class="btn btn-sm btn-secondary" style="font-size:11px;padding:1px 6px;line-height:1.2;" title="Зменшити">−</button>
+                                <button type="button" data-font-scale-step="-5" onclick="stepFontScale(-5)" class="btn btn-sm btn-secondary font-scale-step-btn" style="font-size:11px;padding:1px 6px;line-height:1.2;" title="Зменшити">−</button>
                                 <span id="font-scale-active-badge" class="font-scale-val-badge">100%</span>
-                                <button type="button" onclick="stepFontScale(10)" class="btn btn-sm btn-secondary" style="font-size:11px;padding:1px 6px;line-height:1.2;" title="Збільшити">+</button>
+                                <button type="button" data-font-scale-step="5" onclick="stepFontScale(5)" class="btn btn-sm btn-secondary font-scale-step-btn" style="font-size:11px;padding:1px 6px;line-height:1.2;" title="Збільшити">+</button>
                             </div>
                         </div>
                         <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:4px;margin-top:6px;">
-                            <button type="button" onclick="applyFontScale(75)" class="btn btn-sm font-scale-choice-btn" data-scale="75" title="75%">75%</button>
+                            <button type="button" onclick="applyFontScale(85)" class="btn btn-sm font-scale-choice-btn" data-scale="85" title="85%">85%</button>
                             <button type="button" onclick="applyFontScale(90)" class="btn btn-sm font-scale-choice-btn" data-scale="90" title="90%">90%</button>
                             <button type="button" onclick="applyFontScale(100)" class="btn btn-sm font-scale-choice-btn" data-scale="100" title="100%">100%</button>
                             <button type="button" onclick="applyFontScale(110)" class="btn btn-sm font-scale-choice-btn" data-scale="110" title="110%">110%</button>
+                            <button type="button" onclick="applyFontScale(120)" class="btn btn-sm font-scale-choice-btn" data-scale="120" title="120%">120%</button>
                             <button type="button" onclick="applyFontScale(125)" class="btn btn-sm font-scale-choice-btn" data-scale="125" title="125%">125%</button>
-                            <button type="button" onclick="applyFontScale(150)" class="btn btn-sm font-scale-choice-btn" data-scale="150" title="150%">150%</button>
+                        </div>
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px;padding-top:4px;border-top:1px dashed var(--color-border);font-size:10px;">
+                            <span style="color:var(--color-text-muted);">Безпечний ліміт 85%–125%</span>
+                            <button type="button" onclick="applyFontScale(100)" style="background:none;border:none;color:var(--color-primary);cursor:pointer;font-weight:700;font-size:10px;padding:0;">Скинути 100%</button>
                         </div>
                     </div>
 
@@ -404,6 +412,7 @@
 
 <footer class="site-footer">
     Шкільні Завдання · Локальна шкільна мережа
+    <p id="simplified-site-help">Сайт пригальмовує? Увімкніть «Спрощений сайт» у верхній панелі: анімації, розмиття й декоративні тіні вимкнуться. Вибір зберігається в цьому браузері; завдання та всі функції залишаються доступними.</p>
 </footer>
 
 <div id="assignment-modal-overlay" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title">
@@ -428,7 +437,10 @@
 {% block extra_scripts %}{% endblock %}
 
 <script>
-    // ── Управління масштабуванням шрифтів (Розширений діапазон 60% - 180%) ──
+    // ── Управління масштабуванням шрифтів (Безпечний діапазон 85% - 125%) ──
+    const FONT_SCALE_MIN = 85;
+    const FONT_SCALE_MAX = 125;
+
     function toggleFontScaleMenu(e) {
         if (e) e.stopPropagation();
         const dd = document.getElementById('font-scale-dropdown');
@@ -439,7 +451,8 @@
 
     function applyFontScale(scaleVal) {
         scaleVal = parseInt(scaleVal, 10);
-        if (isNaN(scaleVal) || scaleVal < 60 || scaleVal > 180) scaleVal = 100;
+        if (isNaN(scaleVal)) scaleVal = 100;
+        scaleVal = Math.max(FONT_SCALE_MIN, Math.min(FONT_SCALE_MAX, scaleVal));
 
         document.documentElement.setAttribute('data-font-scale', scaleVal.toString());
         document.documentElement.style.zoom = (scaleVal / 100).toString();
@@ -452,7 +465,7 @@
     function stepFontScale(delta) {
         let cur = parseInt(document.documentElement.getAttribute('data-font-scale') || '100', 10);
         if (isNaN(cur)) cur = 100;
-        let next = Math.max(60, Math.min(180, cur + delta));
+        let next = Math.max(FONT_SCALE_MIN, Math.min(FONT_SCALE_MAX, cur + delta));
         applyFontScale(next);
     }
 
@@ -469,6 +482,24 @@
             } else {
                 btn.classList.add('btn-secondary');
                 btn.classList.remove('btn-primary');
+            }
+        });
+
+        // Блокуємо кнопки + та - при досягненні безпечних лімітів (85% і 125%)
+        document.querySelectorAll('.font-scale-step-btn').forEach(btn => {
+            const step = parseInt(btn.getAttribute('data-font-scale-step'), 10);
+            if (step < 0) {
+                const atMin = (currentScale <= FONT_SCALE_MIN);
+                btn.disabled = atMin;
+                btn.style.opacity = atMin ? '0.45' : '1';
+                btn.style.cursor = atMin ? 'not-allowed' : 'pointer';
+                btn.title = atMin ? `Досягнуто мінімальний розмір (${FONT_SCALE_MIN}%)` : 'Зменшити';
+            } else if (step > 0) {
+                const atMax = (currentScale >= FONT_SCALE_MAX);
+                btn.disabled = atMax;
+                btn.style.opacity = atMax ? '0.45' : '1';
+                btn.style.cursor = atMax ? 'not-allowed' : 'pointer';
+                btn.title = atMax ? `Досягнуто максимальний розмір (${FONT_SCALE_MAX}%)` : 'Збільшити';
             }
         });
     }
@@ -488,8 +519,10 @@
         try {
             curScale = parseInt(localStorage.getItem('sn-font-scale') || '100', 10);
         } catch(e) {}
-        if (isNaN(curScale) || curScale < 90 || curScale > 120) curScale = 100;
-        updateFontScaleUI(curScale);
+        if (isNaN(curScale) || curScale < FONT_SCALE_MIN || curScale > FONT_SCALE_MAX) {
+            curScale = Math.max(FONT_SCALE_MIN, Math.min(FONT_SCALE_MAX, isNaN(curScale) ? 100 : curScale));
+        }
+        applyFontScale(curScale);
     });
 
     function sendClientHeartbeat() {

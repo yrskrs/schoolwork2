@@ -112,6 +112,7 @@
                  РОЗДІЛ ДЛЯ ВЧИТЕЛІВ (НЕ ВІДОБРАЖАЄТЬСЯ УЧНЯМ)
                  ═══════════════════════════════════════════════════════ -->
             <div id="guide-pane-teacher" style="display:flex;flex-direction:column;gap:12px;">
+                {% include 'feed/components/guide_performance.html' with guide_category='teacher_performance' %}
 
                 <!-- Вчитель 1: СТВОРЕННЯ ЗАВДАНЬ ТА КРИТЕРІЇ ШІ -->
                 <div class="guide-card" id="guide-category-teacher-dashboard" data-category="teacher_dashboard" data-keywords="вчитель створення завдання критерії оцінювання ші генерація дедлайн дублювання класи усна робота без здачі файл умова">
@@ -486,6 +487,7 @@
                  РОЗДІЛ ДЛЯ УЧНІВ (ДОСТУПНИЙ ВСІМ УЧНЯМ ТА ВЧИТЕЛЯМ)
                  ═══════════════════════════════════════════════════════ -->
             <div id="guide-pane-student" style="{% if user.is_authenticated and user.teacher_profile %}display:none;{% else %}display:flex;{% endif %}flex-direction:column;gap:12px;">
+                {% include 'feed/components/guide_performance.html' with guide_category='performance' %}
 
                 <!-- Учень 1: ГОЛОВНА СТОРІНКА -->
                 <div class="guide-card" id="guide-category-index" data-category="index" data-keywords="головна календар розклад завдання пошук фільтр клас предмет вчитель сьогодні">
@@ -899,7 +901,7 @@
 
             // Плавний скрол до потрібної картки
             setTimeout(() => {
-                targetCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                targetCard.scrollIntoView({ behavior: window.SchoolNetPerformance ? window.SchoolNetPerformance.scrollBehavior() : 'smooth', block: 'nearest' });
             }, 100);
         } else {
             if (contextBanner) contextBanner.style.display = 'none';
@@ -929,7 +931,7 @@
             if (btn) btn.setAttribute('aria-expanded', 'true');
             card.classList.add('guide-card-open');
             setTimeout(() => {
-                card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                card.scrollIntoView({ behavior: window.SchoolNetPerformance ? window.SchoolNetPerformance.scrollBehavior() : 'smooth', block: 'nearest' });
             }, 80);
         } else {
             body.style.display = 'none';

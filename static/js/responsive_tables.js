@@ -11,15 +11,16 @@
         const observer = window.ResizeObserver ? new ResizeObserver(entries => entries.forEach(entry => update(entry.target))) : null;
         function update(region) {
             const table = regions.get(region);
-            if (!table) return;
+            if (!table || !table.isConnected) return;
             const width = region.getBoundingClientRect().width;
             if (!width) return;
             const record = width < 680;
             table.classList.toggle('is-record-layout', record);
             region.classList.toggle('is-record-region', record);
         }
-        function enhance() {
-            page.querySelectorAll('table').forEach(table => {
+        function enhance(tables) {
+            tables.forEach(table => {
+                if (!table.isConnected || !page.contains(table)) return;
                 if (table.matches('[data-table-layout="matrix"],.journal-table,.printable-schedule-table')) return;
                 if (!table.tHead || !table.tHead.rows.length || table.closest('.assignment-full-description,.rich-text-content,.fv-viewer-body,pre')) return;
                 let region = table.parentElement;
@@ -43,13 +44,31 @@
                 update(region);
             });
         }
-        enhance();
+        enhance(page.querySelectorAll('table'));
+        const dirtyTables = new Set();
         let queued = false;
-        new MutationObserver(() => {
-            if (queued) return;
+        new MutationObserver(mutations => {
+            mutations.forEach(mutation => {
+                const target = mutation.target;
+                // Status text, timers and previews outside tables require no table work.
+                if (target.matches('table,thead,tbody,tfoot,tr') || target.closest('thead')) {
+                    const table = target.closest('table');
+                    if (table) dirtyTables.add(table);
+                }
+                mutation.addedNodes.forEach(node => {
+                    if (node.nodeType !== 1) return;
+                    if (node.matches('table')) dirtyTables.add(node);
+                    node.querySelectorAll('table').forEach(table => dirtyTables.add(table));
+                });
+            });
+            if (queued || !dirtyTables.size) return;
             queued = true;
-            requestAnimationFrame(() => {queued = false; enhance();});
+            requestAnimationFrame(() => {
+                queued = false;
+                enhance(dirtyTables);
+                dirtyTables.clear();
+            });
         }).observe(page, {childList: true, subtree: true});
-        if (!observer) window.addEventListener('resize', enhance);
+        if (!observer) window.addEventListener('resize', () => enhance(page.querySelectorAll('table')));
     });
 })();

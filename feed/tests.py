@@ -1980,11 +1980,47 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
         self.assertFalse(Student.objects.filter(id=st.id).exists())
 
     def test_teacher_schedule_tab_includes_live_lesson_widget(self):
-        """Тест: на вкладці розкладу вчителя відображається живий статус-бар поточного уроку/розкладу."""
+        """Тест: на вкладці розкладу вчителя відображається живий статус-бар, плашка орієнтиру та підсвічування сьогоднішнього дня/уроку."""
         self.client.login(username='teacher1', password='password123')
+        # 1. Без налаштованого розкладу
+        resp_empty = self.client.get(reverse('teacher_students') + '?tab=schedule')
+        self.assertEqual(resp_empty.status_code, 200)
+        self.assertContains(resp_empty, 'live-lesson-widget')
+
+        # 2. З налаштованим розкладом дзвінків та уроків
+        from datetime import time
+        from .models import BellSchedule, TeacherLessonSchedule
+        slot = BellSchedule.objects.create(
+            lesson_number=1,
+            start_time=time(8, 30),
+            end_time=time(9, 15),
+            order=1
+        )
+        TeacherLessonSchedule.objects.create(
+            teacher=self.teacher,
+            bell_slot=slot,
+            class_group=self.class_group,
+            subject=self.subject,
+            day_of_week=1
+        )
         resp = self.client.get(reverse('teacher_students') + '?tab=schedule')
         self.assertEqual(resp.status_code, 200)
-        self.assertContains(resp, 'live-lesson-widget')
+        self.assertContains(resp, 'schedule-live-indicator-card')
+        self.assertContains(resp, 'СЬОГОДНІ')
+        self.assertContains(resp, 'schedule-live-clock')
+
+    def test_font_scale_controls_and_safe_limits(self):
+        """Тест: елементи масштабу тексту обмежені безпечним діапазоном 85%-125%."""
+        self.client.login(username='teacher1', password='password123')
+        resp = self.client.get(reverse('teacher_students'))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, 'FONT_SCALE_MIN = 85')
+        self.assertContains(resp, 'FONT_SCALE_MAX = 125')
+        self.assertContains(resp, 'data-scale="85"')
+        self.assertContains(resp, 'data-scale="125"')
+        self.assertContains(resp, 'font-scale-step-btn')
+        self.assertNotContains(resp, 'data-scale="60"')
+        self.assertNotContains(resp, 'data-scale="180"')
 
     def test_student_portal_search_isolation_for_same_last_names(self):
         """

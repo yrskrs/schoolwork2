@@ -227,7 +227,7 @@ function loadFeed(isSilent, isSearch) {
             // Ніколи не скролити сторінку під час набору тексту в пошуку
             if (!isSilent && !isSearch) {
                 var top = zone.getBoundingClientRect().top;
-                if (top < 0) zone.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                if (top < 0) zone.scrollIntoView({ behavior: window.SchoolNetPerformance ? window.SchoolNetPerformance.scrollBehavior() : 'smooth', block: 'start' });
             }
 
             updateFingerprint();

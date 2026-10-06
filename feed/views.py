@@ -5200,6 +5200,16 @@ def teacher_students(request):
             messages.success(request, "Ваш тижневий розклад уроків успішно очищено.")
             return redirect(f"{reverse('teacher_students')}?tab=schedule")
 
+    ukr_weekdays = {
+        0: 'Понеділок',
+        1: 'Вівторок',
+        2: 'Середа',
+        3: 'Четвер',
+        4: "П'ятниця",
+        5: 'Субота',
+        6: 'Неділя',
+    }
+
     # Дані для розкладу уроків вчителя
     bell_slots = BellSchedule.objects.all().order_by('order', 'lesson_number')
     days_of_week = [
@@ -5225,6 +5235,15 @@ def teacher_students(request):
     else:
         teacher_subjects = list(Subject.objects.all().order_by('name'))
 
+    now_dt = timezone.localtime(timezone.now())
+    today_date = now_dt.date()
+    today_weekday = today_date.weekday() + 1  # 1=Понеділок .. 7=Неділя
+    current_time = now_dt.time()
+    now_minutes = current_time.hour * 60 + current_time.minute
+    today_weekday_name = ukr_weekdays.get(today_date.weekday(), '')
+    today_date_str = today_date.strftime('%d.%m.%Y')
+    today_time_str = current_time.strftime('%H:%M')
+
     schedule_rows = []
     total_scheduled_lessons = 0
     if teacher:
@@ -5232,32 +5251,31 @@ def teacher_students(request):
         total_scheduled_lessons = schedules.count()
         schedule_map = {(s.day_of_week, s.bell_slot_id): s for s in schedules}
         for slot in bell_slots:
+            s_min = slot.start_time.hour * 60 + slot.start_time.minute
+            e_min = slot.end_time.hour * 60 + slot.end_time.minute
+            is_current_slot = (s_min <= now_minutes < e_min)
+
             row_days = []
             for day_num, day_name in days_of_week:
                 entry = schedule_map.get((day_num, slot.id))
+                is_cell_today = (day_num == today_weekday)
+                is_current_lesson = (is_cell_today and is_current_slot)
                 row_days.append({
                     'day_num': day_num,
                     'day_name': day_name,
+                    'is_today': is_cell_today,
+                    'is_current_lesson': is_current_lesson,
                     'entry': entry,
                     'class_id': entry.class_group_id if entry else None,
                     'subject_id': entry.subject_id if entry else None,
                 })
             schedule_rows.append({
                 'slot': slot,
+                'is_current_slot': is_current_slot,
                 'days': row_days,
             })
 
     # ── Облік проведених тем уроків (вкладка tab=lessons) ─────────────────────
-    ukr_weekdays = {
-        0: 'Понеділок',
-        1: 'Вівторок',
-        2: 'Середа',
-        3: 'Четвер',
-        4: "П'ятниця",
-        5: 'Субота',
-        6: 'Неділя',
-    }
-
     lessons_base_qs = Assignment.objects.filter(
         status__in=[Assignment.STATUS_PUBLISHED, Assignment.STATUS_ARCHIVED]
     )
@@ -5300,7 +5318,6 @@ def teacher_students(request):
 
     lessons_filter_qs = lessons_filter_qs.select_related('teacher__user', 'subject').prefetch_related('classes', 'submissions').order_by('-published_at', '-created_at', '-id')
 
-    from django.utils import timezone
     conducted_lessons_list = []
     for a in lessons_filter_qs:
         dt = a.published_at or a.created_at
@@ -5362,6 +5379,10 @@ def teacher_students(request):
         'published_conducted_lessons_count': published_conducted_lessons_count,
         'archived_conducted_lessons_count': archived_conducted_lessons_count,
         'lesson_status_filter': lesson_status_filter,
+        'today_weekday': today_weekday,
+        'today_weekday_name': today_weekday_name,
+        'today_date_str': today_date_str,
+        'today_time_str': today_time_str,
     })
 
 

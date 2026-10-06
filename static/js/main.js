@@ -6,11 +6,6 @@ window.mountDeferredDialog = function (id) {
         template.remove();
     }
 };
-if (document.documentElement.classList.contains('sn-lite')) {
-    const style = document.createElement('style');
-    style.textContent = '@view-transition { navigation: none; }';
-    document.head.appendChild(style);
-}
 
 /**
  * SchoolNet — Головний JavaScript (Vanilla JS, без CDN)

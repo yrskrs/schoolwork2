@@ -83,7 +83,7 @@ body .btn-primary:hover { background: var(--action-primary-hover) !important; bo
     .page-wrapper .feed-layout, .page-wrapper :is(.assignment-detail-layout, .submission-page-layout) { grid-template-columns: minmax(0, 1fr); }
     .page-wrapper .feed-layout > :not(.sidebar) { grid-column: 1; }
     .page-wrapper .sidebar { display: none; }
-    .page-wrapper .sidebar.mobile-open { display: block; position: fixed !important; top: 56px !important; right: 0 !important; left: auto !important; width: min(320px, 90vw) !important; max-height: calc(100vh - 56px) !important; padding: 12px; background: var(--color-bg); z-index: 90; box-shadow: var(--shadow-lg); overflow-y: auto; }
+    .page-wrapper .sidebar.mobile-open { display: block; position: fixed !important; top: var(--sn-navbar-height, 56px) !important; right: 0 !important; left: auto !important; width: min(320px, 90vw) !important; max-height: calc(100vh - var(--sn-navbar-height, 56px)) !important; padding: 12px; background: var(--color-bg); z-index: 90; box-shadow: var(--shadow-lg); overflow-y: auto; }
     .page-wrapper .feed-layout > :is(.teacher-work-sidebar, .settings-tools-sidebar) { display: block; position: static !important; grid-column: 1; grid-row: 1; width: 100% !important; max-height: none !important; padding: 0; overflow: visible; background: transparent; box-shadow: none; }
     .page-wrapper :is(.teacher-work-sidebar, .settings-tools-sidebar) > .sidebar-card:not(.teacher-tools-card) { display: none; }
     .page-wrapper :is(.teacher-work-sidebar, .settings-tools-sidebar) .teacher-tools-card { margin-bottom: 0; }
@@ -204,12 +204,6 @@ body .btn-primary:hover { background: var(--action-primary-hover) !important; bo
 .nav-schedule-pill.status-in-lesson, .nav-schedule-pill.status-in-break {
     animation: none !important;
 }
-html.sn-lite body { animation: pageSmoothIn .12s ease-out; }
-html.sn-lite :is(.assignment-card, .feed-skeleton-card::after) { animation: none !important; }
-html.sn-lite * { backdrop-filter: none !important; }
-html.sn-lite::view-transition-group(*), html.sn-lite::view-transition-old(*), html.sn-lite::view-transition-new(*) {
-    animation: none !important;
-}
 @media (prefers-reduced-motion: reduce) {
     @view-transition { navigation: none; }
     ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
@@ -223,3 +217,62 @@ html.sn-lite::view-transition-group(*), html.sn-lite::view-transition-old(*), ht
 .ai-origin-note { color: var(--color-text-muted); font-size: 12px; line-height: 1.5; }
 /* Fallback for browsers without :has(), keeping labelled tables and work menu usable. */
 .platform-table-region.is-record-region { overflow-x: visible !important; }
+
+/* Layered important rules override page-specific important effects, including SVG robots.
+   Functional status text and all controls stay visible. */
+@layer sn-performance {
+html.sn-reduced-motion, html.sn-reduced-motion *,
+html.sn-reduced-motion *::before, html.sn-reduced-motion *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+}
+html.sn-reduced-motion::view-transition-group(*),
+html.sn-reduced-motion::view-transition-old(*),
+html.sn-reduced-motion::view-transition-new(*) { animation: none !important; }
+html.sn-lite *, html.sn-lite *::before, html.sn-lite *::after,
+html.sn-lite dialog::backdrop {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+}
+html.sn-lite .ai-kid-robot-svg { filter: none !important; }
+html.sn-lite :is(.assignment-card, .btn, .theme-toggle):hover { transform: none !important; }
+html.sn-page-hidden *, html.sn-page-hidden *::before, html.sn-page-hidden *::after {
+    animation-play-state: paused !important;
+}
+/* OS accessibility preferences apply even if decorative effects are explicitly enabled. */
+@media (prefers-reduced-motion: reduce) {
+    html, *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
+}
+.simplified-site-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    flex-shrink: 0;
+    min-height: 36px;
+    padding: 5px 9px;
+    border: 1px solid rgba(255, 255, 255, .35);
+    border-radius: var(--radius-full);
+    color: #fff;
+    background: rgba(255, 255, 255, .08);
+    font: inherit;
+    font-size: 11px;
+    cursor: pointer;
+}
+.simplified-site-toggle:hover { background: rgba(255, 255, 255, .18); }
+.simplified-site-toggle:focus-visible { outline: 3px solid #c7d2fe; outline-offset: 3px; }
+.simplified-site-toggle[aria-checked="true"] { background: #065f46; border-color: #6ee7b7; }
+.simplified-site-track { width: 24px; height: 14px; border: 1px solid #cbd5e1; border-radius: 8px; position: relative; }
+.simplified-site-track::before { content: ''; position: absolute; width: 8px; height: 8px; top: 2px; left: 2px; background: #fff; border-radius: 50%; }
+[aria-checked="true"] > .simplified-site-track::before { left: 12px; }
+#simplified-site-help { max-width: 700px; margin: 8px auto 0; font-size: 12px; line-height: 1.6; }
+@media (max-width: 600px) {
+    .navbar { height: auto; }
+    .navbar-inner { height: auto; min-height: 56px; padding-top: 8px; padding-bottom: 8px; }
+    .simplified-site-toggle { padding: 3px 6px; gap: 4px; }
+    .simplified-site-label { max-width: 64px; font-size: 10px; line-height: 1.2; text-align: left; }
+    .navbar-actions { flex-wrap: wrap; justify-content: flex-end; }
+}

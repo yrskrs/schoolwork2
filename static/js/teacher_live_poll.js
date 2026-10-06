@@ -19,7 +19,7 @@
     var isPolling = false;
 
     function updateTeacherLiveStatus() {
-        if (isPolling) return;
+        if (isPolling || document.hidden) return;
         isPolling = true;
 
         fetch('/api/teacher/live-status/', {
@@ -302,6 +302,7 @@
 
     function startLivePolling() {
         if (pollTimer) clearInterval(pollTimer);
+        if (document.hidden) return;
         pollTimer = setInterval(function() {
             if (!document.hidden) {
                 updateTeacherLiveStatus();

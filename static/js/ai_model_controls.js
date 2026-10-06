@@ -14,7 +14,7 @@
     function status(result, message, state) {
         result.hidden = false; result.style.display = 'block'; result.dataset.state = state;
         result.classList.add('ai-model-test-result'); result.textContent = message;
-        result.scrollIntoView({block: 'nearest', behavior: 'smooth'});
+        result.scrollIntoView({block: 'nearest', behavior: window.SchoolNetPerformance ? window.SchoolNetPerformance.scrollBehavior() : 'smooth'});
     }
     async function runTest(config, button, result) {
         if (button && button.disabled) return;
@@ -95,10 +95,10 @@
         const keyInput = document.getElementById('connection-key-new');
         const urlInput = document.getElementById('connection-url-new');
         if (providerName === 'cloudflare' && urlInput && !urlInput.closest('[hidden]')) {
-            urlInput.scrollIntoView({behavior: 'smooth', block: 'center'});
+            urlInput.scrollIntoView({behavior: window.SchoolNetPerformance ? window.SchoolNetPerformance.scrollBehavior() : 'smooth', block: 'center'});
             urlInput.focus();
         } else if (keyInput) {
-            keyInput.scrollIntoView({behavior: 'smooth', block: 'center'});
+            keyInput.scrollIntoView({behavior: window.SchoolNetPerformance ? window.SchoolNetPerformance.scrollBehavior() : 'smooth', block: 'center'});
             keyInput.focus();
         }
     };
