@@ -39,9 +39,13 @@
         <button type="button" class="btn btn-secondary btn-sm" onclick="window.print()">🖨️ Друкувати розклад</button>
         <button type="button" class="btn btn-secondary btn-sm" onclick="openConductedLessonsModal()">✏️ Кількість проведених уроків</button>
         <a href="{% url 'teacher_rescheduled_calendar' %}" class="btn btn-secondary btn-sm">📅 Календар перенесень</a>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="openGuideModal('teacher_classes')">📖 Інструкція розкладу</button>
+        {% elif current_tab == 'lessons' %}
+        <button type="button" class="btn btn-secondary btn-sm" onclick="openGuideModal('teacher_classes')">📖 Довідка проведених тем</button>
         {% else %}
         <button type="button" class="btn btn-secondary btn-sm" onclick="openImportModal()">📥 Імпорт списку учнів</button>
         <a href="{% url 'teacher_students_export' %}{% if selected_class %}?class_group={{ selected_class.pk }}{% endif %}" class="btn btn-secondary btn-sm">📤 Експорт списку (CSV)</a>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="openGuideModal('teacher_classes')">📖 Інструкція розділу</button>
         {% endif %}
         {% elif current_page == 'ai_batch_check' %}
         <div class="form-group" style="margin:0;">
