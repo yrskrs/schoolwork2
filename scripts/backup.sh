@@ -24,12 +24,12 @@ if [ "${#WRITERS[@]}" -gt 0 ]; then
 fi
 # Use credentials already inside the database container; never print them.
 docker compose exec -T postgres sh -c 'exec pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -F c' > "$BACKUP_PATH/database.dump.partial"
-docker compose run --rm --no-deps -T --entrypoint tar app -czf - -C /app/media . > "$BACKUP_PATH/media.tar.gz.partial"
+docker compose run --rm --no-deps -T --entrypoint tar app --hard-dereference -czf - -C /app/media . > "$BACKUP_PATH/media.tar.gz.partial"
 docker compose exec -T postgres pg_restore --list < "$BACKUP_PATH/database.dump.partial" > /dev/null
 gzip -t "$BACKUP_PATH/media.tar.gz.partial"
 mv "$BACKUP_PATH/database.dump.partial" "$BACKUP_PATH/database.dump"
 mv "$BACKUP_PATH/media.tar.gz.partial" "$BACKUP_PATH/media.tar.gz"
-git rev-parse HEAD > "$BACKUP_PATH/code-commit.txt"
+git rev-parse HEAD > "$BACKUP_PATH/code-commit.txt" 2>/dev/null || echo "unknown" > "$BACKUP_PATH/code-commit.txt"
 docker compose images -q app > "$BACKUP_PATH/docker-image.txt"
 (cd "$BACKUP_PATH" && sha256sum database.dump media.tar.gz > SHA256SUMS)
 BACKUP_COMPLETE=1

@@ -22,8 +22,12 @@ class BackupToolsTests(unittest.TestCase):
         with tarfile.open(self.backup / 'media.tar.gz', 'w:gz') as archive:
             for name, kind, content in entries:
                 member = tarfile.TarInfo(name)
-                if kind == 'symlink': member.type = tarfile.SYMTYPE; member.linkname = '/etc/passwd'
-                else: member.size = len(content)
+                if kind == 'symlink':
+                    member.type = tarfile.SYMTYPE; member.linkname = '/etc/passwd'
+                elif kind == 'hardlink':
+                    member.type = tarfile.LNKTYPE; member.linkname = content.decode('utf-8') if isinstance(content, bytes) else content
+                else:
+                    member.size = len(content)
                 archive.addfile(member, io.BytesIO(content) if kind == 'file' else None)
         manifest = '\n'.join(hashlib.sha256((self.backup / name).read_bytes()).hexdigest()+'  '+name for name in ('database.dump','media.tar.gz'))
         (self.backup / 'SHA256SUMS').write_text(manifest+'\n')
@@ -42,10 +46,19 @@ class BackupToolsTests(unittest.TestCase):
         with self.assertRaises(ValueError): validate(self.backup, legacy=True)
 
     def test_absolute_traversal_and_links_rejected(self):
-        for name, kind in [('../outside','file'),('/outside','file'),('link','symlink')]:
+        for name, kind, target in [('../outside','file',''),('/outside','file',''),('link','symlink','/etc/passwd'),('hbad','hardlink','../outside'),('habs','hardlink','/outside')]:
             with self.subTest(name=name):
-                self.archive([(name,kind,b'bad')])
+                self.archive([(name,kind,target.encode('utf-8') if target else b'bad')])
                 with self.assertRaises(ValueError): validate(self.backup)
+
+    def test_hardlink_within_archive_allowed_and_staged(self):
+        self.archive([('folder/work.txt', 'file', b'new work'), ('folder/linked.txt', 'hardlink', 'folder/work.txt')])
+        validate(self.backup)
+        media = self.root / 'media_hl'; media.mkdir(exist_ok=True)
+        with patch('builtins.print') as output: stage(self.backup / 'media.tar.gz', media)
+        staged = output.call_args.args[0]
+        install(media, staged)
+        self.assertEqual((media / 'folder/linked.txt').read_bytes(), b'new work')
 
     def test_staged_files_and_dotfiles_replace_current_uploads(self):
         media=self.root/'media'; media.mkdir(); (media/'.old-hidden').write_text('old')

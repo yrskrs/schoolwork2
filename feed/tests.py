@@ -3694,7 +3694,7 @@ class AssignmentFileAIAndCoauthorTests(TestCase):
             'weaknesses': ['Немає власного висновку в документі', 'Пункт 3 виконано частково'],
             'strengths': ['Таблиця оформлена акуратно'],
             'ai_generated_detected': True,
-            'ai_generated_percent': 85,
+            'ai_generated_percent': 87,
             'ai_generated_confidence': 'high',
             'ai_generated_details': 'Виявлено структуру та формулювання, характерні для ChatGPT.',
             'is_traditional': True,
@@ -3715,7 +3715,7 @@ class AssignmentFileAIAndCoauthorTests(TestCase):
 
         sub.refresh_from_db()
         self.assertTrue(sub.ai_generated_detected)
-        self.assertEqual(sub.ai_generated_percent, 85)  # Для вчителя в БД збережено повний відсоток
+        self.assertEqual(sub.ai_generated_percent, 87)  # Для вчителя в БД збережено повний відсоток
         self.assertEqual(sub.ai_generated_confidence, 'high')
         self.assertEqual(len(sub.get_student_ai_weaknesses_list()), 2)
         self.assertEqual(len(sub.get_student_ai_strengths_list()), 1)
@@ -3724,7 +3724,7 @@ class AssignmentFileAIAndCoauthorTests(TestCase):
         detail_resp = self.client.get(reverse('submission_detail', args=[sub.id]))
         self.assertEqual(detail_resp.status_code, 200)
         self.assertContains(detail_resp, 'У роботі виявлено ознаки використання штучного інтелекту')
-        self.assertNotContains(detail_resp, '85%')  # Відсоток ШІ приховано для учня
+        self.assertNotContains(detail_resp, '87%')  # Відсоток ШІ приховано для учня
         self.assertNotContains(detail_resp, 'Google Gemini')  # Згадування конкретно Google Gemini прибрано
         self.assertNotContains(detail_resp, 'Оцінки за групами результатів')  # Оцінки за ГР приховано
         self.assertContains(detail_resp, '💡')

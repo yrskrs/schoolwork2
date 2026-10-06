@@ -12,7 +12,13 @@ def entries(archive):
     with tarfile.open(archive, 'r|gz') as package:
         for member in package:
             name = PurePosixPath(member.name)
-            if name.is_absolute() or '..' in name.parts or not (member.isdir() or member.isfile()):
+            if name.is_absolute() or '..' in name.parts:
+                raise ValueError('Архів містить небезпечний шлях, посилання або спеціальний файл.')
+            if member.islnk():
+                link_target = PurePosixPath(member.linkname)
+                if link_target.is_absolute() or '..' in link_target.parts:
+                    raise ValueError('Архів містить небезпечний шлях, посилання або спеціальний файл.')
+            elif not (member.isdir() or member.isfile()):
                 raise ValueError('Архів містить небезпечний шлях, посилання або спеціальний файл.')
             if name == PurePosixPath('.') and not member.isdir():
                 raise ValueError('Некоректний кореневий запис архіву.')
@@ -60,6 +66,17 @@ def stage(archive, media):
             destination = target / str(name)
             if member.isdir():
                 destination.mkdir(parents=True, exist_ok=True)
+            elif member.islnk():
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                source_link = target / str(PurePosixPath(member.linkname))
+                if not source_link.is_file():
+                    raise ValueError('Ціль жорсткого посилання не знайдена в архіві.')
+                try:
+                    os.link(source_link, destination)
+                except OSError:
+                    shutil.copyfile(source_link, destination)
+                destination.chmod(0o644)
+                os.utime(destination, (member.mtime, member.mtime))
             else:
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 with package.extractfile(member) as source, destination.open('xb') as output:
