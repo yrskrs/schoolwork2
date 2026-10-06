@@ -494,7 +494,8 @@ function runStudentAICheck(subId) {
         if (!data.ok) {
             if (resultBox) {
                 resultBox.style.display = 'block';
-                resultBox.innerHTML = '<div style="padding:14px;background:rgba(239,68,68,0.1);border:1px solid #ef4444;border-radius:var(--radius-md);color:var(--color-danger);font-weight:700;font-size:13px;">❌ ' + (data.error || 'Помилка') + '</div>';
+                resultBox.innerHTML = SchoolNetAI.getSadRobotHtml(data.error, subId);
+                resultBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             }
             return;
         }
@@ -684,7 +685,11 @@ function runStudentAICheck(subId) {
             btn.disabled = false;
             btn.innerHTML = '<span>⚡</span> Перевірити ШІ';
         }
-        alert('Помилка запиту. Будь ласка, спробуйте ще раз.');
+        if (resultBox) {
+            resultBox.style.display = 'block';
+            resultBox.innerHTML = SchoolNetAI.getSadRobotHtml('ШІ не зміг завершити перевірку через тимчасовий збій зв’язку. Спробуйте ще раз; спробу не використано.', subId);
+            resultBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
     });
 }
 {% endif %}

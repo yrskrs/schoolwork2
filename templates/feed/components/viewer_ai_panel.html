@@ -132,7 +132,43 @@
                                 </div>
                             </div>
                             {% endif %}
+                            {% with feedback_groups=submission.get_teacher_ai_feedback_groups %}
+                            {% if feedback_groups %}
+                            <div class="teacher-ai-groups-container" style="border-top:1px dashed var(--color-border);padding-top:8px;margin-top:8px;">
+                                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;gap:6px;flex-wrap:wrap;">
+                                    <span style="font-size:11px;font-weight:800;color:var(--color-text-muted);text-transform:uppercase;letter-spacing:0.3px;">
+                                        📝 Звіт ШІ за розділами ({{ feedback_groups|length }}):
+                                    </span>
+                                    <div style="display:flex;gap:4px;">
+                                        <button type="button" class="btn btn-secondary btn-sm" onclick="toggleTeacherAIGroups(this, true)" style="font-size:10px;padding:2px 6px;line-height:1.2;font-weight:700;" title="Розгорнути всі розділи">
+                                            📂 Розгорнути всі
+                                        </button>
+                                        <button type="button" class="btn btn-secondary btn-sm" onclick="toggleTeacherAIGroups(this, false)" style="font-size:10px;padding:2px 6px;line-height:1.2;font-weight:700;" title="Згорнути всі розділи">
+                                            📁 Згорнути всі
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="teacher-ai-groups-list" style="display:flex;flex-direction:column;gap:6px;">
+                                    {% for grp in feedback_groups %}
+                                    <details class="teacher-ai-group-card" style="background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:var(--radius-sm);overflow:hidden;">
+                                        <summary style="padding:6px 10px;font-size:11.5px;font-weight:750;color:var(--color-text-primary);cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:8px;user-select:none;">
+                                            <span style="display:inline-flex;align-items:center;gap:6px;">
+                                                <span style="font-size:13px;">{{ grp.icon }}</span>
+                                                <span>{{ grp.title }}</span>
+                                            </span>
+                                            {% if grp.badge %}
+                                            <span class="badge" style="font-size:9.5px;padding:1px 5px;background:rgba(99,102,241,0.12);color:var(--color-primary);font-weight:750;">{{ grp.badge }}</span>
+                                            {% endif %}
+                                        </summary>
+                                        <div style="padding:8px 10px;border-top:1px dashed var(--color-border);background:var(--color-surface);font-size:11.5px;color:var(--color-text-secondary);line-height:1.45;white-space:pre-wrap;">{{ grp.content }}</div>
+                                    </details>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            {% elif submission.get_formatted_ai_feedback %}
                             <div style="font-size:12px;color:var(--color-text-secondary);line-height:1.4;white-space:pre-wrap;border-top:1px dashed var(--color-border);padding-top:6px;margin-top:6px;">{{ submission.get_formatted_ai_feedback }}</div>
+                            {% endif %}
+                            {% endwith %}
                         </div>
 
                         <button type="button" class="btn btn-primary btn-sm" onclick="applyAIEvaluation({{ submission.id }})" style="width:100%;font-size:12px;font-weight:700;padding:6px;">

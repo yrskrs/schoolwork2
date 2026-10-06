@@ -106,3 +106,45 @@ class StudentFeedbackBoundaryTests(TestCase):
         self.assertEqual([r.pk for r in page.context['ai_error_logs']],[recent.pk])
         page=self.client.get(reverse('teacher_settings'),{'tab':'ai','ai_section':'errors','stats_days':'all'})
         self.assertEqual(page.context['total_ai_errors_count'],2)
+
+    def test_teacher_ai_feedback_groups_parsing_and_model_method(self):
+        from .ai_student_feedback import parse_teacher_ai_feedback_groups
+        # 1. From dictionary
+        result = {
+            'summary': 'Робота виконана добре.',
+            'strengths': ['Охайне оформлення', 'Правильні формули'],
+            'weaknesses': ['Немає джерел'],
+            'feedback_comment': 'Зверни увагу на список літератури.',
+            'format_warning': 'Файл без розширення .docx',
+            'grade_explanation': 'Оцінка 10 за повноту змісту.'
+        }
+        groups = parse_teacher_ai_feedback_groups(result=result)
+        self.assertEqual(len(groups), 6)
+        titles = [g['title'] for g in groups]
+        self.assertIn('Загальний висновок', titles)
+        self.assertIn('Сильні сторони роботи', titles)
+        self.assertIn('Зауваження та неточності', titles)
+        self.assertIn('Рекомендація учню', titles)
+        self.assertIn('Зауваження до формату файлу', titles)
+        self.assertIn('Чому така оцінка / Обґрунтування', titles)
+
+        # 2. From markdown text
+        md_text = (
+            "📌 **Висновок:**\nУсі завдання вирішено.\n\n"
+            "✅ **Сильні сторони:**\n• Пункт 1\n• Пункт 2\n\n"
+            "💡 **Зауваження та неточності:**\n• Додай пояснення\n\n"
+            "💬 **Рекомендація учню:**\nПрактикуйся більше."
+        )
+        md_groups = parse_teacher_ai_feedback_groups(text=md_text)
+        self.assertEqual(len(md_groups), 4)
+        self.assertEqual(md_groups[0]['icon'], '📌')
+        self.assertEqual(md_groups[1]['icon'], '✅')
+        self.assertEqual(md_groups[1]['badge'], '2 пункти')
+
+        # 3. Model method
+        self.sub.ai_feedback = md_text
+        self.sub.save()
+        model_groups = self.sub.get_teacher_ai_feedback_groups()
+        self.assertEqual(len(model_groups), 4)
+        self.assertEqual(model_groups[0]['title'], 'Висновок')
+

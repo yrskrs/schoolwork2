@@ -248,3 +248,185 @@ def get_student_feedback_sections(result=None, text='', grade=None, level=None):
         'improvement': advice_items,
     }
 
+
+def parse_teacher_ai_feedback_groups(text='', result=None):
+    """
+    Розбирає текстовий звіт ШІ для вчителя на структуровані групи для згорнутого перегляду:
+    - 📌 Загальний висновок
+    - 🎯 Чому така оцінка / Обґрунтування
+    - ✅ Сильні сторони роботи
+    - 💡 Зауваження та неточності
+    - 💬 Рекомендація учню
+    - ⚠️ Зауваження до формату файлу
+    - 📋 Критерії оцінювання / Вимоги завдання
+    - 📝 Зміст звіту ШІ
+
+    Повертає список груп: [{'id': str, 'icon': str, 'title': str, 'badge': str, 'content': str}]
+    """
+    groups = []
+
+    # 1. Якщо передано структурований результат або в тексті схований JSON
+    data = result if isinstance(result, dict) else None
+    if not data and text:
+        work_text = str(text).strip()
+        if (work_text.startswith('{') or '"suggested_grade"' in work_text or '"feedback_comment"' in work_text) and work_text.endswith('}'):
+            try:
+                data = json.loads(work_text)
+            except Exception:
+                try:
+                    from feed.gemini_service import extract_json_from_text
+                    data = extract_json_from_text(work_text)
+                except Exception:
+                    data = None
+
+    if data and isinstance(data, dict):
+        fw = data.get('format_warning')
+        if fw and str(fw).strip():
+            groups.append({
+                'id': 'format_warning',
+                'icon': '⚠️',
+                'title': 'Зауваження до формату файлу',
+                'badge': 'Увага',
+                'content': str(fw).strip(),
+            })
+
+        summary = data.get('summary')
+        if summary and str(summary).strip():
+            groups.append({
+                'id': 'summary',
+                'icon': '📌',
+                'title': 'Загальний висновок',
+                'badge': '',
+                'content': str(summary).strip(),
+            })
+
+        grade_expl = data.get('grade_explanation')
+        if grade_expl and str(grade_expl).strip():
+            groups.append({
+                'id': 'grade_reason',
+                'icon': '🎯',
+                'title': 'Чому така оцінка / Обґрунтування',
+                'badge': '',
+                'content': str(grade_expl).strip(),
+            })
+
+        strengths = data.get('strengths')
+        if strengths and isinstance(strengths, list) and len(strengths) > 0:
+            count = len(strengths)
+            cnt_str = f"{count} " + ("пункт" if count == 1 else "пункти" if count in (2, 3, 4) else "пунктів")
+            groups.append({
+                'id': 'strengths',
+                'icon': '✅',
+                'title': 'Сильні сторони роботи',
+                'badge': cnt_str,
+                'content': "\n".join(f"• {s}" for s in strengths if str(s).strip()),
+            })
+
+        weaknesses = data.get('weaknesses')
+        if weaknesses and isinstance(weaknesses, list) and len(weaknesses) > 0:
+            count = len(weaknesses)
+            cnt_str = f"{count} " + ("пункт" if count == 1 else "пункти" if count in (2, 3, 4) else "пунктів")
+            groups.append({
+                'id': 'weaknesses',
+                'icon': '💡',
+                'title': 'Зауваження та неточності',
+                'badge': cnt_str,
+                'content': "\n".join(f"• {w}" for w in weaknesses if str(w).strip()),
+            })
+
+        fc = data.get('feedback_comment')
+        if fc and str(fc).strip():
+            groups.append({
+                'id': 'recommendation',
+                'icon': '💬',
+                'title': 'Рекомендація учню',
+                'badge': '',
+                'content': str(fc).strip(),
+            })
+
+        if groups:
+            return groups
+
+    # 2. Парсинг тексту за заголовками секцій
+    if not text:
+        return []
+
+    raw_text = str(text).strip()
+    if not raw_text:
+        return []
+
+    # Розділяємо за відомими патернами маркдаун-заголовків або емодзі-заголовків
+    pattern = re.compile(
+        r'(?:^|\n)(?:'
+        r'(#{2,4}\s+([^\n]+))|'
+        r'([⚠️📌🎯✅💡💬📋🔍📝⚡])\s*(?:\*\*)?([^\n:*]+)(?:\*\*)?[:\s]*|'
+        r'(?:\*\*)([^\n:*]+)(?:\*\*)[:\s]+'
+        r')',
+        re.MULTILINE
+    )
+
+    matches = list(pattern.finditer(raw_text))
+    if len(matches) >= 2:
+        for idx, m in enumerate(matches):
+            header_full = m.group(0).strip()
+            # Визначаємо іконку та назву
+            h_icon = '📝'
+            h_title = ''
+            if m.group(1):  # ### Title
+                h_title = m.group(2).strip()
+            elif m.group(3):  # Icon + Title
+                h_icon = m.group(3)
+                h_title = m.group(4).strip()
+            elif m.group(5):  # **Title:**
+                h_title = m.group(5).strip()
+
+            # Нормалізуємо іконку, якщо вона не була визначена
+            title_lower = h_title.lower()
+            if 'виснов' in title_lower or 'підсум' in title_lower:
+                h_icon = '📌'
+            elif 'сильн' in title_lower or 'плюс' in title_lower or 'переваг' in title_lower:
+                h_icon = '✅'
+            elif 'зауважен' in title_lower or 'недолік' in title_lower or 'помилк' in title_lower:
+                h_icon = '💡'
+            elif 'рекоменд' in title_lower or 'порад' in title_lower:
+                h_icon = '💬'
+            elif 'формат' in title_lower:
+                h_icon = '⚠️'
+            elif 'чому' in title_lower or 'обґрунт' in title_lower or 'оцінк' in title_lower:
+                h_icon = '🎯'
+            elif 'критер' in title_lower:
+                h_icon = '📋'
+
+            start_content = m.end()
+            end_content = matches[idx + 1].start() if idx + 1 < len(matches) else len(raw_text)
+            content_part = raw_text[start_content:end_content].strip()
+
+            # Чистимо бейдж
+            bullets = [line for line in content_part.split('\n') if line.strip().startswith(('•', '-', '* '))]
+            badge = ''
+            if len(bullets) >= 2:
+                b_count = len(bullets)
+                badge = f"{b_count} " + ("пункти" if b_count in (2, 3, 4) else "пунктів")
+
+            if content_part or h_title:
+                groups.append({
+                    'id': f"sec_{idx + 1}",
+                    'icon': h_icon,
+                    'title': h_title or 'Розділ перевірки',
+                    'badge': badge,
+                    'content': content_part,
+                })
+
+        if len(groups) >= 2:
+            return groups
+
+    # 3. Якщо секцій немає або лише одна, повертаємо суцільний текст в одній групі
+    return [{
+        'id': 'general',
+        'icon': '📝',
+        'title': 'Текстовий звіт перевірки ШІ',
+        'badge': '',
+        'content': raw_text,
+    }]
+
+

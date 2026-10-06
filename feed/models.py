@@ -2493,6 +2493,12 @@ class Submission(models.Model):
             level=self.student_ai_level or self.ai_score_level
         )
 
+    def get_teacher_ai_feedback_groups(self):
+        """Повертає структуровані згорнуті групи звіту ШІ для переглядача вчителя."""
+        from .ai_student_feedback import parse_teacher_ai_feedback_groups
+        raw = self.get_formatted_ai_feedback() or self.ai_feedback or ""
+        return parse_teacher_ai_feedback_groups(text=raw)
+
     def get_ai_grade_group_info(self):
         """
         Повертає структуровану інформацію про групу та діапазон оцінки ШІ:

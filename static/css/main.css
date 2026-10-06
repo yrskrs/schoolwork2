@@ -5117,4 +5117,126 @@ body {
   margin-top: 14px;
 }
 
+/* ── Сумний робот (анімація сліз та співчуття при помилці перевірки) ── */
+.ai-robot-mouth-sad,
+.ai-robot-sad-brows,
+.ai-robot-tears {
+  display: none !important;
+}
+.ai-robot-mouth-smile {
+  display: inline !important;
+}
+
+.ai-kid-panel[data-state="failed"],
+.ai-sad-robot-card {
+  background: linear-gradient(145deg, rgba(254, 242, 242, 0.95) 0%, rgba(245, 243, 255, 0.95) 100%) !important;
+  border-color: #f87171 !important;
+  border-style: dashed !important;
+  box-shadow: 0 8px 26px rgba(239, 68, 68, 0.12) !important;
+  transition: all 0.4s ease !important;
+}
+[data-theme="dark"] .ai-kid-panel[data-state="failed"],
+[data-theme="dark"] .ai-sad-robot-card {
+  background: linear-gradient(145deg, #241417 0%, #17162e 100%) !important;
+  border-color: #ef4444 !important;
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.4) !important;
+}
+
+.ai-kid-panel[data-state="failed"] .ai-robot-mouth-smile,
+.ai-sad-robot-card .ai-robot-mouth-smile {
+  display: none !important;
+}
+.ai-kid-panel[data-state="failed"] .ai-robot-mouth-sad,
+.ai-sad-robot-card .ai-robot-mouth-sad {
+  display: inline !important;
+}
+.ai-kid-panel[data-state="failed"] .ai-robot-sad-brows,
+.ai-sad-robot-card .ai-robot-sad-brows {
+  display: inline !important;
+}
+.ai-kid-panel[data-state="failed"] .ai-robot-tears,
+.ai-sad-robot-card .ai-robot-tears {
+  display: inline !important;
+}
+.ai-kid-panel[data-state="failed"] .ai-scanner-beam,
+.ai-sad-robot-card .ai-scanner-beam {
+  display: none !important;
+}
+
+.ai-kid-panel[data-state="failed"] .ai-kid-robot-svg,
+.ai-sad-robot-card .ai-kid-robot-svg {
+  animation: ai-robot-weep 2.4s ease-in-out infinite !important;
+}
+
+@keyframes ai-robot-weep {
+  0% { transform: translateY(0px) rotate(0deg); }
+  15% { transform: translateY(2px) rotate(-1.5deg); }
+  35% { transform: translateY(4px) rotate(1.5deg); }
+  55% { transform: translateY(2px) rotate(-1deg); }
+  75% { transform: translateY(3px) rotate(0.8deg); }
+  100% { transform: translateY(0px) rotate(0deg); }
+}
+
+.ai-kid-panel[data-state="failed"] .ai-tear-left,
+.ai-sad-robot-card .ai-tear-left {
+  animation: ai-tear-flow 1.9s cubic-bezier(0.4, 0, 0.2, 1) infinite !important;
+}
+.ai-kid-panel[data-state="failed"] .ai-tear-right,
+.ai-sad-robot-card .ai-tear-right {
+  animation: ai-tear-flow 1.9s cubic-bezier(0.4, 0, 0.2, 1) infinite 0.6s !important;
+}
+.ai-kid-panel[data-state="failed"] .ai-tear-drop-left,
+.ai-sad-robot-card .ai-tear-drop-left {
+  animation: ai-tear-drop 1.9s cubic-bezier(0.4, 0, 0.2, 1) infinite 0.35s !important;
+}
+.ai-kid-panel[data-state="failed"] .ai-tear-drop-right,
+.ai-sad-robot-card .ai-tear-drop-right {
+  animation: ai-tear-drop 1.9s cubic-bezier(0.4, 0, 0.2, 1) infinite 0.95s !important;
+}
+
+@keyframes ai-tear-flow {
+  0% { transform: translateY(0) scaleY(0.5); opacity: 0; }
+  25% { opacity: 0.95; transform: translateY(2px) scaleY(1); }
+  70% { opacity: 0.85; transform: translateY(8px) scaleY(1.2); }
+  100% { transform: translateY(14px) scaleY(0.4); opacity: 0; }
+}
+
+@keyframes ai-tear-drop {
+  0% { transform: translateY(0) scale(0); opacity: 0; }
+  35% { opacity: 0.95; transform: translateY(3px) scale(1.1); }
+  75% { opacity: 0.7; transform: translateY(10px) scale(1); }
+  100% { transform: translateY(18px) scale(0.2); opacity: 0; }
+}
+
+.ai-kid-panel[data-state="failed"] .ai-robot-antenna-bulb,
+.ai-sad-robot-card .ai-robot-antenna-bulb {
+  fill: #60a5fa !important;
+  animation: ai-antenna-sad 1.8s ease-in-out infinite alternate !important;
+}
+
+@keyframes ai-antenna-sad {
+  0% { fill: #60a5fa; filter: drop-shadow(0 0 2px #60a5fa); }
+  100% { fill: #94a3b8; filter: drop-shadow(0 0 1px #94a3b8); }
+}
+
+/* ── Згорнуті групи текстового звіту ШІ для вчителя ── */
+.teacher-ai-groups-container {
+  margin-top: 8px;
+}
+.teacher-ai-group-card {
+  transition: all 0.2s ease;
+}
+.teacher-ai-group-card:hover {
+  border-color: rgba(99, 102, 241, 0.4) !important;
+}
+.teacher-ai-group-card[open] {
+  border-color: var(--color-primary) !important;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.08);
+}
+.teacher-ai-group-card summary::-webkit-details-marker {
+  display: inline-block;
+  color: var(--color-primary);
+}
+
+
 
