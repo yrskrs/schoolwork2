@@ -59,6 +59,7 @@ urlpatterns = [
 
     # ── Оцінювання та коментарі (AJAX) ───────────────────────────────────────
     path('teacher/submission/<int:sub_id>/grade/', views.grade_submission, name='grade_submission'),
+    path('teacher/submission/<int:sub_id>/coauthors/', views.teacher_submission_coauthors, name='teacher_submission_coauthors'),
     path('teacher/submissions/mass-grade/', views.mass_grade_submissions, name='mass_grade_submissions'),
     path('teacher/submission/<int:sub_id>/comment/', views.add_submission_comment, name='add_submission_comment'),
     path('teacher/submission/<int:sub_id>/toggle-ignore-plagiarism/', views.toggle_submission_ignore_plagiarism, name='toggle_submission_ignore_plagiarism'),
@@ -76,6 +77,7 @@ urlpatterns = [
 
     # ── Керування профілями учнів та імпорт класів ───────────────────────────
     path('teacher/students/', views.teacher_students, name='teacher_students'),
+    path('teacher/students/merge/', views.teacher_student_merge, name='teacher_student_merge'),
     path('teacher/students/<int:student_id>/edit/', views.teacher_student_edit, name='teacher_student_edit'),
     path('teacher/students/<int:student_id>/delete/', views.teacher_student_delete, name='teacher_student_delete'),
     path('teacher/students/import/', views.teacher_students_import, name='teacher_students_import'),

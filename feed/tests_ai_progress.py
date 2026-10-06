@@ -97,7 +97,9 @@ class EvaluationProgressTests(TestCase):
     def test_free_router_timeout_and_rate_limit_are_not_retried(self,call,sleep):
         self.add_connection('openrouter','openrouter/free')
         self.add_connection('groq','second')
+        from .ai_concurrency import clear_model_cooldown
         for code in [0,429,200]:
+            clear_model_cooldown('openrouter', 'openrouter/free')
             call.reset_mock()
             call.side_effect=[(code,'','MAX_TOKENS: reasoning exhausted' if code == 200 else 'synthetic failure',{}),self.answer()]
             result=evaluate_submission_with_gemini(self.sub)

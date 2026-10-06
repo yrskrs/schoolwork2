@@ -11,7 +11,7 @@
     <div class="assignment-detail-help-actions">
         <button type="button" onclick="openCriteriaModal()" class="btn btn-secondary btn-block">📋 Критерії оцінювання</button>
         {% if assignment.allow_student_ai_understanding %}
-        <button type="button" onclick="openAiUnderstandingModal({{ assignment.pk }})" class="btn btn-secondary btn-block">💡 Пояснення завдання від ШІ</button>
+        <button type="button" onclick="openAiUnderstandingModal({{ assignment.pk }})" class="btn btn-secondary btn-block btn-ai-explain">💡 Пояснення завдання від ШІ</button>
         {% endif %}
     </div>
 </section>

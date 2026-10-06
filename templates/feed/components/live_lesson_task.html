@@ -1,5 +1,7 @@
-<div style="display:flex;flex-direction:column;gap:3px;">
-    <span style="font-size:11px;color:var(--color-text-secondary);">{{ caption }} · {{ task.lesson_date }}</span>
-    <a href="{{ task.url }}" class="btn btn-secondary btn-sm" style="font-size:12px;font-weight:700;white-space:normal;"
-       title="{% if task.has_task %}Переглянути опубліковане завдання{% else %}Створити завдання для цього уроку{% endif %}">{{ task.label }}</a>
+<div style="display:inline-flex;align-items:center;gap:5px;flex-shrink:0;">
+    <a href="{{ task.url }}" class="btn btn-secondary btn-sm" style="font-size:11.5px;font-weight:700;white-space:nowrap;padding:4px 9px;display:inline-flex;align-items:center;gap:4px;text-decoration:none;"
+       title="{% if task.has_task %}Переглянути опубліковане завдання{% else %}Створити завдання для цього уроку{% endif %} ({{ caption }} · {{ task.lesson_date }})">
+        <span style="opacity:0.75;font-weight:600;font-size:10.5px;">{{ caption }}:</span>
+        <span>{{ task.label }}</span>
+    </a>
 </div>

@@ -21,6 +21,9 @@ from .models import AICriteriaPreset, AIRequestLog, AISettings, Assignment, Clas
 
 class AIConnectionsTests(TestCase):
     def setUp(self):
+        from django.core.cache import caches
+        caches['default'].clear()
+        caches['ai_materials'].clear()
         set_has_admin(True)
         self.user = User.objects.create_superuser('connections_teacher', password='test-password')
         School.objects.create(name='Тестова школа', admin=self.user)

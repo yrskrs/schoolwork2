@@ -131,8 +131,6 @@
                                     {% endif %}
                                 </div>
                             </div>
-                            {% else %}
-                            <div class="ai-origin-details" style="margin-bottom:8px;padding:8px 10px;background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:6px;"><strong>🤖 Походження роботи не встановлено</strong><p>{{ submission.ai_generated_details|default:"Виразних ознак ШІ не знайдено. Це не підтверджує самостійність; бал оцінює наданий результат, а процес виконання потребує уточнення."|linebreaksbr }}</p></div>
                             {% endif %}
                             <div style="font-size:12px;color:var(--color-text-secondary);line-height:1.4;white-space:pre-wrap;border-top:1px dashed var(--color-border);padding-top:6px;margin-top:6px;">{{ submission.get_formatted_ai_feedback }}</div>
                         </div>

@@ -146,7 +146,7 @@ class ModelAndReviewWorkspaceTests(TestCase):
         response=self.client.get(reverse('teacher_settings'), {'tab':'ai','ai_section':'models'})
         page=html.fromstring(response.content)
         catalog=json.loads(page.get_element_by_id('ai-provider-catalog-data').text)
-        self.assertEqual({g['provider'] for g in catalog}, {'gemini','openai','deepseek','groq','openrouter','custom'})
+        self.assertEqual({g['provider'] for g in catalog}, {'gemini','openai','deepseek','groq','openrouter','custom','cloudflare'})
         form=page.get_element_by_id('ai-add-model-form')
         self.assertTrue(form.xpath('.//select[@name="connection_id"]/option[@data-provider="openai"]'))
         self.assertTrue(form.xpath('.//input[@name="new_model_name"]'))

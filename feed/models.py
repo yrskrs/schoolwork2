@@ -2485,6 +2485,14 @@ class Submission(models.Model):
         from .ai_student_feedback import compact_student_feedback
         return compact_student_feedback(text=self.student_ai_feedback)
 
+    def get_student_ai_sections(self):
+        from .ai_student_feedback import get_student_feedback_sections
+        return get_student_feedback_sections(
+            text=self.student_ai_feedback or self.ai_feedback,
+            grade=self.student_ai_grade or self.ai_suggested_grade,
+            level=self.student_ai_level or self.ai_score_level
+        )
+
     def get_ai_grade_group_info(self):
         """
         Повертає структуровану інформацію про групу та діапазон оцінки ШІ:
@@ -2946,6 +2954,8 @@ class SubmissionActivityLog(models.Model):
         ('student_updated', 'Оновлення учня'),
         ('student_deleted', 'Видалення учня'),
         ('students_imported', 'Імпорт учнів'),
+        ('students_merged', "Об'єднання учнів"),
+        ('group_authors', 'Склад групи'),
     ]
 
     actor = models.ForeignKey(
@@ -2992,9 +3002,10 @@ class School(models.Model):
 def log_submission_activity(actor, action_type, description, submission=None):
     """Створює запис у журналі дій."""
     try:
+        clean_action = (action_type or '')[:20]
         SubmissionActivityLog.objects.create(
             actor=actor if actor and hasattr(actor, 'is_authenticated') and actor.is_authenticated else None,
-            action_type=action_type,
+            action_type=clean_action,
             description=description,
             submission=submission
         )
@@ -3224,6 +3235,7 @@ AI_PROVIDER_CHOICES = [
     ('deepseek', 'DeepSeek (DeepSeek V3 / R1)'),
     ('groq', 'Groq Cloud (Llama / Mixtral)'),
     ('openrouter', 'OpenRouter (Універсальний доступ)'),
+    ('cloudflare', 'Cloudflare Workers AI'),
     ('custom', 'Власний OpenAI-сумісний (Ollama / Local AI / vLLM)'),
 ]
 

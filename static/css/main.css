@@ -1558,6 +1558,35 @@ pre, code {
   color: var(--color-text-primary);
 }
 
+.btn-ai-explain {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.12) 0%, rgba(99, 102, 241, 0.12) 100%) !important;
+  border: 2px solid #f59e0b !important;
+  color: #b45309 !important;
+  font-weight: 700 !important;
+  box-shadow: 0 2px 10px rgba(245, 158, 11, 0.22) !important;
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast), background var(--transition-fast) !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.btn-ai-explain:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 14px rgba(245, 158, 11, 0.38) !important;
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.22) 0%, rgba(99, 102, 241, 0.2) 100%) !important;
+  color: #92400e !important;
+}
+[data-theme="dark"] .btn-ai-explain {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.2) 0%, rgba(99, 102, 241, 0.25) 100%) !important;
+  border-color: #fbbf24 !important;
+  color: #fef08a !important;
+  box-shadow: 0 2px 10px rgba(245, 158, 11, 0.3) !important;
+}
+[data-theme="dark"] .btn-ai-explain:hover {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.3) 0%, rgba(99, 102, 241, 0.35) 100%) !important;
+  color: #ffffff !important;
+}
+
 .btn-danger {
   background: var(--color-danger-light);
   color: var(--color-danger);
@@ -4890,3 +4919,202 @@ body {
 .upload-progress p { margin:0; font-size:14px; line-height:1.5; }
 :where(a,button,input,select,textarea,summary):focus-visible { outline:3px solid var(--color-primary); outline-offset:3px; }
 @media(max-width:480px) { .submission-summary { gap:8px; } .submission-summary > div { padding:12px 8px; } .submission-summary strong { font-size:24px; } .submission-summary span { font-size:13px; } }
+
+/* ── Дитяча анімація перевірки ШІ для учнів ── */
+.ai-kid-panel {
+  background: linear-gradient(145deg, rgba(240, 253, 244, 0.9) 0%, rgba(239, 246, 255, 0.9) 50%, rgba(250, 245, 255, 0.9) 100%) !important;
+  border: 2px dashed #818cf8 !important;
+  border-radius: var(--radius-lg) !important;
+  padding: 18px 16px !important;
+  text-align: center !important;
+  box-shadow: 0 8px 24px rgba(99, 102, 241, 0.12) !important;
+  margin: 14px 0 !important;
+}
+[data-theme="dark"] .ai-kid-panel {
+  background: linear-gradient(145deg, #131d2e 0%, #1e1b4b 100%) !important;
+  border-color: #6366f1 !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4) !important;
+}
+.ai-kid-robot-anim {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.ai-kid-robot-svg {
+  animation: ai-robot-bob 2.4s ease-in-out infinite alternate;
+}
+@keyframes ai-robot-bob {
+  0% { transform: translateY(0px) rotate(0deg); }
+  50% { transform: translateY(-6px) rotate(-1.5deg); }
+  100% { transform: translateY(0px) rotate(1.5deg); }
+}
+.ai-robot-antenna-bulb {
+  animation: ai-antenna-pulse 1.2s ease-in-out infinite alternate;
+}
+@keyframes ai-antenna-pulse {
+  0% { fill: #f59e0b; filter: drop-shadow(0 0 2px #f59e0b); }
+  100% { fill: #ef4444; filter: drop-shadow(0 0 7px #ef4444); }
+}
+.ai-robot-eyes {
+  animation: ai-eyes-read 2.8s ease-in-out infinite;
+}
+@keyframes ai-eyes-read {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  75% { transform: translateX(4px); }
+}
+.ai-scanner-beam {
+  animation: ai-scanner-flicker 1.6s ease-in-out infinite alternate;
+}
+@keyframes ai-scanner-flicker {
+  0% { opacity: 0.15; transform: scaleX(0.85); transform-origin: 80px 88px; }
+  100% { opacity: 0.55; transform: scaleX(1.15); transform-origin: 80px 88px; }
+}
+.ai-kid-title {
+  font-size: 15.5px !important;
+  font-weight: 800 !important;
+  color: var(--color-primary-text) !important;
+  margin-bottom: 4px !important;
+  display: block !important;
+}
+.ai-kid-status {
+  font-size: 13.5px !important;
+  font-weight: 600 !important;
+  color: var(--color-text-secondary) !important;
+  margin: 6px auto 12px auto !important;
+  min-height: 22px;
+}
+.ai-kid-progress {
+  height: 8px !important;
+  background: rgba(99, 102, 241, 0.15) !important;
+  border-radius: 999px !important;
+  overflow: hidden !important;
+  max-width: 280px !important;
+  margin: 0 auto 12px auto !important;
+}
+.ai-kid-progress-bar {
+  height: 100% !important;
+  width: 40% !important;
+  border-radius: 999px !important;
+  background: linear-gradient(90deg, #ec4899, #8b5cf6, #3b82f6, #10b981) !important;
+  background-size: 200% 100% !important;
+  animation: ai-kid-bar-move 2s linear infinite !important;
+}
+@keyframes ai-kid-bar-move {
+  0% { background-position: 0% 0%; width: 25%; }
+  50% { width: 75%; }
+  100% { background-position: 200% 0%; width: 25%; }
+}
+.ai-kid-panel[data-state="success"] .ai-kid-progress-bar {
+  width: 100% !important;
+  background: var(--color-success) !important;
+  animation: none !important;
+}
+.ai-kid-panel[data-state="failed"] .ai-kid-progress-bar,
+.ai-kid-panel[data-state="disconnected"] .ai-kid-progress-bar {
+  width: 100% !important;
+  background: var(--color-danger) !important;
+  animation: none !important;
+}
+
+/* ── Зменшення панелі робота після завершення перевірки ── */
+.ai-kid-panel {
+  transition: all 0.45s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+.ai-kid-panel[data-state="success"] {
+  padding: 10px 16px !important;
+  margin: 8px 0 16px 0 !important;
+  border-style: solid !important;
+  border-width: 1.5px !important;
+  border-color: rgba(16, 185, 129, 0.4) !important;
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(99, 102, 241, 0.05) 100%) !important;
+  border-radius: var(--radius-md) !important;
+  box-shadow: 0 2px 10px rgba(16, 185, 129, 0.1) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  flex-wrap: wrap !important;
+  gap: 12px !important;
+  text-align: left !important;
+}
+
+[data-theme="dark"] .ai-kid-panel[data-state="success"] {
+  background: linear-gradient(135deg, rgba(6, 78, 59, 0.25) 0%, rgba(30, 27, 75, 0.4) 100%) !important;
+  border-color: rgba(16, 185, 129, 0.4) !important;
+}
+
+.ai-kid-panel[data-state="success"] .ai-kid-robot-anim {
+  margin-bottom: 0 !important;
+  flex-shrink: 0 !important;
+}
+
+.ai-kid-panel[data-state="success"] .ai-kid-robot-svg {
+  width: 38px !important;
+  height: 34px !important;
+  animation: none !important;
+}
+
+.ai-kid-panel[data-state="success"] .ai-kid-title {
+  font-size: 13.5px !important;
+  margin-bottom: 1px !important;
+  color: var(--color-success) !important;
+  display: block !important;
+}
+
+.ai-kid-panel[data-state="success"] .ai-kid-status {
+  font-size: 12.5px !important;
+  margin: 0 !important;
+  min-height: auto !important;
+  color: var(--color-text-secondary) !important;
+  display: block !important;
+}
+
+.ai-kid-panel[data-state="success"] .ai-kid-progress {
+  display: none !important;
+}
+
+.ai-kid-panel[data-state="success"] details {
+  margin: 0 !important;
+  font-size: 11px !important;
+  flex-shrink: 0 !important;
+}
+
+.ai-kid-panel[data-state="success"] details summary {
+  padding: 3px 8px !important;
+  border-radius: var(--radius-sm) !important;
+  background: rgba(0, 0, 0, 0.04) !important;
+}
+
+/* ── Анімація виїзду оцінки на передній план ── */
+@keyframes studentCardSlideIn {
+  0% {
+    opacity: 0;
+    transform: translateY(28px) scale(0.96);
+  }
+  60% {
+    opacity: 1;
+    transform: translateY(-4px) scale(1.008);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.student-ai-card-active {
+  animation: studentCardSlideIn 0.55s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  position: relative;
+  z-index: 10;
+  box-shadow: 0 10px 32px rgba(99, 102, 241, 0.16), 0 2px 10px rgba(0, 0, 0, 0.06) !important;
+}
+
+.student-ai-feedback-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+

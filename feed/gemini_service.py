@@ -37,6 +37,7 @@ OPENAI_API_BASE_URL = "https://api.openai.com/v1"
 DEEPSEEK_API_BASE_URL = "https://api.deepseek.com"
 GROQ_API_BASE_URL = "https://api.groq.com/openai/v1"
 OPENROUTER_API_BASE_URL = "https://openrouter.ai/api/v1"
+CLOUDFLARE_API_BASE_URL = "https://api.cloudflare.com/client/v4/accounts"
 
 DEFAULT_MODELS_BY_PROVIDER = {
     'gemini': ['gemini-3.6-flash', 'gemini-3.1-flash-lite', 'gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-flash-latest', 'gemini-3.1-pro-preview'],
@@ -44,6 +45,7 @@ DEFAULT_MODELS_BY_PROVIDER = {
     'deepseek': ['deepseek-flash', 'deepseek-v4-pro'],
     'groq': ['openai/gpt-oss-120b', 'openai/gpt-oss-20b'],
     'openrouter': ['google/gemini-2.5-flash', 'deepseek/deepseek-chat', 'openai/gpt-4o-mini', 'anthropic/claude-3.5-sonnet'],
+    'cloudflare': ['@cf/meta/llama-3.3-70b-instruct', '@cf/meta/llama-3.1-8b-instruct', '@cf/meta/llama-3.2-11b-vision-instruct', '@cf/deepseek-ai/deepseek-r1-distill-qwen-32b'],
     'custom': ['llama3.2', 'mistral', 'qwen2.5'],
 }
 
@@ -244,6 +246,25 @@ def get_provider_endpoint(provider, model_name=None, api_key=None, custom_url=No
         url = f"{OPENROUTER_API_BASE_URL}/chat/completions"
         headers['HTTP-Referer'] = 'https://schoolnet.local'
         headers['X-Title'] = 'SchoolNet Education AI'
+    elif provider == 'cloudflare':
+        account_id = ''
+        c_url = (custom_url or '').strip()
+        if c_url:
+            if c_url.startswith(('http://', 'https://')):
+                base = c_url.rstrip('/')
+                if not base.endswith('/chat/completions'):
+                    url = f"{base}/chat/completions" if base.endswith('/v1') else f"{base}/v1/chat/completions"
+                else:
+                    url = base
+                return url, headers, model
+            else:
+                account_id = c_url
+        if not account_id and api_key and ':' in api_key:
+            account_id, api_key = api_key.split(':', 1)
+            headers['Authorization'] = f"Bearer {api_key.strip()}"
+        if not account_id:
+            account_id = os.environ.get('CLOUDFLARE_ACCOUNT_ID', '').strip()
+        url = f"{CLOUDFLARE_API_BASE_URL}/{account_id}/ai/v1/chat/completions"
     elif provider == 'custom':
         base = (custom_url or 'http://localhost:11434/v1').strip().rstrip('/')
         if not base.endswith('/chat/completions'):
@@ -621,6 +642,8 @@ def test_ai_connection(provider=None, api_key=None, model_name=None, custom_url=
     url = custom_url.strip() if custom_url is not None else (config['custom_url'] if config else '')
     if prov == 'custom' and not url:
         return False, 'Вкажіть Base URL власного API.', model, prov
+    if prov == 'cloudflare' and not (url or os.environ.get('CLOUDFLARE_ACCOUNT_ID', '') or (key and ':' in key)):
+        return False, 'Вкажіть Cloudflare Account ID або Base URL у налаштуваннях підключення.', model, prov
 
     if prov != 'custom' and not key:
         return False, f"API Key для {prov.title()} не вказано.", model, prov
@@ -6510,12 +6533,91 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
             emit_event('exhausted', 'Наступної моделі у ввімкненій черзі немає.', **context)
         return reason
 
+    from .ai_model_catalog import get_model_capabilities
+
+    requires_vision = bool(inline_media and any(
+        (m.get('mime_type') or '').startswith('image/') or (m.get('mime_type') == 'application/pdf')
+        for m in inline_media
+    ))
+
     for cfg_idx, cfg in enumerate(attempts_configs):
         c_provider = cfg['provider']
         c_key = cfg['api_key']
         c_model = cfg['model']
         c_url = cfg['custom_url']
         c_is_backup = cfg['is_backup']
+
+        # Оптимізація: перевіряємо можливості моделі перед відправкою важкого запиту
+        caps = get_model_capabilities(c_model, c_provider)
+        model_supports_vision = caps.get('supports_vision', True)
+        model_context_tokens = caps.get('context_tokens', 128000)
+        est_tokens = int((len(prompt_content) + len(system_instruction)) / 3.0) + len(inline_media or []) * 1200
+        has_other_models = (cfg_idx + 1 < len(attempts_configs))
+
+        from .ai_concurrency import (
+            is_model_busy, acquire_model_slot, release_model_slot,
+            get_model_cooldown, set_model_cooldown, clear_model_cooldown,
+            is_context_limit_error, is_overload_error,
+            record_model_context_limit
+        )
+
+        # 0. Перевірка зафіксованого ліміту контексту (якщо раніше виникала помилка 413 / перевищення контексту)
+        if caps.get('is_context_flagged') and est_tokens > model_context_tokens:
+            if has_other_models:
+                skip_msg = f"{c_provider}/{c_model}: зафіксовано ліміт контексту ({model_context_tokens} токенів). Пропускаю для збереження якості."
+                emit_event('model_skipped', skip_msg, provider=c_provider, model=c_model, position=cfg_idx + 1, total=len(attempts_configs))
+                attempted_errors.append(f"[{c_provider}/{c_model} пропущено]: зафіксовано ліміт контексту")
+                continue
+
+        # 1. Перевірка чи модель на паузі після збою/перевантаження (Cooldown)
+        is_cooldown, cooldown_rem, cooldown_reason = get_model_cooldown(c_provider, c_model)
+        if is_cooldown and cooldown_rem > 0:
+            if has_other_models:
+                skip_msg = f"{c_provider}/{c_model}: модель на паузі через перевантаження (ще {cooldown_rem}с). Перемикаюсь на наступну модель."
+                emit_event('model_cooldown_skipped', skip_msg, provider=c_provider, model=c_model, position=cfg_idx + 1, total=len(attempts_configs))
+                attempted_errors.append(f"[{c_provider}/{c_model} на паузі]: перевантаження (ще {cooldown_rem}с)")
+                continue
+            else:
+                emit_event('model_cooldown_wait', f"{c_provider}/{c_model}: модель на паузі ({cooldown_rem}с). Очікую перед повторним викликом...", provider=c_provider, model=c_model)
+                time.sleep(min(cooldown_rem, 30))
+
+        # 2. Перевірка паралельної перевірки (Concurrency check)
+        if is_model_busy(c_provider, c_model):
+            if has_other_models:
+                skip_msg = f"{c_provider}/{c_model}: модель наразі зайнята іншою перевіркою. Перемикаюсь на наступну модель у черзі."
+                emit_event('model_busy', skip_msg, provider=c_provider, model=c_model, position=cfg_idx + 1, total=len(attempts_configs))
+                attempted_errors.append(f"[{c_provider}/{c_model} зайнята]: виконується паралельна перевірка")
+                continue
+            else:
+                emit_event('model_waiting', f"{c_provider}/{c_model}: модель зайнята іншою перевіркою. Очікую чергу...", provider=c_provider, model=c_model)
+                wait_t0 = time.time()
+                while is_model_busy(c_provider, c_model) and (time.time() - wait_t0 < 10):
+                    time.sleep(1.0)
+
+        # 3. Якщо у роботі є зображення/PDF, а модель суто текстова, і в черзі є мультимодальна модель — пропускаємо
+        if requires_vision and not model_supports_vision:
+            has_other_vision = any(
+                get_model_capabilities(c['model'], c['provider']).get('supports_vision', True)
+                for i, c in enumerate(attempts_configs) if i > cfg_idx
+            )
+            if has_other_vision:
+                skip_msg = f"{c_provider}/{c_model}: модель не підтримує зображення/PDF. Пропускаю для переходу до мультимодальної моделі."
+                emit_event('model_skipped', skip_msg, provider=c_provider, model=c_model, position=cfg_idx + 1, total=len(attempts_configs))
+                attempted_errors.append(f"[{c_provider}/{c_model} пропущено]: відсутня підтримка зображень/PDF")
+                continue
+
+        # 4. Якщо розрахунковий обсяг даних перевищує ліміт контексту моделі, і в черзі є більша модель — пропускаємо
+        if est_tokens > model_context_tokens:
+            has_larger_model = any(
+                get_model_capabilities(c['model'], c['provider']).get('context_tokens', 128000) > model_context_tokens
+                for i, c in enumerate(attempts_configs) if i > cfg_idx
+            )
+            if has_larger_model:
+                skip_msg = f"{c_provider}/{c_model}: обсяг даних (~{est_tokens} токенів) перевищує контекст моделі ({caps.get('context_display', model_context_tokens)}). Пропускаю для збереження часу."
+                emit_event('model_skipped', skip_msg, provider=c_provider, model=c_model, position=cfg_idx + 1, total=len(attempts_configs))
+                attempted_errors.append(f"[{c_provider}/{c_model} пропущено]: перевищено ліміт контексту")
+                continue
+
         emit_event('model_start', f'Спроба {cfg_idx + 1}/{len(attempts_configs)}: {c_provider}/{c_model}. Очікую відповідь.',
                    provider=c_provider, model=c_model, position=cfg_idx + 1, total=len(attempts_configs))
 
@@ -6542,6 +6644,7 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                    f'і {len(provider_system)} символів правил; текст роботи учня збережено повністю.',
                    provider=c_provider, model=c_model, position=cfg_idx + 1, total=len(attempts_configs))
 
+        slot_acquired = acquire_model_slot(c_provider, c_model, holder_id=str(submission.pk if submission else 'active'))
         for attempt in range(max_retries + 1):
             try:
                 if use_thinking:
@@ -6596,6 +6699,15 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                         fail_reason = err_msg or 'Модель повернула порожню відповідь; оцінку не збережено.'
                     else:
                         fail_reason = f"HTTP {status_code}: {err_msg}" if (status_code and err_msg) else (err_msg or f"Помилка HTTP {status_code}")
+
+                    # Фіксуємо паузу при перевантаженні (429, 503 тощо)
+                    if is_overload_error(status_code, fail_reason):
+                        set_model_cooldown(c_provider, c_model, duration_seconds=45, reason=fail_reason)
+
+                    # Фіксуємо та позначаємо помилку обсягу/контексту (413 тощо)
+                    if is_context_limit_error(status_code, fail_reason):
+                        record_model_context_limit(c_provider, c_model, error_message=fail_reason, est_tokens=est_tokens)
+                        emit_event('model_limit_flagged', f"{c_provider}/{c_model}: зафіксовано ліміт контексту/обсягу. Модель позначено в системі.", provider=c_provider, model=c_model)
 
                     fail_reason = report_failure(fail_reason, status_code)
                     attempted_errors.append(f"[{c_provider}/{c_model}]: {fail_reason}")
@@ -7572,6 +7684,8 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                     emit_event('model_success', f'{c_provider}/{c_model}: відповідь отримано, оцінку збережено.',
                                provider=c_provider, model=c_model, position=cfg_idx + 1, total=len(attempts_configs), status_code=200)
 
+                    clear_model_cooldown(c_provider, c_model)
+
                     return {
                         'status': 'success',
                         'suggested_grade': suggested_grade,
@@ -7626,6 +7740,10 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                 reason = report_failure(f'Помилка запиту або обробки відповіді: {e}')
                 attempted_errors.append(f"[{c_provider}/{c_model} виняток]: {reason}")
                 break
+            finally:
+                if slot_acquired:
+                    release_model_slot(c_provider, c_model)
+                    slot_acquired = False
 
     # Якщо всі спроби (включаючи резервний API) зазнали невдачі
     all_err_msg = " | ".join(attempted_errors) if attempted_errors else "Не вдалося отримати відповідь від жодної з налаштованих моделей або резервного API ШІ."

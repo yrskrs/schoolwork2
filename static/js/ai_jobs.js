@@ -2,27 +2,102 @@
 (function () {
     'use strict';
     const panels = new WeakMap();
-    function makePanel(anchor, existing) {
+
+    function getFriendlyStudentMessage(event, defaultMsg) {
+        if (!event) return defaultMsg;
+        const msg = (event.message || '').toLowerCase();
+        const kind = event.kind;
+        if (kind === 'model_start' || msg.includes('очікую відповідь')) {
+            return '🧐 Розумний робот уважно читає завдання рядок за рядком…';
+        }
+        if (kind === 'context_prepared' || msg.includes('підготовлено')) {
+            return '📖 Розгортаю зошит та вивчаю виконані вправи…';
+        }
+        if (kind === 'switching' || msg.includes('перемикаюсь')) {
+            return '🔍 Перевіряю ще уважніше іншим розумним способом…';
+        }
+        if (kind === 'model_success' || msg.includes('відповідь отримано')) {
+            return '🎉 Майже все! Записую оцінку та корисну пораду…';
+        }
+        if (kind === 'model_error') {
+            return '🤔 Зачекай ще хвилинку, перевіряю за правилами уроку…';
+        }
+        return defaultMsg || '🤖 Розумний помічник старанно перевіряє твою роботу…';
+    }
+
+    function makePanel(anchor, existing, isStudent) {
         if (!anchor && !existing) return null;
         const root = existing || panels.get(anchor) || document.createElement('section');
         if (!existing && !root.parentNode) {
             anchor.before(root);
             panels.set(anchor, root);
         }
-        root.className = 'ai-event-panel';
+        root.className = isStudent ? 'ai-event-panel ai-kid-panel' : 'ai-event-panel';
         root.replaceChildren();
+
+        if (isStudent) {
+            const animBox = document.createElement('div');
+            animBox.className = 'ai-kid-robot-anim';
+            animBox.innerHTML = '<svg class="ai-kid-robot-svg" viewBox="0 0 160 140" width="128" height="112" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
+                '<line x1="80" y1="36" x2="80" y2="18" stroke="#4f46e5" stroke-width="4" stroke-linecap="round"/>' +
+                '<circle cx="80" cy="14" r="7" class="ai-robot-antenna-bulb" fill="#f59e0b"/>' +
+                '<rect x="42" y="36" width="76" height="54" rx="16" fill="#6366f1" stroke="#4338ca" stroke-width="3"/>' +
+                '<rect x="50" y="44" width="60" height="38" rx="10" fill="#1e1b4b"/>' +
+                '<g class="ai-robot-eyes">' +
+                    '<ellipse cx="64" cy="62" rx="6" ry="7" fill="#38bdf8"/>' +
+                    '<circle cx="66" cy="60" r="2.5" fill="#ffffff"/>' +
+                    '<ellipse cx="96" cy="62" rx="6" ry="7" fill="#38bdf8"/>' +
+                    '<circle cx="98" cy="60" r="2.5" fill="#ffffff"/>' +
+                '</g>' +
+                '<circle cx="56" cy="72" r="3.5" fill="#f43f5e" opacity="0.8"/>' +
+                '<circle cx="104" cy="72" r="3.5" fill="#f43f5e" opacity="0.8"/>' +
+                '<path d="M 74 72 Q 80 77 86 72" stroke="#38bdf8" stroke-width="2.5" fill="none" stroke-linecap="round"/>' +
+                '<rect x="52" y="94" width="56" height="36" rx="10" fill="#4f46e5" stroke="#4338ca" stroke-width="3"/>' +
+                '<circle cx="80" cy="106" r="4" fill="#fbbf24"/>' +
+                '<circle cx="80" cy="118" r="4" fill="#34d399"/>' +
+                '<g class="ai-robot-book">' +
+                    '<path d="M 46 116 L 80 124 L 114 116 L 110 134 L 80 138 L 50 134 Z" fill="#ec4899" stroke="#be185d" stroke-width="2"/>' +
+                    '<path d="M 48 114 L 80 121 L 112 114 L 108 131 L 80 135 L 52 131 Z" fill="#fdf2f8"/>' +
+                    '<line x1="80" y1="121" x2="80" y2="135" stroke="#be185d" stroke-width="1.5"/>' +
+                    '<line x1="56" y1="120" x2="74" y2="123" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round"/>' +
+                    '<line x1="56" y1="125" x2="72" y2="127" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round"/>' +
+                    '<line x1="86" y1="123" x2="104" y2="120" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round"/>' +
+                    '<line x1="88" y1="127" x2="104" y2="125" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round"/>' +
+                    '<path d="M 72 88 L 68 112 L 92 112 L 88 88 Z" class="ai-scanner-beam" fill="rgba(56, 189, 248, 0.25)"/>' +
+                '</g>' +
+                '<circle cx="48" cy="122" r="5" fill="#818cf8"/>' +
+                '<circle cx="112" cy="122" r="5" fill="#818cf8"/>' +
+            '</svg>';
+            root.append(animBox);
+        }
+
         const title = document.createElement('strong');
-        title.textContent = 'Події перевірки ШІ';
+        title.className = isStudent ? 'ai-kid-title' : '';
+        title.textContent = isStudent ? '🤖 Розумний робот читає та перевіряє твою роботу!' : 'Події перевірки ШІ';
+
         const status = document.createElement('p');
+        status.className = isStudent ? 'ai-kid-status' : '';
         status.setAttribute('role', 'status');
         status.setAttribute('aria-live', 'polite');
-        status.textContent = 'Очікую запуску перевірки…';
+        status.textContent = isStudent ? '📖 Розгортаю зошит та шукаю завдання…' : 'Очікую запуску перевірки…';
+
         const bar = document.createElement('div');
-        bar.className = 'ai-event-bar';
+        bar.className = isStudent ? 'ai-kid-progress' : 'ai-event-bar';
         bar.setAttribute('aria-hidden', 'true');
+        if (isStudent) {
+            const barInner = document.createElement('div');
+            barInner.className = 'ai-kid-progress-bar';
+            bar.append(barInner);
+        }
+
         const details = document.createElement('details');
         const summary = document.createElement('summary');
-        summary.textContent = 'Перебіг перевірки';
+        summary.textContent = isStudent ? '⚙️ Деталі перевірки (для допитливих)' : 'Перебіг перевірки';
+        if (isStudent) {
+            summary.style.fontSize = '11px';
+            summary.style.opacity = '0.7';
+            summary.style.cursor = 'pointer';
+        }
         const list = document.createElement('ol');
         details.append(summary, list);
         root.append(title, status, bar, details);
@@ -37,27 +112,43 @@
                     row.dataset.kind = event.kind;
                     list.append(row);
                     lastSequence = event.sequence;
-                    status.textContent = event.message;
-                    if (event.kind === 'model_error') details.open = true;
+                    status.textContent = isStudent ? getFriendlyStudentMessage(event, status.textContent) : event.message;
+                    if (!isStudent && event.kind === 'model_error') details.open = true;
                     while (list.children.length > 200) list.firstElementChild.remove();
                 });
-                if (!lastSequence && job.status === 'queued') status.textContent = 'Перевірку додано до черги. Очікую вільного працівника…';
-                if (!lastSequence && job.status === 'running') status.textContent = 'Читаю матеріали та готую перевірку…';
+                if (!lastSequence && job.status === 'queued') {
+                    status.textContent = isStudent ? '⏳ Займаю чергу до розумного робота…' : 'Перевірку додано до черги. Очікую вільного працівника…';
+                }
+                if (!lastSequence && job.status === 'running') {
+                    status.textContent = isStudent ? '📖 Читаю написане та готую оцінку…' : 'Читаю матеріали та готую перевірку…';
+                }
             },
             finish(job) {
                 this.update(job);
                 const success = job.ok || job.status === 'success' || job.status === 'ok';
                 root.dataset.state = success ? 'success' : 'failed';
-                if (!lastSequence) status.textContent = success ? 'Перевірку завершено.' : (job.error || 'Перевірку завершено без оцінки.');
+                if (!lastSequence) {
+                    if (isStudent) {
+                        status.textContent = success ? '🎉 Ура! Твою роботу успішно перевірено!' : (job.error || 'Не вдалося перевірити роботу.');
+                    } else {
+                        status.textContent = success ? 'Перевірку завершено.' : (job.error || 'Перевірку завершено без оцінки.');
+                    }
+                }
             },
             disconnected() {
                 root.dataset.state = 'disconnected';
-                status.textContent = 'З’єднання перервано. Перевірка може тривати; оновіть сторінку для перегляду статусу.';
+                status.textContent = isStudent ? '📡 Ой, з’єднання перервано. Спробуй оновити сторінку.' : 'З’єднання перервано. Перевірка може тривати; оновіть сторінку для перегляду статусу.';
             }
         };
     }
     async function fetchResult(url, options, progressOptions) {
-        const panel = makePanel(progressOptions && progressOptions.anchor, progressOptions && progressOptions.existing);
+        const isStudent = Boolean(
+            (progressOptions && progressOptions.isStudent) ||
+            url.includes('/student-ai-check/') ||
+            (progressOptions && progressOptions.existing && progressOptions.existing.dataset.student) ||
+            (!window.location.pathname.startsWith('/teacher/') && (window.location.pathname.includes('/submission/') || window.location.pathname.includes('/submit/')))
+        );
+        const panel = makePanel(progressOptions && progressOptions.anchor, progressOptions && progressOptions.existing, isStudent);
         try {
             let response = await fetch(url, options);
             while (response.status === 202) {

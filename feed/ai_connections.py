@@ -1,5 +1,6 @@
 """Connection identities and a single, provider-independent model queue."""
 import json
+import re
 from uuid import uuid4
 from django.core.exceptions import ValidationError
 from django.core.validators import URLValidator
@@ -50,11 +51,19 @@ def save_connection(settings_id, data, delete=False):
                 raise ValueError('Вкажіть API ключ.')
             if provider == 'custom' and not url:
                 raise ValueError('Вкажіть Base URL власного API.')
-            if url:
+            if url and provider != 'cloudflare':
                 try:
                     URLValidator(schemes=['http', 'https'])(url)
                 except ValidationError:
                     raise ValueError('Base URL має бути коректною адресою HTTP або HTTPS.')
+            elif url and provider == 'cloudflare':
+                if url.startswith(('http://', 'https://')):
+                    try:
+                        URLValidator(schemes=['http', 'https'])(url)
+                    except ValidationError:
+                        raise ValueError('Адреса API має бути коректною адресою HTTP або HTTPS.')
+                elif not re.match(r'^[a-zA-Z0-9_\-]{10,80}$', url):
+                    raise ValueError('Вкажіть коректний Cloudflare Account ID або повний Base URL.')
             if name and (len(name) > 100 or any(ch.isspace() for ch in name)):
                 raise ValueError('Вкажіть ідентифікатор моделі без пробілів, до 100 символів.')
             connection = {'id': connection_id or uuid4().hex, 'provider': provider,

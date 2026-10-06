@@ -157,7 +157,10 @@ class AssessmentV4Tests(TestCase):
         session['last_submission_id'] = self.sub.pk
         session.save()
         page = self.client.get(reverse('submit_success', args=[self.assignment.pk]))
-        self.assertNotContains(page, 'Чому така оцінка')
+        self.assertContains(page, 'Чому така оцінка')
+        self.assertContains(page, 'Похвала за роботу')
+        self.assertContains(page, 'Рекомендація учню')
+        self.assertContains(page, 'Як покращити роботу')
         self.assertNotContains(page, '📋 Перевірка критеріїв')
         self.assertContains(page, '💡')
         self.assertContains(page, 'Розмісти текст у колонках бюлетеня')

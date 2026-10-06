@@ -141,7 +141,7 @@ REVIEW_PREVIEW_DIR = os.environ.get('REVIEW_PREVIEW_DIR',
 CACHES = {
     'default': {'BACKEND': 'django.core.cache.backends.locmem.LocMemCache'},
     'ai_materials': {
-        'BACKEND': 'django.core.cache.backends.filebased.FileBasedCache',
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache' if 'test' in sys.argv else 'django.core.cache.backends.filebased.FileBasedCache',
         'LOCATION': os.environ.get('AI_CACHE_DIR', '/tmp/schoolnet-ai-cache'),
         'TIMEOUT': 604800,
         'OPTIONS': {'MAX_ENTRIES': int(os.environ.get('AI_CACHE_MAX_ENTRIES', '2000'))},

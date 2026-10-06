@@ -77,7 +77,7 @@ from django.views.decorators.csrf import csrf_exempt
 from .models import (
     Assignment, AssignmentFile, AssignmentLink, AssignmentYouTubeLink,
     Teacher, ClassGroup, Student, Subject,
-    Submission, SubmissionComment, SubmissionActivityLog, School, log_submission_activity,
+    Submission, SubmissionFile, SubmissionComment, SubmissionActivityLog, School, log_submission_activity,
     AISettings, AI_PROVIDER_CHOICES, DEFAULT_NUS_SYSTEM_PROMPT, DEFAULT_NUS_GR_SYSTEM_PROMPT, AICriteriaPreset, DEFAULT_TRADITIONAL_SYSTEM_PROMPT,
     BellSchedule, TeacherLessonSchedule, AssignmentScheduleTarget, SystemNotification,
     AssignmentRescheduleLog, AIErrorLog
@@ -3014,7 +3014,7 @@ def _perform_student_ai_check(submission, result):
     strengths = result.get('strengths') or []
     weaknesses = result.get('weaknesses') or []
 
-    from .ai_student_feedback import compact_student_feedback, student_feedback_parts
+    from .ai_student_feedback import compact_student_feedback, student_feedback_parts, get_student_feedback_sections
     clean_fb = compact_student_feedback(result=result)
     submission.student_ai_feedback = clean_fb
     submission.student_ai_gr_results = _json.dumps(gr_results, ensure_ascii=False) if (gr_results and not is_traditional) else ''
@@ -3104,6 +3104,11 @@ def _perform_student_ai_check(submission, result):
     strengths = public_parts['strengths']
     weaknesses = public_parts['weaknesses']
     feedback_text = clean_fb
+    sections = get_student_feedback_sections(
+        result=result,
+        grade=submission.student_ai_grade,
+        level=submission.student_ai_level
+    )
 
     return JsonResponse({
         'ok': True,
@@ -3112,6 +3117,11 @@ def _perform_student_ai_check(submission, result):
         'grade_group': submission.get_ai_grade_group_info(),
         'summary': public_parts['summary'],
         'feedback': feedback_text,
+        'sections': sections,
+        'praise': sections['praise'],
+        'grade_reason': sections['grade_reason'],
+        'recommendation': sections['recommendation'],
+        'improvement': sections['improvement'],
         'revision_advice': weaknesses,
         'strengths': strengths,
         'weaknesses': weaknesses,
@@ -3795,6 +3805,7 @@ def view_file(request, submission_id):
         'nav_query_string': nav_query_string,
         'back_url': back_url,
         'back_label': back_label,
+        'class_students': list(Student.objects.filter(class_group=submission.class_group).order_by('last_name', 'first_name')) if submission.class_group else [],
     }
     return render(request, 'feed/file_viewer.html', context)
 
@@ -4829,6 +4840,175 @@ def add_submission_comment(request, sub_id):
 
 
 @teacher_required
+@require_POST
+def teacher_submission_coauthors(request, sub_id):
+    """
+    Дозволяє вчителю самостійно призначати/змінювати співавторів колективної роботи,
+    якщо учні забули або помилилися при здачі. Всі дії фіксуються в журналі.
+    """
+    from .student_matcher import is_same_student_identity, resolve_canonical_student_name
+
+    submission = get_object_or_404(
+        Submission.objects.select_related('assignment', 'class_group', 'student', 'primary_submission'),
+        id=sub_id
+    )
+
+    # Якщо це робота-співавтор, діємо від імені кореневої primary_submission
+    root = submission.primary_submission if submission.primary_submission else submission
+
+    # Отримуємо список обраних студентів (ID або ПІБ)
+    student_ids = request.POST.getlist('student_ids')
+    custom_names_raw = request.POST.get('custom_names', '')
+
+    target_students = []
+    if student_ids:
+        target_students = list(Student.objects.filter(id__in=student_ids))
+
+    # Додаткові імена, введені вручну
+    manual_names = [n.strip() for n in custom_names_raw.split(',') if n.strip()]
+
+    # Збираємо всіх авторів
+    all_coauthors_info = []
+    for s in target_students:
+        all_coauthors_info.append({
+            'student': s,
+            'last_name': s.last_name,
+            'first_name': s.first_name,
+            'full_name': s.get_full_name(),
+        })
+
+    for m_name in manual_names:
+        ln, fn = resolve_canonical_student_name(m_name, class_group=root.class_group)
+        if ln or fn:
+            all_coauthors_info.append({
+                'student': None,
+                'last_name': ln or m_name,
+                'first_name': fn or '',
+                'full_name': f"{ln} {fn}".strip() if fn else m_name,
+            })
+
+    # Виключаємо автора кореневої роботи зі списку співавторів
+    final_coauthors = []
+    for c in all_coauthors_info:
+        if is_same_student_identity(c['last_name'], c['first_name'], root.last_name, root.first_name):
+            continue
+        if any(is_same_student_identity(c['last_name'], c['first_name'], fc['last_name'], fc['first_name']) for fc in final_coauthors):
+            continue
+        final_coauthors.append(c)
+
+    # Формуємо рядок group_authors
+    members_display = [root.get_student_full_name()] + [c['full_name'] for c in final_coauthors]
+    new_group_authors_str = ", ".join(members_display)
+
+    if final_coauthors:
+        root.is_group_work = True
+        root.group_authors = new_group_authors_str
+    else:
+        # Якщо вчитель прибрав усіх співавторів
+        root.is_group_work = False
+        root.group_authors = ''
+    root.save(update_fields=['is_group_work', 'group_authors'])
+
+    # Для кожного співавтора створюємо або оновлюємо Submission
+    linked_subs = []
+    for co in final_coauthors:
+        co_st = co.get('student')
+        co_ln = co['last_name']
+        co_fn = co['first_name']
+
+        if not co_st and root.class_group:
+            for s in Student.objects.filter(class_group=root.class_group):
+                if is_same_student_identity(co_ln, co_fn, s.last_name, s.first_name):
+                    co_st = s
+                    break
+
+        peer_sub = None
+        if co_st:
+            peer_sub = Submission.objects.filter(
+                assignment=root.assignment,
+                class_group=root.class_group,
+                student=co_st
+            ).exclude(id=root.id).first()
+
+        if not peer_sub:
+            peer_sub = Submission.objects.filter(
+                assignment=root.assignment,
+                class_group=root.class_group,
+                last_name__iexact=co_ln,
+                first_name__iexact=co_fn
+            ).exclude(id=root.id).first()
+
+        if peer_sub:
+            peer_sub.primary_submission = root
+            peer_sub.is_group_work = True
+            peer_sub.group_authors = new_group_authors_str
+            if root.grade and not peer_sub.grade:
+                peer_sub.grade = root.grade
+                peer_sub.graded_by = root.graded_by or request.user
+                peer_sub.graded_at = root.graded_at or timezone.now()
+                peer_sub.teacher_comment = root.teacher_comment
+            peer_sub.save(update_fields=['primary_submission', 'is_group_work', 'group_authors', 'grade', 'graded_by', 'graded_at', 'teacher_comment'])
+            linked_subs.append(peer_sub)
+        else:
+            peer_comment = f"Колективна робота (додано вчителем спільно з {root.get_student_full_name()})"
+            new_sub = Submission.objects.create(
+                assignment=root.assignment,
+                student=co_st,
+                last_name=co_ln,
+                first_name=co_fn,
+                class_group=root.class_group,
+                teacher=root.teacher,
+                file=root.file,
+                link=root.link,
+                comment_student=peer_comment,
+                teacher_comment=root.teacher_comment,
+                is_group_work=True,
+                group_authors=new_group_authors_str,
+                primary_submission=root,
+                grade=root.grade,
+                graded_by=root.graded_by if root.grade else None,
+                graded_at=root.graded_at if root.grade else None,
+                is_latest_attempt=True
+            )
+            # Копіюємо файли
+            for sf in root.files.all():
+                SubmissionFile.objects.create(
+                    submission=new_sub,
+                    file=sf.file,
+                    original_name=sf.original_name
+                )
+            linked_subs.append(new_sub)
+
+    # Якщо раніше були прив'язані інші coauthor_submissions, які тепер прибрали зі списку:
+    linked_ids = {s.id for s in linked_subs}
+    for old_co in root.coauthor_submissions.all():
+        if old_co.id not in linked_ids:
+            old_co.primary_submission = None
+            old_co.is_group_work = False
+            old_co.save(update_fields=['primary_submission', 'is_group_work'])
+
+    log_desc = (f"Вчитель {request.user.get_full_name() or request.user.username} оновив склад "
+                f"колективної роботи для «{root.get_student_full_name()}» "
+                f"(Завдання «{root.assignment.title if root.assignment else '—'}», ID {root.id}). "
+                f"Склад групи: {new_group_authors_str if final_coauthors else 'індивідуальна робота'}.")
+    log_submission_activity(request.user, 'group_authors', log_desc, submission=root)
+
+    success_msg = f"Склад колективної роботи успішно оновлено! Учасники: {new_group_authors_str if final_coauthors else 'індивідуальна'}"
+    messages.success(request, success_msg)
+
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.POST.get('format') == 'json':
+        return JsonResponse({
+            'success': True,
+            'message': success_msg,
+            'group_authors': new_group_authors_str,
+            'members': members_display,
+            'is_group_work': bool(final_coauthors)
+        })
+
+    return redirect('view_file', submission_id=root.id)
+
+
+@teacher_required
 def delete_submission(request, sub_id):
     """Видалення здачі роботи (POST)."""
     if request.method != 'POST':
@@ -4893,6 +5073,7 @@ def teacher_students(request):
 
     selected_class_id = request.GET.get('class_group') or request.GET.get('class')
     search_query = request.GET.get('search', '').strip()
+    current_tab = request.GET.get('tab', 'students')
 
     students_qs = Student.objects.select_related('class_group').order_by('class_group__grade', 'class_group__letter', 'last_name', 'first_name')
 
@@ -4951,14 +5132,12 @@ def teacher_students(request):
         st.subs_count = len(st_subs)
         st.graded_count = len([s for s in st_subs if s.get('grade')])
 
-    paginator = Paginator(students_list, 25)
-    page_obj = paginator.get_page(request.GET.get('page'))
+    paginator = Paginator(students_list, 20)
+    page_obj = paginator.get_page(request.GET.get('page') if current_tab == 'students' else 1)
 
     # Форми
     add_form = StudentForm(initial={'class_group': selected_class} if selected_class else None)
     import_form = StudentImportForm(initial={'default_class': selected_class} if selected_class else None)
-
-    current_tab = request.GET.get('tab', 'students')
 
     # Обробка дій через POST
     if request.method == 'POST':
@@ -5068,6 +5247,96 @@ def teacher_students(request):
                 'days': row_days,
             })
 
+    # ── Облік проведених тем уроків (вкладка tab=lessons) ─────────────────────
+    ukr_weekdays = {
+        0: 'Понеділок',
+        1: 'Вівторок',
+        2: 'Середа',
+        3: 'Четвер',
+        4: "П'ятниця",
+        5: 'Субота',
+        6: 'Неділя',
+    }
+
+    lessons_base_qs = Assignment.objects.filter(
+        status__in=[Assignment.STATUS_PUBLISHED, Assignment.STATUS_ARCHIVED]
+    )
+    if teacher and not request.user.is_superuser:
+        lessons_base_qs = lessons_base_qs.filter(teacher=teacher)
+
+    total_conducted_lessons_count = lessons_base_qs.count()
+    archived_conducted_lessons_count = lessons_base_qs.filter(status=Assignment.STATUS_ARCHIVED).count()
+    published_conducted_lessons_count = total_conducted_lessons_count - archived_conducted_lessons_count
+
+    # Підрахунок проведених уроків по класах для бейджів у фільтрі
+    class_lessons_count_map = dict(
+        lessons_base_qs.filter(classes__isnull=False)
+        .values('classes__id')
+        .annotate(cnt=Count('id', distinct=True))
+        .values_list('classes__id', 'cnt')
+    )
+    for cg in all_class_groups:
+        cg.conducted_lessons_count = class_lessons_count_map.get(cg.id, 0)
+
+    lessons_filter_qs = lessons_base_qs
+    if selected_class_id:
+        try:
+            cid = int(selected_class_id)
+            lessons_filter_qs = lessons_filter_qs.filter(classes__id=cid)
+        except (ValueError, TypeError):
+            pass
+
+    lesson_status_filter = request.GET.get('status', '').strip()
+    if lesson_status_filter in [Assignment.STATUS_PUBLISHED, Assignment.STATUS_ARCHIVED]:
+        lessons_filter_qs = lessons_filter_qs.filter(status=lesson_status_filter)
+
+    if search_query:
+        lessons_filter_qs = lessons_filter_qs.filter(
+            Q(title__icontains=search_query) |
+            Q(subject__name__icontains=search_query) |
+            Q(classes__name__icontains=search_query) |
+            Q(student_name__icontains=search_query)
+        ).distinct()
+
+    lessons_filter_qs = lessons_filter_qs.select_related('teacher__user', 'subject').prefetch_related('classes', 'submissions').order_by('-published_at', '-created_at', '-id')
+
+    from django.utils import timezone
+    conducted_lessons_list = []
+    for a in lessons_filter_qs:
+        dt = a.published_at or a.created_at
+        local_dt = timezone.localtime(dt) if dt and timezone.is_aware(dt) else dt
+        w_day = ukr_weekdays.get(local_dt.weekday(), '') if local_dt else ''
+        d_str = local_dt.strftime('%d.%m.%Y') if local_dt else '—'
+        t_str = local_dt.strftime('%H:%M') if local_dt else ''
+
+        c_list = list(a.classes.all())
+        if c_list:
+            c_str = ", ".join(c.name for c in c_list)
+        elif a.is_individual:
+            c_str = f"Індивідуально ({a.student_name})" if a.student_name else "Індивідуально"
+        else:
+            c_str = "Всі класи"
+
+        conducted_lessons_list.append({
+            'assignment': a,
+            'id': a.id,
+            'title': a.title,
+            'subject_name': a.subject.name if a.subject else '—',
+            'status': a.status,
+            'status_display': a.get_status_display(),
+            'is_archived': a.status == Assignment.STATUS_ARCHIVED,
+            'date_str': d_str,
+            'time_str': t_str,
+            'day_name': w_day,
+            'full_date': f"{d_str} ({w_day})" if w_day else d_str,
+            'classes': c_list,
+            'classes_str': c_str,
+            'submissions_count': a.submissions.count(),
+        })
+
+    lessons_paginator = Paginator(conducted_lessons_list, 20)
+    lessons_page_obj = lessons_paginator.get_page(request.GET.get('page') if current_tab == 'lessons' else 1)
+
     return render(request, 'feed/teacher_students.html', {
         'page_obj': page_obj,
         'students_list': students_list,
@@ -5087,6 +5356,12 @@ def teacher_students(request):
         'teacher_subjects': teacher_subjects,
         'schedule_rows': schedule_rows,
         'total_scheduled_lessons': total_scheduled_lessons,
+        'conducted_lessons': conducted_lessons_list,
+        'lessons_page_obj': lessons_page_obj,
+        'total_conducted_lessons_count': total_conducted_lessons_count,
+        'published_conducted_lessons_count': published_conducted_lessons_count,
+        'archived_conducted_lessons_count': archived_conducted_lessons_count,
+        'lesson_status_filter': lesson_status_filter,
     })
 
 
@@ -5175,6 +5450,109 @@ def teacher_student_delete(request, student_id):
         return JsonResponse({'success': True, 'message': f"Учня «{st_name}» успішно видалено."})
 
     return redirect(f"{reverse('teacher_students')}?class_group={class_id}")
+
+
+@teacher_required
+@require_POST
+def teacher_student_merge(request):
+    """
+    Об'єднує два профілі учня (коли учень двічі здав роботу з різними або помилковими даними).
+    Переприв'язує всі здані роботи, актуалізує спроби, об'єднує нотатки, видаляє дублікат
+    та обов'язково фіксує дію у журналі подій.
+    """
+    source_id = request.POST.get('source_student_id')
+    target_id = request.POST.get('target_student_id')
+
+    if not source_id or not target_id:
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.POST.get('format') == 'json':
+            return JsonResponse({'success': False, 'error': "Не вказано учнів для об'єднання."}, status=400)
+        messages.error(request, "Будь ласка, оберіть обох учнів для об'єднання.")
+        return redirect('teacher_students')
+
+    try:
+        source_id = int(source_id)
+        target_id = int(target_id)
+    except (ValueError, TypeError):
+        return JsonResponse({'success': False, 'error': "Некоректні ідентифікатори учнів."}, status=400)
+
+    if source_id == target_id:
+        err = "Неможливо об'єднати профіль учня із самим собою."
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.POST.get('format') == 'json':
+            return JsonResponse({'success': False, 'error': err}, status=400)
+        messages.error(request, err)
+        return redirect('teacher_students')
+
+    source_student = get_object_or_404(Student, id=source_id)
+    target_student = get_object_or_404(Student, id=target_id)
+
+    source_name = source_student.get_full_name()
+    target_name = target_student.get_full_name()
+    source_class = source_student.class_group.name if source_student.class_group else '—'
+    target_class = target_student.class_group.name if target_student.class_group else '—'
+
+    # Знаходимо всі роботи дубліката
+    source_subs = list(Submission.objects.filter(
+        Q(student=source_student) |
+        (Q(class_group=source_student.class_group) &
+         Q(last_name__iexact=source_student.last_name) &
+         Q(first_name__iexact=source_student.first_name))
+    ))
+
+    merged_subs_count = 0
+    affected_assignments = set()
+
+    for sub in source_subs:
+        sub.student = target_student
+        sub.last_name = target_student.last_name
+        sub.first_name = target_student.first_name
+        sub.class_group = target_student.class_group
+        sub.save(update_fields=['student', 'last_name', 'first_name', 'class_group'])
+        if sub.assignment_id:
+            affected_assignments.add(sub.assignment_id)
+        merged_subs_count += 1
+
+    # Актуалізуємо is_latest_attempt для цільового учня в зачеплених завданнях
+    for a_id in affected_assignments:
+        user_subs = list(Submission.objects.filter(
+            assignment_id=a_id, student=target_student
+        ).order_by('submitted_at', 'id'))
+        if user_subs:
+            for s in user_subs[:-1]:
+                if s.is_latest_attempt:
+                    s.is_latest_attempt = False
+                    s.save(update_fields=['is_latest_attempt'])
+            if not user_subs[-1].is_latest_attempt:
+                user_subs[-1].is_latest_attempt = True
+                user_subs[-1].save(update_fields=['is_latest_attempt'])
+
+    # Об'єднуємо нотатки вчителя
+    if source_student.notes and source_student.notes.strip():
+        if target_student.notes and target_student.notes.strip():
+            target_student.notes += f"\n[Перенесено з об'єднаного профілю {source_name}]: {source_student.notes.strip()}"
+        else:
+            target_student.notes = source_student.notes.strip()
+        target_student.save(update_fields=['notes'])
+
+    # Видаляємо дублікат
+    source_student.delete()
+
+    log_msg = (f"Вчитель об'єднав дублікат учня «{source_name}» ({source_class}, ID {source_id}) "
+               f"з основним профілем «{target_name}» ({target_class}, ID {target_id}). "
+               f"Перенесено зданих робіт: {merged_subs_count}.")
+    log_submission_activity(request.user, 'students_merged', log_msg)
+
+    success_msg = f"Профіль «{source_name}» успішно об'єднано з «{target_name}». Перенесено робіт: {merged_subs_count}."
+    messages.success(request, success_msg)
+
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.POST.get('format') == 'json':
+        return JsonResponse({
+            'success': True,
+            'message': success_msg,
+            'merged_count': merged_subs_count,
+            'target_student_id': target_id,
+        })
+
+    return redirect(f"{reverse('teacher_students')}?class_group={target_student.class_group_id}")
 
 
 @teacher_required
@@ -7035,15 +7413,28 @@ def teacher_settings_view(request):
     tolerance = getattr(ai_settings, 'ai_detector_tolerance_percent', 25) or 25
     total_ai_detected = Submission.objects.filter(ai_generated_detected=True).count()
 
+    from .ai_concurrency import get_model_cooldown, get_model_context_limit
+
     model_stats = []
     for item in models_with_priority:
         display_name = item['name'] if item['provider'] == 'gemini' else f"{item['name']} ({item['provider'].title()})"
         checks = Submission.objects.filter(ai_model_used=display_name)
-        model_stats.append({**item, 'is_saved': True,
-                            'configured': bool(ai_settings.get_provider_config(item['provider'], connection_id=item.get('connection_id'))),
-                            'is_active': bool(ai_settings.get_request_configs()) and (item.get('connection_id'), item['name']) == (ai_settings.get_request_configs()[0].get('connection_id'), ai_settings.get_request_configs()[0]['model']),
-                            'total_checks': checks.count(), 'success_checks': checks.filter(ai_status='success').count(),
-                            'failed_checks': checks.filter(ai_status='failed').count()})
+        in_cd, cd_rem, cd_reason = get_model_cooldown(item['provider'], item['name'])
+        ctx_limit = get_model_context_limit(item['provider'], item['name'])
+        model_stats.append({
+            **item,
+            'is_saved': True,
+            'configured': bool(ai_settings.get_provider_config(item['provider'], connection_id=item.get('connection_id'))),
+            'is_active': bool(ai_settings.get_request_configs()) and (item.get('connection_id'), item['name']) == (ai_settings.get_request_configs()[0].get('connection_id'), ai_settings.get_request_configs()[0]['model']),
+            'total_checks': checks.count(),
+            'success_checks': checks.filter(ai_status='success').count(),
+            'failed_checks': checks.filter(ai_status='failed').count(),
+            'is_in_cooldown': in_cd,
+            'cooldown_remaining': cd_rem,
+            'cooldown_reason': cd_reason,
+            'context_limit_flagged': bool(ctx_limit),
+            'context_limit_error': ctx_limit.get('error', '') if ctx_limit else ''
+        })
 
     level_high = Submission.objects.filter(ai_score_level__icontains='висок').count()
     level_sufficient = Submission.objects.filter(ai_score_level__icontains='достат').count()

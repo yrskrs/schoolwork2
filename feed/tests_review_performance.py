@@ -91,7 +91,9 @@ class ReviewPerformanceTests(TestCase):
             image.unlink()
         self.preview()
         asset = self.client.get(source)
-        self.assertEqual(asset.status_code, 200); asset.close()
+        self.assertEqual(asset.status_code, 200)
+        if hasattr(asset, 'file_to_stream') and asset.file_to_stream:
+            asset.file_to_stream.close()
         path = Path(self.sub.file.path)
         path.write_bytes(path.read_bytes() + b'changed-version')
         self.assertEqual(self.client.get(source).status_code, 404)
@@ -130,7 +132,9 @@ class ReviewPerformanceTests(TestCase):
         source = page.xpath('//img/@src')[0]
         self.assertEqual(parse_qs(urlsplit(source).query)['file_id'], [str(second.pk)])
         asset = self.client.get(source)
-        self.assertEqual(asset.status_code, 200); asset.close()
+        self.assertEqual(asset.status_code, 200)
+        if hasattr(asset, 'file_to_stream') and asset.file_to_stream:
+            asset.file_to_stream.close()
         self.assertEqual(self.client.get(source.replace(f'file_id={second.pk}', f'file_id={first.pk}')).status_code, 404)
 
     def test_failed_conversion_does_not_break_shell_or_modify_grade(self):

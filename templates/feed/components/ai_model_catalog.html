@@ -1,27 +1,123 @@
 <div class="ai-add-model-box">
-    <h3>➕ Додати модель</h3>
+    <h3>➕ Додати модель до черги</h3>
     <form method="post" class="ai-add-model-form" id="ai-add-model-form">
         {% csrf_token %}<input type="hidden" name="action" value="add_custom_model">
-        <div><label class="form-label" for="new_model_connection">Підключення</label><select id="new_model_connection" name="connection_id" class="form-input" required>
-            {% for connection in ai_connections %}<option value="{{ connection.id }}" data-provider="{{ connection.provider }}">{{ connection.label }} · {{ connection.provider|upper }}{% if not connection.configured %} · потрібен ключ{% endif %}</option>{% endfor %}
-        </select></div>
-        <div><label class="form-label" for="new_model_name">Ідентифікатор моделі</label><input name="new_model_name" id="new_model_name" class="form-input" maxlength="100" list="ai-model-suggestions" required placeholder="Точна назва з API провайдера"><datalist id="ai-model-suggestions"></datalist></div>
-        <div><label class="form-label" for="new_model_priority">Пріоритет</label><select id="new_model_priority" name="priority" class="form-input"><option value="99">У кінець черги</option><option value="1">#1 · Перша</option><option value="2">#2 · Друга</option><option value="3">#3 · Третя</option></select></div>
-        <button type="submit" class="btn btn-primary">➕ Додати модель</button>
+        <div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+                <label class="form-label" for="new_model_connection" style="margin:0;">Підключення до постачальника</label>
+                <a href="javascript:void(0)" onclick="quickCreateConnectionFor('custom')" style="font-size:12px;font-weight:700;color:var(--color-primary);text-decoration:none;">➕ Створити нове</a>
+            </div>
+            <select id="new_model_connection" name="connection_id" class="form-input" required>
+                {% for connection in ai_connections %}
+                <option value="{{ connection.id }}" data-provider="{{ connection.provider }}">
+                    {{ connection.label }} · {{ connection.provider|upper }}{% if not connection.configured %} · потрібен ключ{% endif %}
+                </option>
+                {% empty %}
+                <option value="" disabled selected>Немає налаштованих підключень — створіть перше</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label class="form-label" for="new_model_name">Ідентифікатор моделі</label>
+            <input name="new_model_name" id="new_model_name" class="form-input" maxlength="100" list="ai-model-suggestions" required placeholder="Точна назва з каталогу (або виберіть нижче)">
+            <datalist id="ai-model-suggestions"></datalist>
+        </div>
+        <div>
+            <label class="form-label" for="new_model_priority">Позиція в черзі</label>
+            <select id="new_model_priority" name="priority" class="form-input">
+                <option value="99">У кінець черги</option>
+                <option value="1">#1 · Перша (основна)</option>
+                <option value="2">#2 · Друга</option>
+                <option value="3">#3 · Третя</option>
+            </select>
+        </div>
+        <div style="display:flex;align-items:flex-end;">
+            <button type="submit" class="btn btn-primary" style="font-weight:700;height:42px;">➕ Додати модель</button>
+        </div>
     </form>
-    <p class="form-hint">Модель використовує ключ вибраного підключення. Порядок спільний для всіх постачальників; вимкнені моделі та підключення без ключа пропускаються.</p>
-    <p class="form-hint">Для документів і презентацій обирайте модель з нативною підтримкою PDF та зображень. Текстові моделі, зокрема GPT-OSS у Groq, підходять для текстових робіт і коду. Якщо повний матеріал перевищує допустимий розмір API, перевірка переходить далі за ввімкненою чергою, зберігаючи всі сторінки й об’єкти.</p>
-    <details class="ai-settings-disclosure" id="ai-model-catalog"><summary>📚 Каталог моделей та орієнтовні квоти</summary><div class="ai-settings-disclosure-body">
-        <p class="form-hint">Показано каталог постачальника вибраного підключення. Дані перевірено {{ catalog_checked_at }}; квоти не встановлюють обмежень на роботи учнів.</p>
-        {% for group in provider_catalog %}<section data-catalog-provider="{{ group.provider }}" {% if group.provider != ai_settings.ai_provider %}hidden{% endif %}>
-            <h3>{{ group.title }}</h3><p class="form-hint">{{ group.quota_note }}</p>
-            {% if group.source %}<p class="form-hint"><a href="{{ group.source }}" target="_blank" rel="noopener noreferrer">Офіційний каталог ↗</a> · <a href="{{ group.limits_url }}" target="_blank" rel="noopener noreferrer">Квоти провайдера ↗</a></p>{% endif %}
-            <div class="ai-catalog-grid">{% for model in group.models %}<article class="ai-catalog-card">
-                <code>{{ model.name }}</code><p>{{ model.description }}</p><p class="form-hint"><strong>{{ model.quota }}</strong></p>
-                <div class="ai-catalog-actions"><button type="button" class="btn btn-primary btn-sm" onclick="selectModelToInput('{{ model.name|escapejs }}','queue','{{ group.provider|escapejs }}')">➕ У форму</button></div>
-            </article>{% empty %}<p>Вкажіть ідентифікатор моделі вашого сервера у формі вище.</p>{% endfor %}</div>
-        </section>{% endfor %}
-    </div></details>
+    
+    <!-- Динамічне повідомлення, якщо для обраної з каталогу моделі ще немає підключення -->
+    <div id="ai-model-provider-notice" style="display:none;margin-top:10px;padding:10px 14px;border-radius:var(--radius-md);background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.25);font-size:13px;"></div>
+
+    <p class="form-hint" style="margin-top:12px;">Модель використовує ключ вибраного підключення. Порядок перевірки спільний для всіх постачальників; за наявності збоїв або перевищення квот система автоматично переходить далі за чергою.</p>
+
+    <details class="ai-settings-disclosure" id="ai-model-catalog" open>
+        <summary style="font-size:1.05rem;font-weight:800;cursor:pointer;">📚 Каталог моделей та орієнтовні квоти (всі постачальники)</summary>
+        <div class="ai-settings-disclosure-body">
+            <p class="form-hint">
+                Доступні моделі від усіх підтримуваних постачальників ШІ (дані каталогу станом на {{ catalog_checked_at }}). Натисніть «➕ У форму» біля будь-якої моделі для швидкого додавання до вашої черги.
+            </p>
+
+            <!-- Швидкі таби-фільтри постачальників -->
+            <div class="ai-catalog-tabs-bar" style="display:flex;flex-wrap:wrap;gap:6px;margin:12px 0 16px 0;align-items:center;">
+                <span style="font-size:12px;font-weight:750;text-transform:uppercase;color:var(--color-text-secondary);letter-spacing:0.04em;margin-right:2px;">Постачальник:</span>
+                <button type="button" class="btn btn-sm ai-catalog-tab-btn active" data-catalog-tab="all" onclick="filterCatalogByProvider('all')">
+                    🌟 Всі постачальники ({{ provider_catalog|length }})
+                </button>
+                {% for group in provider_catalog %}
+                <button type="button" class="btn btn-sm ai-catalog-tab-btn" data-catalog-tab="{{ group.provider }}" onclick="filterCatalogByProvider('{{ group.provider }}')">
+                    {% if group.provider == 'cloudflare' %}☁️{% elif group.provider == 'gemini' %}🤖{% elif group.provider == 'openai' %}🧠{% elif group.provider == 'groq' %}⚡{% elif group.provider == 'deepseek' %}🌊{% elif group.provider == 'openrouter' %}🔀{% else %}🛠️{% endif %}
+                    {{ group.title }} ({{ group.models|length }})
+                </button>
+                {% endfor %}
+            </div>
+
+            <!-- Секції кожного постачальника -->
+            {% for group in provider_catalog %}
+            <section data-catalog-provider="{{ group.provider }}" class="ai-catalog-provider-section" style="margin-bottom:24px;">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;margin-bottom:12px;border-bottom:1.5px solid var(--color-border);padding-bottom:8px;">
+                    <div>
+                        <h3 style="margin:0;font-size:1.15rem;font-weight:800;color:var(--color-text-primary);display:flex;align-items:center;gap:8px;">
+                            <span>{% if group.provider == 'cloudflare' %}☁️{% elif group.provider == 'gemini' %}🤖{% elif group.provider == 'openai' %}🧠{% elif group.provider == 'groq' %}⚡{% elif group.provider == 'deepseek' %}🌊{% elif group.provider == 'openrouter' %}🔀{% else %}🛠️{% endif %}</span>
+                            <span>{{ group.title }}</span>
+                            <span class="badge" style="background:rgba(99,102,241,0.12);color:var(--color-primary);font-size:11px;font-weight:700;padding:2px 8px;border-radius:12px;">{{ group.models|length }} моделей</span>
+                        </h3>
+                        <p class="form-hint" style="margin:4px 0 0 0;">{{ group.quota_note }}</p>
+                        {% if group.source %}
+                        <p class="form-hint" style="margin:4px 0 0 0;">
+                            <a href="{{ group.source }}" target="_blank" rel="noopener noreferrer">Офіційний каталог ↗</a> · <a href="{{ group.limits_url }}" target="_blank" rel="noopener noreferrer">Квоти провайдера ↗</a>
+                        </p>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <button type="button" class="btn btn-secondary btn-sm" onclick="quickCreateConnectionFor('{{ group.provider|escapejs }}')" style="font-weight:700;font-size:12px;display:inline-flex;align-items:center;gap:4px;">
+                            ➕ Підключити {{ group.title }}
+                        </button>
+                    </div>
+                </div>
+
+                <div class="ai-catalog-grid">
+                    {% for model in group.models %}
+                    <article class="ai-catalog-card" style="display:flex;flex-direction:column;justify-content:space-between;">
+                        <div>
+                            <code style="font-size:13px;font-weight:700;">{{ model.name }}</code>
+                            <div style="margin:6px 0 8px 0;display:flex;flex-wrap:wrap;gap:5px;">
+                                {% if model.supports_vision %}
+                                    <span class="badge" style="background:rgba(16,185,129,0.15);color:#059669;border:1px solid rgba(16,185,129,0.3);font-size:11px;padding:2px 7px;border-radius:4px;font-weight:700;">👁️ Мультимодальна (фото/PDF)</span>
+                                {% else %}
+                                    <span class="badge" style="background:rgba(107,114,128,0.15);color:#6b7280;border:1px solid rgba(107,114,128,0.3);font-size:11px;padding:2px 7px;border-radius:4px;">📝 Тільки текст</span>
+                                {% endif %}
+                                {% if model.context_display %}
+                                    <span class="badge" style="background:rgba(99,102,241,0.15);color:#4f46e5;border:1px solid rgba(99,102,241,0.3);font-size:11px;padding:2px 7px;border-radius:4px;">📊 {{ model.context_display }}</span>
+                                {% endif %}
+                            </div>
+                            <p style="font-size:12.5px;color:var(--color-text-secondary);margin:0 0 8px 0;">{{ model.description }}</p>
+                            <p class="form-hint" style="margin:0 0 10px 0;"><strong>{{ model.quota }}</strong></p>
+                        </div>
+                        <div class="ai-catalog-actions" style="margin-top:auto;">
+                            <button type="button" class="btn btn-primary btn-sm" onclick="selectModelToInput('{{ model.name|escapejs }}','queue','{{ group.provider|escapejs }}')" style="font-weight:700;width:100%;display:inline-flex;align-items:center;justify-content:center;gap:6px;">
+                                ➕ У форму черги
+                            </button>
+                        </div>
+                    </article>
+                    {% empty %}
+                    <p style="color:var(--color-text-muted);font-size:13px;">Вкажіть назву моделі вашого сервера у формі вище.</p>
+                    {% endfor %}
+                </div>
+            </section>
+            {% endfor %}
+        </div>
+    </details>
 </div>
 {{ provider_catalog|json_script:'ai-provider-catalog-data' }}
 

@@ -21,6 +21,13 @@
                     </div>
                     <div style="font-size:13px;color:var(--color-text-secondary);margin-top:1px;">
                         «{{ assignment.title }}» · збережено на сервері та передано вчителю
+                        {% if latest_submission and latest_submission.files.exists %}
+                        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:4px;">
+                            {% for sf in latest_submission.files.all %}
+                            <span class="badge" style="background:var(--color-bg-secondary);color:var(--color-text-primary);border:1px solid var(--color-border);font-size:11px;padding:2px 7px;border-radius:6px;">📎 {{ sf.original_name }}</span>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
                     </div>
                 </div>
             </div>
@@ -74,7 +81,7 @@
         {% elif latest_submission and latest_submission.student_ai_checked %}
         <!-- Якщо ШІ вже був запущений раніше, показуємо збережений результат -->
         {% with gg=latest_submission.get_ai_grade_group_info %}
-        <div style="background:var(--color-surface);border:2px solid {% if gg %}{{ gg.border_color }}{% else %}rgba(99,102,241,0.3){% endif %};border-radius:var(--radius-lg);overflow:hidden;margin-bottom:16px;box-shadow:0 4px 18px rgba(0,0,0,0.06);">
+        <div class="student-ai-card-active" style="background:var(--color-surface);border:2px solid {% if gg %}{{ gg.border_color }}{% else %}rgba(99,102,241,0.3){% endif %};border-radius:var(--radius-lg);overflow:hidden;margin-bottom:16px;box-shadow:0 4px 18px rgba(0,0,0,0.06);">
             <!-- Верхній банер результату -->
             <div style="padding:14px 20px;background:linear-gradient(135deg,rgba(99,102,241,0.08),rgba(139,92,246,0.08));border-bottom:1.5px solid var(--color-border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
                 <div style="font-weight:800;font-size:15px;color:var(--color-text-primary);display:flex;align-items:center;gap:8px;">
@@ -209,9 +216,66 @@
                 </div>
                 {% endif %}
 
-                {% with feedback=latest_submission.get_student_ai_public_feedback %}
-                {% if feedback %}
-                <div style="font-size:13px;line-height:1.5;white-space:pre-wrap;color:var(--color-text-primary);">{{ feedback }}</div>
+                {% with sections=latest_submission.get_student_ai_sections %}
+                {% if sections %}
+                <div class="student-ai-feedback-grid">
+                    {% if sections.praise %}
+                    <div style="background:linear-gradient(135deg,rgba(16,185,129,0.08) 0%,rgba(99,102,241,0.08) 100%);border:1.5px solid rgba(16,185,129,0.35);border-radius:var(--radius-md);padding:12px 16px;display:flex;align-items:flex-start;gap:12px;">
+                        <span style="font-size:24px;line-height:1;flex-shrink:0;">👏</span>
+                        <div>
+                            <div style="font-weight:800;font-size:12px;color:var(--color-success);margin-bottom:3px;text-transform:uppercase;letter-spacing:0.4px;">
+                                Похвала за роботу:
+                            </div>
+                            <div style="font-size:13px;color:var(--color-text-primary);line-height:1.45;font-weight:600;">
+                                {{ sections.praise }}
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    {% if sections.grade_reason %}
+                    <div style="background:var(--color-surface);border:1.5px solid rgba(99,102,241,0.25);border-left:4px solid var(--color-primary);border-radius:var(--radius-md);padding:12px 16px;">
+                        <div style="font-weight:800;font-size:12.5px;color:var(--color-primary);margin-bottom:3px;display:flex;align-items:center;gap:6px;">
+                            <span>🎯</span> <span>Чому така оцінка:</span>
+                        </div>
+                        <div style="font-size:13px;color:var(--color-text-primary);line-height:1.45;">
+                            {{ sections.grade_reason }}
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    {% if sections.recommendation %}
+                    <div style="background:var(--color-surface);border:1.5px solid rgba(59,130,246,0.25);border-left:4px solid #3b82f6;border-radius:var(--radius-md);padding:12px 16px;">
+                        <div style="font-weight:800;font-size:12.5px;color:#2563eb;margin-bottom:3px;display:flex;align-items:center;gap:6px;">
+                            <span>💬</span> <span>Рекомендація учню:</span>
+                        </div>
+                        <div style="font-size:13px;color:var(--color-text-primary);line-height:1.45;">
+                            {{ sections.recommendation }}
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    {% if sections.improvement %}
+                    <div style="background:var(--color-surface);border:1.5px solid rgba(245,158,11,0.3);border-left:4px solid #f59e0b;border-radius:var(--radius-md);padding:12px 16px;">
+                        <div style="font-weight:800;font-size:12.5px;color:#d97706;margin-bottom:4px;display:flex;align-items:center;gap:6px;">
+                            <span>💡</span> <span>Як покращити роботу:</span>
+                        </div>
+                        <div style="font-size:13px;color:var(--color-text-primary);line-height:1.45;">
+                            {% if sections.improvement|length > 1 %}
+                            <ul style="margin:4px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:4px;">
+                                {% for item in sections.improvement %}
+                                <li>{{ item }}</li>
+                                {% endfor %}
+                            </ul>
+                            {% else %}
+                                {% for item in sections.improvement %}{{ item }}{% endfor %}
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+                {% elif latest_submission.get_student_ai_public_feedback %}
+                <div style="font-size:13px;line-height:1.5;white-space:pre-wrap;color:var(--color-text-primary);">{{ latest_submission.get_student_ai_public_feedback }}</div>
                 {% endif %}
                 {% endwith %}
             </div>
@@ -345,7 +409,7 @@ function runStudentAICheck(subId) {
             'X-CSRFToken': '{{ csrf_token }}',
             'X-Requested-With': 'XMLHttpRequest',
         },
-    }, {anchor: resultBox})
+    }, {anchor: resultBox, isStudent: true})
     .then(function(r) { return r.json(); })
     .then(function(data) {
         var selfCheckBlock = document.getElementById('student-selfcheck-block');
@@ -423,9 +487,69 @@ function runStudentAICheck(subId) {
             '</div>';
         }
 
-        var feedbackCommentHtml = data.feedback
-            ? '<div style="font-size:13px;line-height:1.5;white-space:pre-wrap;">' + data.feedback + '</div>'
-            : '';
+        var sec = data.sections || {};
+        var praise = sec.praise || data.praise || '';
+        var gradeReason = sec.grade_reason || data.grade_reason || data.summary || '';
+        var recommendation = sec.recommendation || data.recommendation || (data.strengths && data.strengths[0]) || '';
+        var improvement = sec.improvement || data.improvement || data.revision_advice || data.weaknesses || [];
+        if (typeof improvement === 'string') improvement = [improvement];
+
+        var feedbackCommentHtml = '';
+        if (praise || gradeReason || recommendation || (improvement && improvement.length > 0)) {
+            feedbackCommentHtml = '<div class="student-ai-feedback-grid" style="display:grid;grid-template-columns:1fr;gap:10px;margin-top:14px;">';
+
+            if (praise) {
+                feedbackCommentHtml += '<div style="background:linear-gradient(135deg,rgba(16,185,129,0.08) 0%,rgba(99,102,241,0.08) 100%);border:1.5px solid rgba(16,185,129,0.35);border-radius:var(--radius-md);padding:12px 16px;display:flex;align-items:flex-start;gap:12px;">' +
+                    '<span style="font-size:24px;line-height:1;flex-shrink:0;">👏</span>' +
+                    '<div>' +
+                        '<div style="font-weight:800;font-size:12px;color:var(--color-success);margin-bottom:3px;text-transform:uppercase;letter-spacing:0.4px;">Похвала за роботу:</div>' +
+                        '<div style="font-size:13px;color:var(--color-text-primary);line-height:1.45;font-weight:600;">' + praise + '</div>' +
+                    '</div>' +
+                '</div>';
+            }
+
+            if (gradeReason) {
+                feedbackCommentHtml += '<div style="background:var(--color-surface);border:1.5px solid rgba(99,102,241,0.25);border-left:4px solid var(--color-primary);border-radius:var(--radius-md);padding:12px 16px;">' +
+                    '<div style="font-weight:800;font-size:12.5px;color:var(--color-primary);margin-bottom:3px;display:flex;align-items:center;gap:6px;">' +
+                        '<span>🎯</span> <span>Чому така оцінка:</span>' +
+                    '</div>' +
+                    '<div style="font-size:13px;color:var(--color-text-primary);line-height:1.45;">' + gradeReason + '</div>' +
+                '</div>';
+            }
+
+            if (recommendation) {
+                feedbackCommentHtml += '<div style="background:var(--color-surface);border:1.5px solid rgba(59,130,246,0.25);border-left:4px solid #3b82f6;border-radius:var(--radius-md);padding:12px 16px;">' +
+                    '<div style="font-weight:800;font-size:12.5px;color:#2563eb;margin-bottom:3px;display:flex;align-items:center;gap:6px;">' +
+                        '<span>💬</span> <span>Рекомендація учню:</span>' +
+                    '</div>' +
+                    '<div style="font-size:13px;color:var(--color-text-primary);line-height:1.45;">' + recommendation + '</div>' +
+                '</div>';
+            }
+
+            if (improvement && improvement.length > 0) {
+                var impHtml = '';
+                if (improvement.length > 1) {
+                    impHtml = '<ul style="margin:4px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:4px;">';
+                    improvement.forEach(function(item) {
+                        impHtml += '<li>' + item + '</li>';
+                    });
+                    impHtml += '</ul>';
+                } else {
+                    impHtml = improvement[0];
+                }
+
+                feedbackCommentHtml += '<div style="background:var(--color-surface);border:1.5px solid rgba(245,158,11,0.3);border-left:4px solid #f59e0b;border-radius:var(--radius-md);padding:12px 16px;">' +
+                    '<div style="font-weight:800;font-size:12.5px;color:#d97706;margin-bottom:4px;display:flex;align-items:center;gap:6px;">' +
+                        '<span>💡</span> <span>Як покращити роботу:</span>' +
+                    '</div>' +
+                    '<div style="font-size:13px;color:var(--color-text-primary);line-height:1.45;">' + impHtml + '</div>' +
+                '</div>';
+            }
+
+            feedbackCommentHtml += '</div>';
+        } else if (data.feedback) {
+            feedbackCommentHtml = '<div style="font-size:13px;line-height:1.5;white-space:pre-wrap;margin-top:10px;">' + data.feedback + '</div>';
+        }
 
         var unclearTaskHtml = '';
         var isUnclear = Boolean(

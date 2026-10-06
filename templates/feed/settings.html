@@ -970,6 +970,12 @@
                                             {% if ms.is_active %}
                                             <span style="font-size:10px;color:var(--color-primary);font-weight:800;margin-left:4px;">(Поточна)</span>
                                             {% endif %}
+                                            {% if ms.context_limit_flagged %}
+                                            <span class="badge" style="background:rgba(239, 68, 68, 0.15);color:#dc2626;border:1px solid rgba(239, 68, 68, 0.3);font-size:10px;padding:2px 6px;border-radius:4px;margin-left:4px;" title="{{ ms.context_limit_error }}">⚠️ Зафіксовано ліміт контексту</span>
+                                            {% endif %}
+                                            {% if ms.is_in_cooldown %}
+                                            <span class="badge" style="background:rgba(245, 158, 11, 0.15);color:#d97706;border:1px solid rgba(245, 158, 11, 0.3);font-size:10px;padding:2px 6px;border-radius:4px;margin-left:4px;" title="{{ ms.cooldown_reason|default:'Модель тимчасово перевантажена' }}">⏳ Пауза ({{ ms.cooldown_remaining }}с)</span>
+                                            {% endif %}
                                         </td>
 
                                         <!-- Чекбокс увімкнення у fallback -->
@@ -1569,17 +1575,23 @@ function switchSettingsTabFromSidebar(tabName, linkEl) {
 
 function selectModelToInput(modelName, target, provider) {
     var connection = document.getElementById('new_model_connection');
+    var noticeEl = document.getElementById('ai-model-provider-notice');
     if (connection && provider) {
         var selected = connection.options[connection.selectedIndex];
         var option = selected && selected.dataset.provider === provider ? selected : Array.from(connection.options).find(function(item) { return item.dataset.provider === provider; });
         if (!option) {
-            window.SchoolNetAISettings?.select('connection');
-            var supplier = document.getElementById('connection-provider-new');
-            if (supplier) { supplier.value = provider; supplier.dispatchEvent(new Event('change', {bubbles:true})); }
-            var model = document.getElementById('connection-model-new');
-            if (model) { model.value = modelName; model.closest('details').open = true; model.focus(); }
+            if (window.quickCreateConnectionFor) {
+                window.quickCreateConnectionFor(provider, modelName);
+            } else {
+                window.SchoolNetAISettings?.select('connection');
+                var supplier = document.getElementById('connection-provider-new');
+                if (supplier) { supplier.value = provider; supplier.dispatchEvent(new Event('change', {bubbles:true})); }
+                var model = document.getElementById('connection-model-new');
+                if (model) { model.value = modelName; if (model.closest('details')) model.closest('details').open = true; model.focus(); }
+            }
             return;
         }
+        if (noticeEl) { noticeEl.style.display = 'none'; }
         connection.value = option.value;
         connection.dispatchEvent(new Event('change', {bubbles:true}));
     }

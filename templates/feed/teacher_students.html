@@ -97,43 +97,57 @@
     color: #fff;
 }
 
+body .page-wrapper {
+    max-width: 1440px !important;
+}
+
+.table-responsive {
+    overflow-x: auto;
+    width: 100%;
+    max-width: 100%;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+}
+
 .student-table {
     width: 100%;
     border-collapse: separate;
     border-spacing: 0;
+    font-size: 13.5px;
 }
 .student-table th {
     background: var(--color-bg-secondary);
     color: var(--color-text-secondary);
-    font-size: 12px;
-    font-weight: 700;
+    font-size: 11.5px;
+    font-weight: 750;
     text-transform: uppercase;
     letter-spacing: 0.04em;
-    padding: 12px 14px;
+    padding: 11px 14px;
     border-bottom: 1px solid var(--color-border);
     text-align: left;
+    white-space: nowrap;
 }
 .student-table td {
-    padding: 12px 14px;
+    padding: 10px 14px;
     border-bottom: 1px solid var(--color-border);
     vertical-align: middle;
     font-size: 13.5px;
 }
 .student-table tr:hover td {
-    background: rgba(99,102,241,0.03);
+    background: rgba(99,102,241,0.035);
 }
 .student-row-avatar {
-    width: 34px;
-    height: 34px;
+    width: 32px;
+    height: 32px;
     border-radius: 50%;
     background: linear-gradient(135deg, var(--color-primary), #8b5cf6);
     color: #fff;
     font-weight: 700;
-    font-size: 13px;
+    font-size: 12.5px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    margin-right: 10px;
+    margin-right: 8px;
     flex-shrink: 0;
 }
 .class-badge-pill {
@@ -145,6 +159,105 @@
     font-size: 12px;
     font-weight: 700;
     display: inline-block;
+    white-space: nowrap;
+}
+.student-table .btn,
+.student-actions-group .btn {
+    white-space: nowrap !important;
+    flex-shrink: 0 !important;
+    word-break: keep-all !important;
+    line-height: 1.2 !important;
+    min-height: 32px !important;
+    box-sizing: border-box !important;
+}
+.student-actions-group {
+    display: inline-flex !important;
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+    justify-content: flex-end !important;
+    gap: 6px !important;
+    white-space: nowrap !important;
+}
+.student-icon-btn {
+    width: 32px !important;
+    height: 32px !important;
+    min-width: 32px !important;
+    padding: 0 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    flex-shrink: 0 !important;
+    font-size: 13px !important;
+}
+.student-edit-btn {
+    padding: 5px 11px !important;
+    font-size: 12px !important;
+    font-weight: 700 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 4px !important;
+    white-space: nowrap !important;
+    flex-shrink: 0 !important;
+    min-width: 82px !important;
+    justify-content: center !important;
+}
+.lesson-topic-link {
+    font-size: 13.5px;
+    font-weight: 700;
+    color: var(--color-text-primary);
+    text-decoration: none;
+    display: inline-block;
+    line-height: 1.4;
+    word-break: normal;
+    overflow-wrap: break-word;
+    transition: color 0.15s ease;
+}
+.lesson-topic-link:hover {
+    color: var(--color-primary);
+}
+.pagination-wrap {
+    padding: 14px 20px;
+    border-top: 1px solid var(--color-border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    background: var(--color-surface);
+}
+.pagination-pages {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+.page-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 32px;
+    height: 32px;
+    padding: 0 9px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border);
+    background: var(--color-bg-secondary);
+    color: var(--color-text-primary);
+    font-size: 12.5px;
+    font-weight: 700;
+    text-decoration: none;
+    transition: all 0.15s ease;
+}
+.page-btn:hover {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+}
+.page-btn.active {
+    background: var(--action-primary-bg);
+    color: #fff;
+    border-color: var(--action-primary-bg);
+    box-shadow: 0 2px 6px rgba(79, 70, 229, 0.3);
+}
+.page-btn-nav {
+    padding: 0 12px;
 }
 .custom-modal-backdrop {
     position: fixed;
@@ -273,20 +386,35 @@
                     <div class="page-hero-sub">Редагування імен, зміна класів з перенесенням робіт та імпорт списків</div>
                 </div>
 
-                {% if current_tab != 'schedule' %}
+                {% if current_tab == 'students' %}
                 <div style="display:flex;gap:8px;flex-wrap:wrap;">
                     <button type="button" class="btn btn-primary" onclick="openAddStudentModal()" style="font-weight:700;">
                         ➕ Додати учня
                     </button>
+                    <button type="button" class="btn btn-secondary" onclick="openMergeStudentsModal()" style="font-weight:700;" title="Об'єднати дублікати профілів учнів">
+                        🔀 Об'єднати дублікати
+                    </button>
+                </div>
+                {% elif current_tab == 'lessons' %}
+                <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                    <a href="{% url 'assignment_create' %}" class="btn btn-primary" style="font-weight:700;display:inline-flex;align-items:center;gap:6px;">
+                        ➕ Створити новий урок
+                    </a>
                 </div>
                 {% endif %}
             </div>
 
             <!-- ── Перемикач вкладок розділу ───────────────────────────────────── -->
             <div style="display:flex;gap:10px;margin-bottom:20px;border-bottom:1px solid var(--color-border);padding-bottom:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;">
-                <div style="display:flex;gap:8px;align-items:center;">
-                    <a href="{% url 'teacher_students' %}?tab=students" class="btn {% if current_tab != 'schedule' %}btn-primary{% else %}btn-secondary{% endif %}" style="font-weight:700;display:inline-flex;align-items:center;gap:6px;border-radius:var(--radius-md);">
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                    <a href="{% url 'teacher_students' %}?tab=students{% if selected_class %}&class_group={{ selected_class.id }}{% endif %}" class="btn {% if current_tab == 'students' %}btn-primary{% else %}btn-secondary{% endif %}" style="font-weight:700;display:inline-flex;align-items:center;gap:6px;border-radius:var(--radius-md);">
                         👥 Список учнів та класів
+                    </a>
+                    <a href="{% url 'teacher_students' %}?tab=lessons{% if selected_class %}&class_group={{ selected_class.id }}{% endif %}" class="btn {% if current_tab == 'lessons' %}btn-primary{% else %}btn-secondary{% endif %}" style="font-weight:700;display:inline-flex;align-items:center;gap:6px;border-radius:var(--radius-md);">
+                        📚 Проведені теми уроків
+                        {% if total_conducted_lessons_count %}
+                        <span style="background:rgba(255,255,255,0.25);padding:1px 8px;border-radius:12px;font-size:11px;">{{ total_conducted_lessons_count }}</span>
+                        {% endif %}
                     </a>
                     <a href="{% url 'teacher_students' %}?tab=schedule" class="btn {% if current_tab == 'schedule' %}btn-primary{% else %}btn-secondary{% endif %}" style="font-weight:700;display:inline-flex;align-items:center;gap:6px;border-radius:var(--radius-md);">
                         📅 Мій тижневий розклад уроків
@@ -297,7 +425,7 @@
                 </div>
             </div>
 
-            {% if current_tab != 'schedule' %}
+            {% if current_tab == 'students' %}
             <!-- ── Статистика бази учнів ──────────────────────────────────────── -->
             <div class="students-stats-grid">
                 <div class="stat-box">
@@ -397,16 +525,16 @@
                 </div>
 
                 {% if page_obj %}
-                <div class="table-responsive" style="overflow-x:auto;width:100%;max-width:100%;-webkit-overflow-scrolling:touch;">
-                    <table class="student-table">
+                <div class="table-responsive">
+                    <table class="student-table" style="width:100%;">
                         <thead>
                             <tr>
-                                <th style="width:40px;text-align:center;">№</th>
-                                <th>Учень (ПІБ)</th>
-                                <th>Клас</th>
-                                <th>Здані роботи</th>
-                                <th>Нотатки</th>
-                                <th style="text-align:right;">Дії</th>
+                                <th style="width:46px;text-align:center;">№</th>
+                                <th style="min-width:240px;">Учень (ПІБ)</th>
+                                <th style="width:100px;text-align:center;">Клас</th>
+                                <th style="width:180px;text-align:center;">Здані роботи</th>
+                                <th style="min-width:140px;">Нотатки</th>
+                                <th style="width:235px;min-width:220px;text-align:right;">Дії</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -416,61 +544,71 @@
                                     {{ forloop.counter0|add:page_obj.start_index }}
                                 </td>
                                 <td>
-                                    <div style="display:flex;align-items:center;">
+                                    <div style="display:flex;align-items:center;gap:10px;">
                                         <div class="student-row-avatar">
                                             {{ student.get_initials }}
                                         </div>
-                                        <div>
+                                        <div style="min-width:0;">
                                             <a href="{% url 'student_detail' student.get_full_name %}"
-                                               style="font-weight:700;color:var(--color-text-primary);text-decoration:none;font-size:14px;"
+                                               style="font-weight:700;color:var(--color-text-primary);text-decoration:none;font-size:13.5px;white-space:nowrap;display:inline-block;"
                                                class="student-link-hover"
                                                title="Переглянути історію робіт учня">
                                                 <span class="student-display-name">{{ student.last_name }} {{ student.first_name }}</span>
                                             </a>
-                                            <div style="font-size:11px;color:var(--color-text-muted);">
+                                            <div style="font-size:11px;color:var(--color-text-muted);white-space:nowrap;margin-top:2px;">
                                                 Додано: {{ student.created_at|date:"d.m.Y" }}
                                             </div>
                                         </div>
                                     </div>
                                 </td>
-                                <td>
+                                <td style="text-align:center;white-space:nowrap;">
                                     <span class="class-badge-pill student-class-label">
                                         🏫 {{ student.class_group.name }}
                                     </span>
                                 </td>
-                                <td>
+                                <td style="text-align:center;white-space:nowrap;">
                                     {% if student.subs_count > 0 %}
-                                    <a href="{% url 'student_detail' student.get_full_name %}" class="badge-tag" style="background:rgba(16,185,129,0.12);color:var(--color-success);border:1px solid rgba(16,185,129,0.3);text-decoration:none;padding:3px 8px;border-radius:12px;font-size:12px;font-weight:700;">
+                                    <a href="{% url 'student_detail' student.get_full_name %}" class="badge-tag" style="background:rgba(16,185,129,0.12);color:var(--color-success);border:1px solid rgba(16,185,129,0.3);text-decoration:none;padding:3px 9px;border-radius:12px;font-size:12px;font-weight:700;display:inline-block;" title="Здано: {{ student.subs_count }}, з них оцінено: {{ student.graded_count }}">
                                         📥 {{ student.subs_count }} робіт ({{ student.graded_count }} оцінено)
                                     </a>
                                     {% else %}
-                                    <span style="font-size:12px;color:var(--color-text-muted);">Робіт ще не здано</span>
+                                    <span style="font-size:12px;color:var(--color-text-muted);">— немає робіт —</span>
                                     {% endif %}
                                 </td>
                                 <td>
                                     {% if student.notes %}
-                                    <span style="font-size:12px;color:var(--color-text-secondary);max-width:200px;display:inline-block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="{{ student.notes }}">
+                                    <span style="font-size:12.5px;color:var(--color-text-secondary);max-width:240px;display:inline-block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="{{ student.notes }}">
                                         📝 {{ student.notes }}
                                     </span>
                                     {% else %}
                                     <span style="font-size:12px;color:var(--color-text-muted);">—</span>
                                     {% endif %}
                                 </td>
-                                <td style="text-align:right;white-space:nowrap;">
-                                    <div style="display:inline-flex;gap:6px;align-items:center;">
+                                <td style="text-align:right;white-space:nowrap;width:235px;min-width:220px;">
+                                    <div class="student-actions-group">
                                         <button type="button"
-                                                class="btn btn-secondary btn-sm"
+                                                class="btn btn-secondary btn-sm student-edit-btn"
                                                 onclick="openEditStudentModal({{ student.id }}, '{{ student.last_name|escapejs }}', '{{ student.first_name|escapejs }}', {{ student.class_group_id }}, '{{ student.notes|escapejs }}')"
-                                                title="Редагувати ім'я чи змінити клас"
-                                                style="padding:4px 10px;font-size:12px;">
+                                                title="Редагувати ім'я чи змінити клас">
                                             ✏️ Змінити
                                         </button>
-                                        <a href="{% url 'student_detail' student.get_full_name %}" class="btn btn-secondary btn-sm" title="Історія робіт" style="padding:4px 8px;font-size:12px;">
+                                        <button type="button"
+                                                class="btn btn-secondary btn-sm student-icon-btn"
+                                                onclick="openMergeStudentsModal({{ student.id }})"
+                                                title="Об'єднати цей дублікат із основним профілем">
+                                            🔀
+                                        </button>
+                                        <a href="{% url 'student_detail' student.get_full_name %}"
+                                           class="btn btn-secondary btn-sm student-icon-btn"
+                                           title="Історія робіт учня">
                                             📋
                                         </a>
-                                        <form method="POST" action="{% url 'teacher_student_delete' student.id %}" style="display:inline;" onsubmit="return confirm('Видалити учня «{{ student.get_full_name|escapejs }}» зі списку класу? Його здані роботи збережуться.');">
+                                        <form method="POST" action="{% url 'teacher_student_delete' student.id %}" style="display:inline;margin:0;" onsubmit="return confirm('Видалити учня «{{ student.get_full_name|escapejs }}» зі списку класу? Його здані роботи збережуться.');">
                                             {% csrf_token %}
-                                            <button type="submit" class="btn btn-sm" style="background:rgba(239,68,68,0.1);color:var(--color-danger);border:1px solid rgba(239,68,68,0.25);padding:4px 8px;font-size:12px;" title="Видалити зі списку">
+                                            <button type="submit"
+                                                    class="btn btn-sm student-icon-btn"
+                                                    style="background:rgba(239,68,68,0.1);color:var(--color-danger);border:1px solid rgba(239,68,68,0.25);"
+                                                    title="Видалити зі списку">
                                                 🗑️
                                             </button>
                                         </form>
@@ -484,18 +622,27 @@
 
                 <!-- Пагінація -->
                 {% if page_obj.has_other_pages %}
-                <div style="padding:16px 20px;border-top:1px solid var(--color-border);display:flex;justify-content:center;gap:6px;align-items:center;">
-                    {% if page_obj.has_previous %}
-                    <a href="?page={{ page_obj.previous_page_number }}{% if selected_class %}&class_group={{ selected_class.id }}{% endif %}{% if search_query %}&search={{ search_query }}{% endif %}" class="btn btn-secondary btn-sm">← Попередня</a>
-                    {% endif %}
+                <div class="pagination-wrap">
+                    <div style="font-size:12.5px;color:var(--color-text-muted);">
+                        Сторінка <strong>{{ page_obj.number }}</strong> з <strong>{{ page_obj.paginator.num_pages }}</strong> (всього {{ page_obj.paginator.count }} учнів)
+                    </div>
+                    <div class="pagination-pages">
+                        {% if page_obj.has_previous %}
+                        <a href="?page={{ page_obj.previous_page_number }}{% if selected_class %}&class_group={{ selected_class.id }}{% endif %}{% if search_query %}&search={{ search_query }}{% endif %}" class="page-btn page-btn-nav">← Попередня</a>
+                        {% endif %}
 
-                    <span style="font-size:13px;color:var(--color-text-secondary);padding:0 10px;">
-                        Сторінка {{ page_obj.number }} з {{ page_obj.paginator.num_pages }}
-                    </span>
+                        {% for p in page_obj.paginator.page_range %}
+                            {% if p == page_obj.number %}
+                            <span class="page-btn active">{{ p }}</span>
+                            {% elif p > page_obj.number|add:"-3" and p < page_obj.number|add:"3" %}
+                            <a href="?page={{ p }}{% if selected_class %}&class_group={{ selected_class.id }}{% endif %}{% if search_query %}&search={{ search_query }}{% endif %}" class="page-btn">{{ p }}</a>
+                            {% endif %}
+                        {% endfor %}
 
-                    {% if page_obj.has_next %}
-                    <a href="?page={{ page_obj.next_page_number }}{% if selected_class %}&class_group={{ selected_class.id }}{% endif %}{% if search_query %}&search={{ search_query }}{% endif %}" class="btn btn-secondary btn-sm">Наступна →</a>
-                    {% endif %}
+                        {% if page_obj.has_next %}
+                        <a href="?page={{ page_obj.next_page_number }}{% if selected_class %}&class_group={{ selected_class.id }}{% endif %}{% if search_query %}&search={{ search_query }}{% endif %}" class="page-btn page-btn-nav">Наступна →</a>
+                        {% endif %}
+                    </div>
                 </div>
                 {% endif %}
 
@@ -515,6 +662,245 @@
                 </div>
                 {% endif %}
 
+            </div>
+            {% elif current_tab == 'lessons' %}
+            <!-- ── Вкладка: Проведені теми уроків по класах ───────────────────── -->
+            <div class="students-stats-grid">
+                <div class="stat-box">
+                    <div class="stat-icon">📚</div>
+                    <div>
+                        <div class="stat-value">{{ total_conducted_lessons_count }}</div>
+                        <div class="stat-label">Всього проведених уроків</div>
+                    </div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-icon">✅</div>
+                    <div>
+                        <div class="stat-value">{{ published_conducted_lessons_count }}</div>
+                        <div class="stat-label">Активних (опублікованих)</div>
+                    </div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-icon">📦</div>
+                    <div>
+                        <div class="stat-value">{{ archived_conducted_lessons_count }}</div>
+                        <div class="stat-label">Заархівованих уроків</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── Панель фільтрації та пошуку проведених уроків ────────────────── -->
+            <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:18px 20px;margin-bottom:20px;box-shadow:0 2px 10px rgba(0,0,0,0.03);">
+                
+                <!-- Таби вибору класу -->
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
+                    <div style="font-size:13px;font-weight:800;text-transform:uppercase;color:var(--color-text-secondary);letter-spacing:0.04em;">
+                        🏫 Фільтр по класах:
+                    </div>
+                    {% if selected_class %}
+                    <div style="display:flex;gap:8px;">
+                        <a href="{% url 'gradebook' %}?class_group={{ selected_class.id }}" class="btn btn-secondary btn-sm" style="font-size:12px;">
+                            📊 Журнал класу {{ selected_class.name }}
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <div class="class-tabs-scroll">
+                    <a href="{% url 'teacher_students' %}?tab=lessons{% if lesson_status_filter %}&status={{ lesson_status_filter }}{% endif %}{% if search_query %}&search={{ search_query }}{% endif %}"
+                       class="class-tab-pill {% if not selected_class %}active{% endif %}">
+                        <span>Усі класи</span>
+                        <span class="class-tab-badge">{{ total_conducted_lessons_count }}</span>
+                    </a>
+                    {% for cg in class_groups %}
+                    <a href="{% url 'teacher_students' %}?tab=lessons&class_group={{ cg.id }}{% if lesson_status_filter %}&status={{ lesson_status_filter }}{% endif %}{% if search_query %}&search={{ search_query }}{% endif %}"
+                       class="class-tab-pill {% if cg.is_selected %}active{% endif %}">
+                        <span>{{ cg.name }}</span>
+                        <span class="class-tab-badge">{{ cg.conducted_lessons_count }}</span>
+                    </a>
+                    {% endfor %}
+                </div>
+
+                <!-- Рядок пошуку та фільтрації статусу -->
+                <form method="GET" style="display:flex;gap:10px;align-items:center;margin-top:10px;flex-wrap:wrap;">
+                    <input type="hidden" name="tab" value="lessons">
+                    {% if selected_class %}
+                    <input type="hidden" name="class_group" value="{{ selected_class.id }}">
+                    {% endif %}
+                    
+                    <div style="min-width:170px;">
+                        <select name="status" class="form-input" style="font-size:13px;padding:7px 10px;" onchange="this.form.submit()">
+                            <option value="">Всі статуси (активні й архів)</option>
+                            <option value="published" {% if lesson_status_filter == 'published' %}selected{% endif %}>✅ Тільки опубліковані</option>
+                            <option value="archived" {% if lesson_status_filter == 'archived' %}selected{% endif %}>📦 Тільки заархівовані</option>
+                        </select>
+                    </div>
+
+                    <div style="position:relative;flex:1;min-width:200px;">
+                        <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--color-text-muted);">🔍</span>
+                        <input type="text"
+                               name="search"
+                               value="{{ search_query }}"
+                               placeholder="Пошук за темою уроку, предметом або класом..."
+                               class="form-input"
+                               style="padding-left:36px;font-size:13.5px;width:100%;">
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-sm" style="font-weight:700;padding:8px 16px;">
+                        Знайти
+                    </button>
+                    {% if search_query or lesson_status_filter or selected_class %}
+                    <a href="{% url 'teacher_students' %}?tab=lessons" class="btn btn-secondary btn-sm">
+                        ✕ Скинути фільтри
+                    </a>
+                    {% endif %}
+                </form>
+            </div>
+
+            <!-- ── Таблиця проведених уроків ─────────────────────────────────────── -->
+            <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);box-shadow:0 2px 10px rgba(0,0,0,0.03);overflow:hidden;margin-bottom:24px;">
+                <div style="padding:16px 20px;border-bottom:1px solid var(--color-border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+                    <div>
+                        <h2 style="font-size:1.1rem;font-weight:800;margin:0;color:var(--color-text-primary);">
+                            📖 Журнал проведених тем уроків
+                            {% if selected_class %}<span style="color:var(--color-primary);">({{ selected_class.name }})</span>{% endif %}
+                        </h2>
+                        <div style="font-size:12.5px;color:var(--color-text-muted);margin-top:2px;">
+                            Показано {{ lessons_page_obj.start_index|default:0 }}–{{ lessons_page_obj.end_index|default:0 }} з {{ lessons_page_obj.paginator.count }} (по 20 на сторінці)
+                        </div>
+                    </div>
+                    <div style="display:flex;gap:8px;">
+                        <a href="{% url 'assignment_create' %}" class="btn btn-primary btn-sm" style="font-weight:700;">
+                            ➕ Створити новий урок
+                        </a>
+                    </div>
+                </div>
+
+                {% if lessons_page_obj %}
+                <div class="table-responsive">
+                    <table class="student-table" style="width:100%;">
+                        <thead>
+                            <tr>
+                                <th style="width:115px;min-width:115px;">📅 Дата</th>
+                                <th style="width:85px;min-width:85px;text-align:center;">🏫 Клас</th>
+                                <th style="width:135px;min-width:120px;max-width:160px;">📖 Предмет</th>
+                                <th style="min-width:280px;">📝 Тема уроку</th>
+                                <th style="width:110px;min-width:100px;text-align:center;">📌 Статус</th>
+                                <th style="width:90px;min-width:85px;text-align:center;">📥 Здано</th>
+                                <th style="width:105px;min-width:100px;text-align:right;">⚡ Дії</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in lessons_page_obj %}
+                            <tr>
+                                <td style="white-space:nowrap;">
+                                    <div style="font-weight:700;color:var(--color-text-primary);font-size:13px;line-height:1.2;">{{ item.date_str }}</div>
+                                    <div style="font-size:11.5px;color:var(--color-primary);font-weight:600;margin-top:2px;">
+                                        {{ item.day_name }}{% if item.time_str %} · {{ item.time_str }}{% endif %}
+                                    </div>
+                                </td>
+                                <td style="text-align:center;white-space:nowrap;">
+                                    {% if item.classes %}
+                                        {% for c in item.classes %}
+                                        <a href="{% url 'teacher_students' %}?tab=lessons&class_group={{ c.id }}" class="class-badge-pill" style="text-decoration:none;margin:1px;">{{ c.name }}</a>
+                                        {% endfor %}
+                                    {% else %}
+                                        <span style="font-size:11.5px;color:var(--color-text-muted);font-weight:600;">{{ item.classes_str }}</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <span style="font-weight:600;color:var(--color-text-secondary);font-size:12.5px;display:inline-block;max-width:145px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ item.subject_name }}">
+                                        {{ item.subject_name }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <a href="{% url 'assignment_detail' item.id %}" class="lesson-topic-link" title="Переглянути тему уроку">
+                                        {{ item.title }}
+                                    </a>
+                                </td>
+                                <td style="text-align:center;white-space:nowrap;">
+                                    {% if item.is_archived %}
+                                    <span class="status-badge status-archived" style="font-size:11px;padding:3px 8px;">📦 Архів</span>
+                                    {% else %}
+                                    <span class="status-badge status-published" style="font-size:11px;padding:3px 8px;">✅ Опубліковано</span>
+                                    {% endif %}
+                                </td>
+                                <td style="text-align:center;white-space:nowrap;">
+                                    <a href="{% url 'assignment_submissions' item.id %}" class="btn btn-secondary btn-xs" style="font-weight:700;text-decoration:none;padding:3px 8px;border-radius:12px;display:inline-flex;align-items:center;gap:3px;font-size:12px;" title="Переглянути здані роботи учнів">
+                                        📥 {{ item.submissions_count }}
+                                    </a>
+                                </td>
+                                <td style="text-align:right;white-space:nowrap;">
+                                    <div style="display:inline-flex;gap:4px;align-items:center;">
+                                        <a href="{% url 'assignment_detail' item.id %}" class="btn btn-secondary btn-xs" title="Переглянути урок" style="padding:4px 7px;font-size:12px;">👁️</a>
+                                        <a href="{% url 'assignment_edit' item.id %}" class="btn btn-secondary btn-xs" title="Редагувати урок" style="padding:4px 7px;font-size:12px;">✏️</a>
+                                        {% if item.is_archived %}
+                                        <form method="post" action="{% url 'assignment_unarchive' item.id %}" style="display:inline;" onsubmit="return confirm('Розархівувати цей урок?');">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                            <button type="submit" class="btn btn-secondary btn-xs" title="Розархівувати" style="padding:4px 7px;font-size:12px;">🔄</button>
+                                        </form>
+                                        {% else %}
+                                        <form method="post" action="{% url 'assignment_archive' item.id %}" style="display:inline;" onsubmit="return confirm('Перемістити цей урок в архів?');">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                            <button type="submit" class="btn btn-secondary btn-xs" title="В архів" style="padding:4px 7px;font-size:12px;">📦</button>
+                                        </form>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Пагінація уроків -->
+                {% if lessons_page_obj.has_other_pages %}
+                <div class="pagination-wrap">
+                    <div style="font-size:12.5px;color:var(--color-text-muted);">
+                        Сторінка <strong>{{ lessons_page_obj.number }}</strong> з <strong>{{ lessons_page_obj.paginator.num_pages }}</strong> (всього {{ lessons_page_obj.paginator.count }} уроків)
+                    </div>
+                    <div class="pagination-pages">
+                        {% if lessons_page_obj.has_previous %}
+                        <a href="?tab=lessons&page={{ lessons_page_obj.previous_page_number }}{% if selected_class %}&class_group={{ selected_class.id }}{% endif %}{% if lesson_status_filter %}&status={{ lesson_status_filter }}{% endif %}{% if search_query %}&search={{ search_query }}{% endif %}" class="page-btn page-btn-nav">← Попередня</a>
+                        {% endif %}
+
+                        {% for p in lessons_page_obj.paginator.page_range %}
+                            {% if p == lessons_page_obj.number %}
+                            <span class="page-btn active">{{ p }}</span>
+                            {% elif p > lessons_page_obj.number|add:"-3" and p < lessons_page_obj.number|add:"3" %}
+                            <a href="?tab=lessons&page={{ p }}{% if selected_class %}&class_group={{ selected_class.id }}{% endif %}{% if lesson_status_filter %}&status={{ lesson_status_filter }}{% endif %}{% if search_query %}&search={{ search_query }}{% endif %}" class="page-btn">{{ p }}</a>
+                            {% endif %}
+                        {% endfor %}
+
+                        {% if lessons_page_obj.has_next %}
+                        <a href="?tab=lessons&page={{ lessons_page_obj.next_page_number }}{% if selected_class %}&class_group={{ selected_class.id }}{% endif %}{% if lesson_status_filter %}&status={{ lesson_status_filter }}{% endif %}{% if search_query %}&search={{ search_query }}{% endif %}" class="page-btn page-btn-nav">Наступна →</a>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+
+                {% else %}
+                <div style="padding:50px 20px;text-align:center;">
+                    <div style="font-size:42px;margin-bottom:12px;">📚</div>
+                    <h3 style="font-size:1.15rem;font-weight:700;margin:0 0 6px;color:var(--color-text-primary);">
+                        {% if search_query %}Уроків за запитом «{{ search_query }}» не знайдено{% elif selected_class %}У класі «{{ selected_class.name }}» ще немає проведених уроків{% else %}Проведених уроків ще немає{% endif %}
+                    </h3>
+                    <p style="font-size:13px;color:var(--color-text-muted);max-width:420px;margin:0 auto 16px;">
+                        {% if search_query or lesson_status_filter or selected_class %}
+                        Спробуйте скинути фільтри або обрати інший клас для перегляду проведених тем.
+                        {% else %}
+                        Створіть свій перший урок та опублікуйте його для учнів — він автоматично з'явиться в цьому журналі.
+                        {% endif %}
+                    </p>
+                    <div style="display:flex;gap:8px;justify-content:center;">
+                        {% if search_query or lesson_status_filter or selected_class %}
+                        <a href="{% url 'teacher_students' %}?tab=lessons" class="btn btn-secondary btn-sm">✕ Скинути фільтри</a>
+                        {% endif %}
+                        <a href="{% url 'assignment_create' %}" class="btn btn-primary btn-sm">➕ Створити новий урок</a>
+                    </div>
+                </div>
+                {% endif %}
             </div>
             {% else %}
             <!-- ── Вкладка: Мій тижневий розклад уроків ──────────────────────── -->
@@ -885,6 +1271,55 @@
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<!-- МОДАЛЬНЕ ВІКНО: ОБ'ЄДНАННЯ ДУБЛІКАТІВ УЧНІВ                                  -->
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="merge-student-modal" class="custom-modal-backdrop" onclick="if(event.target===this)closeModal('merge-student-modal');">
+    <div class="custom-modal-box" style="max-width:560px;">
+        <div class="custom-modal-header">
+            <h3 class="custom-modal-title">🔀 Об'єднати дублікати профілів учня</h3>
+            <button type="button" class="custom-modal-close" onclick="closeModal('merge-student-modal')">✕</button>
+        </div>
+        <div class="custom-modal-body">
+            <form id="merge-student-form" method="POST" action="{% url 'teacher_student_merge' %}">
+                {% csrf_token %}
+                <div style="font-size:12.5px;color:var(--color-text-secondary);margin-bottom:14px;line-height:1.45;">
+                    Якщо учень здав роботи з помилкою у ПІБ або створилося 2 профілі через різні записи, ви можете об'єднати їх в один. Всі здані роботи, оцінки та коментарі дубліката буде приєднано до основного профілю, а дублікат видалено. Дія фіксується в журналі дій.
+                </div>
+
+                <div class="form-group" style="margin-bottom:14px;">
+                    <label class="form-label" style="font-weight:700;font-size:13px;">1. Профіль-дублікат (буде видалено, а роботи перенесено) <span style="color:var(--color-danger)">*</span></label>
+                    <select id="merge_source_student_id" name="source_student_id" class="form-input" required>
+                        <option value="">-- Оберіть помилковий профіль / дублікат --</option>
+                        {% for st in students_list %}
+                        <option value="{{ st.id }}">{{ st.get_full_name }} ({{ st.class_group.name }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="form-group" style="margin-bottom:14px;">
+                    <label class="form-label" style="font-weight:700;font-size:13px;">2. Основний правильний профіль (залишиться в базі) <span style="color:var(--color-success)">*</span></label>
+                    <select id="merge_target_student_id" name="target_student_id" class="form-input" required>
+                        <option value="">-- Оберіть основний профіль учня --</option>
+                        {% for st in students_list %}
+                        <option value="{{ st.id }}">{{ st.get_full_name }} ({{ st.class_group.name }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div style="margin-bottom:16px;background:rgba(245,158,11,0.08);padding:10px 12px;border-radius:var(--radius-md);border:1px solid rgba(245,158,11,0.3);font-size:12px;color:var(--color-warning);">
+                    ⚠️ Усі здані роботи та оцінки першого профілю перейдуть до другого. Відновити видалений дублікат окремо буде неможливо.
+                </div>
+
+                <div style="display:flex;justify-content:flex-end;gap:8px;">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('merge-student-modal')">Скасувати</button>
+                    <button type="submit" class="btn btn-primary" style="font-weight:700;">🔀 Об'єднати профілі</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
 <!-- МОДАЛЬНЕ ВІКНО 3: ІМПОРТ СПИСКУ УЧНІВ ТА КЛАСІВ                              -->
 <!-- ═══════════════════════════════════════════════════════════════════════════ -->
 <div id="import-modal" class="custom-modal-backdrop" onclick="if(event.target===this)closeModal('import-modal');">
@@ -1027,11 +1462,20 @@ function openEditStudentModal(id, lastName, firstName, classId, notes) {
     openModal('edit-student-modal');
 }
 
+function openMergeStudentsModal(sourceId) {
+    var sourceSelect = document.getElementById('merge_source_student_id');
+    if (sourceSelect && sourceId) {
+        sourceSelect.value = sourceId;
+    }
+    openModal('merge-student-modal');
+}
+
 // Закриття модалок по Escape
 document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') {
         closeModal('add-student-modal');
         closeModal('edit-student-modal');
+        closeModal('merge-student-modal');
         closeModal('import-modal');
     }
 });

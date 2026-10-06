@@ -366,13 +366,14 @@
                             </div>
 
                             <div style="display:flex;align-items:center;gap:6px;">
-                                <button type="button" class="btn btn-secondary btn-sm" onclick="zoomActiveImage(1.2)" title="Збільшити фото (+)" style="font-size:12px;padding:4px 9px;background:rgba(255,255,255,0.1);color:#fff;border-color:rgba(255,255,255,0.2);">
-                                    🔍 +
-                                </button>
                                 <button type="button" class="btn btn-secondary btn-sm" onclick="zoomActiveImage(0.8)" title="Зменшити фото (-)" style="font-size:12px;padding:4px 9px;background:rgba(255,255,255,0.1);color:#fff;border-color:rgba(255,255,255,0.2);">
                                     🔍 -
                                 </button>
-                                <button type="button" class="btn btn-secondary btn-sm" onclick="resetActiveImageTransform()" title="Скинути масштаб і поворот" style="font-size:12px;padding:4px 9px;background:rgba(255,255,255,0.1);color:#fff;border-color:rgba(255,255,255,0.2);">
+                                <span id="active-image-zoom-badge" style="font-size:12px;font-weight:700;color:#cbd5e1;min-width:44px;text-align:center;">100%</span>
+                                <button type="button" class="btn btn-secondary btn-sm" onclick="zoomActiveImage(1.25)" title="Збільшити фото (+)" style="font-size:12px;padding:4px 9px;background:rgba(255,255,255,0.1);color:#fff;border-color:rgba(255,255,255,0.2);">
+                                    🔍 +
+                                </button>
+                                <button type="button" class="btn btn-secondary btn-sm" onclick="resetActiveImageTransform()" title="Скинути масштаб і поворот (100%)" style="font-size:12px;padding:4px 9px;background:rgba(255,255,255,0.1);color:#fff;border-color:rgba(255,255,255,0.2);">
                                     1:1
                                 </button>
                                 <button type="button" class="btn btn-secondary btn-sm" onclick="rotateActiveImage()" title="Повернути на 90° за годинниковою стрілкою (Клавіша R)" style="font-size:12px;padding:4px 10px;background:rgba(99,102,241,0.25);color:#a5b4fc;border-color:rgba(99,102,241,0.4);font-weight:700;">
@@ -620,6 +621,7 @@
     </div>
 
     {% include 'feed/components/material_preview_dialog.html' %}
+    {% include 'feed/components/viewer_coauthors_modal.html' %}
 
 </div>
 {% endblock %}
@@ -1101,10 +1103,6 @@ function runSingleAICheck(subId) {
                 '</div>';
             }
 
-            if (!data.ai_generated_detected) {
-                aiDetectionBanner = '<div class="ai-origin-details" style="margin-bottom:8px;padding:8px 10px;background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:6px;"><strong>🤖 Походження роботи не встановлено</strong><p>' +
-                    (data.ai_generated_details || 'Виразних ознак ШІ не знайдено. Це не підтверджує самостійність роботи.').replace(/\n/g, '<br>') + '</p></div>';
-            }
             var lastGrs = document.getElementById('viewer-last-grs');
             if (lastGrs && data.gr_results) {
                 lastGrs.hidden = !data.gr_results.length;
@@ -1199,7 +1197,7 @@ var currentImageZoom = 1;
 function zoomActiveImage(factor) {
     var img = document.getElementById('active-viewer-img');
     if (!img) return;
-    currentImageZoom = Math.min(Math.max(currentImageZoom * factor, 0.3), 5);
+    currentImageZoom = Math.min(Math.max(currentImageZoom * factor, 0.15), 10.0);
     applyActiveImageTransform();
 }
 
@@ -1231,7 +1229,23 @@ function applyActiveImageTransform() {
     var img = document.getElementById('active-viewer-img');
     if (!img) return;
     img.style.transform = 'rotate(' + currentImageRotation + 'deg) scale(' + currentImageZoom + ')';
+    var badge = document.getElementById('active-image-zoom-badge');
+    if (badge) {
+        badge.textContent = Math.round(currentImageZoom * 100) + '%';
+    }
 }
+
+document.addEventListener('DOMContentLoaded', function() {
+    var imgBox = document.getElementById('single-image-view-box');
+    if (imgBox) {
+        imgBox.addEventListener('wheel', function(e) {
+            if (e.ctrlKey || e.metaKey) {
+                e.preventDefault();
+                zoomActiveImage(e.deltaY < 0 ? 1.15 : 0.85);
+            }
+        }, { passive: false });
+    }
+});
 
 function toggleMultiImageGalleryMode() {
     var singleBox = document.getElementById('single-image-view-box');
@@ -1399,6 +1413,16 @@ function toggleViewerIgnorePlagiarism(isChecked) {
         cbs.forEach(function(cb) { cb.disabled = false; cb.checked = !isChecked; });
         alert('Помилка зв\'язку із сервером');
     });
+}
+
+function openCoauthorsModal() {
+    var m = document.getElementById('coauthors-modal');
+    if (m) m.style.display = 'flex';
+}
+
+function closeCoauthorsModal() {
+    var m = document.getElementById('coauthors-modal');
+    if (m) m.style.display = 'none';
 }
 </script>
 {% endblock %}

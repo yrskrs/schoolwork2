@@ -185,17 +185,15 @@
                             var task = ls[kind + '_lesson_task'];
                             if (!task) return;
                             var row = document.createElement('div');
-                            row.style.cssText = 'display:flex;flex-direction:column;gap:3px;';
-                            var caption = document.createElement('span');
-                            caption.style.cssText = 'font-size:11px;color:var(--color-text-secondary);';
-                            caption.textContent = (kind === 'current' ? 'Поточний урок' : 'Наступний урок') + ' · ' + task.lesson_date;
+                            row.style.cssText = 'display:inline-flex;align-items:center;gap:5px;flex-shrink:0;';
                             var link = document.createElement('a');
                             link.className = 'btn btn-secondary btn-sm';
-                            link.style.cssText = 'font-size:12px;font-weight:700;white-space:normal;';
+                            link.style.cssText = 'font-size:11.5px;font-weight:700;white-space:nowrap;padding:4px 9px;display:inline-flex;align-items:center;gap:4px;text-decoration:none;';
                             link.href = task.url;
-                            link.textContent = task.label;
-                            link.title = task.has_task ? 'Переглянути опубліковане завдання' : 'Створити завдання для цього уроку';
-                            row.append(caption, link);
+                            var capPrefix = kind === 'current' ? 'Поточний: ' : 'Наступний: ';
+                            link.innerHTML = '<span style="opacity:0.75;font-weight:600;font-size:10.5px;">' + capPrefix + '</span><span>' + task.label + '</span>';
+                            link.title = (task.has_task ? 'Переглянути опубліковане завдання' : 'Створити завдання для цього уроку') + ' (' + (kind === 'current' ? 'Поточний урок' : 'Наступний урок') + ' · ' + task.lesson_date + ')';
+                            row.append(link);
                             taskActions.append(row);
                         });
                     }

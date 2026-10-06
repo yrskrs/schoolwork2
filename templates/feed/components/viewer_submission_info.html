@@ -71,6 +71,12 @@
                         </div>
                         {% endif %}
 
+                        <div style="margin-top:4px;">
+                            <button type="button" class="btn btn-secondary btn-sm" onclick="openCoauthorsModal()" style="width:100%;font-size:11.5px;font-weight:700;padding:5px 8px;display:flex;align-items:center;justify-content:center;gap:6px;">
+                                👥 {% if submission.is_collective_work %}Редагувати учасників групи{% else %}Вписати учнів (колективна робота){% endif %}
+                            </button>
+                        </div>
+
                         <!-- Статус спроби здачі (якщо це повторна здача або є історія) -->
                         {% if submission.is_resubmission or submission.resubmission_attempt > 1 %}
                         <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:2px;">

@@ -18,8 +18,8 @@
     }
     async function runTest(config, button, result) {
         if (button && button.disabled) return;
-        if (!config.connection_id && ((config.provider !== 'custom' && !config.api_key) || (config.provider === 'custom' && !config.custom_url))) {
-            status(result, '⚠️ Налаштуйте ключ або Base URL для ' + config.provider.toUpperCase() + ' у «Підключення».', 'error'); return;
+        if (!config.connection_id && ((config.provider !== 'custom' && config.provider !== 'cloudflare' && !config.api_key) || ((config.provider === 'custom' || config.provider === 'cloudflare') && !config.custom_url))) {
+            status(result, '⚠️ Налаштуйте ключ або Account ID / Base URL для ' + config.provider.toUpperCase() + ' у «Підключення».', 'error'); return;
         }
         const original = button ? button.textContent : '';
         if (button) {button.disabled = true; button.textContent = '⏳ Тестування…'; button.setAttribute('aria-busy', 'true');}
@@ -43,11 +43,89 @@
         }
         runTest({connection_id: candidates[0].id, provider: provider, model_name: name}, button, result);
     };
+    window.filterCatalogByProvider = function (providerName) {
+        const sections = document.querySelectorAll('[data-catalog-provider]');
+        sections.forEach(group => {
+            if (!providerName || providerName === 'all') {
+                group.hidden = false;
+            } else {
+                group.hidden = group.dataset.catalogProvider !== providerName;
+            }
+        });
+        const buttons = document.querySelectorAll('.ai-catalog-tab-btn');
+        buttons.forEach(btn => {
+            if (btn.dataset.catalogTab === (providerName || 'all')) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        });
+    };
+
+    window.quickCreateConnectionFor = function (providerName, modelName) {
+        if (window.SchoolNetAISettings) {
+            window.SchoolNetAISettings.select('connection');
+        }
+        const supplier = document.getElementById('connection-provider-new');
+        if (supplier) {
+            const details = supplier.closest('details');
+            if (details) details.open = true;
+            if (providerName) {
+                supplier.value = providerName;
+                supplier.dispatchEvent(new Event('change', {bubbles: true}));
+            }
+        }
+        if (modelName) {
+            const modelInput = document.getElementById('connection-model-new');
+            if (modelInput) modelInput.value = modelName;
+        }
+        const labelInput = document.getElementById('connection-label-new');
+        if (labelInput && !labelInput.value && providerName) {
+            const titles = {
+                cloudflare: 'Cloudflare Workers AI',
+                gemini: 'Google Gemini',
+                openai: 'OpenAI API',
+                groq: 'Groq Cloud',
+                deepseek: 'DeepSeek API',
+                openrouter: 'OpenRouter',
+                custom: 'Власний сервер API'
+            };
+            labelInput.value = titles[providerName] || providerName.toUpperCase();
+        }
+        const keyInput = document.getElementById('connection-key-new');
+        const urlInput = document.getElementById('connection-url-new');
+        if (providerName === 'cloudflare' && urlInput && !urlInput.closest('[hidden]')) {
+            urlInput.scrollIntoView({behavior: 'smooth', block: 'center'});
+            urlInput.focus();
+        } else if (keyInput) {
+            keyInput.scrollIntoView({behavior: 'smooth', block: 'center'});
+            keyInput.focus();
+        }
+    };
+
     document.addEventListener('DOMContentLoaded', function () {
         const newProvider = document.getElementById('connection-provider-new');
         if (newProvider) {
             const url = document.querySelector('[data-new-connection-url]');
-            const toggleUrl = () => {url.hidden = newProvider.value !== 'custom';};
+            const toggleUrl = () => {
+                const isCustomOrCf = newProvider.value === 'custom' || newProvider.value === 'cloudflare';
+                url.hidden = !isCustomOrCf;
+                const urlLabel = url.querySelector('label');
+                const urlInput = url.querySelector('input');
+                if (newProvider.value === 'cloudflare') {
+                    if (urlLabel) urlLabel.textContent = 'Cloudflare Account ID або Base URL';
+                    if (urlInput) {
+                        urlInput.placeholder = 'наприклад: 01a23b45c678... або повний URL';
+                        urlInput.required = false;
+                    }
+                } else if (newProvider.value === 'custom') {
+                    if (urlLabel) urlLabel.textContent = 'Base URL власного API';
+                    if (urlInput) {
+                        urlInput.placeholder = 'http://localhost:11434/v1';
+                        urlInput.required = true;
+                    }
+                }
+            };
             newProvider.addEventListener('change', toggleUrl); toggleUrl();
         }
         const provider = document.getElementById('new_model_connection');
@@ -58,12 +136,19 @@
                 const selected = provider.options[provider.selectedIndex];
                 const providerName = selected ? selected.dataset.provider : '';
                 if (clear) document.getElementById('new_model_name').value = '';
-                document.querySelectorAll('[data-catalog-provider]').forEach(group => {group.hidden = group.dataset.catalogProvider !== providerName;});
-                const suggestions = document.getElementById('ai-model-suggestions'); suggestions.replaceChildren();
-                const group = catalog.find(group => group.provider === providerName);
-                (group ? group.models : []).forEach(model => {const option = document.createElement('option'); option.value = model.name; suggestions.append(option);});
+                const suggestions = document.getElementById('ai-model-suggestions');
+                if (suggestions) {
+                    suggestions.replaceChildren();
+                    const group = catalog.find(g => g.provider === providerName);
+                    (group ? group.models : []).forEach(model => {
+                        const option = document.createElement('option');
+                        option.value = model.name;
+                        suggestions.append(option);
+                    });
+                }
             }
-            provider.addEventListener('change', () => selectProvider(true)); selectProvider(false);
+            provider.addEventListener('change', () => selectProvider(true));
+            selectProvider(false);
         }
         const panels = Array.from(document.querySelectorAll('[data-stats-panel]'));
         const tabs = Array.from(document.querySelectorAll('[data-stats-tab]'));

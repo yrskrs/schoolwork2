@@ -14,6 +14,9 @@ from feed.student_matcher import auto_bind_coauthors_from_comment
 
 class AIThinkingAndErrorLogTestCase(TestCase):
     def setUp(self):
+        from django.core.cache import caches
+        caches['default'].clear()
+        caches['ai_materials'].clear()
         self.user = User.objects.create_superuser(username='teacher1', email='t1@test.com', password='password123')
         self.school = School.objects.create(name='Тестова Школа', admin=self.user)
         self.teacher = Teacher.objects.create(user=self.user, full_name='Вчитель Тестовий')

@@ -2,7 +2,7 @@
 <div class="live-lesson-widget" id="live-lesson-widget" style="margin-bottom: 20px;">
     {% if live_lesson_status.has_schedule %}
         <div class="live-lesson-card status-{{ live_lesson_status.status_type }}" 
-             style="background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: 14px 18px; box-shadow: 0 2px 10px rgba(0,0,0,0.03); display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; position: relative; overflow: hidden;">
+             style="background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 10px 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.04); display: flex; align-items: center; justify-content: space-between; gap: 12px; position: relative; overflow: hidden; min-height: 56px;">
             
             <!-- Ліва кольорова смужка статусу -->
             <div style="position: absolute; left: 0; top: 0; bottom: 0; width: 4px; 
@@ -12,9 +12,9 @@
                 {% else %}background: var(--color-primary);{% endif %}">
             </div>
 
-            <div style="display: flex; align-items: center; gap: 14px; padding-left: 6px;">
-                <!-- Іконка статусу з пульсацією -->
-                <div class="status-icon-bubble" style="width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0;
+            <div style="display: flex; align-items: center; gap: 12px; padding-left: 4px; min-width: 0; flex: 1 1 auto;">
+                <!-- Іконка статусу -->
+                <div class="status-icon-bubble" style="width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0;
                     {% if live_lesson_status.status_type == 'in_lesson' %}background: rgba(16, 185, 129, 0.15); color:var(--color-success);
                     {% elif live_lesson_status.status_type == 'in_break' %}background: rgba(245, 158, 11, 0.15); color:var(--color-warning);
                     {% elif live_lesson_status.status_type == 'before_school' %}background: rgba(59, 130, 246, 0.15); color:var(--color-info);
@@ -25,9 +25,9 @@
                     {% else %}📅{% endif %}
                 </div>
 
-                <div>
-                    <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-                        <span class="badge" style="font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 12px;
+                <div style="min-width: 0; flex: 1 1 auto;">
+                    <div style="display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; overflow: hidden;">
+                        <span class="badge" style="font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 10px; flex-shrink: 0; white-space: nowrap;
                             {% if live_lesson_status.status_type == 'in_lesson' %}background: rgba(16, 185, 129, 0.15); color:var(--color-success); border: 1px solid rgba(16, 185, 129, 0.3);
                             {% elif live_lesson_status.status_type == 'in_break' %}background: rgba(245, 158, 11, 0.15); color:var(--color-warning); border: 1px solid rgba(245, 158, 11, 0.3);
                             {% elif live_lesson_status.status_type == 'before_school' %}background: rgba(59, 130, 246, 0.15); color:var(--color-info); border: 1px solid rgba(59, 130, 246, 0.3);
@@ -35,27 +35,27 @@
                             {{ live_lesson_status.badge_text }}
                         </span>
 
-                        <h3 style="margin: 0; font-size: 14px; font-weight: 800; color: var(--color-text-primary);">
+                        <h3 style="margin: 0; font-size: 13.5px; font-weight: 800; color: var(--color-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="{{ live_lesson_status.title }}">
                             {{ live_lesson_status.title }}
                         </h3>
                     </div>
 
-                    <div style="font-size: 13px; color: var(--color-text-muted); margin-top: 3px; display: flex; align-items: center; gap: 6px;">
+                    <div style="font-size: 12px; color: var(--color-text-muted); margin-top: 2px; display: flex; align-items: center; gap: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
                         <span>⏱️</span>
-                        <span id="live-lesson-time-info">{{ live_lesson_status.time_info }}</span>
+                        <span id="live-lesson-time-info" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ live_lesson_status.time_info }}</span>
                     </div>
 
                     {% if live_lesson_status.status_type == 'in_lesson' or live_lesson_status.status_type == 'in_break' %}
-                    <div style="margin-top: 6px; width: 100%; max-width: 260px; height: 6px; background: rgba(0,0,0,0.08); border-radius: 3px; overflow: hidden; position: relative;">
-                        <div id="live-lesson-progress-fill" class="live-lesson-progress-fill" style="height: 100%; width: {{ live_lesson_status.progress_percent|default:0 }}%; background: {% if live_lesson_status.status_type == 'in_break' %}linear-gradient(90deg, #f59e0b, #fbbf24, #d97706){% else %}linear-gradient(90deg, #10b981, #34d399, #059669){% endif %}; border-radius: 3px; transition: width 0.4s ease; animation: liveBarShimmer 2.5s ease-in-out infinite;"></div>
+                    <div style="margin-top: 4px; width: 100%; max-width: 220px; height: 4px; background: rgba(0,0,0,0.08); border-radius: 2px; overflow: hidden; position: relative;">
+                        <div id="live-lesson-progress-fill" class="live-lesson-progress-fill" style="height: 100%; width: {{ live_lesson_status.progress_percent|default:0 }}%; background: {% if live_lesson_status.status_type == 'in_break' %}linear-gradient(90deg, #f59e0b, #fbbf24, #d97706){% else %}linear-gradient(90deg, #10b981, #34d399, #059669){% endif %}; border-radius: 2px; transition: width 0.4s ease;"></div>
                     </div>
                     {% endif %}
                 </div>
             </div>
 
-            <!-- Кнопки швидкого переходу -->
-            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-                <div class="live-lesson-task-actions" style="display:flex;gap:8px;flex-wrap:wrap;">
+            <!-- Кнопки швидкого переходу (компактні, в один рядок, без роздуття) -->
+            <div style="display: flex; align-items: center; gap: 8px; flex-shrink: 0; white-space: nowrap;">
+                <div class="live-lesson-task-actions" style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
                     {% if live_lesson_status.current_lesson_task %}
                     {% include 'feed/components/live_lesson_task.html' with task=live_lesson_status.current_lesson_task caption='Поточний урок' %}
                     {% endif %}
@@ -68,16 +68,16 @@
                 <button type="button" 
                         onclick="openTodayScheduleModal()" 
                         class="btn btn-secondary btn-sm" 
-                        title="Відкрити детальний розклад дзвінків на сьогодні"
-                        style="font-size: 12px; font-weight: 600; border-radius: var(--radius-sm); white-space: nowrap;">
-                    📅 Сьогодні
+                        title="Детальний розклад дзвінків на сьогодні"
+                        style="font-size: 11.5px; font-weight: 700; border-radius: var(--radius-sm); white-space: nowrap; padding: 4px 8px;">
+                    📅 Розклад
                 </button>
                 {% else %}
                 <a href="{% url 'teacher_students' %}?tab=schedule" 
                    class="btn btn-secondary btn-sm" 
                    title="Переглянути та редагувати розклад уроків"
-                   style="font-size: 12px; font-weight: 600; border-radius: var(--radius-sm); white-space: nowrap;">
-                    📅 Мій розклад
+                   style="font-size: 11.5px; font-weight: 700; border-radius: var(--radius-sm); white-space: nowrap; padding: 4px 8px; text-decoration: none;">
+                    📅 Розклад
                 </a>
                 {% endif %}
             </div>
