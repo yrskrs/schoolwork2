@@ -2118,6 +2118,7 @@ class Submission(models.Model):
     ai_model_used = models.CharField('Використана модель ШІ', max_length=100, blank=True, default='')
     ai_provider_used = models.CharField('Постачальник перевірки ШІ', max_length=50, blank=True, default='')
     ai_request_model = models.CharField('Модель у відповіді API', max_length=200, blank=True, default='')
+    ai_connection_id = models.CharField('ID підключення ШІ', max_length=64, blank=True, default='', db_index=True)
     ai_prompt_tokens = models.PositiveIntegerField('Вхідні токени перевірки', null=True, blank=True)
     ai_completion_tokens = models.PositiveIntegerField('Вихідні токени перевірки', null=True, blank=True)
     ai_total_tokens = models.PositiveIntegerField('Всього токенів перевірки', null=True, blank=True)
@@ -3699,6 +3700,9 @@ class AIErrorLog(models.Model):
     prompt_preview = models.TextField('Фрагмент промта / контексту', blank=True, default='')
     raw_response = models.TextField('Сира відповідь API', blank=True, default='')
     failover_triggered = models.BooleanField('Спрацював Failover', default=False)
+    connection_id = models.CharField('ID підключення', max_length=64, blank=True, default='', db_index=True)
+    is_read = models.BooleanField('Зчитано для аналізу / звіту', default=False, db_index=True)
+    read_at = models.DateTimeField('Час зчитування', null=True, blank=True)
     created_at = models.DateTimeField('Час помилки', auto_now_add=True, db_index=True)
 
     class Meta:
@@ -3718,6 +3722,7 @@ class AIRequestLog(models.Model):
     """
     model_name = models.CharField('Модель', max_length=100, db_index=True)
     provider = models.CharField('Провайдер', max_length=50, default='gemini', db_index=True)
+    connection_id = models.CharField('ID підключення', max_length=64, blank=True, default='', db_index=True)
     action = models.CharField('Дія', max_length=100, default='evaluation')
     status_code = models.IntegerField('HTTP Статус', default=200)
     is_success = models.BooleanField('Успішний запит', default=True)
@@ -3735,6 +3740,38 @@ class AIRequestLog(models.Model):
 
     def __str__(self):
         return f"{self.model_name} [{self.status_code}] - {self.total_tokens} токенів ({self.created_at.strftime('%d.%m %H:%M:%S')})"
+
+
+class AIErrorReport(models.Model):
+    """
+    Згенерований звіт аналізу помилок ШІ для передачі ШІ-розробнику або діагностики.
+    Містить вердикт (чи потрібне виправлення в коді, чи це проблема на стороні сервера/провайдера)
+    та детальний структурований звіт для іншого ШІ чи програміста.
+    """
+    created_at = models.DateTimeField('Час створення', auto_now_add=True, db_index=True)
+    created_by = models.ForeignKey(
+        'Teacher',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='ai_error_reports',
+        verbose_name='Вчитель / Адміністратор'
+    )
+    errors_count = models.IntegerField('Кількість проаналізованих помилок', default=0)
+    unread_count_before = models.IntegerField('Було незчитаних', default=0)
+    verdict = models.CharField('Вердикт', max_length=50, default='external_issue')  # 'needs_fix' | 'external_issue' | 'no_errors'
+    verdict_title = models.CharField('Короткий висновок', max_length=255, blank=True, default='')
+    report_text = models.TextField('Текст звіту (Markdown)')
+    model_used = models.CharField('Модель, що сформувала звіт', max_length=100, blank=True, default='')
+    raw_summary = models.TextField('Вхідні дані помилок (JSON)', blank=True, default='')
+
+    class Meta:
+        verbose_name = 'Звіт аналізу помилок ШІ'
+        verbose_name_plural = 'Звіти аналізу помилок ШІ'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Звіт #{self.pk} ({self.created_at.strftime('%d.%m.%Y %H:%M')}) — {self.verdict_title or self.verdict}"
 
 
 

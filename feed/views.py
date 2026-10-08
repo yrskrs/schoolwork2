@@ -7392,6 +7392,22 @@ def teacher_settings_view(request):
             messages.success(request, "Журнал помилок та збоїв ШІ успішно очищено! 🗑️")
             return redirect(ai_settings_url(request))
 
+        elif action == 'generate_ai_error_report':
+            from .ai_error_analyzer import generate_error_report_with_ai
+            report = generate_error_report_with_ai(teacher=teacher)
+            if report.verdict == 'no_errors':
+                messages.info(request, "Помилок ШІ не виявлено — журнал чистий! 🟢")
+            elif report.verdict == 'external_issue':
+                messages.success(request, f"Звіт сформовано ШІ ({report.errors_count} помилок): {report.verdict_title} 🌐")
+            else:
+                messages.warning(request, f"Звіт сформовано ШІ ({report.errors_count} помилок): {report.verdict_title} ⚠️")
+            return redirect(ai_settings_url(request, extra_params={'errors_view': 'analysis'}))
+
+        elif action == 'mark_all_errors_read':
+            count = AIErrorLog.objects.filter(is_read=False).update(is_read=True, read_at=timezone.now())
+            messages.success(request, f"Позначено як зчитані {count} помилок ШІ! ✅")
+            return redirect(ai_settings_url(request))
+
     # Підготовка даних контексту для сторінки налаштувань
     teacher_subjects = teacher.subjects.all().order_by('name')
     teacher_classes = teacher.classes.all().order_by('grade', 'letter', 'name')
@@ -7438,18 +7454,61 @@ def teacher_settings_view(request):
 
     model_stats = []
     for item in models_with_priority:
-        display_name = item['name'] if item['provider'] == 'gemini' else f"{item['name']} ({item['provider'].title()})"
-        checks = Submission.objects.filter(ai_model_used=display_name)
-        in_cd, cd_rem, cd_reason = get_model_cooldown(item['provider'], item['name'])
-        ctx_limit = get_model_context_limit(item['provider'], item['name'])
+        conn_id = item.get('connection_id') or ''
+        provider = item['provider']
+        model_name = item['name']
+        display_name = model_name if provider == 'gemini' else f"{model_name} ({provider.title()})"
+
+        # Рахуємо перевірки конкретного підключення (акаунта)
+        if conn_id:
+            conn_submissions = Submission.objects.filter(ai_connection_id=conn_id)
+            has_conn_subs = conn_submissions.exists()
+            conn_errors = AIErrorLog.objects.filter(connection_id=conn_id)
+            has_conn_errors = conn_errors.exists()
+        else:
+            has_conn_subs = False
+            has_conn_errors = False
+
+        if has_conn_subs or has_conn_errors:
+            success_count = conn_submissions.filter(ai_status='success').count()
+            failed_count = conn_submissions.filter(ai_status='failed').count()
+            total_failed = max(failed_count, conn_errors.count())
+            total_checks = success_count + total_failed
+        else:
+            # Для історичних перевірок (до збереження ai_connection_id):
+            same_siblings = [m for m in models_with_priority if m['provider'] == provider and m['name'] == model_name]
+            is_first_sibling = (not same_siblings or item.get('connection_id') == same_siblings[0].get('connection_id'))
+
+            if is_first_sibling:
+                legacy_checks = Submission.objects.filter(
+                    Q(ai_connection_id__in=['', None]) &
+                    (Q(ai_provider_used=provider) | Q(ai_provider_used='')) &
+                    (Q(ai_model_used=display_name) | Q(ai_model_used=model_name) | Q(ai_request_model=model_name))
+                )
+                legacy_errors = AIErrorLog.objects.filter(
+                    Q(connection_id__in=['', None]) &
+                    Q(provider=provider) &
+                    (Q(model_name=model_name) | Q(model_name=display_name))
+                )
+                success_count = legacy_checks.filter(ai_status='success').count()
+                failed_count = legacy_checks.filter(ai_status='failed').count()
+                total_failed = max(failed_count, legacy_errors.count())
+                total_checks = success_count + total_failed
+            else:
+                success_count = 0
+                total_failed = 0
+                total_checks = 0
+
+        in_cd, cd_rem, cd_reason = get_model_cooldown(provider, model_name)
+        ctx_limit = get_model_context_limit(provider, model_name)
         model_stats.append({
             **item,
             'is_saved': True,
-            'configured': bool(ai_settings.get_provider_config(item['provider'], connection_id=item.get('connection_id'))),
-            'is_active': bool(ai_settings.get_request_configs()) and (item.get('connection_id'), item['name']) == (ai_settings.get_request_configs()[0].get('connection_id'), ai_settings.get_request_configs()[0]['model']),
-            'total_checks': checks.count(),
-            'success_checks': checks.filter(ai_status='success').count(),
-            'failed_checks': checks.filter(ai_status='failed').count(),
+            'configured': bool(ai_settings.get_provider_config(provider, connection_id=conn_id)),
+            'is_active': bool(ai_settings.get_request_configs()) and (conn_id, model_name) == (ai_settings.get_request_configs()[0].get('connection_id'), ai_settings.get_request_configs()[0]['model']),
+            'total_checks': total_checks,
+            'success_checks': success_count,
+            'failed_checks': total_failed,
             'is_in_cooldown': in_cd,
             'cooldown_remaining': cd_rem,
             'cooldown_reason': cd_reason,
@@ -7521,6 +7580,17 @@ def teacher_settings_view(request):
     stats_view = request.GET.get('stats_view', 'usage')
     if stats_view not in ['usage', 'models', 'overview']: stats_view = 'usage'
 
+    errors_view = request.GET.get('errors_view', 'list')
+    if errors_view not in ['list', 'analysis']:
+        errors_view = 'list'
+
+    from .models import AIErrorReport
+    from .ai_error_analyzer import get_error_summary_stats
+    ai_error_reports = list(AIErrorReport.objects.select_related('created_by').order_by('-created_at')[:10])
+    latest_ai_error_report = ai_error_reports[0] if ai_error_reports else None
+    error_summary_stats = get_error_summary_stats()
+    unread_ai_errors_count = AIErrorLog.objects.filter(is_read=False).count()
+
     context = {
         'active_tab': tab,
         'ai_section': ai_settings_section(request),
@@ -7550,6 +7620,11 @@ def teacher_settings_view(request):
         'provider_catalog': PROVIDER_CATALOG,
         'catalog_checked_at': CATALOG_CHECKED_AT,
         'stats_view': stats_view,
+        'errors_view': errors_view,
+        'ai_error_reports': ai_error_reports,
+        'latest_ai_error_report': latest_ai_error_report,
+        'error_summary_stats': error_summary_stats,
+        'unread_ai_errors_count': unread_ai_errors_count,
         'used_model_usage_stats': used_model_usage_stats,
         'ai_usage_chart': ai_usage_chart,
         'stats_days': stats_days_param,

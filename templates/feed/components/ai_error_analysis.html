@@ -1,0 +1,363 @@
+<!-- 3.4. ЖУРНАЛ ТА АНАЛІЗ ПОМИЛОК І ЗБОЇВ ШІ (AI ERROR LOG & ANALYSIS) -->
+<div class="form-card mb-4" id="ai-error-logs-section" style="border-color:{% if total_ai_errors_count %}rgba(239,68,68,0.4){% else %}var(--color-border){% endif %};">
+    
+    <!-- Шапка розділу з перемикачем вкладок -->
+    <div class="form-card-header" style="background:{% if total_ai_errors_count %}rgba(239,68,68,0.06){% else %}var(--color-bg-secondary){% endif %};padding:16px 20px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:12px;">
+            <div>
+                <h2 class="form-card-title" style="display:flex;align-items:center;gap:8px;color:{% if total_ai_errors_count %}var(--color-danger){% else %}var(--color-text-primary){% endif %};font-size:18px;">
+                    <span>⚠️</span>
+                    <span>Журнал помилок та збоїв ШІ</span>
+                    <span class="badge" style="background:{% if total_ai_errors_count %}#ef4444{% else %}#6b7280{% endif %};color:#fff;font-size:12px;font-weight:800;padding:2px 8px;border-radius:12px;" title="Всього помилок">
+                        {{ total_ai_errors_count }}
+                    </span>
+                    {% if unread_ai_errors_count %}
+                    <span class="badge" style="background:#dc2626;color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:12px;" title="Незчитаних помилок для аналізу">
+                        {{ unread_ai_errors_count }} нових
+                    </span>
+                    {% endif %}
+                </h2>
+                <div style="font-size:12px;color:var(--color-text-muted);margin-top:2px;">
+                    Фіксує збої API (HTTP статуси, Rate Limit 429, 503, таймаути, помилки JSON та переходи на резервні моделі).
+                </div>
+            </div>
+
+            <!-- Швидкі дії -->
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                {% if total_ai_errors_count %}
+                <form method="POST" style="margin:0;" onsubmit="return confirm('Ви дійсно бажаєте очистити весь журнал помилок ШІ?');">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="clear_ai_error_logs">
+                    <button type="submit" class="btn btn-secondary btn-sm" style="color:var(--color-danger);font-weight:700;border-color:rgba(239,68,68,0.3);background:var(--color-surface);font-size:12px;padding:5px 12px;">
+                        🗑️ Очистити журнал
+                    </button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Навігація між підвкладками: Список помилок vs Збір і аналіз помилок -->
+        <div style="display:flex;gap:8px;border-bottom:1px solid var(--color-border);padding-bottom:10px;margin-top:8px;">
+            <a href="{% url 'teacher_settings' %}?tab=ai&amp;ai_section=errors&amp;errors_view=list{% if stats_days %}&amp;stats_days={{ stats_days }}{% endif %}" 
+               id="error-tab-list-btn"
+               class="btn btn-sm {% if errors_view != 'analysis' %}btn-primary{% else %}btn-secondary{% endif %}"
+               style="font-size:12.5px;padding:5px 14px;border-radius:var(--radius-md);text-decoration:none;display:inline-flex;align-items:center;gap:6px;">
+                <span>📋 Список помилок</span>
+                <span class="badge" style="background:rgba(255,255,255,0.25);font-size:11px;">{{ total_ai_errors_count }}</span>
+            </a>
+            <a href="{% url 'teacher_settings' %}?tab=ai&amp;ai_section=errors&amp;errors_view=analysis{% if stats_days %}&amp;stats_days={{ stats_days }}{% endif %}" 
+               id="error-tab-analysis-btn"
+               class="btn btn-sm {% if errors_view == 'analysis' %}btn-primary{% else %}btn-secondary{% endif %}"
+               style="font-size:12.5px;padding:5px 14px;border-radius:var(--radius-md);text-decoration:none;display:inline-flex;align-items:center;gap:6px;">
+                <span>🔬 Збір і аналіз помилок</span>
+                {% if unread_ai_errors_count %}
+                <span class="badge" style="background:#ef4444;color:#fff;font-size:11px;animation:pulse 2s infinite;">{{ unread_ai_errors_count }} незчитаних</span>
+                {% elif latest_ai_error_report %}
+                <span class="badge" style="background:rgba(255,255,255,0.25);font-size:11px;">Є звіт</span>
+                {% endif %}
+            </a>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════════════ -->
+    <!-- Вкладка 1: СПИСОК ПОМИЛОК (ТАБЛИЦЯ)                                       -->
+    <!-- ═══════════════════════════════════════════════════════════════════════════ -->
+    <div id="ai-errors-pane-list" {% if errors_view == 'analysis' %}style="display:none;"{% endif %}>
+        <div style="padding:12px 20px;background:var(--color-surface);border-bottom:1px solid var(--color-border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+            <form method="GET" style="margin:0;display:flex;align-items:center;gap:8px;">
+                <input type="hidden" name="tab" value="ai">
+                <input type="hidden" name="ai_section" value="errors">
+                <input type="hidden" name="errors_view" value="list">
+                <label for="ai-errors-period" style="font-size:12px;font-weight:600;color:var(--color-text-secondary);margin:0;">Період:</label>
+                <select name="stats_days" id="ai-errors-period" onchange="this.form.submit()" style="padding:3px 8px;font-size:12px;border-radius:var(--radius-sm);border:1px solid var(--color-border);background:var(--color-surface);color:var(--color-text-primary);">
+                    <option value="1" {% if stats_days == '1' %}selected{% endif %}>24 години</option>
+                    <option value="3" {% if stats_days == '3' %}selected{% endif %}>3 дні</option>
+                    <option value="7" {% if stats_days == '7' %}selected{% endif %}>7 днів</option>
+                    <option value="14" {% if stats_days == '14' %}selected{% endif %}>14 днів</option>
+                    <option value="30" {% if stats_days == '30' %}selected{% endif %}>30 днів</option>
+                    <option value="all" {% if stats_days == 'all' %}selected{% endif %}>Весь час</option>
+                </select>
+            </form>
+
+            <div style="display:flex;align-items:center;gap:8px;">
+                {% if unread_ai_errors_count %}
+                <form method="POST" style="margin:0;">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="mark_all_errors_read">
+                    <button type="submit" class="btn btn-secondary btn-sm" style="font-size:11.5px;padding:3px 10px;" title="Позначити всі помилки як зчитані">
+                        ✅ Позначити як зчитані ({{ unread_ai_errors_count }})
+                    </button>
+                </form>
+                {% endif %}
+                <a href="{% url 'teacher_settings' %}?tab=ai&amp;ai_section=errors&amp;errors_view=analysis" class="btn btn-primary btn-sm" style="font-size:11.5px;padding:3px 12px;text-decoration:none;">
+                    🤖 Перейти до аналізу ШІ →
+                </a>
+            </div>
+        </div>
+
+        <div class="form-card-body" style="padding:0;">
+            {% if ai_error_logs %}
+            <div class="ai-settings-table" style="overflow-x:auto;" tabindex="0" role="region" aria-label="Журнал помилок ШІ">
+                <table class="table" style="margin:0;font-size:12.5px;width:100%;border-collapse:collapse;">
+                    <thead>
+                        <tr style="background:var(--color-bg-secondary);border-bottom:1px solid var(--color-border);color:var(--color-text-secondary);font-size:11.5px;text-transform:uppercase;">
+                            <th style="padding:10px 14px;white-space:nowrap;">Час</th>
+                            <th style="padding:10px 14px;text-align:center;">Статус</th>
+                            <th style="padding:10px 14px;">Провайдер / Модель</th>
+                            <th style="padding:10px 14px;">Контекст / Робота</th>
+                            <th style="padding:10px 14px;">Тип помилки</th>
+                            <th style="padding:10px 14px;">Опис / Причина збою</th>
+                            <th style="padding:10px 14px;text-align:center;">Перехід</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for log in ai_error_logs %}
+                        <tr style="border-bottom:1px solid var(--color-border);vertical-align:top;{% if not log.is_read %}background:rgba(239,68,68,0.03);{% endif %}">
+                            <td style="padding:10px 14px;white-space:nowrap;font-size:11.5px;color:var(--color-text-muted);">
+                                {{ log.created_at|date:"d.m.Y H:i:s" }}
+                            </td>
+                            <td style="padding:10px 14px;text-align:center;white-space:nowrap;">
+                                {% if log.is_read %}
+                                <span class="badge" style="background:var(--color-bg-secondary);color:var(--color-text-muted);font-size:10.5px;font-weight:600;" title="Цю помилку вже було зчитано для аналізу">
+                                    ✓ Зчитано
+                                </span>
+                                {% else %}
+                                <span class="badge" style="background:rgba(239,68,68,0.15);color:#dc2626;border:1px solid rgba(239,68,68,0.3);font-size:10.5px;font-weight:800;" title="Нова незчитана помилка">
+                                    🔴 Нова
+                                </span>
+                                {% endif %}
+                            </td>
+                            <td style="padding:10px 14px;font-family:monospace;white-space:nowrap;">
+                                <strong style="color:var(--color-text-primary);">{{ log.provider|default:"gemini" }}</strong>
+                                <div style="font-size:11px;color:var(--color-text-secondary);">{{ log.model_name|default:"—" }}</div>
+                            </td>
+                            <td style="padding:10px 14px;font-size:12px;">
+                                {% if log.submission %}
+                                <a href="{% url 'view_file' log.submission.id %}" target="_blank" style="font-weight:700;color:var(--color-primary);text-decoration:none;">
+                                    📄 Робота #{{ log.submission.id }} ({{ log.submission.get_student_full_name }})
+                                </a>
+                                {% elif log.assignment %}
+                                <span style="font-weight:600;color:var(--color-text-primary);">Завдання: {{ log.assignment.title|truncatechars:35 }}</span>
+                                {% else %}
+                                <span style="color:var(--color-text-muted);">{{ log.action }}</span>
+                                {% endif %}
+                                {% if log.teacher %}
+                                <div style="font-size:11px;color:var(--color-text-muted);margin-top:2px;">Вчитель: {{ log.teacher.full_name }}</div>
+                                {% endif %}
+                            </td>
+                            <td style="padding:10px 14px;white-space:nowrap;">
+                                <span class="badge" style="background:rgba(239,68,68,0.12);color:var(--color-danger);border:1px solid rgba(239,68,68,0.25);font-size:11px;font-weight:700;">
+                                    {% if log.status_code %}HTTP {{ log.status_code }}{% else %}{{ log.error_type|default:"Error" }}{% endif %}
+                                </span>
+                            </td>
+                            <td style="padding:10px 14px;color:var(--color-text-primary);max-width:380px;word-break:break-word;">
+                                <div style="font-weight:600;color:var(--color-danger);margin-bottom:3px;">{{ log.error_message }}</div>
+                                {% if log.raw_response %}
+                                <details style="margin-top:4px;font-size:11px;color:var(--color-text-muted);">
+                                    <summary style="cursor:pointer;color:var(--color-primary);font-weight:600;">Показати сиру відповідь API</summary>
+                                    <pre style="margin-top:4px;padding:6px 8px;background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:4px;font-size:10.5px;max-height:120px;overflow-y:auto;white-space:pre-wrap;word-break:break-all;">{{ log.raw_response }}</pre>
+                                </details>
+                                {% endif %}
+                            </td>
+                            <td style="padding:10px 14px;text-align:center;white-space:nowrap;">
+                                {% if log.failover_triggered %}
+                                <span class="badge" style="background:var(--color-warning-light);color:var(--color-warning);border:1px solid #fcd34d;font-size:11px;font-weight:700;" title="Система перейшла до наступної моделі у черзі">
+                                    🔄 Резерв
+                                </span>
+                                {% else %}
+                                <span style="color:var(--color-text-muted);font-size:11px;">—</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div style="text-align:center;padding:36px 20px;color:var(--color-text-muted);">
+                <div style="font-size:36px;margin-bottom:8px;">🎉</div>
+                <div style="font-weight:700;font-size:15px;color:var(--color-text-primary);">Жодної помилки ШІ не зафіксовано</div>
+                <div style="font-size:12.5px;margin-top:4px;">Всі запити до API провайдерів пройшли успішно або журнал було очищено.</div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════════════ -->
+    <!-- Вкладка 2: ЗБІР І АНАЛІЗ ПОМИЛОК (ШІ-ДІАГНОСТИКА ТА ЗВІТ)                 -->
+    <!-- ═══════════════════════════════════════════════════════════════════════════ -->
+    <div id="ai-errors-pane-analysis" {% if errors_view != 'analysis' %}style="display:none;"{% endif %}>
+        
+        <!-- Блок запуску аналізу -->
+        <div style="padding:20px;background:var(--color-surface);border-bottom:1px solid var(--color-border);">
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px;">
+                <div style="max-width:680px;">
+                    <h3 style="margin:0 0 4px 0;font-size:16px;font-weight:800;color:var(--color-text-primary);display:flex;align-items:center;gap:8px;">
+                        <span>🤖</span>
+                        <span>Автоматичний збір та аналіз помилок штучним інтелектом</span>
+                    </h3>
+                    <p style="margin:0;font-size:12.5px;color:var(--color-text-secondary);line-height:1.45;">
+                        Натисніть кнопку нижче: система зчитає накопичені помилки, позначить їх як зчитані, передасть ШІ-аналітику та згенерує структурований звіт. ШІ визначить, чи це зовнішня проблема постачальника (перевантаження, ліміт 429), чи баг, який потрібно виправити в коді. Отриманий звіт можна скопіювати і передати іншому ШІ-асистенту.
+                    </p>
+                </div>
+
+                <div>
+                    <form method="POST" style="margin:0;">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="generate_ai_error_report">
+                        <button type="submit" class="btn btn-primary" id="btn-generate-ai-error-report" style="font-size:13.5px;font-weight:800;padding:10px 18px;display:inline-flex;align-items:center;gap:8px;box-shadow:0 2px 8px rgba(99,102,241,0.25);">
+                            <span>⚡</span>
+                            <span>Зчитати помилки та згенерувати звіт для ШІ</span>
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Зведені лічильники -->
+            <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));gap:12px;margin-top:18px;">
+                <div style="background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:12px 14px;">
+                    <div style="font-size:11.5px;color:var(--color-text-muted);font-weight:600;text-transform:uppercase;">Всього помилок у базі</div>
+                    <div style="font-size:22px;font-weight:800;color:var(--color-text-primary);margin-top:4px;">{{ total_ai_errors_count }}</div>
+                </div>
+                <div style="background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:12px 14px;">
+                    <div style="font-size:11.5px;color:var(--color-text-muted);font-weight:600;text-transform:uppercase;">Незчитаних (нових)</div>
+                    <div style="font-size:22px;font-weight:800;color:{% if unread_ai_errors_count %}#dc2626{% else %}var(--color-success){% endif %};margin-top:4px;">
+                        {{ unread_ai_errors_count }}
+                    </div>
+                </div>
+                <div style="background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:12px 14px;">
+                    <div style="font-size:11.5px;color:var(--color-text-muted);font-weight:600;text-transform:uppercase;">Останній аналіз</div>
+                    <div style="font-size:14px;font-weight:700;color:var(--color-text-primary);margin-top:8px;">
+                        {% if latest_ai_error_report %}
+                        {{ latest_ai_error_report.created_at|date:"d.m.Y H:i" }}
+                        {% else %}
+                        Ще не проводився
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Відображення звіту -->
+        {% if latest_ai_error_report %}
+        <div style="padding:20px;">
+            
+            <!-- Вердиктна плашка -->
+            <div style="border-radius:var(--radius-md);padding:14px 18px;margin-bottom:18px;display:flex;align-items:flex-start;gap:12px;
+                {% if latest_ai_error_report.verdict == 'external_issue' %}
+                background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3);color:#065f46;
+                {% elif latest_ai_error_report.verdict == 'needs_fix' %}
+                background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);color:#991b1b;
+                {% else %}
+                background:rgba(99,102,241,0.1);border:1px solid rgba(99,102,241,0.3);color:#3730a3;
+                {% endif %}">
+                <span style="font-size:24px;line-height:1;">
+                    {% if latest_ai_error_report.verdict == 'external_issue' %}🟢
+                    {% elif latest_ai_error_report.verdict == 'needs_fix' %}🔴
+                    {% else %}⚪{% endif %}
+                </span>
+                <div style="flex:1;">
+                    <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;opacity:0.85;">
+                        Вердикт діагностики ШІ
+                    </div>
+                    <div style="font-size:16px;font-weight:800;margin-top:2px;">
+                        {{ latest_ai_error_report.verdict_title|default:latest_ai_error_report.verdict }}
+                    </div>
+                    <div style="font-size:12px;margin-top:4px;opacity:0.9;">
+                        Проаналізовано {{ latest_ai_error_report.errors_count }} помилок. Модель: {{ latest_ai_error_report.model_used }}. Час створення: {{ latest_ai_error_report.created_at|date:"d.m.Y H:i:s" }}
+                    </div>
+                </div>
+                <div>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="copyErrorReportText()" id="btn-copy-error-report" style="font-weight:700;font-size:12px;padding:6px 12px;display:inline-flex;align-items:center;gap:6px;background:var(--color-surface);color:var(--color-text-primary);">
+                        <span>📋</span>
+                        <span id="btn-copy-text">Копіювати звіт для іншого ШІ</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Текст звіту (Markdown) -->
+            <div style="background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:24px;position:relative;">
+                <div id="ai-error-report-content" class="markdown-body" style="font-size:13.5px;line-height:1.65;color:var(--color-text-primary);">
+                    {{ latest_ai_error_report.report_text|linebreaksbr }}
+                </div>
+                
+                <!-- Прихований блок з сирим текстом для швидкого копіювання в буфер -->
+                <textarea id="raw-ai-error-report-text" style="position:absolute;left:-9999px;top:-9999px;" readonly>{{ latest_ai_error_report.report_text }}</textarea>
+            </div>
+
+            <!-- Історія попередніх звітів -->
+            {% if ai_error_reports|length > 1 %}
+            <details style="margin-top:18px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:12px 16px;">
+                <summary style="font-weight:700;font-size:13px;color:var(--color-text-primary);cursor:pointer;">
+                    📜 Історія попередніх звітів ({{ ai_error_reports|length }})
+                </summary>
+                <div style="margin-top:12px;display:flex;flex-direction:column;gap:8px;">
+                    {% for r in ai_error_reports %}
+                    <div style="padding:8px 12px;background:var(--color-bg-secondary);border-radius:var(--radius-sm);display:flex;justify-content:space-between;align-items:center;font-size:12.5px;">
+                        <div>
+                            <strong>#{{ r.pk }}</strong> · {{ r.created_at|date:"d.m.Y H:i" }} · 
+                            <span style="font-weight:600;">{{ r.verdict_title }}</span> ({{ r.errors_count }} помилок)
+                        </div>
+                        <div style="font-size:11.5px;color:var(--color-text-muted);">
+                            {{ r.model_used }}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </details>
+            {% endif %}
+
+        </div>
+        {% else %}
+        <!-- Якщо звіту ще немає -->
+        <div style="text-align:center;padding:48px 20px;color:var(--color-text-muted);">
+            <div style="font-size:42px;margin-bottom:12px;">📊</div>
+            <div style="font-weight:800;font-size:16px;color:var(--color-text-primary);">Звітів аналізу помилок ще не сформовано</div>
+            <div style="font-size:13px;max-width:540px;margin:8px auto 20px;line-height:1.5;">
+                Натисніть кнопку «Зчитати помилки та згенерувати звіт для ШІ» вище. Система проаналізує записи в журналі помилок, оцінить їх та сформує детальний вердикт.
+            </div>
+        </div>
+        {% endif %}
+
+    </div>
+
+</div>
+
+<!-- Скрипт копіювання звіту в буфер обміну -->
+<script>
+function copyErrorReportText() {
+    const rawTextElem = document.getElementById('raw-ai-error-report-text');
+    const copyBtnText = document.getElementById('btn-copy-text');
+    if (!rawTextElem) return;
+
+    const textToCopy = rawTextElem.value;
+    if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(textToCopy).then(() => {
+            showCopiedFeedback(copyBtnText);
+        }).catch(() => {
+            fallbackCopyText(rawTextElem, copyBtnText);
+        });
+    } else {
+        fallbackCopyText(rawTextElem, copyBtnText);
+    }
+}
+
+function fallbackCopyText(elem, btnText) {
+    elem.select();
+    try {
+        document.execCommand('copy');
+        showCopiedFeedback(btnText);
+    } catch (err) {
+        alert('Не вдалося скопіювати звіт автоматично. Виділіть текст вручну.');
+    }
+}
+
+function showCopiedFeedback(btnText) {
+    if (!btnText) return;
+    const original = btnText.innerText;
+    btnText.innerText = '✅ Скопійовано в буфер обміну!';
+    setTimeout(() => {
+        btnText.innerText = original;
+    }, 3000);
+}
+</script>

@@ -277,7 +277,7 @@ def get_provider_endpoint(provider, model_name=None, api_key=None, custom_url=No
     return url, headers, model
 
 
-def log_ai_request_metric(model_name, provider='gemini', action='evaluation', status_code=200, is_success=True, data=None, latency_ms=0):
+def log_ai_request_metric(model_name, provider='gemini', action='evaluation', status_code=200, is_success=True, data=None, latency_ms=0, connection_id=None):
     """
     Фіксує кожен виклик API ШІ у AIRequestLog разом із лічильниками токенів
     (Prompt, Candidates/Completion, Total) для точного розрахунку RPM, RPD та аналітики за період.
@@ -290,6 +290,7 @@ def log_ai_request_metric(model_name, provider='gemini', action='evaluation', st
         AIRequestLog.objects.create(
             model_name=str(model_name or '')[:100],
             provider=str(provider or 'gemini')[:50],
+            connection_id=str(connection_id or '')[:64],
             action=str(action or 'evaluation')[:100],
             status_code=int(200 if status_code is None else status_code),
             is_success=bool(is_success),
@@ -540,7 +541,7 @@ def _raw_call_ai_api(prompt_text, system_prompt="", inline_media=None, provider=
             return 0, None, str(e), None
 
 
-def call_ai_api(prompt_text, system_prompt="", inline_media=None, provider="gemini", api_key="", model_name="", custom_url="", temperature=0.2, max_output_tokens=3500, timeout=35, json_mode=False, thinking_budget=None, action="evaluation"):
+def call_ai_api(prompt_text, system_prompt="", inline_media=None, provider="gemini", api_key="", model_name="", custom_url="", temperature=0.2, max_output_tokens=3500, timeout=35, json_mode=False, thinking_budget=None, action="evaluation", connection_id=None):
     """
     Універсальна функція для звернення до будь-якого ШІ-провайдера
     (Google Gemini, OpenAI, DeepSeek, Groq, OpenRouter, Custom/Ollama).
@@ -578,7 +579,8 @@ def call_ai_api(prompt_text, system_prompt="", inline_media=None, provider="gemi
             status_code=status_code,
             is_success=(status_code == 200 and bool(reply_text) and not err_msg),
             data=raw_data,
-            latency_ms=latency_ms
+            latency_ms=latency_ms,
+            connection_id=connection_id
         )
 
     return status_code, reply_text, err_msg, raw_data
@@ -586,7 +588,8 @@ def call_ai_api(prompt_text, system_prompt="", inline_media=None, provider="gemi
 
 def log_ai_error(teacher=None, submission=None, assignment=None, action='evaluation',
                  provider='', model_name='', status_code=None, error_type='',
-                 error_message='', prompt_preview='', raw_response='', failover_triggered=False):
+                 error_message='', prompt_preview='', raw_response='', failover_triggered=False,
+                 connection_id=None):
     """Фіксує збій або помилку ШІ у базі даних (AIErrorLog) для журналу помилок ШІ."""
     try:
         from .models import AIErrorLog
@@ -604,6 +607,7 @@ def log_ai_error(teacher=None, submission=None, assignment=None, action='evaluat
             action=action or 'evaluation',
             provider=str(provider or '')[:50],
             model_name=str(model_name or '')[:100],
+            connection_id=str(connection_id or '')[:64],
             status_code=status_code,
             error_type=str(error_type or '')[:150],
             error_message=str(error_message)[:4000],
@@ -6546,6 +6550,7 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
         c_model = cfg['model']
         c_url = cfg['custom_url']
         c_is_backup = cfg['is_backup']
+        c_conn_id = cfg.get('connection_id') or ''
 
         # Оптимізація: перевіряємо можливості моделі перед відправкою важкого запиту
         caps = get_model_capabilities(c_model, c_provider)
@@ -6667,7 +6672,8 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                     max_output_tokens=min(10000, (2200 if c_provider == 'groq' else 4000) + 300 * len(active_grs) + 180 * len(scope.get("assigned_tasks") or [])),
                     timeout=90 if router_retry else 35,
                     json_mode=True,
-                    thinking_budget=thinking_budget_val
+                    thinking_budget=thinking_budget_val,
+                    connection_id=c_conn_id
                 )
 
                 retryable = (status_code in (502, 503) if router_retry
@@ -6718,6 +6724,7 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                         action='evaluation',
                         provider=c_provider,
                         model_name=c_model,
+                        connection_id=c_conn_id,
                         status_code=status_code,
                         error_type=f"HTTP {status_code}" if status_code else "API Error",
                         error_message=fail_reason,
@@ -6739,7 +6746,7 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                 if router_retry and unusable_format and attempt < max_retries:
                     reason = 'Модель повернула непридатний формат замість оцінювання. Повторюю вибір маршруту один раз.'
                     log_ai_error(teacher=teacher, submission=submission, action='evaluation',
-                                 provider=c_provider, model_name=c_model, status_code=200,
+                                 provider=c_provider, model_name=c_model, connection_id=c_conn_id, status_code=200,
                                  error_type='Unexpected Assessment Format', error_message=reason,
                                  raw_response=raw_text[:2000], failover_triggered=True)
                     emit_event('retry', f'{c_provider}/{c_model}: {reason}',
@@ -7667,6 +7674,7 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                     metadata = request_metadata(c_provider, c_model, raw_data)
                     submission.ai_provider_used = metadata['provider']
                     submission.ai_request_model = metadata['model']
+                    submission.ai_connection_id = c_conn_id
                     submission.ai_prompt_tokens = metadata['prompt_tokens']
                     submission.ai_completion_tokens = metadata['completion_tokens']
                     submission.ai_total_tokens = metadata['total_tokens']
@@ -7677,6 +7685,7 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                         'ai_suggested_grade', 'ai_score_level', 'ai_feedback', 'ai_gr_results',
                         'ai_generated_detected', 'ai_generated_confidence', 'ai_generated_details',
                         'ai_generated_percent', 'ai_model_used', 'ai_provider_used', 'ai_request_model',
+                        'ai_connection_id',
                         'ai_prompt_tokens', 'ai_completion_tokens', 'ai_total_tokens',
                         'ai_status', 'ai_error_reason', 'ai_reviewed_at'
                     ])
@@ -7734,11 +7743,39 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                 else:
                     reason = report_failure('Неповна або некоректна відповідь JSON; оцінку не збережено.')
                     attempted_errors.append(f"[{c_provider}/{c_model}] {reason}")
+                    log_ai_error(
+                        teacher=teacher,
+                        submission=submission,
+                        assignment=submission.assignment,
+                        action='evaluation',
+                        provider=c_provider,
+                        model_name=c_model,
+                        connection_id=c_conn_id,
+                        status_code=200,
+                        error_type='JSON Parsing Error',
+                        error_message=reason,
+                        raw_response=str(raw_text or '')[:2000],
+                        failover_triggered=(fallback_happened or (len(attempts_configs) > 1 and cfg_idx < len(attempts_configs) - 1))
+                    )
                     break
 
             except Exception as e:
                 reason = report_failure(f'Помилка запиту або обробки відповіді: {e}')
                 attempted_errors.append(f"[{c_provider}/{c_model} виняток]: {reason}")
+                log_ai_error(
+                    teacher=teacher,
+                    submission=submission,
+                    assignment=submission.assignment,
+                    action='evaluation',
+                    provider=c_provider,
+                    model_name=c_model,
+                    connection_id=c_conn_id,
+                    status_code=None,
+                    error_type='Processing Exception',
+                    error_message=reason,
+                    raw_response=str(e)[:2000],
+                    failover_triggered=(fallback_happened or (len(attempts_configs) > 1 and cfg_idx < len(attempts_configs) - 1))
+                )
                 break
             finally:
                 if slot_acquired:
