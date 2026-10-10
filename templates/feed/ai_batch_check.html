@@ -211,6 +211,26 @@
     </div>
 
 </div>
+
+<!-- ════ МОДАЛЬНЕ ВІКНО: ДАНІ ЗАПИТУ ШІ ═════════════════════════════════ -->
+<div id="ai-metadata-modal-overlay" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="ai-metadata-modal-title" onclick="if(event.target===this)closeAiMetadataModal()">
+    <div class="modal" style="max-width:560px;">
+        <div class="modal-header">
+            <h3 class="modal-title" id="ai-metadata-modal-title" style="display:flex;align-items:center;gap:8px;font-size:1.15rem;margin:0;">
+                <span>📊</span> <span>Дані запиту ШІ</span>
+            </h3>
+            <button class="modal-close" type="button" aria-label="Закрити" onclick="closeAiMetadataModal()">✕</button>
+        </div>
+        <div class="modal-body" id="ai-metadata-modal-body" style="padding:20px 24px;">
+            <!-- Контент генерується динамічно через openAiMetadataModal -->
+        </div>
+        <div style="padding:12px 24px 16px;border-top:1px solid var(--color-border);display:flex;justify-content:flex-end;background:var(--color-surface);">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="closeAiMetadataModal()" style="font-weight:700;padding:6px 16px;">
+                Закрити
+            </button>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_scripts %}
@@ -434,12 +454,25 @@ function renderQueueTable() {
             statusBadge = '<span class="badge" style="background:var(--color-bg-secondary);color:var(--color-text-muted);font-size:11px;">⏳ В черзі</span>';
         }
 
-        var requestDetails = item.ai_status === 'success' ? SchoolNetAIRequestMetadata.html(requestMetadata) : '';
         var feedbackDisplay = item.ai_feedback ?
-            '<span title="' + item.ai_feedback.replace(/"/g, '&quot;') + '">' + item.ai_feedback.substring(0, 110) + '...</span>' :
-            (item.ai_error ? '<span style="color:var(--color-danger);font-size:12px;">' + item.ai_error + '</span>' : '—');
+            '<div style="line-height:1.45;word-break:break-word;" title="' + item.ai_feedback.replace(/"/g, '&quot;') + '">' +
+                item.ai_feedback.substring(0, 130) + (item.ai_feedback.length > 130 ? '...' : '') +
+            '</div>' :
+            (item.ai_error ? '<div style="color:var(--color-danger);font-size:12px;line-height:1.4;">' + item.ai_error + '</div>' : '<span style="color:var(--color-text-muted);">—</span>');
 
-        feedbackDisplay += requestDetails;
+        var actionButtons = '<div style="display:flex;flex-direction:column;gap:5px;align-items:stretch;min-width:115px;">' +
+            '<a href="/teacher/view-file/' + item.id + '/" target="_blank" class="btn btn-secondary btn-sm" style="font-size:11px;padding:4px 8px;white-space:nowrap;display:inline-flex;align-items:center;justify-content:center;gap:4px;">' +
+                '<span>👁️</span> <span>Переглянути ↗</span>' +
+            '</a>';
+
+        if (item.ai_status === 'success' && requestMetadata) {
+            actionButtons += '<button type="button" class="btn btn-secondary btn-sm" onclick="openAiMetadataModal(' + item.id + ')" style="font-size:11px;padding:4px 8px;white-space:nowrap;display:inline-flex;align-items:center;justify-content:center;gap:4px;color:var(--color-primary);border-color:rgba(99,102,241,0.3);background:rgba(99,102,241,0.06);font-weight:700;" title="Показати модель, токени та дані запиту ШІ">' +
+                '<span>📊</span> <span>Деталі ШІ</span>' +
+            '</button>';
+        }
+
+        actionButtons += '</div>';
+
         var isProcessingRow = (item.ai_status === 'processing');
         var rowBg = isProcessingRow ? 'background:rgba(99,102,241,0.06);' : '';
 
@@ -450,11 +483,7 @@ function renderQueueTable() {
             '<td style="font-size:13px;max-width:200px;text-overflow:ellipsis;overflow:hidden;white-space:nowrap;" title="' + item.assignment_title + '">' + item.assignment_title + '</td>' +
             '<td style="text-align:center;" id="cell-grade-' + item.id + '">' + statusBadge + '</td>' +
             '<td style="font-size:12px;color:var(--color-text-secondary);" id="cell-feedback-' + item.id + '">' + feedbackDisplay + '</td>' +
-            '<td style="text-align:center;">' +
-                '<a href="/teacher/view-file/' + item.id + '/" target="_blank" class="btn btn-secondary btn-sm" style="font-size:11px;padding:3px 8px;">' +
-                    '👁️ Переглянути ↗' +
-                '</a>' +
-            '</td>' +
+            '<td style="text-align:center;">' + actionButtons + '</td>' +
         '</tr>';
     });
 
@@ -609,6 +638,73 @@ function finishBatchProcessing() {
     document.getElementById('btn-stop-batch').style.display = 'none';
     document.getElementById('progress-status-text').textContent = shouldStop ? '⏹ Обробку зупинено користувачем.' : '🎉 Пакетну перевірку ШІ успішно завершено!';
 }
+
+function openAiMetadataModal(subId) {
+    var item = currentQueue.find(function(it) { return String(it.id) === String(subId); });
+    if (!item) return;
+
+    var overlay = document.getElementById('ai-metadata-modal-overlay');
+    var body = document.getElementById('ai-metadata-modal-body');
+    if (!overlay || !body) return;
+
+    var meta = item.request_metadata || {};
+    var metaHtml = SchoolNetAIRequestMetadata.html(meta);
+
+    var safeStudent = document.createElement('div');
+    safeStudent.textContent = item.student_name || 'Учень';
+    var safeClass = document.createElement('span');
+    safeClass.textContent = item.class_name || '—';
+    var safeAssignment = document.createElement('div');
+    safeAssignment.textContent = item.assignment_title || 'Завдання';
+
+    var gradeBadge = '';
+    if (item.ai_status === 'success') {
+        if (item.ai_grade === 'Доопрацювати') {
+            gradeBadge = '<span class="badge" style="background:var(--color-warning-light);color:var(--color-warning);border:1px solid #fcd34d;font-weight:700;font-size:11px;">🔄 Доопрацювати</span>';
+        } else {
+            gradeBadge = '<span class="badge" style="background:rgba(16,185,129,0.15);color:var(--color-success);font-weight:800;font-size:13px;">🤖 ' + item.ai_grade + '</span>';
+        }
+    }
+
+    var studentCard = '<div style="margin-bottom:16px;padding:12px 16px;background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:var(--radius-md);">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap;">' +
+            '<div style="display:flex;align-items:center;gap:8px;">' +
+                '<span style="font-weight:800;font-size:15px;color:var(--color-text-primary);">' + safeStudent.innerHTML + '</span>' +
+                '<span class="class-prominent-badge" style="font-size:11px;">' + safeClass.innerHTML + '</span>' +
+            '</div>' +
+            gradeBadge +
+        '</div>' +
+        '<div style="font-size:13px;color:var(--color-text-secondary);">' + safeAssignment.innerHTML + '</div>' +
+    '</div>';
+
+    var feedbackSection = '';
+    if (item.ai_feedback) {
+        var safeFeedback = document.createElement('div');
+        safeFeedback.textContent = item.ai_feedback;
+        feedbackSection = '<div style="margin-top:14px;">' +
+            '<div style="font-size:12px;font-weight:700;color:var(--color-text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Повний відгук ШІ:</div>' +
+            '<div style="padding:12px 14px;background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:var(--radius-sm);font-size:13px;line-height:1.55;color:var(--color-text-primary);max-height:200px;overflow-y:auto;white-space:pre-wrap;">' +
+                safeFeedback.innerHTML +
+            '</div>' +
+        '</div>';
+    }
+
+    body.innerHTML = studentCard + metaHtml + feedbackSection;
+    overlay.classList.add('active');
+    document.body.style.overflow = 'hidden';
+}
+
+function closeAiMetadataModal() {
+    var overlay = document.getElementById('ai-metadata-modal-overlay');
+    if (overlay) overlay.classList.remove('active');
+    document.body.style.overflow = '';
+}
+
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        closeAiMetadataModal();
+    }
+});
 
 document.addEventListener('DOMContentLoaded', function() {
     onBatchPresetChanged();

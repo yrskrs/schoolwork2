@@ -5,3 +5,46 @@
 .ai-request-metadata dt { font-size: 11px; color: var(--color-text-muted); }
 .ai-request-metadata dd { margin: 2px 0 0; font-size: 12px; font-weight: 700; overflow-wrap: anywhere; color: var(--color-text-primary); }
 .ai-request-metadata p { margin: 8px 0 0; font-size: 10px; line-height: 1.4; color: var(--color-text-muted); }
+
+/* Стилізація деталей запиту ШІ всередині модального вікна */
+#ai-metadata-modal-body .ai-request-metadata {
+    padding: 16px;
+    margin: 0;
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+}
+#ai-metadata-modal-body .ai-request-metadata h3 {
+    font-size: 13px;
+    font-weight: 800;
+    margin: 0 0 12px;
+    color: var(--color-text-primary);
+}
+#ai-metadata-modal-body .ai-request-metadata dl {
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 10px;
+}
+#ai-metadata-modal-body .ai-request-metadata dl > div {
+    background: var(--color-bg-secondary);
+    padding: 10px 12px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--color-border);
+}
+#ai-metadata-modal-body .ai-request-metadata dt {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--color-text-muted);
+}
+#ai-metadata-modal-body .ai-request-metadata dd {
+    font-size: 14px;
+    font-weight: 800;
+    margin: 4px 0 0;
+    color: var(--color-text-primary);
+}
+#ai-metadata-modal-body .ai-request-metadata p {
+    margin: 12px 0 0;
+    font-size: 11px;
+    color: var(--color-text-muted);
+    line-height: 1.45;
+}
+
