@@ -346,19 +346,42 @@ def _raw_call_ai_api(prompt_text, system_prompt="", inline_media=None, provider=
     url, headers, model = get_provider_endpoint(provider, model_name=model_name, api_key=api_key, custom_url=custom_url)
 
     if provider == 'gemini':
+        # Збільшений таймаут для Gemini для запобігання read timeouts (рекомендація: >= 50с)
+        gemini_timeout = max(timeout, 50) if timeout <= 35 else timeout
+
         parts = []
-        if prompt_text:
-            parts.append({"text": prompt_text})
+        if prompt_text and str(prompt_text).strip():
+            parts.append({"text": str(prompt_text).strip()})
+
+        _GEMINI_ALLOWED_MIMES = {
+            'image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif',
+            'application/pdf', 'audio/mp3', 'audio/wav', 'audio/ogg',
+            'text/plain', 'text/csv', 'text/html'
+        }
+
         if inline_media:
             for item in inline_media:
-                if item.get("source"):
-                    parts.append({"text": item["source"]})
-                parts.append({
-                    "inlineData": {
-                        "mimeType": item["mime_type"],
-                        "data": item["data"]
-                    }
-                })
+                if not isinstance(item, dict):
+                    continue
+                if item.get("source") and str(item["source"]).strip():
+                    parts.append({"text": str(item["source"]).strip()})
+                m_type = (item.get("mime_type") or '').lower().strip()
+                b64_data = (item.get("data") or '').strip()
+                if b64_data.startswith('data:'):
+                    b64_data = re.sub(r'^data:[^;]+;base64,', '', b64_data)
+
+                # Перевіряємо валідність MIME-типу та наявність даних перед додаванням
+                if m_type in _GEMINI_ALLOWED_MIMES and b64_data:
+                    parts.append({
+                        "inlineData": {
+                            "mimeType": m_type,
+                            "data": b64_data
+                        }
+                    })
+
+        # Gemini API вимагає непорожній список parts у contents
+        if not parts:
+            parts = [{"text": (prompt_text or "").strip() or "Оціни надані матеріали."}]
 
         generation_config = {
             "temperature": temperature,
@@ -378,18 +401,56 @@ def _raw_call_ai_api(prompt_text, system_prompt="", inline_media=None, provider=
             ],
             "generationConfig": generation_config
         }
-        if system_prompt:
+        if system_prompt and str(system_prompt).strip():
             payload["systemInstruction"] = {
-                "parts": [{"text": system_prompt}]
+                "parts": [{"text": str(system_prompt).strip()}]
             }
 
-        try:
-            status_code, data, text = _http_post_json(url, payload, headers=headers, timeout=timeout)
+        def _log_gemini_400(err_text, cur_payload):
+            try:
+                debug_payload = {
+                    "contents_count": len(cur_payload.get("contents", [])),
+                    "parts_types": [
+                        "text" if "text" in p else f"inlineData({p.get('inlineData', {}).get('mimeType')})"
+                        for p in cur_payload.get("contents", [{}])[0].get("parts", [])
+                    ],
+                    "has_system": bool(cur_payload.get("systemInstruction")),
+                    "gen_config": cur_payload.get("generationConfig"),
+                }
+                logger.warning("Gemini 400 Invalid Argument: %s | Payload: %s", str(err_text)[:500], debug_payload)
+            except Exception:
+                pass
 
-            # Якщо модель не підтримує thinkingConfig (400), повторюємо без нього
-            if status_code == 400 and thinking_budget is not None and ('thinkingConfig' in text or 'thinking' in text):
+        try:
+            status_code, data, text = _http_post_json(url, payload, headers=headers, timeout=gemini_timeout)
+
+            # Каскадне відновлення при 400 (Invalid argument):
+            # 1. Повтор без thinkingConfig, якщо він заданий
+            if status_code == 400 and "thinkingConfig" in payload.get("generationConfig", {}):
+                _log_gemini_400(text, payload)
                 del payload["generationConfig"]["thinkingConfig"]
-                status_code, data, text = _http_post_json(url, payload, headers=headers, timeout=timeout)
+                status_code, data, text = _http_post_json(url, payload, headers=headers, timeout=gemini_timeout)
+
+            # 2. Повтор без responseMimeType, якщо модель не підтримує JSON mode
+            if status_code == 400 and "responseMimeType" in payload.get("generationConfig", {}):
+                _log_gemini_400(text, payload)
+                del payload["generationConfig"]["responseMimeType"]
+                status_code, data, text = _http_post_json(url, payload, headers=headers, timeout=gemini_timeout)
+
+            # 3. Повтор без окремого systemInstruction (вбудовуємо в user prompt)
+            if status_code == 400 and "systemInstruction" in payload:
+                _log_gemini_400(text, payload)
+                sys_text = payload.pop("systemInstruction", {}).get("parts", [{}])[0].get("text", "")
+                if sys_text and payload.get("contents") and payload["contents"][0].get("parts"):
+                    first_part = payload["contents"][0]["parts"][0]
+                    if "text" in first_part:
+                        first_part["text"] = f"[SYSTEM INSTRUCTION]\n{sys_text}\n\n[USER REQUEST]\n{first_part['text']}"
+                    else:
+                        payload["contents"][0]["parts"].insert(0, {"text": f"[SYSTEM INSTRUCTION]\n{sys_text}"})
+                status_code, data, text = _http_post_json(url, payload, headers=headers, timeout=gemini_timeout)
+
+            if status_code == 400:
+                _log_gemini_400(text, payload)
 
             if status_code == 200 and data:
                 candidates = data.get('candidates', [])
@@ -2756,6 +2817,131 @@ def extract_submission_content(submission):
     return text_parts, inline_media, None
 
 
+def repair_json_string(text):
+    """
+    Автоматично відновлює та балансує пошкоджений або обірваний JSON-рядок:
+    - Витягує блок JSON або обрізає markdown-код ```json ... ```
+    - Балансує незакриті лапки/рядки, квадратні [ ] та фігурні { } дужки
+    - Виправляє висячі коми, невалідні екранування (\') та синтаксичні обриви
+    Повертає розпарсений dict або None.
+    """
+    if not text:
+        return None
+    text = str(text).strip()
+
+    first_brace = text.find('{')
+    if first_brace == -1:
+        return None
+
+    candidate = text[first_brace:]
+    code_end = candidate.rfind('```')
+    if code_end != -1:
+        candidate = candidate[:code_end].strip()
+
+    def _sanitize(s):
+        s = re.sub(r"(?<!\\)\\'", "'", s)
+        s = re.sub(r',\s*([\]}])', r'\1', s)
+        return s
+
+    # 1. Спроба розпарсити безпосередньо
+    try:
+        res = json.loads(_sanitize(candidate), strict=False)
+        if isinstance(res, dict):
+            return res
+    except Exception:
+        pass
+
+    # 2. Якщо є закриваюча дужка '}', спробуємо зріз до останньої '}'
+    last_brace = candidate.rfind('}')
+    if last_brace != -1 and last_brace > 0:
+        try:
+            res = json.loads(_sanitize(candidate[:last_brace + 1]), strict=False)
+            if isinstance(res, dict):
+                return res
+        except Exception:
+            pass
+
+    # 3. Балансування через посимвольний стек
+    stack = []
+    in_string = False
+    escape = False
+    clean_chars = []
+
+    for c in candidate:
+        if in_string:
+            if escape:
+                clean_chars.append(c)
+                escape = False
+            elif c == '\\':
+                clean_chars.append(c)
+                escape = True
+            elif c == '"':
+                clean_chars.append(c)
+                in_string = False
+            elif c == '\n':
+                clean_chars.append('\\n')
+            elif c == '\r':
+                pass
+            elif c == '\t':
+                clean_chars.append('\\t')
+            else:
+                clean_chars.append(c)
+        else:
+            if c == '"':
+                in_string = True
+                clean_chars.append(c)
+            elif c in ('{', '['):
+                stack.append('}' if c == '{' else ']')
+                clean_chars.append(c)
+            elif c in ('}', ']'):
+                if stack and stack[-1] == c:
+                    stack.pop()
+                    clean_chars.append(c)
+                elif stack and c in stack:
+                    while stack and stack[-1] != c:
+                        clean_chars.append(stack.pop())
+                    if stack:
+                        stack.pop()
+                    clean_chars.append(c)
+            else:
+                clean_chars.append(c)
+
+    if in_string:
+        clean_chars.append('"')
+
+    fixed_text = ''.join(clean_chars)
+    fixed_text = re.sub(r',\s*$', '', fixed_text)
+    fixed_text = re.sub(r',\s*"[^"]*"\s*:\s*$', '', fixed_text)
+    fixed_text = re.sub(r':\s*"[^"]*$', ':"..."', fixed_text)
+    fixed_text += ''.join(reversed(stack))
+    fixed_text = _sanitize(fixed_text)
+
+    try:
+        res = json.loads(fixed_text, strict=False)
+        if isinstance(res, dict):
+            return res
+    except Exception:
+        pass
+
+    # 4. Прогресивне скорочення обірваних ключів або незакритих елементів списку
+    for cut in range(len(fixed_text), max(0, len(fixed_text) - 1200), -10):
+        sub = fixed_text[:cut].rstrip()
+        sub = re.sub(r',\s*$', '', sub)
+        sub = re.sub(r',\s*"[^"]*"\s*:\s*$', '', sub)
+        open_b = sub.count('{') - sub.count('}')
+        open_sq = sub.count('[') - sub.count(']')
+        if open_b >= 0 and open_sq >= 0:
+            tail = (']' * open_sq) + ('}' * open_b)
+            try:
+                res = json.loads(_sanitize(sub + tail), strict=False)
+                if isinstance(res, dict) and ('suggested_grade' in res or 'summary' in res or 'feedback_comment' in res):
+                    return res
+            except Exception:
+                continue
+
+    return None
+
+
 def extract_json_from_text(text, allow_partial=True):
     """
     Надійно видобуває JSON-об'єкт із будь-якого тексту чи markdown-блоку відповіді Gemini.
@@ -2799,6 +2985,11 @@ def extract_json_from_text(text, allow_partial=True):
             return json.loads(candidate, strict=False)
         except Exception:
             pass
+
+    # 3.5 Спроба автоматичного відновлення структури через repair_json_string
+    repaired = repair_json_string(text)
+    if isinstance(repaired, dict):
+        return repaired
 
     if not allow_partial:
         return None
@@ -6556,7 +6747,7 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
         caps = get_model_capabilities(c_model, c_provider)
         model_supports_vision = caps.get('supports_vision', True)
         model_context_tokens = caps.get('context_tokens', 128000)
-        est_tokens = int((len(prompt_content) + len(system_instruction)) / 3.0) + len(inline_media or []) * 1200
+        max_images_allowed = caps.get('max_images')
         has_other_models = (cfg_idx + 1 < len(attempts_configs))
 
         from .ai_concurrency import (
@@ -6565,6 +6756,22 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
             is_context_limit_error, is_overload_error,
             record_model_context_limit
         )
+
+        provider_prompt, provider_system = prompt_content, system_instruction
+        if c_provider in ('groq', 'openrouter'):
+            provider_prompt, provider_system = build_assessment_request(
+                submission, selected_preset, active_grs, scope, text_parts,
+                primary_task_content if 'primary_task_content' in locals() else [],
+                teacher_files_content, material_coverage, custom_prompt=custom_prompt,
+                ai_settings=settings, compact=True)
+            # Extra rubric extraction and its limitations are mandatory too.
+            provider_prompt += prompt_content[base_prompt_length:]
+
+        from .ai_payload import estimate_text_tokens
+        media_tokens_per_item = 1500 if clean_model_name(c_model, c_provider) == 'qwen/qwen3.8-27b' else 1000
+        current_images = [m for m in (inline_media or []) if (m.get('mime_type') or '').startswith('image/') or m.get('mime_type') == 'application/pdf']
+        current_images_count = len(current_images)
+        est_tokens = estimate_text_tokens(provider_prompt + provider_system) + len(inline_media or []) * media_tokens_per_item
 
         # 0. Перевірка зафіксованого ліміту контексту (якщо раніше виникала помилка 413 / перевищення контексту)
         if caps.get('is_context_flagged') and est_tokens > model_context_tokens:
@@ -6599,6 +6806,20 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                 while is_model_busy(c_provider, c_model) and (time.time() - wait_t0 < 10):
                     time.sleep(1.0)
 
+        # 2.5 Перевірка кількості зображень (наприклад qwen3.8-27b підтримує до 3 зображень, текстові моделі 0)
+        if max_images_allowed is not None and current_images_count > max_images_allowed:
+            has_other_multimodal = any(
+                (get_model_capabilities(c['model'], c['provider']).get('max_images') is None or
+                 get_model_capabilities(c['model'], c['provider']).get('max_images', 0) >= current_images_count) and
+                get_model_capabilities(c['model'], c['provider']).get('supports_vision', True)
+                for i, c in enumerate(attempts_configs) if i > cfg_idx
+            )
+            if has_other_multimodal:
+                skip_msg = f"{c_provider}/{c_model}: робота містить {current_images_count} зображень/PDF-сторінок (ліміт моделі {max_images_allowed}). Перемикаюсь на мультимодальну модель."
+                emit_event('model_skipped', skip_msg, provider=c_provider, model=c_model, position=cfg_idx + 1, total=len(attempts_configs))
+                attempted_errors.append(f"[{c_provider}/{c_model} пропущено]: перевищено ліміт зображень ({current_images_count} > {max_images_allowed})")
+                continue
+
         # 3. Якщо у роботі є зображення/PDF, а модель суто текстова, і в черзі є мультимодальна модель — пропускаємо
         if requires_vision and not model_supports_vision:
             has_other_vision = any(
@@ -6611,17 +6832,36 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                 attempted_errors.append(f"[{c_provider}/{c_model} пропущено]: відсутня підтримка зображень/PDF")
                 continue
 
-        # 4. Якщо розрахунковий обсяг даних перевищує ліміт контексту моделі, і в черзі є більша модель — пропускаємо
+        # 4. Якщо розрахунковий обсяг даних перевищує ліміт контексту моделі:
         if est_tokens > model_context_tokens:
             has_larger_model = any(
                 get_model_capabilities(c['model'], c['provider']).get('context_tokens', 128000) > model_context_tokens
                 for i, c in enumerate(attempts_configs) if i > cfg_idx
             )
             if has_larger_model:
-                skip_msg = f"{c_provider}/{c_model}: обсяг даних (~{est_tokens} токенів) перевищує контекст моделі ({caps.get('context_display', model_context_tokens)}). Пропускаю для збереження часу."
+                skip_msg = f"{c_provider}/{c_model}: обсяг даних (~{est_tokens} токенів) перевищує безпечний контекст моделі ({caps.get('context_display', model_context_tokens)}). Перемикаюсь на модель з більшим контекстом."
                 emit_event('model_skipped', skip_msg, provider=c_provider, model=c_model, position=cfg_idx + 1, total=len(attempts_configs))
-                attempted_errors.append(f"[{c_provider}/{c_model} пропущено]: перевищено ліміт контексту")
+                attempted_errors.append(f"[{c_provider}/{c_model} пропущено]: перевищено ліміт контексту (~{est_tokens} > {model_context_tokens})")
                 continue
+            elif c_provider == 'groq':
+                # Якщо більшої моделі в черзі немає, а це Groq — автоматично скорочуємо контекст (truncate),
+                # щоб уникнути HTTP 413 (Payload Too Large). Докази учня зберігаємо!
+                excess_tokens = est_tokens - model_context_tokens + 400
+                excess_chars = int(excess_tokens * 2.5)
+                ref_marker = 'МАТЕРІАЛИ ДО УРОКУ / ДОВІДКОВІ ФАЙЛИ ВЧИТЕЛЯ:\n'
+                if ref_marker in provider_prompt:
+                    p_before, p_after = provider_prompt.split(ref_marker, 1)
+                    student_marker = '\nВИКОНАНА РОБОТА УЧНЯ ДЛЯ ОЦІНЮВАННЯ:\n'
+                    if student_marker in p_after:
+                        ref_content, student_part = p_after.split(student_marker, 1)
+                        shortened_ref = ref_content[:-min(len(ref_content), excess_chars)].rstrip()
+                        if not shortened_ref:
+                            shortened_ref = "[Довідкову теорію вчителя скорочено для безпечного обсягу запиту]"
+                        provider_prompt = p_before + ref_marker + shortened_ref + student_marker + student_part
+                est_tokens = estimate_text_tokens(provider_prompt + provider_system) + len(inline_media or []) * media_tokens_per_item
+                emit_event('context_truncated',
+                           f"{c_provider}/{c_model}: виконано авто-скорочення контексту до ~{est_tokens} токенів для запобігання HTTP 413.",
+                           provider=c_provider, model=c_model, position=cfg_idx + 1, total=len(attempts_configs))
 
         emit_event('model_start', f'Спроба {cfg_idx + 1}/{len(attempts_configs)}: {c_provider}/{c_model}. Очікую відповідь.',
                    provider=c_provider, model=c_model, position=cfg_idx + 1, total=len(attempts_configs))
@@ -6635,15 +6875,6 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
         if router_retry:
             max_retries = 1
 
-        provider_prompt, provider_system = prompt_content, system_instruction
-        if c_provider in ('groq', 'openrouter'):
-            provider_prompt, provider_system = build_assessment_request(
-                submission, selected_preset, active_grs, scope, text_parts,
-                primary_task_content if 'primary_task_content' in locals() else [],
-                teacher_files_content, material_coverage, custom_prompt=custom_prompt,
-                ai_settings=settings, compact=True)
-            # Extra rubric extraction and its limitations are mandatory too.
-            provider_prompt += prompt_content[base_prompt_length:]
         emit_event('context_prepared',
                    f'{c_provider}/{c_model}: підготовлено {len(provider_prompt)} символів контексту '
                    f'і {len(provider_system)} символів правил; текст роботи учня збережено повністю.',
@@ -6670,7 +6901,7 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                     custom_url=c_url,
                     temperature=float(settings.temperature if settings.temperature is not None else 0.2),
                     max_output_tokens=min(10000, (2200 if c_provider == 'groq' else 4000) + 300 * len(active_grs) + 180 * len(scope.get("assigned_tasks") or [])),
-                    timeout=90 if router_retry else 35,
+                    timeout=50 if c_provider == 'gemini' else (90 if router_retry else 35),
                     json_mode=True,
                     thinking_budget=thinking_budget_val,
                     connection_id=c_conn_id
@@ -6707,13 +6938,14 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                         fail_reason = f"HTTP {status_code}: {err_msg}" if (status_code and err_msg) else (err_msg or f"Помилка HTTP {status_code}")
 
                     # Фіксуємо паузу при перевантаженні (429, 503 тощо)
-                    if is_overload_error(status_code, fail_reason):
-                        set_model_cooldown(c_provider, c_model, duration_seconds=45, reason=fail_reason)
+                    if is_overload_error(status_code, fail_reason) or status_code in (429, 503):
+                        cooldown_secs = 60 if status_code == 503 else 45
+                        set_model_cooldown(c_provider, c_model, duration_seconds=cooldown_secs, reason=fail_reason)
 
                     # Фіксуємо та позначаємо помилку обсягу/контексту (413 тощо)
-                    if is_context_limit_error(status_code, fail_reason):
+                    if is_context_limit_error(status_code, fail_reason) or status_code == 413:
                         record_model_context_limit(c_provider, c_model, error_message=fail_reason, est_tokens=est_tokens)
-                        emit_event('model_limit_flagged', f"{c_provider}/{c_model}: зафіксовано ліміт контексту/обсягу. Модель позначено в системі.", provider=c_provider, model=c_model)
+                        emit_event('model_limit_flagged', f"{c_provider}/{c_model}: зафіксовано ліміт контексту/обсягу (HTTP {status_code}). Модель позначено в системі.", provider=c_provider, model=c_model)
 
                     fail_reason = report_failure(fail_reason, status_code)
                     attempted_errors.append(f"[{c_provider}/{c_model}]: {fail_reason}")
@@ -6737,22 +6969,27 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                 raw_text = str(raw_text or '').strip()
                 result_json = extract_json_from_text(raw_text, allow_partial=False)
                 if not isinstance(result_json, dict):
+                    result_json = repair_json_string(raw_text)
+                if not isinstance(result_json, dict):
+                    result_json = extract_json_from_text(raw_text, allow_partial=True)
+                if not isinstance(result_json, dict):
                     result_json = None
-                # Some free routes return a safety classification instead of an
-                # assessment. Retry one completed but unusable response, sharing
-                # the existing retry budget; never invent a grade from fragments.
+
                 unusable_format = (not result_json or
                                    ('suggested_grade' not in result_json and not result_json.get('assessment_blocked')))
-                if router_retry and unusable_format and attempt < max_retries:
-                    reason = 'Модель повернула непридатний формат замість оцінювання. Повторюю вибір маршруту один раз.'
+                json_retry_allowed = (router_retry or attempt < 1)
+                if unusable_format and attempt < max_retries and json_retry_allowed:
+                    reason = ('Модель повернула непридатний формат або пошкоджений JSON. '
+                              f'Повторюю спробу ({attempt + 1}/{max(max_retries, 1)}) з експоненціальною паузою...')
                     log_ai_error(teacher=teacher, submission=submission, action='evaluation',
                                  provider=c_provider, model_name=c_model, connection_id=c_conn_id, status_code=200,
-                                 error_type='Unexpected Assessment Format', error_message=reason,
+                                 error_type='JSON Parsing Error' if not result_json else 'Unexpected Assessment Format',
+                                 error_message=reason,
                                  raw_response=raw_text[:2000], failover_triggered=True)
                     emit_event('retry', f'{c_provider}/{c_model}: {reason}',
                                provider=c_provider, model=c_model, position=cfg_idx + 1,
                                total=len(attempts_configs), status_code=200)
-                    time.sleep(1.5 * (attempt + 1))
+                    time.sleep(2.0 * (attempt + 1))
                     continue
 
                 model_name = f"{c_model} ({c_provider.title()})" if c_provider != 'gemini' else c_model

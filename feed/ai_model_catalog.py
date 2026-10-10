@@ -39,10 +39,10 @@ PROVIDER_CATALOG = [
         'limits_url': 'https://console.groq.com/docs/rate-limits',
         'quota_note': 'Орієнтири для Free Plan; фактичні квоти організації — у кабінеті Groq.',
         'models': [
-            {'name': 'openai/gpt-oss-120b', 'description': 'Текстова модель GPT OSS; контекст 131 072 токени.', 'quota': 'Free: 30 RPM · 1 000 RPD · 8 000 TPM', 'supports_vision': False, 'context_tokens': 131072, 'context_display': '131 072 токени (тільки текст)'},
-            {'name': 'openai/gpt-oss-20b', 'description': 'Компактна текстова модель GPT OSS.', 'quota': 'Free: 30 RPM · 1 000 RPD · 8 000 TPM', 'supports_vision': False, 'context_tokens': 131072, 'context_display': '131 072 токени (тільки текст)'},
-            {'name': 'llama-3.3-70b-versatile', 'description': 'Швидка мовна модель LLaMA 3.3 від Meta.', 'quota': 'Free: 30 RPM', 'supports_vision': False, 'context_tokens': 128000, 'context_display': '128 000 токенів (тільки текст)'},
-            {'name': 'qwen/qwen3.8-27b', 'description': 'Мультимодальна модель Qwen із підтримкою зображень.', 'quota': 'Free: 30 RPM', 'supports_vision': True, 'context_tokens': 32768, 'context_display': '32 768 токенів (до 3 фото)'},
+            {'name': 'openai/gpt-oss-120b', 'description': 'Текстова модель GPT OSS (Free TPM ліміт ~8 000).', 'quota': 'Free: 30 RPM · 1 000 RPD · 8 000 TPM', 'supports_vision': False, 'context_tokens': 6500, 'context_display': '6 500 токенів (Free TPM ліміт, тільки текст)', 'max_images': 0},
+            {'name': 'openai/gpt-oss-20b', 'description': 'Компактна текстова модель GPT OSS.', 'quota': 'Free: 30 RPM · 1 000 RPD · 8 000 TPM', 'supports_vision': False, 'context_tokens': 6500, 'context_display': '6 500 токенів (Free TPM ліміт, тільки текст)', 'max_images': 0},
+            {'name': 'llama-3.3-70b-versatile', 'description': 'Швидка мовна модель LLaMA 3.3 від Meta.', 'quota': 'Free: 30 RPM · 6 000 TPM', 'supports_vision': False, 'context_tokens': 6000, 'context_display': '6 000 токенів (Free TPM ліміт, тільки текст)', 'max_images': 0},
+            {'name': 'qwen/qwen3.8-27b', 'description': 'Мультимодальна модель Qwen із підтримкою зображень (до 3 фото).', 'quota': 'Free: 30 RPM · 7 000 ITPM', 'supports_vision': True, 'context_tokens': 6000, 'context_display': '6 000 токенів (Free ITPM ліміт, до 3 фото)', 'max_images': 3},
         ]
     },
     {
@@ -108,6 +108,7 @@ def get_model_capabilities(model_name, provider=None):
                         'supports_vision': m.get('supports_vision', True),
                         'context_tokens': m.get('context_tokens', 128000),
                         'context_display': m.get('context_display', '128 000 токенів'),
+                        'max_images': m.get('max_images'),
                     }
                     break
             if base_caps:
@@ -136,9 +137,9 @@ def get_model_capabilities(model_name, provider=None):
             base_caps = {'supports_vision': has_vision, 'context_tokens': 64000 if 'flash' in name else 128000, 'context_display': '64K–128K токенів (тільки текст)'}
         elif prov == 'groq':
             if any(v in name for v in ('vision', 'qwen3.8', 'qwen-vl')):
-                base_caps = {'supports_vision': True, 'context_tokens': 32768, 'context_display': '32 768 токенів (до 3 фото)'}
+                base_caps = {'supports_vision': True, 'context_tokens': 6000, 'context_display': '6 000 токенів (Free ITPM ліміт, до 3 фото)', 'max_images': 3}
             else:
-                base_caps = {'supports_vision': False, 'context_tokens': 131072 if 'gpt-oss' in name else 128000, 'context_display': '128K–131K токенів (тільки текст)'}
+                base_caps = {'supports_vision': False, 'context_tokens': 6500 if 'gpt-oss' in name else 6000, 'context_display': '6 000–6 500 токенів (Free TPM ліміт, тільки текст)', 'max_images': 0}
         elif any(v in name for v in ('vision', '4o', 'gemini', 'claude-3', 'vl', 'pixtral')):
             base_caps = {'supports_vision': True, 'context_tokens': 128000, 'context_display': '128 000 токенів (~128K)'}
         else:
