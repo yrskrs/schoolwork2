@@ -43,6 +43,7 @@ MIDDLEWARE = [
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'feed.middleware.PageCompressionMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'schoolnet.middleware.LegacySessionCookieMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -119,6 +120,8 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # ─── Сесії ─────────────────────────────────────────────────────────────────────
 SESSION_COOKIE_AGE = 86400 * 30  # 30 днів
+SESSION_COOKIE_NAME = 'schoolwork2_sessionid'
+CSRF_COOKIE_NAME = 'schoolwork2_csrftoken'
 SESSION_SAVE_EVERY_REQUEST = True
 
 # ─── Завантаження без обмеження розміру файлів ────────────────────────────────

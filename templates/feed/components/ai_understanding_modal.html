@@ -225,7 +225,7 @@ function getAiUndCsrfToken() {
         || document.querySelector('[name=csrfmiddlewaretoken]')?.value;
     if (inputToken) return inputToken;
     if (typeof CSRF_TOKEN !== 'undefined' && CSRF_TOKEN) return CSRF_TOKEN;
-    const match = document.cookie.match(/csrftoken=([^;]+)/);
+    const match = document.cookie.match(/(?:^|;\s*)schoolwork2_csrftoken=([^;]+)/);
     if (match) return decodeURIComponent(match[1]);
     return '';
 }

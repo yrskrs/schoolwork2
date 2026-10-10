@@ -1,7 +1,7 @@
 name: ${COMPOSE_PROJECT_NAME:-schoolwork2}
 services:
   app:
-    image: ${SCHOOLWORK_IMAGE:-schoolwork2-app:4.3.0}
+    image: ${SCHOOLWORK_IMAGE:-schoolwork2-app:4.3.1}
     build:
       context: .
       dockerfile: Dockerfile
@@ -31,7 +31,7 @@ services:
       start_period: 45s
 
   ai_worker:
-    image: ${SCHOOLWORK_IMAGE:-schoolwork2-app:4.3.0}
+    image: ${SCHOOLWORK_IMAGE:-schoolwork2-app:4.3.1}
     container_name: schoolnet_ai_worker
     restart: unless-stopped
     command: ["python", "manage.py", "process_ai_jobs"]

@@ -8,6 +8,21 @@ from school_sync.django_backend import operate, cycle
 
 @override_settings(ROSTER_SYNC_TOKEN='synthetic-roster',ROSTER_PEERS=[])
 class SchoolAPIV2Tests(TestCase):
+    def test_own_cookie_and_valid_legacy_session_survive_foreign_cookie(self):
+        from django.conf import settings
+        from django.test import Client
+        original = self.client.cookies[settings.SESSION_COOKIE_NAME].value
+        self.client.cookies['sessionid'] = original
+        del self.client.cookies[settings.SESSION_COOKIE_NAME]
+        response = self.client.get('/teacher/roster-sync/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.wsgi_request.user, self.user)
+        self.assertEqual(response.cookies[settings.SESSION_COOKIE_NAME].value, original)
+        self.client.cookies['sessionid'] = 'foreign-journal-session-that-is-not-ours'
+        self.assertEqual(self.client.get('/teacher/roster-sync/').status_code, 200)
+        outsider = Client(); outsider.cookies['sessionid'] = 'foreign-journal-session-that-is-not-ours'
+        self.assertEqual(outsider.get('/teacher/roster-sync/').status_code, 302)
+
     def setUp(self):
         get_user_model().objects.create_superuser(username='synthetic-admin',password='synthetic')
         self.user=get_user_model().objects.create_user(username='synthetic-v2',password='synthetic')
@@ -102,8 +117,11 @@ class SchoolAPIV2Tests(TestCase):
         self.assertEqual(response.status_code, 200)
         code = json.loads(unescape(re.search(r'<textarea[^>]*id="journal-connection-code"[^>]*>(.*?)</textarea>', response.content.decode(), re.S).group(1)))
         self.assertEqual(code['source'], 'schoolwork')
-        self.assertEqual(code['site_url'], 'http://schoolwork-api:8000')
+        self.assertEqual(code['site_url'], 'http://example.invalid')
         key = JournalAPIKey.objects.get(key=code['api_key'])
+        plain = unescape(re.search(r'<textarea[^>]*id="journal-api-key"[^>]*>(.*?)</textarea>', response.content.decode(), re.S).group(1))
+        self.assertEqual(plain, key.key)
+        self.assertFalse(plain.startswith('{'))
         self.assertEqual(key.teacher, self.teacher)
         self.assertTrue(key.can_export_grades)
         self.assertFalse(key.can_import_roster)

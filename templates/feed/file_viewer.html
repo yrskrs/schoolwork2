@@ -1382,7 +1382,7 @@ function toggleViewerIgnorePlagiarism(isChecked) {
         tokenVal = CSRF_TOKEN;
     }
     if (!tokenVal) {
-        var match = document.cookie.match(/csrftoken=([^;]+)/);
+        var match = document.cookie.match(/(?:^|;\s*)schoolwork2_csrftoken=([^;]+)/);
         if (match) tokenVal = match[1];
     }
     var subId = typeof SUBMISSION_ID !== 'undefined' ? SUBMISSION_ID : '{{ submission.id }}';

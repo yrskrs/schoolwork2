@@ -8,6 +8,7 @@ from django.views.decorators.http import require_GET
 
 from .journal_api import get_authenticated_journal_key
 from .models import ClassGroup, Student, Submission, Subject
+from school_sync.django_backend import operate
 
 
 def authorized(request):
@@ -35,7 +36,7 @@ def roster(request):
         classes = classes.filter(teacher=key.teacher)
         subjects = subjects.filter(teacher=key.teacher)
     class_ids = list(classes.values_list('pk', flat=True))
-    return reply({'schema_version': 2, 'source': 'schoolwork',
+    return reply({'schema_version': 2, 'source': 'schoolwork', 'instance_id': operate(lambda engine, store: engine.origin),
         'classes': list(classes.values('id', 'name')),
         'subjects': list(subjects.values('id', 'name')),
         'students': [{'id': s.pk, 'class_id': s.class_group_id, 'name': s.get_full_name()}

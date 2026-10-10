@@ -7688,7 +7688,7 @@ def teacher_settings_view(request):
     from django.conf import settings as journal_settings
     journal_site_url = getattr(journal_settings, 'PUBLIC_BASE_URL', '') or request.build_absolute_uri('/')[:-1]
     import json as journal_json
-    journal_connection_code = journal_json.dumps({'source': 'schoolwork', 'site_url': getattr(journal_settings, 'JOURNAL_API_BASE_URL', '') or journal_site_url, 'api_key': just_created_api_key}, ensure_ascii=False) if just_created_api_key else ''
+    journal_connection_code = journal_json.dumps({'source': 'schoolwork', 'site_url': journal_site_url, 'api_key': just_created_api_key}, ensure_ascii=False) if just_created_api_key else ''
 
     context = {
         'active_tab': tab,
