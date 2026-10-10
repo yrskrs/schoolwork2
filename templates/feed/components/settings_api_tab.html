@@ -1,0 +1,509 @@
+{% load static %}
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<!-- 4. ВКЛАДКА: API ТА ІНТЕГРАЦІЯ З ЛОКАЛЬНИМ ЖУРНАЛОМ ОЦІНОК                   -->
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="tab-section-api" class="settings-tab-pane" style="{% if active_tab != 'api' %}display:none;{% endif %}">
+
+    <!-- Банер про щойно створений API ключ -->
+    {% if just_created_api_key %}
+    <div class="form-card mb-4" style="background:linear-gradient(135deg, rgba(16,185,129,0.12), rgba(99,102,241,0.08));border:1.5px solid #10b981;animation:fadeIn 0.3s ease-in-out;">
+        <div class="form-card-body" style="padding:18px 20px;">
+            <div style="display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap;">
+                <span style="font-size:32px;line-height:1;">🎉</span>
+                <div style="flex:1;min-width:240px;">
+                    <div style="font-weight:800;font-size:16px;color:#10b981;margin-bottom:4px;">
+                        Новий API ключ для «{{ just_created_api_key_name|default:'Локального журналу' }}» успішно створено!
+                    </div>
+                    <div style="font-size:13px;color:var(--color-text-secondary);margin-bottom:12px;">
+                        Скопіюйте цей токен зараз і вставте у конфігурацію вашого локального журналу. Для вашої безпеки повний ключ відображається тут лише один раз.
+                    </div>
+                    <div style="display:flex;align-items:center;gap:10px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:8px 12px;max-width:650px;">
+                        <code id="new-api-key-code" style="font-family:monospace;font-size:14px;font-weight:700;color:var(--color-primary);flex:1;word-break:break-all;">{{ just_created_api_key }}</code>
+                        <button type="button" class="btn btn-primary btn-sm" onclick="copyTextToClipboard('{{ just_created_api_key }}', this)" style="padding:6px 14px;white-space:nowrap;">
+                            📋 Скопіювати
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- 4.1. Картка керування API ключами -->
+    <div class="form-card mb-4">
+        <div class="form-card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+            <div>
+                <h2 class="form-card-title" style="margin:0;display:flex;align-items:center;gap:8px;">
+                    <span>🔑</span> <span>API ключі для локального журналу</span>
+                </h2>
+                <div style="font-size:12.5px;color:var(--color-text-muted);margin-top:2px;">
+                    Використовуються для безпечної передачі оцінок у ваш журнал та імпорту списків учнів
+                </div>
+            </div>
+            <button type="button" class="btn btn-primary btn-sm" onclick="openCreateApiKeyModal()" style="font-weight:700;display:flex;align-items:center;gap:6px;">
+                <span>➕</span> <span>Створити API ключ</span>
+            </button>
+        </div>
+
+        <div class="form-card-body">
+            {% if journal_api_keys %}
+            <div style="overflow-x:auto;">
+                <table class="table" style="width:100%;border-collapse:collapse;font-size:13px;">
+                    <thead>
+                        <tr style="border-bottom:1.5px solid var(--color-border);text-align:left;color:var(--color-text-muted);font-size:11.5px;text-transform:uppercase;">
+                            <th style="padding:10px 8px;">Назва та призначення</th>
+                            <th style="padding:10px 8px;">API Ключ (Токен)</th>
+                            <th style="padding:10px 8px;">Дозволи</th>
+                            <th style="padding:10px 8px;">Статистика</th>
+                            <th style="padding:10px 8px;text-align:right;">Дії</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for k in journal_api_keys %}
+                        <tr style="border-bottom:1px solid var(--color-border);vertical-align:middle;">
+                            <td style="padding:12px 8px;">
+                                <div style="font-weight:700;color:var(--color-text-primary);display:flex;align-items:center;gap:6px;">
+                                    <span>{% if k.is_active %}🟢{% else %}⏸️{% endif %}</span>
+                                    <span>{{ k.name }}</span>
+                                </div>
+                                <div style="font-size:11px;color:var(--color-text-muted);margin-top:2px;">
+                                    Створено: {{ k.created_at|date:"d.m.Y H:i" }}
+                                    {% if k.teacher %}· Вчитель: {{ k.teacher.full_name }}{% endif %}
+                                </div>
+                            </td>
+                            <td style="padding:12px 8px;">
+                                <div style="display:inline-flex;align-items:center;gap:6px;background:var(--color-bg-secondary);padding:4px 8px;border-radius:var(--radius-sm);border:1px solid var(--color-border);">
+                                    <span id="key-display-{{ k.id }}" style="font-family:monospace;font-size:12px;font-weight:600;">
+                                        {{ k.key|slice:":12" }}••••••••••••••••
+                                    </span>
+                                    <input type="hidden" id="key-full-{{ k.id }}" value="{{ k.key }}">
+                                    <button type="button" class="btn btn-secondary btn-sm" onclick="toggleKeyVisibility({{ k.id }})" style="padding:2px 6px;font-size:11px;" title="Показати/приховати токен">
+                                        👁️
+                                    </button>
+                                    <button type="button" class="btn btn-secondary btn-sm" onclick="copyTextToClipboard('{{ k.key }}', this)" style="padding:2px 6px;font-size:11px;" title="Скопіювати в буфер">
+                                        📋
+                                    </button>
+                                </div>
+                            </td>
+                            <td style="padding:12px 8px;">
+                                <div style="display:flex;flex-direction:column;gap:3px;">
+                                    {% if k.can_export_grades %}
+                                    <span style="font-size:11px;color:#10b981;font-weight:700;display:inline-flex;align-items:center;gap:3px;">
+                                        <span>📥</span> <span>Вивантаження оцінок</span>
+                                    </span>
+                                    {% endif %}
+                                    {% if k.can_import_roster %}
+                                    <span style="font-size:11px;color:var(--color-primary);font-weight:700;display:inline-flex;align-items:center;gap:3px;">
+                                        <span>📤</span> <span>Синхронізація учнів</span>
+                                    </span>
+                                    {% endif %}
+                                    {% if not k.can_export_grades and not k.can_import_roster %}
+                                    <span style="font-size:11px;color:var(--color-text-muted);">Без дозволів</span>
+                                    {% endif %}
+                                </div>
+                            </td>
+                            <td style="padding:12px 8px;">
+                                <div style="font-size:11.5px;color:var(--color-text-primary);">
+                                    Запитів: <strong>{{ k.requests_count }}</strong>
+                                </div>
+                                <div style="font-size:11px;color:var(--color-text-muted);">
+                                    {% if k.last_used_at %}
+                                    Останній: {{ k.last_used_at|date:"d.m.Y H:i" }}
+                                    {% else %}
+                                    Ще не використовувався
+                                    {% endif %}
+                                </div>
+                            </td>
+                            <td style="padding:12px 8px;text-align:right;">
+                                <div style="display:inline-flex;align-items:center;gap:6px;">
+                                    <form method="POST" style="display:inline-block;margin:0;">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="action" value="toggle_journal_api_key">
+                                        <input type="hidden" name="key_id" value="{{ k.id }}">
+                                        <button type="submit" class="btn btn-secondary btn-sm" style="font-size:11px;padding:3px 8px;" title="{% if k.is_active %}Призупинити дію ключа{% else %}Активувати ключ{% endif %}">
+                                            {% if k.is_active %}⏸️ Призупинити{% else %}▶️ Активувати{% endif %}
+                                        </button>
+                                    </form>
+                                    <form method="POST" style="display:inline-block;margin:0;" onsubmit="return confirm('Ви впевнені, що бажаєте видалити цей API ключ? Локальний журнал втратить доступ до системи.');">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="action" value="delete_journal_api_key">
+                                        <input type="hidden" name="key_id" value="{{ k.id }}">
+                                        <button type="submit" class="btn btn-secondary btn-sm" style="color:var(--color-danger);border-color:rgba(239,68,68,0.3);font-size:11px;padding:3px 8px;" title="Видалити API ключ">
+                                            🗑️
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div style="text-align:center;padding:32px 16px;background:var(--color-bg-secondary);border-radius:var(--radius-md);border:1px dashed var(--color-border);">
+                <div style="font-size:36px;margin-bottom:8px;">🔑</div>
+                <div style="font-weight:800;font-size:15px;color:var(--color-text-primary);margin-bottom:4px;">
+                    У вас ще немає створених API ключів
+                </div>
+                <div style="font-size:12.5px;color:var(--color-text-muted);max-width:440px;margin:0 auto 16px;">
+                    Створіть свій перший API ключ, щоб ваш локальний журнал міг автоматично забирати оцінки та передавати списки дітей.
+                </div>
+                <button type="button" class="btn btn-primary" onclick="openCreateApiKeyModal()" style="font-weight:700;">
+                    ➕ Створити перший API ключ
+                </button>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- 4.2. Картка прямої синхронізації з локальним журналом (On-demand Sync) -->
+    <div class="form-card mb-4">
+        <div class="form-card-header">
+            <h2 class="form-card-title" style="margin:0;display:flex;align-items:center;gap:8px;">
+                <span>🔄</span> <span>Отримати список учнів з локального журналу прямо зараз</span>
+            </h2>
+        </div>
+        <div class="form-card-body">
+            <p style="font-size:13px;color:var(--color-text-secondary);margin-bottom:14px;line-height:1.5;">
+                Якщо ваш локальний журнал запущено в мережі або на локальному комп'ютері (наприклад, <code>http://127.0.0.1:8000/api/journal/students</code> або <code>http://localhost:5000/api/roster</code>), введіть його адресу нижче — SchoolNet сам виконає запит і заповнить базу учнями та класами.
+            </p>
+            <form method="POST">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="pull_local_journal_roster">
+                <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+                    <input type="url" name="journal_url" class="form-input" style="flex:1;min-width:280px;" placeholder="http://127.0.0.1:8000/api/journal/students" required>
+                    <button type="submit" class="btn btn-primary" style="font-weight:800;white-space:nowrap;display:flex;align-items:center;gap:6px;">
+                        <span>📥</span> <span>Синхронізувати зараз</span>
+                    </button>
+                </div>
+                <div style="font-size:11.5px;color:var(--color-text-muted);margin-top:6px;">
+                    💡 Очікуваний формат відповіді локального журналу: JSON-список учнів з полями <code>last_name</code>, <code>first_name</code>, <code>class_name</code> (або вкладені <code>classes</code>).
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 4.3. Документація API та приклади для розробника -->
+    <div class="form-card mb-4">
+        <div class="form-card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+            <div>
+                <h2 class="form-card-title" style="margin:0;display:flex;align-items:center;gap:8px;">
+                    <span>📚</span> <span>Інструкція та документація REST API</span>
+                </h2>
+                <div style="font-size:12.5px;color:var(--color-text-muted);margin-top:2px;">
+                    Готові приклади запитів для підключення вашого локального журналу
+                </div>
+            </div>
+            <div style="font-size:12px;color:var(--color-primary);font-weight:700;background:rgba(99,102,241,0.08);padding:4px 10px;border-radius:12px;">
+                Базовий URL: <code>{{ api_base_url }}</code>
+            </div>
+        </div>
+
+        <div class="form-card-body">
+            <!-- Перемикач підрозділів документації -->
+            <div style="display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap;border-bottom:1px solid var(--color-border);padding-bottom:10px;">
+                <button type="button" class="btn btn-secondary btn-sm api-doc-tab-btn active" id="btn-doc-grades" onclick="showApiDocSection('grades', this)" style="font-weight:700;">
+                    📥 1. Витягування оцінок (GET)
+                </button>
+                <button type="button" class="btn btn-secondary btn-sm api-doc-tab-btn" id="btn-doc-roster-post" onclick="showApiDocSection('roster-post', this)" style="font-weight:700;">
+                    📤 2. Синхронізація учнів (POST)
+                </button>
+                <button type="button" class="btn btn-secondary btn-sm api-doc-tab-btn" id="btn-doc-roster-get" onclick="showApiDocSection('roster-get', this)" style="font-weight:700;">
+                    📋 3. Список класів та учнів (GET)
+                </button>
+                <button type="button" class="btn btn-secondary btn-sm api-doc-tab-btn" id="btn-doc-code" onclick="showApiDocSection('code', this)" style="font-weight:700;">
+                    💻 4. Приклад коду (Python / JS)
+                </button>
+            </div>
+
+            <!-- Документація 1: Експорт оцінок -->
+            <div id="doc-section-grades" class="api-doc-pane">
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+                    <span style="font-size:11px;font-weight:800;background:#10b981;color:#fff;padding:2px 8px;border-radius:4px;">GET</span>
+                    <code style="font-weight:800;font-size:13.5px;color:var(--color-text-primary);">/api/v1/journal/grades/</code>
+                </div>
+                <p style="font-size:13px;color:var(--color-text-secondary);margin-bottom:12px;">
+                    Локальний журнал надсилає цей запит до SchoolNet, щоб отримати виставлені вчителем (або ШІ) оцінки разом з прізвищами, іменами учнів, назвами класів та завданнями.
+                </p>
+
+                <div style="font-weight:700;font-size:12.5px;margin-bottom:6px;color:var(--color-text-primary);">Параметри фільтрації (Query parameters):</div>
+                <ul style="font-size:12px;color:var(--color-text-secondary);margin-bottom:14px;padding-left:20px;line-height:1.6;">
+                    <li><code>class_name=10-А</code> — фільтр по конкретному класу (наприклад 10-А, 9-Б).</li>
+                    <li><code>subject=Інформатика</code> — фільтр по навчальному предмету.</li>
+                    <li><code>since=2026-10-01T00:00:00Z</code> — інкрементальна синхронізація (повертає лише оцінки, виставлені після цієї дати).</li>
+                    <li><code>only_graded=1</code> — повертати тільки перевірені роботи з оцінкою (за замовчуванням увімкнено).</li>
+                    <li><code>limit=500</code> — максимальна кількість записів у відповіді (від 1 до 2000).</li>
+                </ul>
+
+                <div style="font-weight:700;font-size:12.5px;margin-bottom:6px;color:var(--color-text-primary);">Приклад cURL запиту:</div>
+                <div style="position:relative;margin-bottom:14px;">
+                    <pre style="background:var(--color-bg-secondary);border:1px solid var(--color-border);padding:12px 14px;border-radius:var(--radius-sm);font-size:12px;overflow-x:auto;margin:0;"><code id="curl-grades-example">curl -X GET "{{ api_base_url }}/api/v1/journal/grades/?class_name=10-А" \
+  -H "Authorization: Bearer <ВАШ_API_КЛЮЧ>"</code></pre>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="copySnippetFromEl('curl-grades-example', this)" style="position:absolute;top:8px;right:8px;font-size:11px;padding:2px 8px;">
+                        📋 Скопіювати
+                    </button>
+                </div>
+
+                <div style="font-weight:700;font-size:12.5px;margin-bottom:6px;color:var(--color-text-primary);">Приклад JSON відповіді:</div>
+                <pre style="background:var(--color-bg-secondary);border:1px solid var(--color-border);padding:12px 14px;border-radius:var(--radius-sm);font-size:11.5px;overflow-x:auto;margin:0;"><code>{
+  "status": "success",
+  "count": 1,
+  "server_time": "2026-10-10T12:00:00Z",
+  "grades": [
+    {
+      "submission_id": 142,
+      "student_id": 45,
+      "student": {
+        "id": 45,
+        "last_name": "Шевченко",
+        "first_name": "Тарас",
+        "full_name": "Шевченко Тарас"
+      },
+      "class": {
+        "id": 12,
+        "name": "10-А",
+        "grade": 10,
+        "letter": "А"
+      },
+      "assignment": {
+        "id": 8,
+        "title": "Практична робота №3",
+        "subject": "Інформатика",
+        "max_grade": 12,
+        "due_date": "2026-10-15"
+      },
+      "grade": "11",
+      "ai_suggested_grade": "11",
+      "teacher_comment": "Відмінно виконане завдання!",
+      "submitted_at": "2026-10-10T09:30:00Z",
+      "graded_at": "2026-10-10T11:15:00Z",
+      "is_group_work": false
+    }
+  ]
+}</code></pre>
+            </div>
+
+            <!-- Документація 2: Синхронізація ростеру учнів -->
+            <div id="doc-section-roster-post" class="api-doc-pane" style="display:none;">
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+                    <span style="font-size:11px;font-weight:800;background:var(--color-primary);color:#fff;padding:2px 8px;border-radius:4px;">POST</span>
+                    <code style="font-weight:800;font-size:13.5px;color:var(--color-text-primary);">/api/v1/journal/roster/</code>
+                </div>
+                <p style="font-size:13px;color:var(--color-text-secondary);margin-bottom:12px;">
+                    Локальний журнал надсилає сюди списки класів та дітей. SchoolNet автоматично створить або оновлює записи без дублікатів. Після цього при здачі робіт <strong>учням не потрібно буде вводити свої імена вручну</strong> — вони просто обиратимуть своє прізвище зі списку класу!
+                </p>
+
+                <div style="font-weight:700;font-size:12.5px;margin-bottom:6px;color:var(--color-text-primary);">Формат JSON тіла запиту:</div>
+                <pre style="background:var(--color-bg-secondary);border:1px solid var(--color-border);padding:12px 14px;border-radius:var(--radius-sm);font-size:11.5px;overflow-x:auto;margin-bottom:14px;"><code>{
+  "classes": [
+    {
+      "name": "10-А",
+      "students": [
+        {"last_name": "Шевченко", "first_name": "Тарас"},
+        {"last_name": "Франко", "first_name": "Іван"}
+      ]
+    },
+    {
+      "name": "11-Б",
+      "students": [
+        {"last_name": "Костенко", "first_name": "Ліна"}
+      ]
+    }
+  ]
+}</code></pre>
+
+                <div style="font-size:12px;color:var(--color-text-muted);margin-bottom:12px;">
+                    💡 <em>Альтернативний плоский формат також підтримується:</em> <code>{"students": [{"last_name": "Шевченко", "first_name": "Тарас", "class_name": "10-А"}]}</code>
+                </div>
+
+                <div style="font-weight:700;font-size:12.5px;margin-bottom:6px;color:var(--color-text-primary);">Приклад cURL запиту:</div>
+                <div style="position:relative;margin-bottom:14px;">
+                    <pre style="background:var(--color-bg-secondary);border:1px solid var(--color-border);padding:12px 14px;border-radius:var(--radius-sm);font-size:12px;overflow-x:auto;margin:0;"><code id="curl-roster-example">curl -X POST "{{ api_base_url }}/api/v1/journal/roster/" \
+  -H "Authorization: Bearer <ВАШ_API_КЛЮЧ>" \
+  -H "Content-Type: application/json" \
+  -d '{"classes": [{"name": "10-А", "students": [{"last_name": "Шевченко", "first_name": "Тарас"}]}]}'</code></pre>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="copySnippetFromEl('curl-roster-example', this)" style="position:absolute;top:8px;right:8px;font-size:11px;padding:2px 8px;">
+                        📋 Скопіювати
+                    </button>
+                </div>
+            </div>
+
+            <!-- Документація 3: Перегляд ростеру -->
+            <div id="doc-section-roster-get" class="api-doc-pane" style="display:none;">
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+                    <span style="font-size:11px;font-weight:800;background:#10b981;color:#fff;padding:2px 8px;border-radius:4px;">GET</span>
+                    <code style="font-weight:800;font-size:13.5px;color:var(--color-text-primary);">/api/v1/journal/roster/</code>
+                </div>
+                <p style="font-size:13px;color:var(--color-text-secondary);margin-bottom:12px;">
+                    Повертає поточну структуру класів та зареєстрованих учнів у платформі SchoolNet.
+                </p>
+                <div style="position:relative;margin-bottom:14px;">
+                    <pre style="background:var(--color-bg-secondary);border:1px solid var(--color-border);padding:12px 14px;border-radius:var(--radius-sm);font-size:12px;overflow-x:auto;margin:0;"><code id="curl-get-roster-example">curl -X GET "{{ api_base_url }}/api/v1/journal/roster/?class_name=10-А" \
+  -H "Authorization: Bearer <ВАШ_API_КЛЮЧ>"</code></pre>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="copySnippetFromEl('curl-get-roster-example', this)" style="position:absolute;top:8px;right:8px;font-size:11px;padding:2px 8px;">
+                        📋 Скопіювати
+                    </button>
+                </div>
+            </div>
+
+            <!-- Документація 4: Приклад коду на Python / JS -->
+            <div id="doc-section-code" class="api-doc-pane" style="display:none;">
+                <div style="font-weight:700;font-size:13px;margin-bottom:6px;color:var(--color-text-primary);">
+                    🐍 Приклад для Python (requests) у вашому локальному журналі:
+                </div>
+                <div style="position:relative;margin-bottom:16px;">
+                    <pre style="background:var(--color-bg-secondary);border:1px solid var(--color-border);padding:12px 14px;border-radius:var(--radius-sm);font-size:12px;overflow-x:auto;margin:0;"><code id="py-code-example">import requests
+
+API_URL = "{{ api_base_url }}/api/v1/journal"
+API_KEY = "sk_journal_ваш_ключ"
+HEADERS = {"Authorization": f"Bearer {API_KEY}"}
+
+# 1. Синхронізувати список учнів 10-А класу у SchoolNet:
+roster_data = {
+    "classes": [
+        {
+            "name": "10-А",
+            "students": [
+                {"last_name": "Шевченко", "first_name": "Тарас"},
+                {"last_name": "Франко", "first_name": "Іван"}
+            ]
+        }
+    ]
+}
+r_sync = requests.post(f"{API_URL}/roster/", json=roster_data, headers=HEADERS)
+print("Синхронізація списку:", r_sync.json())
+
+# 2. Витягнути оцінки для заповнення локального журналу:
+r_grades = requests.get(f"{API_URL}/grades/", params={"class_name": "10-А"}, headers=HEADERS)
+grades_data = r_grades.json()
+for item in grades_data.get("grades", []):
+    student = item["student"]["full_name"]
+    grade = item["grade"]
+    assignment = item["assignment"]["title"]
+    print(f"Учень: {student} | Оцінка: {grade} | Робота: {assignment}")
+</code></pre>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="copySnippetFromEl('py-code-example', this)" style="position:absolute;top:8px;right:8px;font-size:11px;padding:2px 8px;">
+                        📋 Скопіювати код Python
+                    </button>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+</div>
+
+<!-- ════ МОДАЛЬНЕ ВІКНО СТВОРЕННЯ API КЛЮЧА ════════════════════════════════════ -->
+<div id="modal-create-api-key" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:9999;align-items:center;justify-content:center;padding:16px;">
+    <div style="background:var(--color-surface);border-radius:var(--radius-lg);width:100%;max-width:560px;max-height:90vh;overflow-y:auto;padding:24px;box-shadow:0 10px 30px rgba(0,0,0,0.3);position:relative;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+            <h3 style="font-size:17px;font-weight:800;margin:0;color:var(--color-text-primary);">
+                🔑 Новий API ключ для журналу
+            </h3>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="closeCreateApiKeyModal()">✕</button>
+        </div>
+
+        <form method="POST">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="create_journal_api_key">
+
+            <div class="form-group" style="margin-bottom:14px;">
+                <label class="form-label required" style="font-weight:700;font-size:13px;">Назва / призначення ключа:</label>
+                <input type="text" name="key_name" class="form-input" placeholder="Наприклад: Мій локальний журнал оцінок (Python)" value="Локальний журнал оцінок" required>
+            </div>
+
+            <div class="form-group" style="margin-bottom:14px;">
+                <label class="form-label" style="font-weight:700;font-size:13px;">URL локального журналу (опціонально):</label>
+                <input type="url" name="local_journal_url" class="form-input" placeholder="http://127.0.0.1:8000/api/journal/students">
+                <div style="font-size:11px;color:var(--color-text-muted);margin-top:3px;">
+                    Адреса сервера локального журналу для швидкої синхронізації однією кнопкою
+                </div>
+            </div>
+
+            <div class="form-group" style="margin-bottom:16px;">
+                <div style="font-weight:700;font-size:13px;margin-bottom:8px;color:var(--color-text-primary);">Дозволи ключа:</div>
+                <div style="display:flex;flex-direction:column;gap:8px;">
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--color-text-primary);">
+                        <input type="checkbox" name="can_export_grades" value="1" checked style="width:18px;height:18px;accent-color:var(--color-primary);">
+                        <span>📥 <strong>Дозволити вивантаження оцінок</strong> (передача оцінок та робіт у журнал)</span>
+                    </label>
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--color-text-primary);">
+                        <input type="checkbox" name="can_import_roster" value="1" checked style="width:18px;height:18px;accent-color:var(--color-primary);">
+                        <span>📤 <strong>Дозволити імпорт та синхронізацію учнів</strong> (створення/оновлення класів з журналу)</span>
+                    </label>
+                </div>
+            </div>
+
+            <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:20px;padding-top:14px;border-top:1px solid var(--color-border);">
+                <button type="button" class="btn btn-secondary" onclick="closeCreateApiKeyModal()">Скасувати</button>
+                <button type="submit" class="btn btn-primary" style="font-weight:800;padding:8px 20px;">
+                    🚀 Згенерувати ключ
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function openCreateApiKeyModal() {
+    var modal = document.getElementById('modal-create-api-key');
+    if (modal) modal.style.display = 'flex';
+}
+
+function closeCreateApiKeyModal() {
+    var modal = document.getElementById('modal-create-api-key');
+    if (modal) modal.style.display = 'none';
+}
+
+function toggleKeyVisibility(keyId) {
+    var span = document.getElementById('key-display-' + keyId);
+    var hidden = document.getElementById('key-full-' + keyId);
+    if (!span || !hidden) return;
+    if (span.getAttribute('data-revealed') === 'true') {
+        span.textContent = hidden.value.substring(0, 12) + '••••••••••••••••';
+        span.removeAttribute('data-revealed');
+    } else {
+        span.textContent = hidden.value;
+        span.setAttribute('data-revealed', 'true');
+    }
+}
+
+function copyTextToClipboard(text, btnEl) {
+    if (!text) return;
+    navigator.clipboard.writeText(text).then(function() {
+        if (btnEl) {
+            var orig = btnEl.innerHTML;
+            btnEl.innerHTML = '✅ Скопійовано!';
+            btnEl.style.borderColor = '#10b981';
+            setTimeout(function() {
+                btnEl.innerHTML = orig;
+                btnEl.style.borderColor = '';
+            }, 1800);
+        }
+    }).catch(function() {
+        prompt('Скопіюйте API ключ:', text);
+    });
+}
+
+function copySnippetFromEl(elemId, btnEl) {
+    var el = document.getElementById(elemId);
+    if (el) copyTextToClipboard(el.textContent.trim(), btnEl);
+}
+
+function showApiDocSection(secName, btnEl) {
+    var panes = document.querySelectorAll('.api-doc-pane');
+    panes.forEach(function(p) { p.style.display = 'none'; });
+    var target = document.getElementById('doc-section-' + secName);
+    if (target) target.style.display = 'block';
+
+    var btns = document.querySelectorAll('.api-doc-tab-btn');
+    btns.forEach(function(b) { b.classList.remove('active'); });
+    if (btnEl) btnEl.classList.add('active');
+}
+
+// Закриття модального вікна при кліку на фон
+document.addEventListener('click', function(e) {
+    var modal = document.getElementById('modal-create-api-key');
+    if (modal && e.target === modal) closeCreateApiKeyModal();
+});
+</script>

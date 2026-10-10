@@ -493,6 +493,108 @@ function selectStudentName(fullName) {
     }
 }
 
+// ── Швидкий вибір учня з ростеру класу (імпортованого з журналу) ───────────
+const rosterSelect = document.getElementById('student-roster-select');
+const manualWrapper = document.getElementById('student-manual-input-wrapper');
+const toggleModeBtn = document.getElementById('btn-toggle-student-mode');
+let isManualStudentMode = false;
+
+function loadClassRoster(classId) {
+    if (!classId) {
+        if (rosterSelect) rosterSelect.style.display = 'none';
+        if (manualWrapper) manualWrapper.style.display = 'block';
+        if (toggleModeBtn) toggleModeBtn.style.display = 'none';
+        return;
+    }
+
+    fetch('/api/students-autocomplete/?class_group_id=' + encodeURIComponent(classId) + '&limit=100')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            const students = data.students || [];
+            if (students.length > 0 && rosterSelect) {
+                let html = '<option value="">— Оберіть своє імʼя зі списку (' + students.length + ' учнів) —</option>';
+                const currentVal = (nameInput ? nameInput.value.trim().toLowerCase() : '');
+                let matchedVal = '';
+                students.forEach(function(st) {
+                    const isSelected = (currentVal && currentVal === st.full_name.trim().toLowerCase());
+                    if (isSelected) matchedVal = st.full_name;
+                    html += '<option value="' + st.full_name.replace(/"/g, '&quot;') + '"' + (isSelected ? ' selected' : '') + '>' + st.full_name + '</option>';
+                });
+                html += '<option value="__manual__">✏️ Ввести власноруч / Немає в списку</option>';
+                rosterSelect.innerHTML = html;
+
+                if (currentVal && !matchedVal) {
+                    isManualStudentMode = true;
+                }
+
+                if (!isManualStudentMode) {
+                    rosterSelect.style.display = 'block';
+                    if (manualWrapper) manualWrapper.style.display = 'none';
+                    if (toggleModeBtn) {
+                        toggleModeBtn.style.display = 'inline-block';
+                        toggleModeBtn.textContent = '✏️ Ввести вручну';
+                    }
+                } else {
+                    rosterSelect.style.display = 'none';
+                    if (manualWrapper) manualWrapper.style.display = 'block';
+                    if (toggleModeBtn) {
+                        toggleModeBtn.style.display = 'inline-block';
+                        toggleModeBtn.textContent = '📋 Обрати зі списку';
+                    }
+                }
+            } else {
+                if (rosterSelect) rosterSelect.style.display = 'none';
+                if (manualWrapper) manualWrapper.style.display = 'block';
+                if (toggleModeBtn) toggleModeBtn.style.display = 'none';
+            }
+        })
+        .catch(function() {
+            if (rosterSelect) rosterSelect.style.display = 'none';
+            if (manualWrapper) manualWrapper.style.display = 'block';
+            if (toggleModeBtn) toggleModeBtn.style.display = 'none';
+        });
+}
+
+function onRosterStudentSelected(val) {
+    if (val === '__manual__') {
+        toggleStudentInputMode(true);
+        return;
+    }
+    if (nameInput) {
+        nameInput.value = val;
+        const clientErr = document.getElementById('full-name-client-error');
+        if (clientErr && val) clientErr.style.display = 'none';
+    }
+}
+
+function toggleStudentInputMode(forceManual) {
+    if (forceManual === true || !isManualStudentMode) {
+        isManualStudentMode = true;
+        if (rosterSelect) rosterSelect.style.display = 'none';
+        if (manualWrapper) manualWrapper.style.display = 'block';
+        if (toggleModeBtn) {
+            toggleModeBtn.style.display = 'inline-block';
+            toggleModeBtn.textContent = '📋 Обрати зі списку';
+        }
+        if (nameInput) nameInput.focus();
+    } else {
+        isManualStudentMode = false;
+        if (rosterSelect && rosterSelect.options.length > 1) {
+            rosterSelect.style.display = 'block';
+            if (manualWrapper) manualWrapper.style.display = 'none';
+            if (toggleModeBtn) {
+                toggleModeBtn.style.display = 'inline-block';
+                toggleModeBtn.textContent = '✏️ Ввести вручну';
+            }
+        }
+    }
+}
+
+// Завантаження ростеру при відкритті сторінки (якщо клас вже вибрано)
+if (classSelect && classSelect.value) {
+    loadClassRoster(classSelect.value);
+}
+
 if (nameInput) {
     nameInput.addEventListener('input', function() {
         clearTimeout(debounceTimer);
@@ -506,6 +608,7 @@ if (nameInput) {
 }
 if (classSelect) {
     classSelect.addEventListener('change', function() {
+        loadClassRoster(classSelect.value);
         if (nameInput && nameInput.value.trim()) {
             fetchStudentSuggestions();
         }

@@ -31,6 +31,7 @@
                 <a href="{% url 'teacher_settings' %}?tab=profile" class="tab-btn {% if active_tab == 'profile' %}active{% endif %}" onclick="return switchSettingsTab('profile', this)">👤 Профіль</a>
                 <a href="{% url 'teacher_settings' %}?tab=environment" class="tab-btn {% if active_tab == 'environment' %}active{% endif %}" onclick="return switchSettingsTab('environment', this)">🏫 Середовище</a>
                 <a href="{% url 'teacher_settings' %}?tab=ai" class="tab-btn {% if active_tab == 'ai' %}active{% endif %}" onclick="return switchSettingsTab('ai', this)">🤖 ШІ</a>
+                <a href="{% url 'teacher_settings' %}?tab=api" class="tab-btn {% if active_tab == 'api' %}active{% endif %}" onclick="return switchSettingsTab('api', this)">🌐 API та журнал</a>
             </nav>
 
             <!-- ═══════════════════════════════════════════════════════════════════ -->
@@ -1082,6 +1083,9 @@
                 </section>
 
             </div>
+
+            <!-- 4. ВКЛАДКА: API ТА ЛОКАЛЬНИЙ ЖУРНАЛ ОЦІНОК -->
+            {% include 'feed/components/settings_api_tab.html' %}
 
         </div>
     </div>

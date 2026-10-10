@@ -204,7 +204,8 @@ class FirstRunSetupMiddleware:
             path.startswith('/static/') or
             path.startswith('/media/') or
             path == '/favicon.ico' or
-            path.startswith('/setup/')
+            path.startswith('/setup/') or
+            path.startswith('/api/')
         ):
             return self.get_response(request)
 

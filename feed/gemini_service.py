@@ -2986,13 +2986,13 @@ def extract_json_from_text(text, allow_partial=True):
         except Exception:
             pass
 
+    if not allow_partial:
+        return None
+
     # 3.5 Спроба автоматичного відновлення структури через repair_json_string
     repaired = repair_json_string(text)
     if isinstance(repaired, dict):
         return repaired
-
-    if not allow_partial:
-        return None
 
     # 4. Спроба відновлення обірваного/обрізаного JSON (наприклад через ліміт токенів)
     if first_brace != -1:
@@ -6969,21 +6969,18 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                 raw_text = str(raw_text or '').strip()
                 result_json = extract_json_from_text(raw_text, allow_partial=False)
                 if not isinstance(result_json, dict):
-                    result_json = repair_json_string(raw_text)
-                if not isinstance(result_json, dict):
-                    result_json = extract_json_from_text(raw_text, allow_partial=True)
-                if not isinstance(result_json, dict):
                     result_json = None
 
                 unusable_format = (not result_json or
                                    ('suggested_grade' not in result_json and not result_json.get('assessment_blocked')))
                 json_retry_allowed = (router_retry or attempt < 1)
                 if unusable_format and attempt < max_retries and json_retry_allowed:
-                    reason = ('Модель повернула непридатний формат або пошкоджений JSON. '
-                              f'Повторюю спробу ({attempt + 1}/{max(max_retries, 1)}) з експоненціальною паузою...')
+                    reason = ('Модель повернула непридатний формат замість оцінювання. Повторюю вибір маршруту один раз.'
+                              if router_retry else
+                              f'Модель повернула непридатний формат або пошкоджений JSON. Повторюю спробу ({attempt + 1}/{max(max_retries, 1)}) з експоненціальною паузою...')
                     log_ai_error(teacher=teacher, submission=submission, action='evaluation',
                                  provider=c_provider, model_name=c_model, connection_id=c_conn_id, status_code=200,
-                                 error_type='JSON Parsing Error' if not result_json else 'Unexpected Assessment Format',
+                                 error_type='Unexpected Assessment Format' if router_retry else ('JSON Parsing Error' if not result_json else 'Unexpected Assessment Format'),
                                  error_message=reason,
                                  raw_response=raw_text[:2000], failover_triggered=True)
                     emit_event('retry', f'{c_provider}/{c_model}: {reason}',

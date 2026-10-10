@@ -3006,6 +3006,45 @@ class School(models.Model):
         verbose_name_plural = "Школа"
 
 
+# ─── API Ключі для локальних журналів оцінок ──────────────────────────────────
+class JournalAPIKey(models.Model):
+    """
+    API ключ для двосторонньої інтеграції з локальними та зовнішніми журналами оцінок.
+    - Вивантаження оцінок, учнів та завдань для заповнення локального журналу.
+    - Отримання та синхронізація списків учнів і класів з журналу до платформи.
+    """
+    name = models.CharField('Назва / Призначення', max_length=150, default='Локальний журнал оцінок')
+    key = models.CharField('API ключ / Токен', max_length=64, unique=True, db_index=True)
+    teacher = models.ForeignKey(
+        'Teacher',
+        on_delete=models.CASCADE,
+        related_name='journal_api_keys',
+        verbose_name='Власник (вчитель)',
+        null=True,
+        blank=True
+    )
+    is_active = models.BooleanField('Активний', default=True)
+    can_export_grades = models.BooleanField('Дозвіл на вивантаження оцінок', default=True)
+    can_import_roster = models.BooleanField('Дозвіл на синхронізацію учнів та класів', default=True)
+    local_journal_url = models.CharField('URL локального журналу (опціонально)', max_length=255, blank=True, default='')
+    created_at = models.DateTimeField('Створено', auto_now_add=True)
+    last_used_at = models.DateTimeField('Останнє використання', null=True, blank=True)
+    requests_count = models.PositiveIntegerField('Кількість запитів', default=0)
+
+    class Meta:
+        verbose_name = 'API ключ журналу'
+        verbose_name_plural = 'API ключі журналу'
+        ordering = ['-created_at']
+
+    @classmethod
+    def generate_key(cls):
+        import secrets
+        return f"sk_journal_{secrets.token_hex(20)}"
+
+    def __str__(self):
+        return f"{self.name} ({self.key[:14]}...)"
+
+
 def log_submission_activity(actor, action_type, description, submission=None):
     """Створює запис у журналі дій."""
     try:

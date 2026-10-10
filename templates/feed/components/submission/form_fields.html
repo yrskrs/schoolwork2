@@ -17,12 +17,22 @@
             <label for="{{ form.full_name.id_for_label }}" class="form-label" style="margin:0;">
                 👤 {{ form.full_name.label }} <span style="color:var(--color-danger)">*</span>
             </label>
-
+            <button type="button" id="btn-toggle-student-mode" onclick="toggleStudentInputMode()" style="display:none;background:none;border:none;color:var(--color-primary);cursor:pointer;font-size:11px;font-weight:700;padding:0;text-decoration:underline;">
+                ✏️ Ввести вручну
+            </button>
         </div>
         <div style="position:relative;">
-            {{ form.full_name }}
-            <div id="student-autocomplete-dropdown"
-                 style="display:none;position:absolute;top:100%;left:0;right:0;z-index:50;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);box-shadow:0 8px 24px rgba(0,0,0,0.15);max-height:180px;overflow-y:auto;margin-top:2px;">
+            <!-- Швидкий вибір зі списку класу (імпортованого з журналу) -->
+            <select id="student-roster-select" class="form-input form-select" style="display:none;" onchange="onRosterStudentSelected(this.value)">
+                <option value="">— Оберіть своє ім'я зі списку класу —</option>
+            </select>
+
+            <!-- Ручне введення або автокомпліт -->
+            <div id="student-manual-input-wrapper">
+                {{ form.full_name }}
+                <div id="student-autocomplete-dropdown"
+                     style="display:none;position:absolute;top:100%;left:0;right:0;z-index:50;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);box-shadow:0 8px 24px rgba(0,0,0,0.15);max-height:180px;overflow-y:auto;margin-top:2px;">
+                </div>
             </div>
         </div>
         <div id="full-name-client-error" style="display:none;color:var(--color-danger);font-size:11px;font-weight:700;margin-top:3px;align-items:center;gap:4px;">

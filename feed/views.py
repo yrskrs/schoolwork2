@@ -6773,8 +6773,13 @@ def api_students_autocomplete(request):
                 'full_name': full_name,
             })
 
+    try:
+        limit = int(request.GET.get('limit', 15 if query else 100))
+    except (ValueError, TypeError):
+        limit = 100 if not query else 15
+
     students.sort(key=lambda x: (x['last_name'].lower(), x['first_name'].lower()))
-    return JsonResponse({'students': students[:15]})
+    return JsonResponse({'students': students[:limit]})
 
 
 @teacher_required
@@ -6905,7 +6910,7 @@ def teacher_settings_view(request):
         school = School.objects.create(name="Наш Заклад Освіти", admin=request.user)
 
     tab = request.GET.get('tab', 'profile')
-    if tab not in ['profile', 'environment', 'ai']:
+    if tab not in ['profile', 'environment', 'ai', 'api']:
         tab = 'profile'
 
     profile_form = TeacherProfileForm(instance=teacher)
@@ -7408,6 +7413,72 @@ def teacher_settings_view(request):
             messages.success(request, f"Позначено як зчитані {count} помилок ШІ! ✅")
             return redirect(ai_settings_url(request))
 
+        # ── 5. ДІЇ ДЛЯ API ТА ЛОКАЛЬНОГО ЖУРНАЛУ ─────────────────────────────
+        elif action == 'create_journal_api_key':
+            name = request.POST.get('key_name', '').strip() or 'Локальний журнал оцінок'
+            can_export = bool(request.POST.get('can_export_grades'))
+            can_import = bool(request.POST.get('can_import_roster'))
+            journal_url = request.POST.get('local_journal_url', '').strip()
+
+            from .models import JournalAPIKey
+            key_token = JournalAPIKey.generate_key()
+            JournalAPIKey.objects.create(
+                name=name,
+                key=key_token,
+                teacher=teacher,
+                can_export_grades=can_export,
+                can_import_roster=can_import,
+                local_journal_url=journal_url,
+                is_active=True
+            )
+            request.session['just_created_api_key'] = key_token
+            request.session['just_created_api_key_name'] = name
+            messages.success(request, f"API ключ «{name}» успішно згенеровано! 🔑 Скопіюйте його нижче для налаштування локального журналу.")
+            return redirect(f"{reverse('teacher_settings')}?tab=api")
+
+        elif action == 'delete_journal_api_key':
+            key_id = request.POST.get('key_id')
+            from .models import JournalAPIKey
+            key_obj = get_object_or_404(JournalAPIKey, id=key_id)
+            k_name = key_obj.name
+            key_obj.delete()
+            messages.success(request, f"API ключ «{k_name}» видалено! 🗑️")
+            return redirect(f"{reverse('teacher_settings')}?tab=api")
+
+        elif action == 'toggle_journal_api_key':
+            key_id = request.POST.get('key_id')
+            from .models import JournalAPIKey
+            key_obj = get_object_or_404(JournalAPIKey, id=key_id)
+            key_obj.is_active = not key_obj.is_active
+            key_obj.save(update_fields=['is_active'])
+            status_text = "активовано ✅" if key_obj.is_active else "деактивовано ⏸️"
+            messages.info(request, f"API ключ «{key_obj.name}» {status_text}.")
+            return redirect(f"{reverse('teacher_settings')}?tab=api")
+
+        elif action == 'pull_local_journal_roster':
+            target_url = request.POST.get('journal_url', '').strip()
+            if not target_url:
+                messages.error(request, "Вкажіть коректний URL локального журналу для отримання даних.")
+            else:
+                from .journal_api import sync_roster_data
+                import urllib.request
+                import json
+                try:
+                    req = urllib.request.Request(
+                        target_url,
+                        headers={'User-Agent': 'SchoolNet-Journal-Sync/1.0', 'Accept': 'application/json'}
+                    )
+                    with urllib.request.urlopen(req, timeout=8) as resp:
+                        raw_data = json.loads(resp.read().decode('utf-8'))
+                    payload = raw_data if isinstance(raw_data, dict) else {'students': raw_data}
+                    res = sync_roster_data(payload, teacher=teacher)
+                    c_count = len(res['created_classes'])
+                    c_str = f" та {c_count} класів ({', '.join(res['created_classes'])})" if c_count else ""
+                    messages.success(request, f"🎉 Успішно отримано дані з {target_url}! Створено учнів: {res['created_students']}, оновлено: {res['updated_students']}{c_str}.")
+                except Exception as e:
+                    messages.error(request, f"Помилка зʼєднання з локальним журналом ({target_url}): {e}")
+            return redirect(f"{reverse('teacher_settings')}?tab=api")
+
     # Підготовка даних контексту для сторінки налаштувань
     teacher_subjects = teacher.subjects.all().order_by('name')
     teacher_classes = teacher.classes.all().order_by('grade', 'letter', 'name')
@@ -7591,10 +7662,20 @@ def teacher_settings_view(request):
     error_summary_stats = get_error_summary_stats()
     unread_ai_errors_count = AIErrorLog.objects.filter(is_read=False).count()
 
+    from .models import JournalAPIKey
+    journal_api_keys = JournalAPIKey.objects.all().order_by('-created_at')
+    just_created_api_key = request.session.pop('just_created_api_key', None)
+    just_created_api_key_name = request.session.pop('just_created_api_key_name', None)
+
     context = {
         'active_tab': tab,
         'ai_section': ai_settings_section(request),
         'ai_settings_sections': AI_SETTINGS_SECTIONS,
+        'journal_api_keys': journal_api_keys,
+        'total_journal_keys_count': journal_api_keys.count(),
+        'just_created_api_key': just_created_api_key,
+        'just_created_api_key_name': just_created_api_key_name,
+        'api_base_url': request.build_absolute_uri('/')[:-1],
         'teacher': teacher,
         'school': school,
         'profile_form': profile_form,

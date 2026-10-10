@@ -21,6 +21,11 @@
                     <span>🤖</span><span>Модуль ШІ</span>
                 </a>
             </li>
+            <li class="sidebar-tab-item {% if active_tab == 'api' %}active{% endif %}">
+                <a href="{% url 'teacher_settings' %}?tab=api" onclick="if(typeof switchSettingsTabFromSidebar==='function'){return switchSettingsTabFromSidebar('api', this);}">
+                    <span>🌐</span><span>API та журнал</span>
+                </a>
+            </li>
         </ul>
     </div>
 

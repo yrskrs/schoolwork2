@@ -2,6 +2,7 @@
 
 from django.urls import path
 from . import views
+from . import journal_api
 
 urlpatterns = [
     path("api/ai/jobs/<uuid:job_id>/", views.ai_job_status, name="ai_job_status"),
@@ -132,4 +133,9 @@ urlpatterns = [
     path('teacher/assignment/<int:pk>/export-zip/', views.export_assignment_zip, name='export_assignment_zip'),
     path('teacher/assignments/export-day-zip/', views.export_assignments_day_zip, name='export_assignments_day_zip'),
     path('teacher/assignments/import-zip/', views.import_assignments_zip, name='import_assignments_zip'),
+
+    # ── Інтеграція з локальним та зовнішніми журналами оцінок (API v1) ────────
+    path('api/v1/journal/grades/', journal_api.api_journal_export_grades, name='api_journal_export_grades'),
+    path('api/v1/journal/roster/', journal_api.api_journal_roster, name='api_journal_roster'),
+    path('api/v1/journal/pull/', journal_api.api_journal_pull_from_external, name='api_journal_pull_from_external'),
 ]
