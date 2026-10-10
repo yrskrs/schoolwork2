@@ -83,3 +83,5 @@ docker_data/
 
 # Test Media
 test_media*/
+
+compose.override.yaml

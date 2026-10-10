@@ -5460,9 +5460,11 @@ def teacher_student_delete(request, student_id):
     st_name = student.get_full_name()
     class_name = student.class_group.name if student.class_group else '—'
 
-    # Відв'язуємо FK у зданих роботах, зберігаючи історію
-    Submission.objects.filter(student=student).update(student=None)
-    student.delete()
+    if not request.user.is_superuser and not request.user.teacher_profile.classes.filter(pk=class_id).exists():
+        return HttpResponseForbidden('Немає доступу до класу.')
+    # Withdraw without losing pupil IDs, submissions or synchronized history.
+    student.integration_active = False
+    student.save(update_fields=['integration_active'])
 
     log_submission_activity(request.user, 'student_deleted', f"Видалено учня «{st_name}» з класу {class_name}")
     messages.success(request, f"Учня «{st_name}» видалено зі списку класу {class_name}.")
@@ -5505,6 +5507,9 @@ def teacher_student_merge(request):
 
     source_student = get_object_or_404(Student, id=source_id)
     target_student = get_object_or_404(Student, id=target_id)
+    from .models import RosterReplica
+    if RosterReplica.objects.filter(data__kind='class', data__native_id__in=[source_student.class_group_id, target_student.class_group_id]).exists():
+        return JsonResponse({'success': False, 'error': 'Учні синхронізованого класу мають стабільні ID. Видалення чи об’єднання профілів із переприв’язуванням історії заблоковано. Використовуйте явне зіставлення ID або зняття активності.'}, status=409)
 
     source_name = source_student.get_full_name()
     target_name = target_student.get_full_name()
@@ -5747,6 +5752,23 @@ def student_detail(request, student_name):
             if is_same_student_identity(target_last, target_first, st.last_name, st.first_name):
                 student_obj = st
                 break
+
+    # New links use the stored pupil FK, preserving twins and moved pupils.
+    native_id = request.GET.get('student_id')
+    if native_id:
+        student_obj = get_object_or_404(Student, pk=int(native_id) if native_id.isdigit() else 0)
+        if not request.user.is_superuser and not request.user.teacher_profile.classes.filter(pk=student_obj.class_group_id).exists():
+            return HttpResponseForbidden('Немає доступу до цього учня.')
+        submissions = all_subs.filter(student_id=student_obj.pk)
+        if not request.user.is_superuser:
+            submissions = submissions.filter(assignment__teacher=request.user.teacher_profile)
+        target_class = student_obj.class_group
+        target_last, target_first = student_obj.last_name, student_obj.first_name
+    else:
+        from .models import RosterReplica
+        shared_ids = [pk for pk in RosterReplica.objects.filter(data__kind='class').values_list('data__native_id', flat=True) if pk is not None]
+        if submissions.filter(class_group_id__in=shared_ids).exists():
+            return HttpResponse('Для синхронізованого класу відкрийте профіль учня за ID зі списку робіт.', status=409)
 
     paginator = Paginator(submissions, 15)
     page_obj = paginator.get_page(request.GET.get('page'))
@@ -6743,35 +6765,32 @@ def api_students_autocomplete(request):
     Повертає список унікальних імен учнів для миттєвого автодоповнення у формі здачі робіт.
     """
     class_group_id = request.GET.get('class_group_id')
+    if class_group_id and (not class_group_id.isdigit() or int(class_group_id) < 1):
+        return JsonResponse({'error': 'Некоректний ID класу.'}, status=400)
     query = request.GET.get('query', '').strip().lower()
 
-    students_qs = Student.objects.all()
+    students_qs = Student.objects.filter(integration_active=True, class_group__integration_active=True)
     submissions = Submission.objects.all()
     if class_group_id:
         students_qs = students_qs.filter(class_group_id=class_group_id)
         submissions = submissions.filter(class_group_id=class_group_id)
-
-    raw_names = list(students_qs.values_list('last_name', 'first_name')) + list(submissions.values_list('last_name', 'first_name').distinct())
-    
-    seen = set()
-    students = []
-    for ln, fn in raw_names:
-        ln_clean = ln.strip()
-        fn_clean = fn.strip()
-        full_name = f"{ln_clean} {fn_clean}".strip()
-        if not full_name:
-            continue
-        key = (ln_clean.lower(), fn_clean.lower())
-        if key in seen:
-            continue
-        seen.add(key)
-        
-        if not query or query in full_name.lower() or query in f"{fn_clean} {ln_clean}".lower():
-            students.append({
-                'last_name': ln_clean,
-                'first_name': fn_clean,
-                'full_name': full_name,
-            })
+    students, seen = [], set()
+    for pupil in students_qs:
+        full_name = pupil.get_full_name()
+        seen.add((pupil.last_name.casefold(), pupil.first_name.casefold()))
+        if not query or query in full_name.casefold() or query in f"{pupil.first_name} {pupil.last_name}".casefold():
+            students.append({'id': pupil.pk, 'last_name': pupil.last_name, 'first_name': pupil.first_name, 'full_name': full_name})
+    # Historical names remain available in legacy, unshared classes. They have
+    # no stable ID and cannot be silently matched to a synchronized pupil.
+    from .models import RosterReplica
+    shared = class_group_id and RosterReplica.objects.filter(data__kind='class', data__native_id=int(class_group_id)).exists()
+    if not shared:
+        for ln, fn in submissions.values_list('last_name', 'first_name').distinct():
+            key = (ln.strip().casefold(), fn.strip().casefold())
+            full_name = f"{ln} {fn}".strip()
+            if key not in seen and full_name and (not query or query in full_name.casefold()):
+                seen.add(key)
+                students.append({'id': None, 'last_name': ln, 'first_name': fn, 'full_name': full_name})
 
     try:
         limit = int(request.GET.get('limit', 15 if query else 100))
@@ -6779,7 +6798,7 @@ def api_students_autocomplete(request):
         limit = 100 if not query else 15
 
     students.sort(key=lambda x: (x['last_name'].lower(), x['first_name'].lower()))
-    return JsonResponse({'students': students[:limit]})
+    return JsonResponse({'students': students[:max(1, min(limit, 1000))]})
 
 
 @teacher_required

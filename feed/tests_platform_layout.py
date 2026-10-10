@@ -215,8 +215,11 @@ class PlatformNavigationTests(TestCase):
             self.assertEqual(len(page.xpath('//a[@href=$href]', href=reverse(route))), 2 if route == 'activity_log' else 1)
             # The second activity link is inside the collapsed mobile navigation.
             self.assertEqual(len(sidebar.xpath('.//a[@href=$href]', href=reverse(route))), 1)
-        self.assertEqual(len(page.get_element_by_id('settings-sidebar-links').xpath('./li')), 3)
-        self.assertEqual(len(page.get_element_by_id('settings-main-tabs').xpath('./a')), 3)
+        for element, selector in [('settings-sidebar-links', './li/a/@href'), ('settings-main-tabs', './a/@href')]:
+            links = page.get_element_by_id(element).xpath(selector)
+            self.assertEqual({parse_qs(urlparse(link).query)['tab'][0] for link in links},
+                             {'profile', 'environment', 'ai', 'api'})
+            self.assertEqual(len(links), 4)
         for route, tab in [('teacher_profiles', 'environment'), ('ai_settings', 'ai')]:
             alias = self.page(self.client.get(reverse(route)))
             tools = alias.get_element_by_id('teacher-page-tools')

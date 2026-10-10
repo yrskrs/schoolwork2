@@ -165,7 +165,7 @@
                     <div style="flex:1;min-width:0;">
                         <div style="display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:8px;">
                             <div class="submission-student-name" style="font-weight:800;font-size:16px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-                                <a href="{% url 'student_detail' student_name=submission.last_name|add:'_'|add:submission.first_name %}" style="color:var(--color-text-primary);text-decoration:none;">
+                                <a href="{% url 'student_detail' student_name=submission.last_name|add:'_'|add:submission.first_name %}{% if submission.student_id %}?student_id={{ submission.student_id }}{% endif %}" style="color:var(--color-text-primary);text-decoration:none;">
                                     👤 {{ submission.last_name }} {{ submission.first_name }}
                                 </a>
                                 {% if submission.is_resubmission or submission.resubmission_attempt > 1 %}

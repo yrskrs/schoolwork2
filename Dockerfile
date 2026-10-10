@@ -40,3 +40,9 @@ RUN chmod -R 755 /app/media /app/staticfiles /app/logs
 
 # Команда запуску через gunicorn з автоматичною міграцією БД та збором статики
 CMD ["sh", "-c", "python manage.py migrate && python manage.py collectstatic --noinput && gunicorn --config /app/gunicorn.conf.py schoolnet.wsgi:application"]
+
+ARG VCS_REF=local
+ARG APP_VERSION=4.2.0
+LABEL org.opencontainers.image.version=$APP_VERSION \
+      org.opencontainers.image.revision=$VCS_REF \
+      org.opencontainers.image.source="https://github.com/yrskrs/schoolwork2"

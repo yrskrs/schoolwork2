@@ -330,6 +330,8 @@ def _sync_roster_from_payload(request: HttpRequest) -> JsonResponse:
         teacher = key.teacher
 
     sync_result = sync_roster_data(payload, teacher=teacher)
+    if sync_result.get('blocked'):
+        return JsonResponse({'status': 'error', 'detail': sync_result['errors'][0]}, status=409)
 
     return JsonResponse({
         'status': 'success',
@@ -350,6 +352,11 @@ def sync_roster_data(payload: Dict[str, Any], teacher: Optional[Teacher] = None)
     2. {"students": [{"last_name": "...", "first_name": "...", "class_name": "10-А"}]}
     3. {"students_text": "Шевченко Тарас, 10-А\\nФранко Іван, 10-А"}
     """
+    from .models import RosterReplica
+    if RosterReplica.objects.filter(data__kind='class', data__native_id__isnull=False).exists():
+        return {'created_students': 0, 'updated_students': 0, 'total_processed': 0, 'created_classes': [],
+            'blocked': True, 'errors': ['Списки вже використовують стабільні ID API v2. Імпорт за ПІБ API v1 заблоковано; відкрийте «Синхронізація списків». Локальні дані збережено.']}
+
     created_students = 0
     updated_students = 0
     total_processed = 0

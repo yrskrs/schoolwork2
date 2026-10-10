@@ -1890,10 +1890,10 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
         self.assertEqual(student.class_group, class_10b)
         self.assertEqual(student.notes, 'Переведений до 10-Б')
 
-        # Перевіряємо що здача автоматично перенеслась у 10-Б та оновила ПІБ
+        # Зберігаємо клас призначеного завдання та FK учня після переведення
         sub.refresh_from_db()
         self.assertEqual(sub.last_name, 'Шевченко-Бондар')
-        self.assertEqual(sub.class_group, class_10b)
+        self.assertEqual(sub.class_group, self.class_group)
         self.assertEqual(sub.student, student)
 
     def test_student_roster_import_from_text_and_csv(self):
@@ -1977,7 +1977,8 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
         # 3. Видалення учня
         resp_del = self.client.post(reverse('teacher_student_delete', kwargs={'student_id': st.id}))
         self.assertEqual(resp_del.status_code, 302)
-        self.assertFalse(Student.objects.filter(id=st.id).exists())
+        st.refresh_from_db()
+        self.assertFalse(st.integration_active)
 
     def test_teacher_schedule_tab_includes_live_lesson_widget(self):
         """Тест: на вкладці розкладу вчителя відображається живий статус-бар, плашка орієнтиру та підсвічування сьогоднішнього дня/уроку."""

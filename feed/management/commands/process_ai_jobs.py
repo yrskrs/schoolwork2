@@ -31,6 +31,8 @@ class Command(BaseCommand):
         signal.signal(signal.SIGTERM, stop)
         signal.signal(signal.SIGINT, stop)
         if not options['once']:
+            from school_sync.django_backend import start_worker
+            start_worker()
             def heartbeat():
                 while True:
                     Path('/tmp/schoolnet-ai-worker-heartbeat').touch()

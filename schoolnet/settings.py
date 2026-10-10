@@ -147,3 +147,12 @@ CACHES = {
         'OPTIONS': {'MAX_ENTRIES': int(os.environ.get('AI_CACHE_MAX_ENTRIES', '2000'))},
     },
 }
+
+# Server-only, optional peer-to-peer roster integration.
+import json as _roster_json
+ROSTER_BACKEND = 'feed.roster_backend'
+ROSTER_SYNC_TOKEN = os.getenv("ROSTER_SYNC_TOKEN", "")
+ROSTER_PEERS = _roster_json.loads(os.getenv("ROSTER_PEERS", "[]"))
+ROSTER_SYNC_INTERVAL = int(os.getenv("ROSTER_SYNC_INTERVAL", "30"))
+ROSTER_SCHOOL_ID = int(os.getenv("ROSTER_SCHOOL_ID", "0"))
+ROSTER_YEAR_ID = int(os.getenv("ROSTER_YEAR_ID", "0"))

@@ -1,9 +1,12 @@
+name: ${COMPOSE_PROJECT_NAME:-schoolwork2}
 services:
   app:
-    image: schoolwork2-app:latest
+    image: ${SCHOOLWORK_IMAGE:-schoolwork2-app:4.2.0}
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        VCS_REF: ${VCS_REF:-local}
     container_name: schoolnet_app
     restart: unless-stopped
     depends_on:
@@ -28,7 +31,7 @@ services:
       start_period: 45s
 
   ai_worker:
-    image: schoolwork2-app:latest
+    image: ${SCHOOLWORK_IMAGE:-schoolwork2-app:4.2.0}
     container_name: schoolnet_ai_worker
     restart: unless-stopped
     command: ["python", "manage.py", "process_ai_jobs"]
@@ -64,7 +67,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
-      - "5433:5432"
+      - "${DB_PORT:-5433}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-schoolnet_user} -d ${POSTGRES_DB:-schoolnet_db}"]
       interval: 5s

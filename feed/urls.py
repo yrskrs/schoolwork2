@@ -3,6 +3,8 @@
 from django.urls import path
 from . import views
 from . import journal_api
+from . import school_api_v2
+from school_sync import django_backend as roster_views
 
 urlpatterns = [
     path("api/ai/jobs/<uuid:job_id>/", views.ai_job_status, name="ai_job_status"),
@@ -136,6 +138,10 @@ urlpatterns = [
 
     # ── Інтеграція з локальним та зовнішніми журналами оцінок (API v1) ────────
     path('api/v1/journal/grades/', journal_api.api_journal_export_grades, name='api_journal_export_grades'),
+    path('api/v2/journal/grades/', school_api_v2.grades, name='api_school_grades_v2'),
+    path('api/v2/journal/roster/', school_api_v2.roster, name='api_school_roster_v2'),
+    path('api/v2/roster-sync/', roster_views.roster_api, name='roster_sync_api'),
+    path('teacher/roster-sync/', roster_views.roster_ui, name='roster_sync'),
     path('api/v1/journal/roster/', journal_api.api_journal_roster, name='api_journal_roster'),
     path('api/v1/journal/pull/', journal_api.api_journal_pull_from_external, name='api_journal_pull_from_external'),
 ]

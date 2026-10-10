@@ -41,12 +41,13 @@ class AIDiagnosticFixesTests(TestCase):
         self.assertIsNotNone(res)
         self.assertEqual(res.get("suggested_grade"), "12")
 
-    def test_extract_json_from_text_repairs_when_allow_partial_false(self):
+    def test_extract_json_from_text_rejects_partial_assessment_in_strict_mode(self):
         truncated = '{"suggested_grade": "8", "summary": "Короткий зміст", "tasks_completed_count": 1'
-        # With allow_partial=False, previously returned None. Now repair_json_string recovers it.
+        # A recovered suggestion is useful for display, but cannot make an incomplete
+        # assessment authoritative. Strict evaluation must request a complete reply.
         res = extract_json_from_text(truncated, allow_partial=False)
-        self.assertIsNotNone(res)
-        self.assertEqual(res.get("suggested_grade"), "8")
+        self.assertIsNone(res)
+        self.assertEqual(extract_json_from_text(truncated).get("suggested_grade"), "8")
 
     def test_gemini_payload_sanitization(self):
         posted_payloads = []

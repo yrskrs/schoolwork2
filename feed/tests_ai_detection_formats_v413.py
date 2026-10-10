@@ -18,9 +18,14 @@ def make_png_with_text(keyword, text):
     return buf.getvalue()
 
 
-@override_settings(MEDIA_ROOT=Path(settings.BASE_DIR) / 'test_media_v413')
 class AIDetectionFormatsTests(TestCase):
     def setUp(self):
+        import tempfile
+        self.test_media = tempfile.TemporaryDirectory(prefix='schoolwork-format-tests-')
+        self.addCleanup(self.test_media.cleanup)
+        media_override = override_settings(MEDIA_ROOT=Path(self.test_media.name))
+        media_override.enable()
+        self.addCleanup(media_override.disable)
         User = get_user_model()
         self.teacher_user = User.objects.create_user(username='teacher_det', password='passWord123!')
         self.teacher_profile = Teacher.objects.create(user=self.teacher_user, full_name='Вчитель Тест')

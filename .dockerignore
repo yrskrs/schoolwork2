@@ -23,3 +23,12 @@ backups/
 scripts/
 docker_data/
 staticfiles/
+
+.env*
+!.env.example
+*.dump
+*.tar.gz
+compose.override.yaml
+.release-image.yaml
+.local-audits/
+test_media*/

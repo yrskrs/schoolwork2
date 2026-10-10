@@ -610,6 +610,9 @@ class AssignmentForm(forms.ModelForm):
 class SubmissionForm(forms.Form):
     """Форма здачі роботи учнем по конкретному завданню."""
 
+    student_id = forms.IntegerField(required=False, widget=forms.HiddenInput())
+    coauthor_ids = forms.CharField(required=False, widget=forms.HiddenInput())
+
     full_name = forms.CharField(
         label="Прізвище та ім'я",
         max_length=200,
@@ -678,20 +681,45 @@ class SubmissionForm(forms.Form):
                 self.fields['full_name'].initial = assignment.student_name
 
             # Показуємо тільки класи, яким призначено це завдання (або всі)
-            assigned_classes = assignment.classes.all().order_by('grade', 'letter', 'name')
-            if assigned_classes.exists():
+            assigned_classes = assignment.classes.filter(integration_active=True).order_by('grade', 'letter', 'name')
+            if assignment.classes.exists():
                 self.fields['class_group'].queryset = assigned_classes
                 first_class = assigned_classes.first()
                 if not self.initial.get('class_group'):
                     self.fields['class_group'].initial = first_class
                 self.fields['class_group'].empty_label = None
             else:
-                self.fields['class_group'].queryset = ClassGroup.objects.all().order_by('grade', 'letter', 'name')
+                self.fields['class_group'].queryset = ClassGroup.objects.filter(integration_active=True).order_by('grade', 'letter', 'name')
         else:
-            self.fields['class_group'].queryset = ClassGroup.objects.all().order_by('grade', 'letter', 'name')
+            self.fields['class_group'].queryset = ClassGroup.objects.filter(integration_active=True).order_by('grade', 'letter', 'name')
 
     def clean(self):
         cleaned_data = super().clean()
+        from .models import Student, RosterReplica
+        import json
+        group = cleaned_data.get('class_group')
+        shared = group and RosterReplica.objects.filter(data__kind='class', data__native_id=group.pk).exists()
+        pupil_id = cleaned_data.get('student_id')
+        pupil = Student.objects.filter(pk=pupil_id, class_group=group, integration_active=True).first() if pupil_id else None
+        if pupil_id and not pupil:
+            self.add_error('full_name', 'Оберіть активного учня цього класу.')
+        if shared and not pupil:
+            self.add_error('full_name', 'Для синхронізованого класу оберіть учня зі списку за ID. Якщо запису немає, зверніться до вчителя.')
+        if pupil:
+            cleaned_data['full_name'] = pupil.get_full_name()
+        cleaned_data['selected_student'] = pupil
+        cleaned_data['shared_roster'] = bool(shared)
+        try:
+            selected_coauthors = json.loads(cleaned_data.get('coauthor_ids') or '[]')
+            if not isinstance(selected_coauthors, list) or len(selected_coauthors) > 5 or any(isinstance(v, bool) or not isinstance(v, int) for v in selected_coauthors):
+                raise ValueError
+            co_rows = list(Student.objects.filter(pk__in=selected_coauthors, class_group=group, integration_active=True))
+            if len(co_rows) != len(set(selected_coauthors)):
+                raise ValueError
+            cleaned_data['selected_coauthors'] = [row for row in co_rows if row != pupil]
+        except (ValueError, TypeError):
+            self.add_error('full_name', 'Оберіть співавторів цього класу за ID.')
+            cleaned_data['selected_coauthors'] = []
         files = cleaned_data.get('files') or []
         file = cleaned_data.get('file')
         link = cleaned_data.get('link')
@@ -790,6 +818,9 @@ class SubmissionForm(forms.Form):
             if len(cleaned_coauthors) >= 5:
                 break
 
+        selected_names = {row.get_full_name().casefold() for row in cleaned_data.get('selected_coauthors', [])}
+        if cleaned_data.get('shared_roster') and any(name.casefold() not in selected_names for name in cleaned_coauthors):
+            self.add_error('full_name', 'Оберіть кожного співавтора зі списку за ID.')
         cleaned_data['coauthors'] = cleaned_coauthors
 
         comment_st = cleaned_data.get('comment_student')
@@ -805,6 +836,9 @@ class SubmissionForm(forms.Form):
         self._saved_uploads = []
         try:
             with transaction.atomic():
+                # Keep lock order consistent with incoming roster updates.
+                from school_sync.django_backend import operate
+                operate(lambda engine, store: None)
                 # Serialize attempt numbering and canonical student creation per class.
                 ClassGroup.objects.select_for_update().get(pk=self.cleaned_data['class_group'].pk)
                 return self._save_submission(assignment)
@@ -824,31 +858,25 @@ class SubmissionForm(forms.Form):
         from .utils import optimize_uploaded_file
 
         class_grp = self.cleaned_data['class_group']
-        last_name, first_name = resolve_canonical_student_name(
-            self.cleaned_data['full_name'],
-            class_group=class_grp
-        )
-
+        student_obj = self.cleaned_data.get('selected_student')
+        if student_obj:
+            # Recheck the selected ID inside the class-locked transaction.
+            student_obj = Student.objects.get(pk=student_obj.pk, class_group=class_grp, integration_active=True)
+            last_name, first_name = student_obj.last_name, student_obj.first_name
+        else:
+            last_name, first_name = resolve_canonical_student_name(self.cleaned_data['full_name'], class_group=class_grp)
+            matches = [p for p in Student.objects.filter(class_group=class_grp, integration_active=True)
+                if is_same_student_identity(last_name, first_name, p.last_name, p.first_name)]
+            if len(matches) > 1:
+                raise forms.ValidationError('Кілька учнів мають однакове ім’я. Оберіть ID зі списку.')
+            student_obj = matches[0] if matches else Student.objects.create(last_name=last_name or "Учень", first_name=first_name, class_group=class_grp)
         all_files = self.cleaned_data.get('all_files') or []
         coauthors_list = self.cleaned_data.get('coauthors') or []
-
-        # Знаходимо або створюємо запис Student для учня
-        student_obj = None
-        for s in Student.objects.filter(class_group=class_grp):
-            if is_same_student_identity(last_name, first_name, s.last_name, s.first_name):
-                student_obj = s
-                break
-        if not student_obj and (last_name or first_name):
-            student_obj = Student.objects.create(
-                last_name=last_name or "Учень",
-                first_name=first_name,
-                class_group=class_grp
-            )
 
         # Резолвимо дані для кожного співавтора
         resolved_coauthors = []
         all_authors_display = [f"{last_name} {first_name}".strip()]
-        for co_raw in coauthors_list:
+        for co_raw in ([] if self.cleaned_data.get('shared_roster') or self.cleaned_data.get('selected_coauthors') else coauthors_list):
             co_ln, co_fn = resolve_canonical_student_name(co_raw, class_group=class_grp)
             if not co_ln and not co_fn:
                 continue
@@ -879,13 +907,18 @@ class SubmissionForm(forms.Form):
             })
             all_authors_display.append(co_full)
 
+        if self.cleaned_data.get('shared_roster') or self.cleaned_data.get('selected_coauthors'):
+            resolved_coauthors = [{'student': row, 'last_name': row.last_name, 'first_name': row.first_name, 'full_name': row.get_full_name()}
+                for row in self.cleaned_data.get('selected_coauthors', [])]
+            all_authors_display = [student_obj.get_full_name()] + [row['full_name'] for row in resolved_coauthors]
+
         is_group = bool(resolved_coauthors)
         group_authors_str = ", ".join(all_authors_display) if is_group else ""
 
         # Визначаємо, чи учень здає роботу повторно (перездача / робота над помилками)
         q_prev = Q(assignment=assignment, class_group=class_grp)
         if student_obj:
-            q_prev &= (Q(student=student_obj) | (Q(last_name__iexact=last_name) & Q(first_name__iexact=first_name)))
+            q_prev &= Q(student=student_obj) if self.cleaned_data.get('shared_roster') else (Q(student=student_obj) | (Q(student__isnull=True) & Q(last_name__iexact=last_name) & Q(first_name__iexact=first_name)))
         else:
             q_prev &= (Q(last_name__iexact=last_name) & Q(first_name__iexact=first_name))
 
@@ -952,7 +985,7 @@ class SubmissionForm(forms.Form):
                 # Перевіряємо чи є попередня спроба у цього співавтора
                 q_co_prev = Q(assignment=assignment, class_group=class_grp)
                 if co_st:
-                    q_co_prev &= (Q(student=co_st) | (Q(last_name__iexact=co_ln) & Q(first_name__iexact=co_fn)))
+                    q_co_prev &= Q(student=co_st) if self.cleaned_data.get('shared_roster') else (Q(student=co_st) | (Q(student__isnull=True) & Q(last_name__iexact=co_ln) & Q(first_name__iexact=co_fn)))
                 else:
                     q_co_prev &= (Q(last_name__iexact=co_ln) & Q(first_name__iexact=co_fn))
 
@@ -996,7 +1029,8 @@ class SubmissionForm(forms.Form):
 
         # Автоматичне розпізнавання та прив'язка співавторів з коментаря учня
         from .student_matcher import auto_bind_coauthors_from_comment
-        auto_bind_coauthors_from_comment(submission)
+        if not self.cleaned_data.get('shared_roster') and not self.cleaned_data.get('selected_coauthors'):
+            auto_bind_coauthors_from_comment(submission)
 
         return submission
 
@@ -1009,7 +1043,7 @@ class StudentForm(forms.ModelForm):
         label="Синхронізувати попередні здані роботи учня",
         required=False,
         initial=True,
-        help_text="Оновити ім'я та клас у всіх раніше зданих роботах цього учня"
+        help_text="Оновити ім’я у власних роботах; клас призначеного завдання та історію зберегти"
     )
 
     class Meta:

@@ -50,7 +50,7 @@
                                 {{ forloop.counter0|add:page_obj.start_index }}
                             </td>
                             <td>
-                                <a href="{% url 'student_detail' student_name=sub.last_name|add:'_'|add:sub.first_name %}"
+                                <a href="{% url 'student_detail' student_name=sub.last_name|add:'_'|add:sub.first_name %}{% if sub.student_id %}?student_id={{ sub.student_id }}{% endif %}"
                                    style="font-weight:700;color:var(--color-primary);text-decoration:none;">
                                     👤 {{ sub.last_name }} {{ sub.first_name }}
                                 </a>

@@ -1,3 +1,4 @@
+from school_sync.django_backend import LocalRosterMixin
 """
 Моделі Django для шкільної мікро-соціальної мережі SchoolNet.
 
@@ -54,9 +55,10 @@ class Subject(models.Model):
 
 
 # ─── Клас ─────────────────────────────────────────────────────────────────────
-class ClassGroup(models.Model):
+class ClassGroup(LocalRosterMixin, models.Model):
     """Клас або група учнів (наприклад: 9А, 10Б, 11В)."""
     name = models.CharField('Назва класу', max_length=20, unique=True)
+    integration_active = models.BooleanField(default=True)
     grade = models.PositiveSmallIntegerField('Паралель (цифра)', default=9)
     letter = models.CharField('Літера класу', max_length=3, default='А')
     created_by = models.ForeignKey(
@@ -97,9 +99,11 @@ class ClassGroup(models.Model):
 
 
 # ─── Учень ────────────────────────────────────────────────────────────────────
-class Student(models.Model):
+class Student(LocalRosterMixin, models.Model):
     """Профіль учня школи."""
     first_name = models.CharField("Ім'я", max_length=100)
+    middle_name = models.CharField(max_length=100, blank=True, default='')
+    integration_active = models.BooleanField(default=True)
     last_name = models.CharField("Прізвище", max_length=100)
     class_group = models.ForeignKey(
         ClassGroup,
@@ -115,14 +119,13 @@ class Student(models.Model):
         verbose_name = 'Учень'
         verbose_name_plural = 'Учні'
         ordering = ['class_group__grade', 'class_group__letter', 'last_name', 'first_name']
-        unique_together = [('last_name', 'first_name', 'class_group')]
 
     def __str__(self):
         c_name = self.class_group.name if self.class_group else '—'
         return f"{self.last_name} {self.first_name} ({c_name})"
 
     def get_full_name(self):
-        return f"{self.last_name} {self.first_name}".strip()
+        return ' '.join(part for part in (self.last_name, self.first_name, self.middle_name) if part).strip()
 
     def get_initials(self):
         ln = (self.last_name or '').strip()
@@ -138,14 +141,14 @@ class Student(models.Model):
     def get_submissions_count(self):
         """Рахує кількість зданих робіт цього учня."""
         from .student_matcher import is_same_student_identity
-        if not self.class_group_id:
-            return 0
-        subs = Submission.objects.filter(class_group_id=self.class_group_id)
-        count = 0
-        for s in subs:
-            if is_same_student_identity(self.last_name, self.first_name, s.last_name, s.first_name):
-                count += 1
-        return count
+        bound = Submission.objects.filter(student=self).count()
+        if RosterReplica.objects.filter(data__kind='class', data__native_id=self.class_group_id).exists():
+            return bound
+        # Legacy names can only add unbound historical rows when unambiguous.
+        if Student.objects.filter(class_group_id=self.class_group_id, first_name=self.first_name, last_name=self.last_name).exclude(pk=self.pk).exists():
+            return bound
+        return bound + sum(1 for sub in Submission.objects.filter(student__isnull=True, class_group_id=self.class_group_id)
+            if is_same_student_identity(self.last_name,self.first_name,sub.last_name,sub.first_name))
 
     def sync_submissions(self, old_last_name=None, old_first_name=None, old_class_group=None):
         """
@@ -163,7 +166,7 @@ class Student(models.Model):
         qs = Submission.objects.filter(class_group=search_class)
         matching_ids = []
         for sub in qs:
-            if is_same_student_identity(search_last, search_first, sub.last_name, sub.first_name):
+            if sub.student_id == self.pk or (sub.student_id is None and not RosterReplica.objects.filter(data__kind='class', data__native_id=search_class.pk).exists() and is_same_student_identity(search_last, search_first, sub.last_name, sub.first_name)):
                 matching_ids.append(sub.id)
 
         updated_count = 0
@@ -171,7 +174,6 @@ class Student(models.Model):
             updated_count = Submission.objects.filter(id__in=matching_ids).update(
                 last_name=self.last_name,
                 first_name=self.first_name,
-                class_group=self.class_group,
                 student=self
             )
         return updated_count
@@ -4385,3 +4387,4 @@ class AICriteriaPreset(models.Model):
 
 
 from .job_models import AIJob, StudentAICheckReservation  # noqa: E402, F401
+from .roster_models import RosterReplica, RosterState  # noqa: E402, F401

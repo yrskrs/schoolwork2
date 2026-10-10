@@ -1,0 +1,16 @@
+# Optional shared bridge; private database networks stay isolated.
+services:
+  app:
+    networks:
+      default: {}
+      integration:
+        aliases: [schoolwork-api]
+  ai_worker:
+    networks:
+      default: {}
+      integration:
+        aliases: [schoolwork-worker]
+networks:
+  integration:
+    external: true
+    name: ${INTEGRATION_NETWORK:-school-integration}

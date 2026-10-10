@@ -466,14 +466,12 @@ function fetchStudentSuggestions() {
         .then(function(r) { return r.json(); })
         .then(function(data) {
             if (data.students && data.students.length > 0) {
-                let html = '<div style="padding:4px 10px;font-size:10.5px;font-weight:700;color:var(--color-text-muted);background:var(--color-bg-secondary);border-bottom:1px solid var(--color-border);">💡 Оберіть учня:</div>';
-                data.students.forEach(function(st) {
-                    html += '<div class="autocomplete-item" onclick="selectStudentName(\'' + st.full_name.replace(/'/g, "\\'") + '\')" style="padding:6px 10px;cursor:pointer;font-size:12.5px;font-weight:600;display:flex;align-items:center;gap:6px;border-bottom:1px solid var(--color-border);transition:background 0.15s;" onmouseover="this.style.background=\'var(--color-bg-secondary)\'" onmouseout="this.style.background=\'transparent\'">' +
-                        '<span>👤</span>' +
-                        '<span>' + st.full_name + '</span>' +
-                    '</div>';
+                autoDropdown.replaceChildren();
+                data.students.forEach(function(st){
+                    const item=document.createElement('div');item.className='autocomplete-item';
+                    item.textContent=st.full_name+(st.id?' · ID '+st.id:' · історичний запис');
+                    item.addEventListener('click',()=>selectStudentName(st.full_name,st.id));autoDropdown.appendChild(item);
                 });
-                autoDropdown.innerHTML = html;
                 autoDropdown.style.display = 'block';
             } else {
                 autoDropdown.style.display = 'none';
@@ -484,7 +482,8 @@ function fetchStudentSuggestions() {
         });
 }
 
-function selectStudentName(fullName) {
+function selectStudentName(fullName, id) {
+    document.getElementById('id_student_id').value=id || '';
     if (nameInput) {
         nameInput.value = fullName;
     }
@@ -512,17 +511,16 @@ function loadClassRoster(classId) {
         .then(function(data) {
             const students = data.students || [];
             if (students.length > 0 && rosterSelect) {
-                let html = '<option value="">— Оберіть своє імʼя зі списку (' + students.length + ' учнів) —</option>';
-                const currentVal = (nameInput ? nameInput.value.trim().toLowerCase() : '');
+                rosterSelect.replaceChildren(new Option('— Оберіть себе за ID —',''));
+                const currentVal = nameInput ? nameInput.value.trim().toLowerCase() : '';
+                const currentId = document.getElementById('id_student_id').value;
                 let matchedVal = '';
-                students.forEach(function(st) {
-                    const isSelected = (currentVal && currentVal === st.full_name.trim().toLowerCase());
-                    if (isSelected) matchedVal = st.full_name;
-                    html += '<option value="' + st.full_name.replace(/"/g, '&quot;') + '"' + (isSelected ? ' selected' : '') + '>' + st.full_name + '</option>';
+                students.forEach(function(st){
+                    const option=new Option(st.full_name+(st.id?' · ID '+st.id:' · історичний запис'),st.id || '');
+                    option.dataset.name=st.full_name;option.selected=!!currentId && String(st.id)===currentId;
+                    if(option.selected)matchedVal=st.full_name;rosterSelect.add(option);
                 });
-                html += '<option value="__manual__">✏️ Ввести власноруч / Немає в списку</option>';
-                rosterSelect.innerHTML = html;
-
+                rosterSelect.add(new Option('✏️ Ввести власноруч / Немає в списку','__manual__'));
                 if (currentVal && !matchedVal) {
                     isManualStudentMode = true;
                 }
@@ -561,7 +559,9 @@ function onRosterStudentSelected(val) {
         return;
     }
     if (nameInput) {
-        nameInput.value = val;
+        const option=rosterSelect.selectedOptions[0];
+        nameInput.value = option ? (option.dataset.name || '') : '';
+        document.getElementById('id_student_id').value=val || '';
         const clientErr = document.getElementById('full-name-client-error');
         if (clientErr && val) clientErr.style.display = 'none';
     }
@@ -570,6 +570,7 @@ function onRosterStudentSelected(val) {
 function toggleStudentInputMode(forceManual) {
     if (forceManual === true || !isManualStudentMode) {
         isManualStudentMode = true;
+        document.getElementById('id_student_id').value='';
         if (rosterSelect) rosterSelect.style.display = 'none';
         if (manualWrapper) manualWrapper.style.display = 'block';
         if (toggleModeBtn) {
@@ -597,6 +598,7 @@ if (classSelect && classSelect.value) {
 
 if (nameInput) {
     nameInput.addEventListener('input', function() {
+        document.getElementById('id_student_id').value='';
         clearTimeout(debounceTimer);
         debounceTimer = setTimeout(fetchStudentSuggestions, 150);
     });
@@ -608,6 +610,8 @@ if (nameInput) {
 }
 if (classSelect) {
     classSelect.addEventListener('change', function() {
+        document.getElementById('id_student_id').value='';
+        document.querySelectorAll('.coauthor-input').forEach(e=>delete e.dataset.studentId);
         loadClassRoster(classSelect.value);
         if (nameInput && nameInput.value.trim()) {
             fetchStudentSuggestions();
@@ -773,18 +777,15 @@ function fetchCoauthorSuggestions(inputEl) {
         .then(function(data) {
             if (data.students && data.students.length > 0) {
                 const filtered = data.students.filter(function(st) {
+                    if(st.id){return String(st.id)!==document.getElementById('id_student_id').value && !Array.from(document.querySelectorAll('.coauthor-input')).some(e=>String(st.id)===e.dataset.studentId);}
                     return !currentNames.includes(st.full_name.trim().toLowerCase());
                 });
 
                 if (filtered.length > 0) {
-                    let html = '<div style="padding:4px 8px;font-size:10px;font-weight:700;color:var(--color-text-muted);background:var(--color-bg-secondary);border-bottom:1px solid var(--color-border);">💡 Оберіть співавтора:</div>';
-                    filtered.forEach(function(st) {
-                        html += '<div class="autocomplete-item" onclick="selectCoauthorName(this, \'' + st.full_name.replace(/'/g, "\\'") + '\')" style="padding:5px 8px;cursor:pointer;font-size:12px;font-weight:600;display:flex;align-items:center;gap:6px;border-bottom:1px solid var(--color-border);transition:background 0.15s;" onmouseover="this.style.background=\'var(--color-bg-secondary)\'" onmouseout="this.style.background=\'transparent\'">' +
-                            '<span>👥</span>' +
-                            '<span>' + st.full_name + '</span>' +
-                        '</div>';
-                    });
-                    dropdown.innerHTML = html;
+                    dropdown.replaceChildren();
+                    filtered.forEach(function(st){const item=document.createElement('div');item.className='autocomplete-item';
+                        item.textContent=st.full_name+(st.id?' · ID '+st.id:'');
+                        item.addEventListener('click',()=>selectCoauthorName(item,st.full_name,st.id));dropdown.appendChild(item);});
                     dropdown.style.display = 'block';
                 } else {
                     dropdown.style.display = 'none';
@@ -798,11 +799,12 @@ function fetchCoauthorSuggestions(inputEl) {
         });
 }
 
-window.selectCoauthorName = function(itemEl, fullName) {
+window.selectCoauthorName = function(itemEl, fullName, id) {
     const parentRow = itemEl.closest('.coauthor-row');
     if (parentRow) {
         const inp = parentRow.querySelector('.coauthor-input');
-        if (inp) inp.value = fullName;
+        if (inp) {inp.value=fullName;inp.dataset.studentId=id || '';}
+
         const dropdown = parentRow.querySelector('.coauthor-autocomplete-dropdown');
         if (dropdown) dropdown.style.display = 'none';
     }
@@ -1074,4 +1076,11 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 {% include 'feed/components/criteria_modal.html' %}
+
+<script>
+document.addEventListener('input',function(e){if(e.target.matches('.coauthor-input'))delete e.target.dataset.studentId;});
+document.getElementById('id_student_id').form.addEventListener('submit',function(){
+ document.getElementById('id_coauthor_ids').value=JSON.stringify(Array.from(document.querySelectorAll('.coauthor-input')).filter(e=>e.value.trim()&&e.dataset.studentId).map(e=>Number(e.dataset.studentId)));
+});
+</script>
 {% endblock %}

@@ -30,7 +30,7 @@
                     <div style="display:flex;flex-direction:column;gap:6px;font-size:12.5px;border-top:1px solid var(--color-border);padding-top:8px;">
                         <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
                             <span style="color:var(--color-text-muted);">👤 Учень:</span>
-                            <a href="{% url 'student_detail' student_name=submission.last_name|add:'_'|add:submission.first_name %}" style="font-weight:800;color:var(--color-primary);text-decoration:none;" title="Переглянути профіль учня">
+                            <a href="{% url 'student_detail' student_name=submission.last_name|add:'_'|add:submission.first_name %}{% if submission.student_id %}?student_id={{ submission.student_id }}{% endif %}" style="font-weight:800;color:var(--color-primary);text-decoration:none;" title="Переглянути профіль учня">
                                 {{ submission.last_name }} {{ submission.first_name }}
                             </a>
                         </div>
