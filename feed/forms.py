@@ -704,7 +704,7 @@ class SubmissionForm(forms.Form):
         if pupil_id and not pupil:
             self.add_error('full_name', 'Оберіть активного учня цього класу.')
         if shared and not pupil:
-            self.add_error('full_name', 'Для синхронізованого класу оберіть учня зі списку за ID. Якщо запису немає, зверніться до вчителя.')
+            self.add_error('full_name', 'Для синхронізованого класу оберіть учня зі списку. Якщо запису немає, зверніться до вчителя.')
         if pupil:
             cleaned_data['full_name'] = pupil.get_full_name()
         cleaned_data['selected_student'] = pupil
@@ -718,7 +718,7 @@ class SubmissionForm(forms.Form):
                 raise ValueError
             cleaned_data['selected_coauthors'] = [row for row in co_rows if row != pupil]
         except (ValueError, TypeError):
-            self.add_error('full_name', 'Оберіть співавторів цього класу за ID.')
+            self.add_error('full_name', 'Оберіть співавторів цього класу зі списку.')
             cleaned_data['selected_coauthors'] = []
         files = cleaned_data.get('files') or []
         file = cleaned_data.get('file')
@@ -820,7 +820,7 @@ class SubmissionForm(forms.Form):
 
         selected_names = {row.get_full_name().casefold() for row in cleaned_data.get('selected_coauthors', [])}
         if cleaned_data.get('shared_roster') and any(name.casefold() not in selected_names for name in cleaned_coauthors):
-            self.add_error('full_name', 'Оберіть кожного співавтора зі списку за ID.')
+            self.add_error('full_name', 'Оберіть кожного співавтора зі списку.')
         cleaned_data['coauthors'] = cleaned_coauthors
 
         comment_st = cleaned_data.get('comment_student')
@@ -868,7 +868,7 @@ class SubmissionForm(forms.Form):
             matches = [p for p in Student.objects.filter(class_group=class_grp, integration_active=True)
                 if is_same_student_identity(last_name, first_name, p.last_name, p.first_name)]
             if len(matches) > 1:
-                raise forms.ValidationError('Кілька учнів мають однакове ім’я. Оберіть ID зі списку.')
+                raise forms.ValidationError('Кілька учнів мають однакове ім’я. Оберіть своє ім’я зі списку.')
             student_obj = matches[0] if matches else Student.objects.create(last_name=last_name or "Учень", first_name=first_name, class_group=class_grp)
         all_files = self.cleaned_data.get('all_files') or []
         coauthors_list = self.cleaned_data.get('coauthors') or []

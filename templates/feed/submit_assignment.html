@@ -469,7 +469,7 @@ function fetchStudentSuggestions() {
                 autoDropdown.replaceChildren();
                 data.students.forEach(function(st){
                     const item=document.createElement('div');item.className='autocomplete-item';
-                    item.textContent=st.full_name+(st.id?' · ID '+st.id:' · історичний запис');
+                    item.textContent=st.full_name;
                     item.addEventListener('click',()=>selectStudentName(st.full_name,st.id));autoDropdown.appendChild(item);
                 });
                 autoDropdown.style.display = 'block';
@@ -511,12 +511,12 @@ function loadClassRoster(classId) {
         .then(function(data) {
             const students = data.students || [];
             if (students.length > 0 && rosterSelect) {
-                rosterSelect.replaceChildren(new Option('— Оберіть себе за ID —',''));
+                rosterSelect.replaceChildren(new Option('— Оберіть себе зі списку —',''));
                 const currentVal = nameInput ? nameInput.value.trim().toLowerCase() : '';
                 const currentId = document.getElementById('id_student_id').value;
                 let matchedVal = '';
                 students.forEach(function(st){
-                    const option=new Option(st.full_name+(st.id?' · ID '+st.id:' · історичний запис'),st.id || '');
+                    const option=new Option(st.full_name,st.id || '');
                     option.dataset.name=st.full_name;option.selected=!!currentId && String(st.id)===currentId;
                     if(option.selected)matchedVal=st.full_name;rosterSelect.add(option);
                 });
@@ -784,7 +784,7 @@ function fetchCoauthorSuggestions(inputEl) {
                 if (filtered.length > 0) {
                     dropdown.replaceChildren();
                     filtered.forEach(function(st){const item=document.createElement('div');item.className='autocomplete-item';
-                        item.textContent=st.full_name+(st.id?' · ID '+st.id:'');
+                        item.textContent=st.full_name;
                         item.addEventListener('click',()=>selectCoauthorName(item,st.full_name,st.id));dropdown.appendChild(item);});
                     dropdown.style.display = 'block';
                 } else {
