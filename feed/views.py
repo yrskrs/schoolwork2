@@ -7433,10 +7433,10 @@ def teacher_settings_view(request):
             return redirect(ai_settings_url(request))
 
         # ── 5. ДІЇ ДЛЯ API ТА ЛОКАЛЬНОГО ЖУРНАЛУ ─────────────────────────────
-        elif action == 'create_journal_api_key':
+        elif action in ('create_journal_api_key', 'create_simple_journal_api_key'):
             name = request.POST.get('key_name', '').strip() or 'Локальний журнал оцінок'
-            can_export = bool(request.POST.get('can_export_grades'))
-            can_import = bool(request.POST.get('can_import_roster'))
+            can_export = action == 'create_simple_journal_api_key' or bool(request.POST.get('can_export_grades'))
+            can_import = action != 'create_simple_journal_api_key' and bool(request.POST.get('can_import_roster'))
             journal_url = request.POST.get('local_journal_url', '').strip()
 
             from .models import JournalAPIKey
@@ -7458,7 +7458,7 @@ def teacher_settings_view(request):
         elif action == 'delete_journal_api_key':
             key_id = request.POST.get('key_id')
             from .models import JournalAPIKey
-            key_obj = get_object_or_404(JournalAPIKey, id=key_id)
+            key_obj = get_object_or_404(JournalAPIKey.objects.all() if request.user.is_superuser else JournalAPIKey.objects.filter(teacher=teacher), id=key_id)
             k_name = key_obj.name
             key_obj.delete()
             messages.success(request, f"API ключ «{k_name}» видалено! 🗑️")
@@ -7467,7 +7467,7 @@ def teacher_settings_view(request):
         elif action == 'toggle_journal_api_key':
             key_id = request.POST.get('key_id')
             from .models import JournalAPIKey
-            key_obj = get_object_or_404(JournalAPIKey, id=key_id)
+            key_obj = get_object_or_404(JournalAPIKey.objects.all() if request.user.is_superuser else JournalAPIKey.objects.filter(teacher=teacher), id=key_id)
             key_obj.is_active = not key_obj.is_active
             key_obj.save(update_fields=['is_active'])
             status_text = "активовано ✅" if key_obj.is_active else "деактивовано ⏸️"
@@ -7682,9 +7682,13 @@ def teacher_settings_view(request):
     unread_ai_errors_count = AIErrorLog.objects.filter(is_read=False).count()
 
     from .models import JournalAPIKey
-    journal_api_keys = JournalAPIKey.objects.all().order_by('-created_at')
+    journal_api_keys = (JournalAPIKey.objects.all() if request.user.is_superuser else JournalAPIKey.objects.filter(teacher=teacher)).order_by('-created_at')
     just_created_api_key = request.session.pop('just_created_api_key', None)
     just_created_api_key_name = request.session.pop('just_created_api_key_name', None)
+    from django.conf import settings as journal_settings
+    journal_site_url = getattr(journal_settings, 'PUBLIC_BASE_URL', '') or request.build_absolute_uri('/')[:-1]
+    import json as journal_json
+    journal_connection_code = journal_json.dumps({'source': 'schoolwork', 'site_url': getattr(journal_settings, 'JOURNAL_API_BASE_URL', '') or journal_site_url, 'api_key': just_created_api_key}, ensure_ascii=False) if just_created_api_key else ''
 
     context = {
         'active_tab': tab,
@@ -7694,6 +7698,8 @@ def teacher_settings_view(request):
         'total_journal_keys_count': journal_api_keys.count(),
         'just_created_api_key': just_created_api_key,
         'just_created_api_key_name': just_created_api_key_name,
+        'journal_site_url': journal_site_url,
+        'journal_connection_code': journal_connection_code,
         'api_base_url': request.build_absolute_uri('/')[:-1],
         'teacher': teacher,
         'school': school,
@@ -7751,7 +7757,9 @@ def teacher_settings_view(request):
         'ai_error_logs': error_logs.select_related('teacher', 'submission', 'assignment').order_by('-created_at')[:100],
         'total_ai_errors_count': error_logs.count(),
     }
-    return render(request, 'feed/settings.html', context)
+    response = render(request, 'feed/settings.html', context)
+    response['Cache-Control'] = 'no-store'
+    return response
 
 
 @teacher_required

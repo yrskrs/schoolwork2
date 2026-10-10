@@ -150,6 +150,8 @@ CACHES = {
 
 # Server-only, optional peer-to-peer roster integration.
 import json as _roster_json
+PUBLIC_BASE_URL = os.getenv('PUBLIC_BASE_URL', '').rstrip('/')
+JOURNAL_API_BASE_URL = os.getenv('JOURNAL_API_BASE_URL', '').rstrip('/')
 ROSTER_BACKEND = 'feed.roster_backend'
 ROSTER_SYNC_TOKEN = os.getenv("ROSTER_SYNC_TOKEN", "")
 ROSTER_PEERS = _roster_json.loads(os.getenv("ROSTER_PEERS", "[]"))

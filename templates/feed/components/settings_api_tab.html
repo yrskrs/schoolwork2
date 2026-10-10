@@ -1,12 +1,15 @@
-<div class="card" style="padding:1rem"><h2>Обмін трьох сайтів · API v2</h2><p>Списки зберігаються локально. <a href="{% url 'roster_sync' %}">Синхронізація списків</a> працює у фоні; ID зіставляє вчитель, конфлікти вирішуються вручну. Ключ експорту нижче дає журналу доступ до ваших остаточних оцінок. Журнал отримує їх лише кнопкою «Синхронізувати із завданнями», у вибраному класі, предметі та періоді. Дробові й рівневі значення потребують ручного рішення. Після відновлення зв’язку накопичені результати знову доступні.</p><p>Для нового підключення використовуйте контракт v2. Наведені нижче приклади v1 збережені для попередніх клієнтів.</p></div>
 {% load static %}
 <!-- ═══════════════════════════════════════════════════════════════════════════ -->
 <!-- 4. ВКЛАДКА: API ТА ІНТЕГРАЦІЯ З ЛОКАЛЬНИМ ЖУРНАЛОМ ОЦІНОК                   -->
 <!-- ═══════════════════════════════════════════════════════════════════════════ -->
 <div id="tab-section-api" class="settings-tab-pane" style="{% if active_tab != 'api' %}display:none;{% endif %}">
+<section class="form-card mb-4" style="padding:20px"><h2>Підключення до журналу</h2><ol><li>Натисніть «Створити API для журналу».</li><li>Скопіюйте код і у журналі відкрийте «Підключити тести / завдання».</li><li>Виберіть назви класу й предмета, підтвердьте учнів. Надалі натискайте у журналі «Синхронізувати із завданнями».</li></ol><p>API надає назви моїх класів, предметів та учнів і остаточні оцінки моїх робіт. Журнал отримує оцінки лише за кнопкою; локальні списки та роботи зберігаються під час недоступності інших сайтів.</p><form method="post">{% csrf_token %}<button class="btn btn-primary" name="action" value="create_simple_journal_api_key">Створити API для журналу</button></form>
+{% if journal_connection_code %}<h3>Код підключення готовий</h3><p>Скопіюйте його повністю і вставте у власний журнал. Код містить секретний ключ.</p><textarea id="journal-connection-code" readonly rows="4" class="form-input" style="width:100%">{{ journal_connection_code }}</textarea><button class="btn btn-primary" type="button" onclick="copyJournalConnection(this)">Скопіювати код підключення</button><p>Адреса сайту: <code>{{ journal_site_url }}</code>. Ключ показано нижче.</p>{% endif %}</section>
 
+
+<details class="form-card mb-4"><summary style="padding:16px">Керування ключами та розширена документація API</summary>
     <!-- Банер про щойно створений API ключ -->
-    {% if just_created_api_key %}
+    {% if just_created_api_key and not journal_connection_code %}
     <div class="form-card mb-4" style="background:linear-gradient(135deg, rgba(16,185,129,0.12), rgba(99,102,241,0.08));border:1.5px solid #10b981;animation:fadeIn 0.3s ease-in-out;">
         <div class="form-card-body" style="padding:18px 20px;">
             <div style="display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap;">
@@ -147,7 +150,7 @@
                     У вас ще немає створених API ключів
                 </div>
                 <div style="font-size:12.5px;color:var(--color-text-muted);max-width:440px;margin:0 auto 16px;">
-                    Створіть свій перший API ключ, щоб ваш локальний журнал міг автоматично забирати оцінки та передавати списки дітей.
+                    Створіть свій перший API ключ, щоб ваш локальний журнал міг отримувати назви класів та учнів, а оцінки — за кнопкою вчителя.
                 </div>
                 <button type="button" class="btn btn-primary" onclick="openCreateApiKeyModal()" style="font-weight:700;">
                     ➕ Створити перший API ключ
@@ -158,7 +161,7 @@
     </div>
 
     <!-- 4.2. Картка прямої синхронізації з локальним журналом (On-demand Sync) -->
-    <div class="form-card mb-4">
+    <details class="form-card mb-4"><summary style="padding:16px">Попередній спосіб отримання учнів із іншого API</summary>
         <div class="form-card-header">
             <h2 class="form-card-title" style="margin:0;display:flex;align-items:center;gap:8px;">
                 <span>🔄</span> <span>Отримати список учнів з локального журналу прямо зараз</span>
@@ -182,7 +185,7 @@
                 </div>
             </form>
         </div>
-    </div>
+    </details>
 
     <!-- 4.3. Документація API та приклади для розробника -->
     <div class="form-card mb-4">
@@ -392,6 +395,7 @@ for item in grades_data.get("grades", []):
         </div>
     </div>
 
+</details>
 </div>
 
 <!-- ════ МОДАЛЬНЕ ВІКНО СТВОРЕННЯ API КЛЮЧА ════════════════════════════════════ -->
@@ -508,3 +512,5 @@ document.addEventListener('click', function(e) {
     if (modal && e.target === modal) closeCreateApiKeyModal();
 });
 </script>
+
+<script>async function copyJournalConnection(button){const field=document.getElementById('journal-connection-code');field.select();try{await navigator.clipboard.writeText(field.value);button.textContent='Скопійовано';}catch(error){document.execCommand('copy');button.textContent='Код виділено — скопіюйте його';}}</script>

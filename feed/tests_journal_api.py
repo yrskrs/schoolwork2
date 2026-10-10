@@ -223,6 +223,8 @@ class JournalAPITests(TestCase):
         self.assertTrue(Student.objects.filter(last_name='Котляревський', class_group__name='8-А').exists())
 
     def test_settings_tab_api_view_and_actions(self):
+        self.api_key.teacher = self.teacher
+        self.api_key.save()
         self.client.force_login(self.user)
         settings_url = reverse('teacher_settings')
 

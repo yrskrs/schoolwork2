@@ -85,3 +85,7 @@ docker_data/
 test_media*/
 
 compose.override.yaml
+
+# Private image-tag backup created by the updater
+.env.before-image-update
+.env.image-*

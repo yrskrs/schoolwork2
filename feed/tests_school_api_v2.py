@@ -90,3 +90,28 @@ class SchoolAPIV2Tests(TestCase):
         self.assertEqual(page.status_code,200)
         self.assertEqual([row.pk for row in page.context['page_obj']],[second.pk])
         self.assertEqual(self.student.get_submissions_count(),1);self.assertEqual(self.twin.get_submissions_count(),1)
+
+    @override_settings(PUBLIC_BASE_URL='http://example.invalid', JOURNAL_API_BASE_URL='http://schoolwork-api:8000')
+    def test_one_click_key_connection_code_and_key_owner_permissions(self):
+        import json
+        import re
+        from html import unescape
+        from django.urls import reverse
+        url = reverse('teacher_settings')
+        response = self.client.post(url, {'action': 'create_simple_journal_api_key'}, follow=True)
+        self.assertEqual(response.status_code, 200)
+        code = json.loads(unescape(re.search(r'<textarea[^>]*id="journal-connection-code"[^>]*>(.*?)</textarea>', response.content.decode(), re.S).group(1)))
+        self.assertEqual(code['source'], 'schoolwork')
+        self.assertEqual(code['site_url'], 'http://schoolwork-api:8000')
+        key = JournalAPIKey.objects.get(key=code['api_key'])
+        self.assertEqual(key.teacher, self.teacher)
+        self.assertTrue(key.can_export_grades)
+        self.assertFalse(key.can_import_roster)
+        roster = self.client.get('/api/v2/journal/roster/', HTTP_AUTHORIZATION='Bearer ' + key.key).json()
+        self.assertEqual(roster['classes'][0]['name'], '7-А')
+        other = Teacher.objects.create(user=get_user_model().objects.create_user(username='other-private-key'), full_name='Інший')
+        private = JournalAPIKey.objects.create(teacher=other, key='synthetic-other-private-key')
+        self.assertNotContains(self.client.get(url, {'tab': 'api'}), private.key)
+        for action in ('toggle_journal_api_key', 'delete_journal_api_key'):
+            self.assertEqual(self.client.post(url, {'action': action, 'key_id': private.pk}).status_code, 404)
+        private.refresh_from_db(); self.assertTrue(private.is_active)
