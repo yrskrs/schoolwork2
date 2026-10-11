@@ -73,4 +73,23 @@
     <textarea name="custom_criteria" id="id_custom_criteria" class="form-textarea" rows="4"
               placeholder="Вкажіть специфічні критерії або розбаловку для цього конкретного завдання (наприклад: 1. Повнота списку дат — до 5 б., 2. Власний аналіз наслідків — до 4 б., 3. Грамотність та оформлення — до 3 б.). Ці вимоги будуть показані учням у вікні «Критерії оцінювання» та безпосередньо враховані ШІ при перевірці.">{{ form.custom_criteria.value|default_if_none:"" }}</textarea>
     <p class="form-hint">Власні критерії мають найвищий пріоритет для ШІ та будуть доступні учням для ознайомлення перед виконанням роботи.</p>
+
+    <!-- Окреме поле для коментаря/вказівок вчителя безпосередньо для ШІ (приховано від учнів) -->
+    <div class="form-group" style="margin-top:20px;padding:16px;background:var(--color-bg-secondary);border:1.5px dashed rgba(99,102,241,0.4);border-radius:var(--radius-md);">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:6px;">
+            <label class="form-label" for="id_teacher_ai_instructions" style="display:flex;align-items:center;gap:6px;font-weight:700;margin-bottom:0;color:var(--color-text-primary);">
+                <span>🤫</span>
+                <span>Коментар та вказівки для ШІ (приховано від учнів)</span>
+            </label>
+            <span class="badge" style="background:rgba(99,102,241,0.15);color:var(--color-primary);font-weight:700;font-size:11px;padding:3px 9px;border-radius:12px;display:inline-flex;align-items:center;gap:4px;">
+                <span>🔒</span> Тільки для вчителя та ШІ
+            </span>
+        </div>
+        <p class="form-hint" style="margin-bottom:8px;font-size:12px;color:var(--color-text-muted);line-height:1.4;">
+            Опишіть очікування та індивідуальні вимоги до оцінювання робіт (наприклад: поблажки слабшому класу, не знижувати бали за відсутність бюлетеня, якщо є зміст, звернути увагу на конкретний аспект тощо). ШІ врахує це при оцінюванні. <strong>Учень ніде не побачить цей коментар і не дізнається про нього.</strong>
+        </p>
+        <textarea name="teacher_ai_instructions" id="id_teacher_ai_instructions" class="form-textarea" rows="3"
+                  placeholder="Наприклад: Для 7-Б класу бути лояльнішим до оформлення: якщо учні не створили бюлетень, але знайшли інформацію — не занижувати бал за оформлення, головне зміст роботи.">{{ form.teacher_ai_instructions.value|default_if_none:"" }}</textarea>
+    </div>
 </div>
+

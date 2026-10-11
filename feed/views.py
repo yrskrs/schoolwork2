@@ -1342,15 +1342,67 @@ def assignment_create(request):
     if request.method == 'GET':
         class_id = request.GET.get('class') or request.GET.get('class_group')
         subject_id = request.GET.get('subject')
-        if class_id and str(class_id).isdigit() and form.fields['classes'].queryset.filter(pk=class_id).exists():
-            form.initial['classes'] = [int(class_id)]
+
+        # ── 1. Автоматичний вибір предмету ──────────────────────────────────────
+        chosen_subject_id = None
         if subject_id and str(subject_id).isdigit() and form.fields['subject'].queryset.filter(pk=subject_id).exists():
-            form.initial['subject'] = int(subject_id)
+            chosen_subject_id = int(subject_id)
+        else:
+            # Спробувати взяти попередньо обраний предмет:
+            # а) з поточної сесії
+            session_subj = request.session.get('last_created_subject_id')
+            if session_subj and form.fields['subject'].queryset.filter(pk=session_subj).exists():
+                chosen_subject_id = int(session_subj)
+            else:
+                # б) з останнього створеного завдання вчителя
+                last_asgn = Assignment.objects.filter(teacher=teacher, subject__isnull=False).order_by('-id').first()
+                if last_asgn and last_asgn.subject_id and form.fields['subject'].queryset.filter(pk=last_asgn.subject_id).exists():
+                    chosen_subject_id = last_asgn.subject_id
+                else:
+                    # в) предмет, який вчитель викладає найбільше (за розкладом/завданнями)
+                    most_taught = teacher.get_most_taught_subject()
+                    if most_taught and form.fields['subject'].queryset.filter(pk=most_taught.pk).exists():
+                        chosen_subject_id = most_taught.pk
+
+        if chosen_subject_id:
+            form.initial['subject'] = chosen_subject_id
+
+        # ── 2. Автоматичний вибір класів (Кому призначено) ────────────────────
+        chosen_class_ids = None
+        if class_id and str(class_id).isdigit() and form.fields['classes'].queryset.filter(pk=class_id).exists():
+            chosen_class_ids = [int(class_id)]
+        else:
+            # Спробувати зберегти попередній вибір класів:
+            # а) з поточної сесії
+            session_classes = request.session.get('last_created_class_ids')
+            if session_classes and isinstance(session_classes, list):
+                valid_ids = list(form.fields['classes'].queryset.filter(pk__in=session_classes).values_list('pk', flat=True))
+                if valid_ids:
+                    chosen_class_ids = valid_ids
+
+            # б) з останнього створеного завдання вчителя
+            if not chosen_class_ids:
+                last_asgn = Assignment.objects.filter(teacher=teacher).order_by('-id').first()
+                if last_asgn:
+                    valid_ids = list(last_asgn.classes.values_list('id', flat=True))
+                    valid_ids = list(form.fields['classes'].queryset.filter(pk__in=valid_ids).values_list('pk', flat=True))
+                    if valid_ids:
+                        chosen_class_ids = valid_ids
+
+        if chosen_class_ids:
+            form.initial['classes'] = chosen_class_ids
 
     if request.method == 'POST':
         form = AssignmentForm(teacher=teacher, data=request.POST, files=request.FILES)
         if form.is_valid():
             assignment = form.save_with_status(teacher=teacher)
+
+            # ── Зберігаємо вибір предмету та класів у сесію для автопідстановки наступного разу
+            if assignment.subject_id:
+                request.session['last_created_subject_id'] = assignment.subject_id
+            class_ids = list(assignment.classes.values_list('id', flat=True))
+            if class_ids:
+                request.session['last_created_class_ids'] = class_ids
 
             # ── Зберігаємо дефолтні налаштування ШІ для завдання
             ai_preset_id = request.POST.get('default_ai_preset')
@@ -1548,6 +1600,13 @@ def assignment_edit(request, pk):
 
             # Зберігаємо оновлене завдання
             assignment = form.save_with_status(teacher=teacher)
+
+            # ── Зберігаємо вибір предмету та класів у сесію для автопідстановки наступного разу
+            if assignment.subject_id:
+                request.session['last_created_subject_id'] = assignment.subject_id
+            class_ids = list(assignment.classes.values_list('id', flat=True))
+            if class_ids:
+                request.session['last_created_class_ids'] = class_ids
             from .utils import sanitize_html
             if assignment.description:
                 assignment.description = sanitize_html(assignment.description)
@@ -1802,6 +1861,7 @@ def assignment_duplicate(request, pk):
         allow_student_ai_understanding=original.allow_student_ai_understanding,
         allow_ai_usage=original.allow_ai_usage,
         custom_criteria=original.custom_criteria,
+        teacher_ai_instructions=getattr(original, 'teacher_ai_instructions', ''),
         no_submission_required=original.no_submission_required,
     )
     duplicate.classes.set(target_classes)

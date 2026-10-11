@@ -26,7 +26,7 @@
                     <div class="form-card-header"><h2 class="form-card-title" id="assignment-materials-title">📎 Матеріали та посилання</h2></div>
                     <div class="form-card-body">{% include 'feed/components/assignment_editor/materials.html' %}</div>
                 </section>
-                <details class="form-card assignment-editor-disclosure" id="assignment-custom-criteria" {% if form.errors or form.custom_criteria.value %}open{% endif %}>
+                <details class="form-card assignment-editor-disclosure" id="assignment-custom-criteria" {% if form.errors or form.custom_criteria.value or form.teacher_ai_instructions.value %}open{% endif %}>
                     <summary>📝 Власні критерії оцінювання <span>За потреби</span></summary>
                     <div class="form-card-body">{% include 'feed/components/assignment_editor/criteria.html' %}</div>
                 </details>

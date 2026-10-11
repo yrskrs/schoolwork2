@@ -50,7 +50,7 @@ def _legacy_result(text):
             continue
         if _HEADING.match(line):
             title = line.replace('**', '').casefold()
-            if _GRADE.search(title) or any(word in title for word in ('чому така', 'критері', 'оцінювання', 'групами результат', 'розбалов')):
+            if _GRADE.search(title) or any(word in title for word in ('чому така', 'критері', 'оцінювання', 'групами результат', 'розбалов', 'вказівки вчител', 'коментар вчител', 'прихован')):
                 section = None
                 continue
             if line.startswith('📌') or 'висновок:' in title or 'резюме:' in title:

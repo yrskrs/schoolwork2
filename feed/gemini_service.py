@@ -6007,6 +6007,21 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
         )
         prompt_lines.append("═══════════════════════════════════════════════════════════════════\n")
 
+    # ── ПРИХОВАНІ ВКАЗІВКИ ТА КОМЕНТАР ВЧИТЕЛЯ ДЛЯ ШІ (КОНФІДЕНЦІЙНО) ─────────
+    teacher_ai_instructions = getattr(assignment, 'teacher_ai_instructions', '') if assignment else ''
+    if teacher_ai_instructions and teacher_ai_instructions.strip():
+        prompt_lines.append("\n═══════════════════════════════════════════════════════════════════")
+        prompt_lines.append("🤫 ВНУТРІШНІ ВКАЗІВКИ ТА КОМЕНТАР ВЧИТЕЛЯ ДЛЯ ШІ (СУВОРО КОНФІДЕНЦІЙНО, НЕ ДЛЯ УЧНЯ):")
+        prompt_lines.append("Вчитель залишив спеціальні внутрішні педагогічні вказівки для ШІ щодо перевірки саме цього завдання:")
+        prompt_lines.append(teacher_ai_instructions.strip())
+        prompt_lines.append(
+            "\n⚠️ КАТЕГОРИЧНІ ВИМОГИ ДЛЯ ШІ ЩОДО ЦИХ ПРИХОВАНИХ ВКАЗІВОК ВЧИТЕЛЯ:\n"
+            "1. ОБОВ'ЯЗКОВЕ ВРАХУВАННЯ ПРИ ОЦІНЮВАННІ: Скоригуй оцінювання та вимоги згідно з цими вказівками вчителя (наприклад: проявити лояльність до слабшого класу, не занижувати бал за оформлення чи відсутність бюлетеня, якщо виконано зміст/пошук інформації, оцінювати лише конкретний аспект тощо).\n"
+            "2. СУВОРА ТА АБСОЛЮТНА КОНФІДЕНЦІЙНІСТЬ ВІД УЧНЯ: Учень КАТЕГОРИЧНО НЕ ПОВИНЕН бачити чи здогадуватися про цей коментар вчителя! У текстах для учня ('feedback_comment', 'summary', 'weaknesses') СУВОРО ЗАБОРОНЕНО цитувати ці вказівки, посилатися на них або писати, що вчитель зробив виняток чи дав таємну вказівку!\n"
+            "3. ПІДТВЕРДЖЕННЯ ДЛЯ ВЧИТЕЛЯ: У 'summary' або обґрунтуванні оцінки коротко зазнач врахування побажань вчителя, щоб вчитель бачив виконання його вказівки."
+        )
+        prompt_lines.append("═══════════════════════════════════════════════════════════════════\n")
+
     # ── ПЕРЕВІРКА ВІДПОВІДНОСТІ ТЕМІ, КЛАСУ ТА СПРАВЖНЬОСТІ РОБОТИ ─────────────
     pre_is_invalid, pre_reason, pre_code = detect_invalid_or_teacher_template_submission(submission, text_parts)
     if pre_is_invalid:
@@ -8594,6 +8609,9 @@ def analyze_assignment_task_understanding(assignment, force_refresh=False) -> di
         f"ТЕМА ЗАВДАННЯ: {assignment_title}",
         f"\nОПИС / ВКАЗІВКИ ВЧИТЕЛЯ:\n{assignment_desc}"
     ]
+    teacher_ai_instructions = getattr(assignment, 'teacher_ai_instructions', '') if assignment else ''
+    if teacher_ai_instructions and teacher_ai_instructions.strip():
+        prompt_lines.append(f"\nВКАЗІВКИ ВЧИТЕЛЯ ДЛЯ ШІ (КОНФІДЕНЦІЙНО):\n{teacher_ai_instructions.strip()}")
     seen_rubrics = set()
     from .models import DEFAULT_NUS_SYSTEM_PROMPT, DEFAULT_NUS_GR_SYSTEM_PROMPT, DEFAULT_TRADITIONAL_SYSTEM_PROMPT
     for class_group in assignment.classes.all():

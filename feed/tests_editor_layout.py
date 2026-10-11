@@ -13,7 +13,7 @@ from lxml import html
 from .middleware import set_has_admin
 from .models import (
     AICriteriaPreset, AIRequestLog, AISettings, Assignment, AssignmentScheduleTarget,
-    BellSchedule, ClassGroup, School, Subject, Teacher, TeacherLessonSchedule,
+    BellSchedule, ClassGroup, School, Subject, Submission, Teacher, TeacherLessonSchedule,
 )
 
 
@@ -176,3 +176,135 @@ class AssignmentEditorLayoutTests(TestCase):
         self.assertIn('Активна', identity.text_content())
         self.assertEqual(len(card.xpath('.//dl/div')), 6)
         self.assertFalse(page.xpath('//table[contains(@class, "ai-model-usage-table")]'))
+
+    def test_assignment_create_preselects_previous_subject_and_classes(self):
+        # 1. Створюємо інший предмет і додаємо вчителю
+        physics = Subject.objects.create(name='Фізика')
+        self.teacher.subjects.add(physics)
+
+        # 2. Вчитель створює перше завдання з фізики для класу 9-Б
+        post_data = self.data(
+            subject=str(physics.pk),
+            classes=[str(self.classes[1].pk)],
+            title='Завдання з фізики',
+            description='Умова фізики',
+        )
+        resp = self.client.post(reverse('assignment_create'), post_data)
+        self.assertEqual(resp.status_code, 302)
+
+        # 3. Відкриваємо створення наступного завдання (GET без параметрів)
+        page = self.page(reverse('assignment_create'))
+
+        # Перевіряємо, що предмет попереднього вибору (Фізика) автоматично обрано
+        subject_select = page.get_element_by_id('id_subject')
+        self.assertEqual(subject_select.xpath('./option[@selected]/@value'), [str(physics.pk)])
+
+        # Перевіряємо, що клас попереднього вибору (9-Б) автоматично відмічено чекбоксом
+        checked_classes = page.xpath('//input[@name="classes" and @checked]/@value')
+        self.assertEqual(checked_classes, [str(self.classes[1].pk)])
+
+    def test_teacher_ai_instructions_saved_edited_and_duplicated(self):
+        secret_notes = "Для 9-А класу: лояльніше оцінювати бюлетень, головне зміст!"
+        post_data = self.data(
+            teacher_ai_instructions=secret_notes,
+            custom_criteria="Критерії від вчителя",
+        )
+        resp = self.client.post(reverse('assignment_create'), post_data)
+        self.assertEqual(resp.status_code, 302)
+
+        assignment = Assignment.objects.get(title='Створити програму')
+        self.assertEqual(assignment.teacher_ai_instructions, secret_notes)
+
+        # Редагування
+        updated_notes = "Оновлені вказівки для ШІ"
+        resp_edit = self.client.post(reverse('assignment_edit', args=[assignment.pk]), self.data(
+            teacher_ai_instructions=updated_notes,
+        ))
+        self.assertEqual(resp_edit.status_code, 302)
+        assignment.refresh_from_db()
+        self.assertEqual(assignment.teacher_ai_instructions, updated_notes)
+
+        # Дублювання
+        dup_resp = self.client.post(reverse('assignment_duplicate', args=[assignment.pk]))
+        self.assertEqual(dup_resp.status_code, 302)
+        duplicate = Assignment.objects.exclude(pk=assignment.pk).filter(duplicated_from=assignment).first()
+        self.assertIsNotNone(duplicate)
+        self.assertEqual(duplicate.teacher_ai_instructions, updated_notes)
+
+    def test_teacher_ai_instructions_visible_in_review_but_hidden_from_students(self):
+        secret_notes = "Секретний коментар для ШІ: пробачити помилки у бюлетені"
+        assignment = Assignment.objects.create(
+            teacher=self.teacher,
+            subject=self.subject,
+            title='Тестове завдання з секретом',
+            description='Умова для всіх',
+            teacher_ai_instructions=secret_notes,
+            status=Assignment.STATUS_PUBLISHED,
+            published_at=timezone.now(),
+        )
+        assignment.classes.add(self.classes[0])
+
+        submission = Submission.objects.create(
+            assignment=assignment,
+            teacher=self.teacher,
+            class_group=self.classes[0],
+            first_name='Олександр',
+            last_name='Коваленко',
+        )
+
+        # 1. Перевірка панелі перевірки вчителя (view_file)
+        viewer_resp = self.client.get(reverse('view_file', args=[submission.pk]))
+        self.assertEqual(viewer_resp.status_code, 200)
+        self.assertIn(secret_notes, viewer_resp.content.decode('utf-8'))
+        self.assertIn("Ваші вказівки для ШІ:", viewer_resp.content.decode('utf-8'))
+
+        # 2. Перевірка учнівського перегляду завдання (assignment_detail)
+        student_resp = self.client.get(reverse('assignment_detail', args=[assignment.pk]))
+        self.assertEqual(student_resp.status_code, 200)
+        self.assertNotIn(secret_notes, student_resp.content.decode('utf-8'))
+
+        # 3. Перевірка учнівського модального вікна критеріїв (criteria modal)
+        self.assertNotIn('teacher_ai_instructions', student_resp.content.decode('utf-8'))
+
+    def test_evaluate_submission_prompt_contains_teacher_ai_instructions(self):
+        secret_notes = "ШІ, будь уважний: оцінюй лише таблицю, бюлетень не обов'язковий"
+        assignment = Assignment.objects.create(
+            teacher=self.teacher,
+            subject=self.subject,
+            title='Завдання для ШІ тесту',
+            description='Опис',
+            teacher_ai_instructions=secret_notes,
+            status=Assignment.STATUS_PUBLISHED,
+        )
+        assignment.classes.add(self.classes[0])
+
+        submission = Submission.objects.create(
+            assignment=assignment,
+            teacher=self.teacher,
+            class_group=self.classes[0],
+            first_name='Марія',
+            last_name='Сидоренко',
+            comment_student='Ось моя виконана робота',
+        )
+
+        # Перевіряємо формування запиту для Gemini
+        from feed.gemini_service import evaluate_submission_with_gemini
+        with patch('feed.gemini_service.call_ai_api') as mock_call:
+            mock_call.return_value = (200, '{"suggested_grade": "10", "summary": "Добре"}', '', {})
+            with patch('feed.gemini_service.get_ai_settings') as mock_settings:
+                settings_obj = AISettings.get_solo()
+                settings_obj.api_key = 'test-key'
+                settings_obj.save()
+                mock_settings.return_value = settings_obj
+                evaluate_submission_with_gemini(submission, teacher=self.teacher)
+
+            self.assertTrue(mock_call.called)
+            # Отримуємо prompt_text (може передаватися як keyword або positional аргумент)
+            called_prompt = mock_call.call_args.kwargs.get('prompt_text')
+            if not called_prompt and mock_call.call_args.args:
+                called_prompt = mock_call.call_args.args[0]
+            if isinstance(called_prompt, list):
+                called_prompt = "\n".join(str(p) for p in called_prompt)
+            self.assertIn(secret_notes, str(called_prompt))
+            self.assertIn("СУВОРО КОНФІДЕНЦІЙНО", str(called_prompt))
+

@@ -244,6 +244,36 @@ class Teacher(models.Model):
             return subjects.first()
         return None
 
+    def get_most_taught_subject(self):
+        """Повертає предмет, який вчитель викладає найбільше (за розкладом уроків або створеними завданнями)."""
+        from django.db.models import Count
+        sch_subj = (
+            self.lesson_schedules.filter(subject__isnull=False)
+            .values('subject')
+            .annotate(cnt=Count('id'))
+            .order_by('-cnt')
+            .first()
+        )
+        if sch_subj and sch_subj.get('subject'):
+            subj = self.subjects.filter(pk=sch_subj['subject']).first()
+            if subj:
+                return subj
+
+        asgn_subj = (
+            self.assignments.filter(subject__isnull=False)
+            .values('subject')
+            .annotate(cnt=Count('id'))
+            .order_by('-cnt')
+            .first()
+        )
+        if asgn_subj and asgn_subj.get('subject'):
+            subj = self.subjects.filter(pk=asgn_subj['subject']).first()
+            if subj:
+                return subj
+
+        return self.get_default_subject() or self.subjects.first()
+
+
     def get_calculated_conducted_lessons(self, semester_start_date=None):
         """
         Підраховує кількість проведених уроків на основі ОПУБЛІКОВАНИХ ЗАВДАНЬ вчителя.
@@ -638,6 +668,12 @@ class Assignment(models.Model):
         blank=True,
         default='',
         help_text='Власні детальні критерії та шкала оцінювання саме для цього завдання (враховуються вчителем та ШІ при перевірці)'
+    )
+    teacher_ai_instructions = models.TextField(
+        'Вказівки для ШІ при оцінюванні',
+        blank=True,
+        default='',
+        help_text='Внутрішні конфіденційні вказівки вчителя для ШІ (наприклад, поблажки слабшому класу, пріоритет змісту над оформленням тощо). Приховано від учнів.'
     )
     no_submission_required = models.BooleanField(
         'Не вимагає здачі робіт (завдання для опрацювання / усне)',

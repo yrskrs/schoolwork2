@@ -413,6 +413,7 @@ class AssignmentForm(forms.ModelForm):
             'ai_thinking_mode',
             'allow_student_ai_understanding',
             'custom_criteria',
+            'teacher_ai_instructions',
         ]
         labels = {
             'subject': 'Предмет',
@@ -430,6 +431,7 @@ class AssignmentForm(forms.ModelForm):
             'ai_thinking_mode': 'Режим глибокого мислення ШІ (Thinking mode)',
             'allow_student_ai_understanding': 'Дозволити учням бачити аналіз ШІ («Як ШІ розуміє завдання»)',
             'custom_criteria': 'Індивідуальні критерії оцінювання для цього завдання',
+            'teacher_ai_instructions': 'Вказівки для ШІ при оцінюванні (приховано від учнів)',
         }
         widgets = {
             'subject': forms.Select(attrs={'class': 'form-select'}),
@@ -471,6 +473,11 @@ class AssignmentForm(forms.ModelForm):
                 'class': 'form-textarea',
                 'rows': 4,
                 'placeholder': 'Вкажіть специфічні критерії, розбаловку або правила перевірки для цього завдання (будуть показані учням та враховані ШІ)...',
+            }),
+            'teacher_ai_instructions': forms.Textarea(attrs={
+                'class': 'form-textarea',
+                'rows': 3,
+                'placeholder': 'Наприклад: Для 7-Б класу бути лояльнішим до оформлення: якщо учні не створили бюлетень, але знайшли інформацію — не занижувати бал за оформлення, головне зміст роботи...',
             }),
         }
 
