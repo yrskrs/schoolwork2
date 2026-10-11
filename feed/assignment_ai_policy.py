@@ -41,7 +41,8 @@ def export_ai_policy(assignment, archive):
     return {'presets': presets, 'default_preset': snapshot(assignment.default_ai_preset),
             'default_grs': assignment.get_default_gr_list(), 'classes': classes,
             'thinking_mode': assignment.ai_thinking_mode,
-            'student_understanding': assignment.allow_student_ai_understanding}
+            'student_understanding': assignment.allow_student_ai_understanding,
+            'teacher_ai_instructions': assignment.teacher_ai_instructions}
 
 
 def import_ai_policy(assignment, data, archive):
@@ -88,5 +89,8 @@ def import_ai_policy(assignment, data, archive):
     assignment.class_ai_overrides = overrides
     assignment.ai_thinking_mode = bool(data.get('thinking_mode'))
     assignment.allow_student_ai_understanding = bool(data.get('student_understanding'))
+    notes = data.get('teacher_ai_instructions', '')
+    assignment.teacher_ai_instructions = notes if isinstance(notes, str) else ''
     assignment.save(update_fields=['default_ai_preset', 'default_ai_grs', 'class_ai_overrides',
-                                   'ai_thinking_mode', 'allow_student_ai_understanding'])
+                                   'ai_thinking_mode', 'allow_student_ai_understanding',
+                                   'teacher_ai_instructions'])

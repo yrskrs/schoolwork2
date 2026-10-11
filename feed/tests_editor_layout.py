@@ -306,5 +306,6 @@ class AssignmentEditorLayoutTests(TestCase):
             if isinstance(called_prompt, list):
                 called_prompt = "\n".join(str(p) for p in called_prompt)
             self.assertIn(secret_notes, str(called_prompt))
+            self.assertEqual(str(called_prompt).count(secret_notes), 1)
             self.assertIn("СУВОРО КОНФІДЕНЦІЙНО", str(called_prompt))
 

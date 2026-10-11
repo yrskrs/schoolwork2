@@ -265,6 +265,9 @@ class AssessmentV4Tests(TestCase):
 
     def test_zip_policy_roundtrip_keeps_classes_rubrics_and_source_flag(self):
         from .assignment_ai_policy import export_ai_policy, import_ai_policy
+        notes = 'Оцінюй насамперед зміст.\nНе знижуй бал за оформлення.'
+        self.assignment.teacher_ai_instructions = notes
+        self.assignment.save(update_fields=['teacher_ai_instructions'])
         document = SimpleUploadedFile('criteria.txt', 'Формат: 3 бали. Зміст: 9 балів.'.encode())
         self.traditional.document_file.save('criteria.txt', document)
         buffer = io.BytesIO()
@@ -274,9 +277,25 @@ class AssessmentV4Tests(TestCase):
         clone.classes.add(self.group, self.older)
         with zipfile.ZipFile(io.BytesIO(buffer.getvalue())) as archive:
             import_ai_policy(clone, policy, archive)
+        clone.refresh_from_db()
+        self.assertEqual(clone.teacher_ai_instructions, notes)
         self.assertEqual(clone.get_ai_policy(self.older)[0].name, self.traditional.name)
         self.assertEqual(clone.get_ai_policy(self.group)[1], ['ГР 1'])
         self.assertTrue(clone.get_ai_policy(self.older)[0].document_file)
+
+    def test_legacy_zip_policy_import_without_teacher_ai_instructions(self):
+        from .assignment_ai_policy import export_ai_policy, import_ai_policy
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, 'w') as archive:
+            policy = export_ai_policy(self.assignment, archive)
+        policy.pop('teacher_ai_instructions', None)
+        clone = Assignment.objects.create(teacher=self.teacher, title='Стара копія', description='Тест')
+        clone.classes.add(self.group)
+        with zipfile.ZipFile(io.BytesIO(buffer.getvalue())) as archive:
+            import_ai_policy(clone, policy, archive)
+        clone.refresh_from_db()
+        self.assertEqual(clone.teacher_ai_instructions, '')
+        self.assertEqual(clone.get_ai_policy(self.group)[1], ['ГР 1'])
 
     def test_custom_points_are_not_replaced_by_result_group_average(self):
         self.assignment.custom_criteria = 'Зміст — 9 балів; формат — 3 бали.'
