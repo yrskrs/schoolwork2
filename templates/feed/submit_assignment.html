@@ -491,6 +491,7 @@ function selectStudentName(fullName, id) {
     if (autoDropdown) {
         autoDropdown.style.display = 'none';
     }
+    refreshAllCoauthorSelects();
 }
 
 // ── Швидкий вибір учня з ростеру класу (імпортованого з журналу) ───────────
@@ -499,13 +500,16 @@ const manualWrapper = document.getElementById('student-manual-input-wrapper');
 const toggleModeBtn = document.getElementById('btn-toggle-student-mode');
 let isManualStudentMode = false;
 let isStableClassRoster = false;
+let cachedRosterStudents = [];
 
 function loadClassRoster(classId) {
     isStableClassRoster = false;
     if (!classId) {
+        cachedRosterStudents = [];
         if (rosterSelect) rosterSelect.style.display = 'none';
         if (manualWrapper) manualWrapper.style.display = 'block';
         if (toggleModeBtn) toggleModeBtn.style.display = 'none';
+        refreshAllCoauthorSelects();
         return;
     }
 
@@ -513,6 +517,7 @@ function loadClassRoster(classId) {
         .then(function(r) { return r.json(); })
         .then(function(data) {
             const students = data.students || [];
+            cachedRosterStudents = students;
             isStableClassRoster = !!data.stable_roster;
             if (students.length > 0 && rosterSelect) {
                 rosterSelect.replaceChildren(new Option('— Оберіть себе зі списку —',''));
@@ -549,11 +554,14 @@ function loadClassRoster(classId) {
                 if (manualWrapper) manualWrapper.style.display = 'block';
                 if (toggleModeBtn) toggleModeBtn.style.display = 'none';
             }
+            refreshAllCoauthorSelects();
         })
         .catch(function() {
+            cachedRosterStudents = [];
             if (rosterSelect) rosterSelect.style.display = 'none';
             if (manualWrapper) manualWrapper.style.display = 'block';
             if (toggleModeBtn) toggleModeBtn.style.display = 'none';
+            refreshAllCoauthorSelects();
         });
 }
 
@@ -570,6 +578,7 @@ function onRosterStudentSelected(val) {
         const clientErr = document.getElementById('full-name-client-error');
         if (clientErr && val) clientErr.style.display = 'none';
     }
+    refreshAllCoauthorSelects();
 }
 
 function toggleStudentInputMode(forceManual) {
@@ -596,11 +605,13 @@ function toggleStudentInputMode(forceManual) {
             }
         }
     }
+    refreshAllCoauthorSelects();
 }
 
 // Завантаження ростеру при відкритті сторінки (якщо клас вже вибрано)
 document.getElementById('id_other_student').addEventListener('change', function() {
     if (this.checked) document.getElementById('id_student_id').value='';
+    refreshAllCoauthorSelects();
 });
 if (classSelect && classSelect.value) {
     loadClassRoster(classSelect.value);
@@ -610,7 +621,10 @@ if (nameInput) {
     nameInput.addEventListener('input', function() {
         document.getElementById('id_student_id').value='';
         clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(fetchStudentSuggestions, 150);
+        debounceTimer = setTimeout(function() {
+            fetchStudentSuggestions();
+            refreshAllCoauthorSelects();
+        }, 150);
     });
     nameInput.addEventListener('focus', function() {
         if (classSelect && classSelect.value) {
@@ -621,7 +635,14 @@ if (nameInput) {
 if (classSelect) {
     classSelect.addEventListener('change', function() {
         document.getElementById('id_student_id').value='';
-        document.querySelectorAll('.coauthor-input').forEach(e=>delete e.dataset.studentId);
+        document.querySelectorAll('.coauthor-input').forEach(function(e) {
+            delete e.dataset.studentId;
+            e.value = '';
+        });
+        document.querySelectorAll('.coauthor-roster-select').forEach(function(sel) {
+            sel.value = '';
+        });
+        updateCoauthorIdsHiddenInput();
         loadClassRoster(classSelect.value);
         if (nameInput && nameInput.value.trim()) {
             fetchStudentSuggestions();
@@ -638,6 +659,72 @@ document.addEventListener('click', function(e) {
 // ── Додавання співавторів (Колективна робота, максимум 5) ────────────────────
 let coauthorRowIdCounter = 0;
 const MAX_COAUTHORS = 5;
+
+// Повертає ID та ім'я учня, який уже обраний зверху (в основному полі)
+function getPrimaryStudentInfo() {
+    let id = '';
+    let name = '';
+    const stIdEl = document.getElementById('id_student_id');
+    if (stIdEl && stIdEl.value) {
+        id = String(stIdEl.value).trim();
+    } else if (rosterSelect && rosterSelect.value && rosterSelect.value !== '__manual__') {
+        id = String(rosterSelect.value).trim();
+    }
+    if (nameInput && nameInput.value) {
+        name = nameInput.value.trim().toLowerCase();
+    } else if (rosterSelect && rosterSelect.selectedOptions && rosterSelect.selectedOptions[0]) {
+        const opt = rosterSelect.selectedOptions[0];
+        if (opt.value && opt.value !== '__manual__') {
+            name = (opt.dataset.name || opt.text || '').trim().toLowerCase();
+        }
+    }
+    return { id: id, name: name };
+}
+
+// Повертає список зайнятих ID та імен з інших полів співавторів
+function getTakenCoauthorsInfo(excludeRowId) {
+    const takenIds = new Set();
+    const takenNames = new Set();
+    const rows = document.querySelectorAll('.coauthor-row');
+    rows.forEach(function(row) {
+        const match = row.id.match(/^coauthor-row-(\d+)$/);
+        if (!match) return;
+        const rId = parseInt(match[1], 10);
+        if (excludeRowId !== null && excludeRowId !== undefined && rId === excludeRowId) return;
+
+        const sel = row.querySelector('.coauthor-roster-select');
+        const inp = row.querySelector('.coauthor-input');
+
+        let cId = '';
+        let cName = '';
+
+        if (inp && inp.dataset.studentId) {
+            cId = String(inp.dataset.studentId).trim();
+        } else if (sel && sel.value && sel.value !== '__manual__') {
+            cId = String(sel.value).trim();
+        }
+
+        if (inp && inp.value.trim()) {
+            cName = inp.value.trim().toLowerCase();
+        } else if (sel && sel.selectedOptions && sel.selectedOptions[0] && sel.value && sel.value !== '__manual__') {
+            const opt = sel.selectedOptions[0];
+            cName = (opt.dataset.name || opt.text || '').trim().toLowerCase();
+        }
+
+        if (cId) takenIds.add(cId);
+        if (cName) takenNames.add(cName);
+    });
+    return { ids: takenIds, names: takenNames };
+}
+
+function updateCoauthorIdsHiddenInput() {
+    const hiddenInput = document.getElementById('id_coauthor_ids');
+    if (!hiddenInput) return;
+    const ids = Array.from(document.querySelectorAll('.coauthor-input'))
+        .filter(function(e) { return e.value.trim() && e.dataset.studentId; })
+        .map(function(e) { return Number(e.dataset.studentId); });
+    hiddenInput.value = JSON.stringify(ids);
+}
 
 function getExistingStudentNames() {
     const names = [];
@@ -701,6 +788,95 @@ function updateCoauthorsUI() {
     }
 }
 
+function populateCoauthorSelect(rowId) {
+    const row = document.getElementById('coauthor-row-' + rowId);
+    if (!row) return;
+    const sel = row.querySelector('.coauthor-roster-select');
+    const inp = row.querySelector('.coauthor-input');
+    const toggleBtn = row.querySelector('.btn-toggle-coauthor-mode');
+    const manualWrap = row.querySelector('.coauthor-manual-wrapper');
+    if (!sel) return;
+
+    const currentSelectedId = (inp && inp.dataset.studentId) ? String(inp.dataset.studentId) : (sel.value && sel.value !== '__manual__' ? String(sel.value) : '');
+    const currentSelectedName = (inp && inp.value) ? inp.value.trim().toLowerCase() : '';
+
+    const primary = getPrimaryStudentInfo();
+    const taken = getTakenCoauthorsInfo(rowId);
+
+    sel.replaceChildren(new Option('— Оберіть співавтора зі списку —', ''));
+
+    let hasMatchedCurrent = false;
+
+    if (cachedRosterStudents && cachedRosterStudents.length > 0) {
+        cachedRosterStudents.forEach(function(st) {
+            const stIdStr = (st.id !== null && st.id !== undefined) ? String(st.id) : '';
+            const stNameLower = (st.full_name || '').trim().toLowerCase();
+
+            // Виключаємо основного учня, який уже введений зверху
+            const isPrimary = (primary.id && stIdStr && stIdStr === primary.id) ||
+                              (primary.name && stNameLower === primary.name);
+            if (isPrimary) return;
+
+            // Виключаємо співавторів, обраних в інших полях
+            const isTakenByOther = (stIdStr && taken.ids.has(stIdStr)) ||
+                                   (stNameLower && taken.names.has(stNameLower));
+            if (isTakenByOther) return;
+
+            const opt = new Option(st.full_name, stIdStr || st.full_name);
+            opt.dataset.name = st.full_name;
+            if (stIdStr) opt.dataset.id = stIdStr;
+
+            if (currentSelectedId && stIdStr === currentSelectedId) {
+                opt.selected = true;
+                hasMatchedCurrent = true;
+            } else if (!currentSelectedId && currentSelectedName && stNameLower === currentSelectedName) {
+                opt.selected = true;
+                hasMatchedCurrent = true;
+            }
+
+            sel.add(opt);
+        });
+
+        sel.add(new Option('✏️ Ввести власноруч / Немає в списку', '__manual__'));
+
+        if (toggleBtn) {
+            toggleBtn.style.display = 'inline-block';
+        }
+        if (sel.dataset.mode !== 'manual') {
+            sel.style.display = 'block';
+            if (manualWrap) manualWrap.style.display = 'none';
+        }
+    } else {
+        if (toggleBtn) {
+            toggleBtn.style.display = 'none';
+        }
+        sel.style.display = 'none';
+        if (manualWrap) manualWrap.style.display = 'block';
+    }
+
+    // Якщо обраний учень тепер виключений (наприклад, став основним учнем зверху)
+    if ((currentSelectedId || currentSelectedName) && !hasMatchedCurrent && sel.dataset.mode !== 'manual') {
+        sel.value = '';
+        if (inp) {
+            inp.value = '';
+            delete inp.dataset.studentId;
+        }
+        updateCoauthorIdsHiddenInput();
+    }
+}
+
+function refreshAllCoauthorSelects(changedRowId) {
+    const rows = document.querySelectorAll('.coauthor-row');
+    rows.forEach(function(row) {
+        const match = row.id.match(/^coauthor-row-(\d+)$/);
+        if (!match) return;
+        const rId = parseInt(match[1], 10);
+        if (changedRowId === undefined || changedRowId === null || rId !== changedRowId) {
+            populateCoauthorSelect(rId);
+        }
+    });
+}
+
 window.addCoauthorField = function() {
     const container = document.getElementById('coauthors-list-container');
     if (!container) return;
@@ -716,32 +892,52 @@ window.addCoauthorField = function() {
     const row = document.createElement('div');
     row.className = 'coauthor-row';
     row.id = 'coauthor-row-' + rowId;
-    row.style.cssText = 'position:relative;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:6px 8px;display:flex;flex-direction:column;gap:3px;';
+    row.style.cssText = 'position:relative;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:8px 10px;display:flex;flex-direction:column;gap:5px;';
+
+    const hasRoster = cachedRosterStudents && cachedRosterStudents.length > 0;
 
     row.innerHTML = 
-        '<div style="display:flex;align-items:center;justify-content:space-between;">' +
-            '<span class="coauthor-label" style="font-size:11px;font-weight:700;color:var(--color-primary);">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px;">' +
+            '<span class="coauthor-label" style="font-size:11.5px;font-weight:700;color:var(--color-primary);">' +
                 '👥 Співавтор #' + (rows.length + 1) + ':' +
             '</span>' +
-            '<button type="button" onclick="removeCoauthorField(' + rowId + ')" ' +
-                    'style="background:none;border:none;color:var(--color-danger);font-size:12px;font-weight:bold;cursor:pointer;padding:0 4px;line-height:1;" ' +
-                    'title="Видалити цього співавтора">✕</button>' +
+            '<div style="display:flex;align-items:center;gap:8px;">' +
+                '<button type="button" class="btn-toggle-coauthor-mode" onclick="toggleCoauthorInputMode(' + rowId + ')" ' +
+                        'style="display:' + (hasRoster ? 'inline-block' : 'none') + ';background:none;border:none;color:var(--color-primary);cursor:pointer;font-size:11px;font-weight:700;padding:0;text-decoration:underline;">' +
+                    '✏️ Ввести вручну' +
+                '</button>' +
+                '<button type="button" onclick="removeCoauthorField(' + rowId + ')" ' +
+                        'style="background:none;border:none;color:var(--color-danger);font-size:13px;font-weight:bold;cursor:pointer;padding:0 4px;line-height:1;" ' +
+                        'title="Видалити цього співавтора">✕</button>' +
+            '</div>' +
         '</div>' +
         '<div style="position:relative;">' +
-            '<input type="text" name="coauthors" class="form-input coauthor-input" ' +
-                   'placeholder="Прізвище та ім\'я співавтора..." autocomplete="off" ' +
-                   'style="font-size:12px;padding:5px 8px;" ' +
-                   'oninput="handleCoauthorInput(this)" onfocus="handleCoauthorFocus(this)">' +
-            '<div class="coauthor-autocomplete-dropdown" ' +
-                 'style="display:none;position:absolute;top:100%;left:0;right:0;z-index:60;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);box-shadow:0 8px 24px rgba(0,0,0,0.15);max-height:160px;overflow-y:auto;margin-top:2px;"></div>' +
+            '<select class="form-input form-select coauthor-roster-select" id="coauthor-roster-select-' + rowId + '" ' +
+                    'onchange="onCoauthorSelectChange(this, ' + rowId + ')" ' +
+                    'style="display:' + (hasRoster ? 'block' : 'none') + ';font-size:12.5px;padding:6px 10px;height:38px;width:100%;">' +
+                '<option value="">— Оберіть співавтора зі списку —</option>' +
+            '</select>' +
+            '<div class="coauthor-manual-wrapper" id="coauthor-manual-wrapper-' + rowId + '" ' +
+                 'style="display:' + (hasRoster ? 'none' : 'block') + ';position:relative;">' +
+                '<input type="text" name="coauthors" class="form-input coauthor-input" id="coauthor-input-' + rowId + '" ' +
+                       'placeholder="Прізвище та ім\'я співавтора..." autocomplete="off" ' +
+                       'style="font-size:12px;padding:6px 10px;height:38px;width:100%;" ' +
+                       'oninput="handleCoauthorInput(this, ' + rowId + ')" onfocus="handleCoauthorFocus(this)">' +
+                '<div class="coauthor-autocomplete-dropdown" ' +
+                     'style="display:none;position:absolute;top:100%;left:0;right:0;z-index:60;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);box-shadow:0 8px 24px rgba(0,0,0,0.15);max-height:160px;overflow-y:auto;margin-top:2px;"></div>' +
+            '</div>' +
         '</div>';
 
     container.appendChild(row);
     updateCoauthorsUI();
 
-    const input = row.querySelector('.coauthor-input');
-    if (input) {
-        input.focus();
+    if (hasRoster) {
+        populateCoauthorSelect(rowId);
+        const sel = row.querySelector('.coauthor-roster-select');
+        if (sel) sel.focus();
+    } else {
+        const input = row.querySelector('.coauthor-input');
+        if (input) input.focus();
     }
 };
 
@@ -750,14 +946,83 @@ window.removeCoauthorField = function(rowId) {
     if (row) {
         row.remove();
         updateCoauthorsUI();
+        updateCoauthorIdsHiddenInput();
+        refreshAllCoauthorSelects();
+    }
+};
+
+window.onCoauthorSelectChange = function(sel, rowId) {
+    const row = document.getElementById('coauthor-row-' + rowId);
+    if (!row) return;
+    const inp = row.querySelector('.coauthor-input');
+    const val = sel.value;
+
+    if (val === '__manual__') {
+        toggleCoauthorInputMode(rowId, true);
+        return;
+    }
+
+    if (val) {
+        const opt = sel.selectedOptions[0];
+        const studentName = opt ? (opt.dataset.name || opt.text) : '';
+        const studentId = opt ? (opt.dataset.id || opt.value) : val;
+        if (inp) {
+            inp.value = studentName;
+            inp.dataset.studentId = studentId;
+        }
+    } else {
+        if (inp) {
+            inp.value = '';
+            delete inp.dataset.studentId;
+        }
+    }
+
+    updateCoauthorIdsHiddenInput();
+    refreshAllCoauthorSelects(rowId);
+};
+
+window.toggleCoauthorInputMode = function(rowId, forceManual) {
+    const row = document.getElementById('coauthor-row-' + rowId);
+    if (!row) return;
+    const sel = row.querySelector('.coauthor-roster-select');
+    const manualWrap = row.querySelector('.coauthor-manual-wrapper');
+    const toggleBtn = row.querySelector('.btn-toggle-coauthor-mode');
+    const inp = row.querySelector('.coauthor-input');
+
+    const isCurrentlyManual = manualWrap && manualWrap.style.display !== 'none';
+
+    if (forceManual === true || !isCurrentlyManual) {
+        if (sel) {
+            sel.style.display = 'none';
+            sel.dataset.mode = 'manual';
+        }
+        if (manualWrap) manualWrap.style.display = 'block';
+        if (toggleBtn) toggleBtn.textContent = '📋 Обрати зі списку';
+        if (inp) inp.focus();
+    } else {
+        if (sel) {
+            sel.dataset.mode = 'select';
+            populateCoauthorSelect(rowId);
+            sel.style.display = 'block';
+        }
+        if (manualWrap) manualWrap.style.display = 'none';
+        if (toggleBtn) toggleBtn.textContent = '✏️ Ввести вручну';
+        if (inp && inp.dataset.studentId && sel) {
+            sel.value = String(inp.dataset.studentId);
+        }
     }
 };
 
 let coauthorDebounce = null;
-window.handleCoauthorInput = function(inputEl) {
+window.handleCoauthorInput = function(inputEl, rowId) {
+    delete inputEl.dataset.studentId;
+    updateCoauthorIdsHiddenInput();
     clearTimeout(coauthorDebounce);
     coauthorDebounce = setTimeout(function() {
         fetchCoauthorSuggestions(inputEl);
+        if (rowId !== undefined) {
+            refreshAllCoauthorSelects(rowId);
+        }
     }, 150);
 };
 
@@ -781,21 +1046,38 @@ function fetchCoauthorSuggestions(inputEl) {
     const currentNames = getExistingStudentNames().filter(function(n) {
         return n !== inputEl.value.trim().toLowerCase();
     });
+    const primary = getPrimaryStudentInfo();
 
     fetch('/api/students-autocomplete/?class_group_id=' + encodeURIComponent(classId) + '&query=' + encodeURIComponent(query))
         .then(function(r) { return r.json(); })
         .then(function(data) {
             if (data.students && data.students.length > 0) {
                 const filtered = data.students.filter(function(st) {
-                    if(st.id){return String(st.id)!==document.getElementById('id_student_id').value && !Array.from(document.querySelectorAll('.coauthor-input')).some(e=>String(st.id)===e.dataset.studentId);}
-                    return !currentNames.includes(st.full_name.trim().toLowerCase());
+                    const stIdStr = (st.id !== null && st.id !== undefined) ? String(st.id) : '';
+                    const stNameLower = (st.full_name || '').trim().toLowerCase();
+
+                    // Виключаємо основного учня
+                    if (primary.id && stIdStr && stIdStr === primary.id) return false;
+                    if (primary.name && stNameLower === primary.name) return false;
+
+                    // Виключаємо інших співавторів
+                    if (stIdStr && Array.from(document.querySelectorAll('.coauthor-input')).some(function(e) { return e !== inputEl && String(st.id) === e.dataset.studentId; })) {
+                        return false;
+                    }
+                    if (currentNames.includes(stNameLower)) return false;
+
+                    return true;
                 });
 
                 if (filtered.length > 0) {
                     dropdown.replaceChildren();
-                    filtered.forEach(function(st){const item=document.createElement('div');item.className='autocomplete-item';
-                        item.textContent=st.full_name;
-                        item.addEventListener('click',()=>selectCoauthorName(item,st.full_name,st.id));dropdown.appendChild(item);});
+                    filtered.forEach(function(st) {
+                        const item = document.createElement('div');
+                        item.className = 'autocomplete-item';
+                        item.textContent = st.full_name;
+                        item.addEventListener('click', function() { selectCoauthorName(item, st.full_name, st.id); });
+                        dropdown.appendChild(item);
+                    });
                     dropdown.style.display = 'block';
                 } else {
                     dropdown.style.display = 'none';
@@ -813,10 +1095,19 @@ window.selectCoauthorName = function(itemEl, fullName, id) {
     const parentRow = itemEl.closest('.coauthor-row');
     if (parentRow) {
         const inp = parentRow.querySelector('.coauthor-input');
-        if (inp) {inp.value=fullName;inp.dataset.studentId=id || '';}
+        if (inp) {
+            inp.value = fullName;
+            inp.dataset.studentId = id || '';
+        }
 
         const dropdown = parentRow.querySelector('.coauthor-autocomplete-dropdown');
         if (dropdown) dropdown.style.display = 'none';
+
+        updateCoauthorIdsHiddenInput();
+        const match = parentRow.id.match(/^coauthor-row-(\d+)$/);
+        if (match) {
+            refreshAllCoauthorSelects(parseInt(match[1], 10));
+        }
     }
 };
 
@@ -878,6 +1169,7 @@ if (classSelect) {
 
 if (submitForm) {
     submitForm.addEventListener('submit', function(e) {
+        updateCoauthorIdsHiddenInput();
         resetValidationErrors();
 
         let hasError = false;
@@ -1088,9 +1380,17 @@ document.addEventListener('DOMContentLoaded', function() {
 {% include 'feed/components/criteria_modal.html' %}
 
 <script>
-document.addEventListener('input',function(e){if(e.target.matches('.coauthor-input'))delete e.target.dataset.studentId;});
-document.getElementById('id_student_id').form.addEventListener('submit',function(){
- document.getElementById('id_coauthor_ids').value=JSON.stringify(Array.from(document.querySelectorAll('.coauthor-input')).filter(e=>e.value.trim()&&e.dataset.studentId).map(e=>Number(e.dataset.studentId)));
+document.addEventListener('input', function(e) {
+    if (e.target.matches('.coauthor-input')) {
+        delete e.target.dataset.studentId;
+        if (typeof updateCoauthorIdsHiddenInput === 'function') updateCoauthorIdsHiddenInput();
+    }
 });
+const stForm = document.getElementById('id_student_id') ? document.getElementById('id_student_id').form : null;
+if (stForm) {
+    stForm.addEventListener('submit', function() {
+        if (typeof updateCoauthorIdsHiddenInput === 'function') updateCoauthorIdsHiddenInput();
+    });
+}
 </script>
 {% endblock %}

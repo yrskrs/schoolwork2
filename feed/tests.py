@@ -3411,6 +3411,52 @@ class AssignmentFileAIAndCoauthorTests(TestCase):
         self.assertIn('Мельник Софія', sub2.group_authors)
         self.assertEqual(sub2.files.count(), 1)
 
+    def test_submission_with_explicit_coauthors_from_roster(self):
+        """Тест здачі роботи зі співавтором, обраним зі списку учнів класу."""
+        import json
+        from feed.models import Assignment, Submission
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        asg = Assignment.objects.create(
+            subject=self.subject,
+            title='Командна лабораторна робота',
+            teacher=self.teacher,
+            status=Assignment.STATUS_PUBLISHED
+        )
+        asg.classes.add(self.class_group)
+
+        dummy_file = SimpleUploadedFile("lab.py", b"print('Lab by team')", content_type="text/plain")
+
+        # Перевіряємо завантаження форми здачі та наявність компонентів вибору співавтора
+        resp_get = self.client.get(reverse('submit_assignment', args=[asg.id]))
+        self.assertEqual(resp_get.status_code, 200)
+        self.assertContains(resp_get, 'coauthor-roster-select')
+        self.assertContains(resp_get, 'populateCoauthorSelect')
+        self.assertContains(resp_get, 'refreshAllCoauthorSelects')
+
+        # Учень 1 здає роботу, обравши себе та додавши співавтора зі списку
+        resp_sub = self.client.post(reverse('submit_assignment', args=[asg.id]), {
+            'student_id': str(self.student1.id),
+            'full_name': self.student1.get_full_name(),
+            'class_group': self.class_group.id,
+            'coauthors': [self.student2.get_full_name()],
+            'coauthor_ids': json.dumps([self.student2.id]),
+            'files': [dummy_file],
+        })
+        self.assertEqual(resp_sub.status_code, 302)
+
+        # Перевіряємо основну здачу
+        sub1 = Submission.objects.get(assignment=asg, student=self.student1)
+        self.assertTrue(sub1.is_group_work)
+        self.assertIn(self.student1.get_full_name(), sub1.group_authors)
+        self.assertIn(self.student2.get_full_name(), sub1.group_authors)
+
+        # Перевіряємо створену здачу для співавтора
+        sub2 = Submission.objects.filter(assignment=asg, student=self.student2).first()
+        self.assertIsNotNone(sub2)
+        self.assertEqual(sub2.primary_submission, sub1)
+        self.assertTrue(sub2.is_group_work)
+
     def test_extract_images_from_pptx_and_zip(self):
         import io
         import zipfile
