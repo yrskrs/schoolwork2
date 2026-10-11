@@ -1977,8 +1977,7 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
         # 3. Видалення учня
         resp_del = self.client.post(reverse('teacher_student_delete', kwargs={'student_id': st.id}))
         self.assertEqual(resp_del.status_code, 302)
-        st.refresh_from_db()
-        self.assertFalse(st.integration_active)
+        self.assertFalse(Student.objects.filter(pk=st.pk).exists())
 
     def test_teacher_schedule_tab_includes_live_lesson_widget(self):
         """Тест: на вкладці розкладу вчителя відображається живий статус-бар, плашка орієнтиру та підсвічування сьогоднішнього дня/уроку."""

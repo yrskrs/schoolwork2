@@ -603,7 +603,7 @@ body .page-wrapper {
                                            title="Історія робіт учня">
                                             📋
                                         </a>
-                                        <form method="POST" action="{% url 'teacher_student_delete' student.id %}" style="display:inline;margin:0;" onsubmit="return confirm('Видалити учня «{{ student.get_full_name|escapejs }}» зі списку класу? Його здані роботи збережуться.');">
+                                        <form method="POST" action="{% url 'teacher_student_delete' student.id %}" style="display:inline;margin:0;" onsubmit="return confirm('Повністю видалити учня «{{ student.get_full_name|escapejs }}» та ВСІ його здані роботи? Дію буде записано в журналі.');">
                                             {% csrf_token %}
                                             <button type="submit"
                                                     class="btn btn-sm student-icon-btn"

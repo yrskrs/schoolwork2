@@ -5017,23 +5017,9 @@ def delete_submission(request, sub_id):
     if request.method != 'POST':
         return JsonResponse({'status': 'error'}, status=405)
 
-    submission = get_object_or_404(Submission, id=sub_id)
-    teacher = request.user.teacher_profile
-    assignment_pk = submission.assignment_id
-
-    if not (request.user.is_superuser or (submission.teacher == teacher) or (submission.assignment and submission.assignment.teacher == teacher)):
-        messages.error(request, 'Немає доступу.')
-        return redirect('teacher_dashboard')
-
-    if submission.file:
-        try:
-            if os.path.exists(submission.file.path):
-                os.remove(submission.file.path)
-        except Exception:
-            pass
-
-    student_name = submission.get_student_full_name()
-    submission.delete()
+    get_object_or_404(Submission, id=sub_id)
+    from .student_deletion import delete_submission as remove_submission
+    assignment_pk, student_name = remove_submission(sub_id, request.user)
     messages.success(request, f'Здачу від {student_name} видалено.')
 
     if assignment_pk:
@@ -5457,23 +5443,15 @@ def teacher_student_edit(request, student_id):
 @teacher_required
 @require_POST
 def teacher_student_delete(request, student_id):
-    """Видаляє учня зі списку класу."""
-    student = get_object_or_404(Student, id=student_id)
-    class_id = student.class_group_id
-    st_name = student.get_full_name()
-    class_name = student.class_group.name if student.class_group else '—'
-
-    if not request.user.is_superuser and not request.user.teacher_profile.classes.filter(pk=class_id).exists():
-        return HttpResponseForbidden('Немає доступу до класу.')
-    # Withdraw without losing pupil IDs, submissions or synchronized history.
-    student.integration_active = False
-    student.save(update_fields=['integration_active'])
-
-    log_submission_activity(request.user, 'student_deleted', f"Видалено учня «{st_name}» з класу {class_name}")
-    messages.success(request, f"Учня «{st_name}» видалено зі списку класу {class_name}.")
+    """Повне явне видалення профілю та його власних робіт за стабільним ID."""
+    get_object_or_404(Student, id=student_id)
+    from .student_deletion import delete_student
+    class_id, st_name, class_name, count = delete_student(student_id, request.user)
+    text = f'Учня «{st_name}» і його здачі ({count}) повністю видалено. Дію записано в журналі.'
+    messages.success(request, text)
     
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-        return JsonResponse({'success': True, 'message': f"Учня «{st_name}» успішно видалено."})
+        return JsonResponse({'success': True, 'message': text, 'deleted_submissions': count})
 
     return redirect(f"{reverse('teacher_students')}?class_group={class_id}")
 
@@ -5718,6 +5696,17 @@ def student_detail(request, student_name):
     target_last = parts[0] if parts else clean_target
     target_first = " ".join(parts[1:]) if len(parts) > 1 else ""
 
+    native_id = request.GET.get('student_id')
+    if not native_id:
+        # Legacy name URLs may navigate to a unique exact profile, but never
+        # expose a destructive action for a fuzzy guess or an ambiguous name.
+        profiles = Student.objects.filter(last_name__iexact=target_last, first_name__iexact=target_first)
+        if not request.user.is_superuser:
+            profiles = profiles.filter(class_group__in=request.user.teacher_profile.classes.all())
+        exact = list(profiles[:2])
+        if len(exact) == 1:
+            return redirect(f"{reverse('student_detail', kwargs={'student_name': exact[0].get_full_name()})}?student_id={exact[0].pk}")
+
     all_subs = Submission.objects.all().select_related('assignment', 'class_group', 'teacher').prefetch_related('comments').order_by('-submitted_at')
     
     # Первинна фільтрація за коренем імені або прізвища
@@ -5750,14 +5739,7 @@ def student_detail(request, student_name):
     student_obj = None
     first_sub = submissions.first()
     target_class = first_sub.class_group if first_sub else None
-    if target_class:
-        for st in Student.objects.filter(class_group=target_class):
-            if is_same_student_identity(target_last, target_first, st.last_name, st.first_name):
-                student_obj = st
-                break
-
     # New links use the stored pupil FK, preserving twins and moved pupils.
-    native_id = request.GET.get('student_id')
     if native_id:
         student_obj = get_object_or_404(Student, pk=int(native_id) if native_id.isdigit() else 0)
         if not request.user.is_superuser and not request.user.teacher_profile.classes.filter(pk=student_obj.class_group_id).exists():
@@ -5768,6 +5750,10 @@ def student_detail(request, student_name):
         target_class = student_obj.class_group
         target_last, target_first = student_obj.last_name, student_obj.first_name
     else:
+        if not request.user.is_superuser:
+            submissions = submissions.filter(assignment__teacher=request.user.teacher_profile)
+        if not submissions.exists():
+            raise Http404('Профіль учня або його роботи не знайдено.')
         from .models import RosterReplica
         shared_ids = [pk for pk in RosterReplica.objects.filter(data__kind='class').values_list('data__native_id', flat=True) if pk is not None]
         if submissions.filter(class_group_id__in=shared_ids).exists():

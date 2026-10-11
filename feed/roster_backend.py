@@ -36,7 +36,9 @@ class Native:
             row.name, row.grade, row.letter = payload['name'], payload.get('grade_level', row.grade), payload.get('letter', row.letter)
             row.integration_active = payload['active']
         else:
-            row = Student.objects.get(pk=native_id)
+            row = Student.objects.filter(pk=native_id).first()
+            if row is None:
+                raise ValidationError('Локальний профіль повністю видалено. Відновлення або створення нового потребує явного рішення вчителя.')
             row.first_name, row.last_name, row.middle_name = payload.get('first_name', ''), payload.get('last_name', ''), payload.get('middle_name', '')
             row.class_group_id, row.integration_active = payload['native_class_id'], payload['active']
         row.full_clean(validate_unique=True)

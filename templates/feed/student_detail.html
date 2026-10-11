@@ -32,6 +32,10 @@
                 <div style="display:flex;gap:8px;flex-wrap:wrap;">
                     {% if student_obj %}
                     <a href="{% url 'teacher_student_edit' student_obj.id %}" class="btn btn-primary btn-sm" style="font-weight:700;">✏️ Редагувати дані учня</a>
+                    <form method="post" action="{% url 'teacher_student_delete' student_obj.pk %}" onsubmit="return confirm('Повністю видалити цей профіль та всі його здані роботи? Дію буде записано в журналі.');">
+                        {% csrf_token %}
+                        <button class="btn btn-danger btn-sm">Видалити учня та роботи</button>
+                    </form>
                     {% endif %}
                     <a href="{% url 'teacher_students' %}{% if target_class %}?class_group={{ target_class.id }}{% endif %}" class="btn btn-secondary btn-sm">👥 Список класу</a>
                     <a href="{% url 'gradebook' %}{% if target_class %}?class_group={{ target_class.id }}{% endif %}" class="btn btn-secondary btn-sm">📖 Журнал оцінок</a>
