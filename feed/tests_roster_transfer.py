@@ -77,3 +77,15 @@ class JournalRosterReceiveTests(TestCase):
         self.assertEqual(self.send(self.payload()).status_code, 401)
         self.assertEqual(self.client.get('/api/v2/journal/roster/', HTTP_AUTHORIZATION='Bearer synthetic-key').status_code, 401)
         self.assertEqual(Student.objects.count(), 2)
+
+    def test_legacy_name_import_only_works_before_optional_journal_connection(self):
+        from feed.journal_api import sync_roster_data
+        from feed.models import RosterReplica
+        payload = {'classes': [{'name': self.group.name, 'students': [
+            {'last_name': 'Самостійний', 'first_name': 'Учень'}]}]}
+        self.assertNotIn('blocked', sync_roster_data(payload, teacher=self.teacher))
+        self.assertEqual(self.send(self.payload()).status_code, 200)
+        self.assertFalse(RosterReplica.objects.filter(data__kind='class').exists())
+        before = list(Student.objects.order_by('pk').values())
+        self.assertTrue(sync_roster_data(payload, teacher=self.teacher)['blocked'])
+        self.assertEqual(list(Student.objects.order_by('pk').values()), before)

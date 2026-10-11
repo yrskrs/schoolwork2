@@ -352,8 +352,9 @@ def sync_roster_data(payload: Dict[str, Any], teacher: Optional[Teacher] = None)
     2. {"students": [{"last_name": "...", "first_name": "...", "class_name": "10-А"}]}
     3. {"students_text": "Шевченко Тарас, 10-А\\nФранко Іван, 10-А"}
     """
-    from .models import RosterReplica
-    if RosterReplica.objects.filter(data__kind='class', data__native_id__isnull=False).exists():
+    from .models import RosterReplica, RosterState
+    state = RosterState.objects.filter(pk=1).values_list('data', flat=True).first() or {}
+    if state.get('journal_imports') or RosterReplica.objects.filter(data__kind='class', data__native_id__isnull=False).exists():
         return {'created_students': 0, 'updated_students': 0, 'total_processed': 0, 'created_classes': [],
             'blocked': True, 'errors': ['Списки вже використовують стабільні ID API v2. Імпорт за ПІБ API v1 заблоковано; відкрийте «Синхронізація списків». Локальні дані збережено.']}
 
