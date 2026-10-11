@@ -7436,7 +7436,7 @@ def teacher_settings_view(request):
         elif action in ('create_journal_api_key', 'create_simple_journal_api_key'):
             name = request.POST.get('key_name', '').strip() or 'Локальний журнал оцінок'
             can_export = action == 'create_simple_journal_api_key' or bool(request.POST.get('can_export_grades'))
-            can_import = action != 'create_simple_journal_api_key' and bool(request.POST.get('can_import_roster'))
+            can_import = action == 'create_simple_journal_api_key' or bool(request.POST.get('can_import_roster'))
             journal_url = request.POST.get('local_journal_url', '').strip()
 
             from .models import JournalAPIKey

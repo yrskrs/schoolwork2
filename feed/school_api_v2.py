@@ -1,14 +1,18 @@
-"""Read-only native-ID API. v1 remains available for existing clients."""
+"""Optional journal roster copies and native-ID grades; v1 remains available."""
 import datetime as dt
 import math
 
 from django.http import JsonResponse
 from django.utils import timezone
 from django.views.decorators.http import require_GET
+from django.views.decorators.http import require_http_methods
+from django.views.decorators.csrf import csrf_exempt
+import json
 
 from .journal_api import get_authenticated_journal_key
 from .models import ClassGroup, Student, Submission, Subject
 from school_sync.django_backend import operate
+from school_sync.core import SyncError
 
 
 def authorized(request):
@@ -16,6 +20,8 @@ def authorized(request):
     if not header.startswith('Bearer ') or not header[7:].strip():
         return None
     key, error = get_authenticated_journal_key(request, 'export')
+    if key and key.teacher_id and not key.teacher.user.is_active:
+        return None
     return key
 
 
@@ -25,18 +31,46 @@ def reply(payload, status=200):
     return response
 
 
-@require_GET
+@csrf_exempt
+@require_http_methods(['GET', 'POST'])
 def roster(request):
     key = authorized(request)
     if not key:
         return reply({'error': 'Потрібен чинний Bearer-ключ із правом експорту.'}, 401)
+    if request.method == 'POST':
+        if not key.can_import_roster:
+            return reply({'error': 'Цей ключ не дозволяє передавати списки учнів.'}, 403)
+        from school_sync.journal_roster import import_students
+        try:
+            if len(request.body) > 2 * 1024 * 1024:
+                raise SyncError('Список перевищує 2 МБ.')
+            payload = json.loads(request.body)
+            def receive(engine, store):
+                classes = ClassGroup.objects.all()
+                if key.teacher_id:
+                    classes = classes.filter(teacher=key.teacher)
+                result = import_students(engine, store, payload, key.teacher_id or 'admin', set(classes.values_list('pk', flat=True)))
+                group = ClassGroup.objects.get(pk=result['class_id'])
+                if key.teacher_id:
+                    key.teacher.classes.add(group)
+                name = payload.get('subject', {}).get('name', '').strip()
+                if not name or len(name) > 100:
+                    raise SyncError('Потрібна назва предмета до 100 символів.')
+                subject, _ = Subject.objects.get_or_create(name=name)
+                if key.teacher_id:
+                    key.teacher.subjects.add(subject)
+                result.update(source='schoolwork', instance_id=engine.origin, subject_id=subject.pk)
+                return result
+            return reply(operate(receive))
+        except (SyncError, ValueError, TypeError, KeyError, AttributeError):
+            return reply({'error': 'Не вдалося передати список. Перевірте відповідності та права власника ключа; місцеві дані збережено.'}, 400)
     classes = ClassGroup.objects.all()
     subjects = Subject.objects.all()
     if key.teacher_id:
         classes = classes.filter(teacher=key.teacher)
         subjects = subjects.filter(teacher=key.teacher)
     class_ids = list(classes.values_list('pk', flat=True))
-    return reply({'schema_version': 2, 'source': 'schoolwork', 'instance_id': operate(lambda engine, store: engine.origin),
+    return reply({'schema_version': 2, 'source': 'schoolwork', 'capabilities': ['journal_roster_import'], 'instance_id': operate(lambda engine, store: engine.origin),
         'classes': list(classes.values('id', 'name')),
         'subjects': list(subjects.values('id', 'name')),
         'students': [{'id': s.pk, 'class_id': s.class_group_id, 'name': s.get_full_name()}
@@ -86,7 +120,8 @@ def grades(request):
         records.append((sub.pk, {
             'source': 'schoolwork',
             'id': f'schoolwork:assignment:{sub.assignment_id}:class:{sub.class_group_id}:student:{sub.student_id}' if sub.student_id else f'schoolwork:unmapped:{sub.pk}',
-            'student_id': sub.student_id, 'class_id': sub.class_group_id,
+            'student_id': sub.student_id, 'student_name': sub.student.get_full_name() if sub.student_id else sub.get_student_full_name(),
+            'student_key': str(sub.student_id) if sub.student_id else f'unmapped:{sub.pk}', 'class_id': sub.class_group_id,
             'subject_id': sub.assignment.subject_id, 'work_id': sub.assignment_id,
             'title': sub.assignment.title, 'attempt_id': sub.pk,
             'points': points, 'max_points': 12, 'value': sub.grade, 'grading_scale': 12,

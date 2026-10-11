@@ -124,7 +124,7 @@ class SchoolAPIV2Tests(TestCase):
         self.assertFalse(plain.startswith('{'))
         self.assertEqual(key.teacher, self.teacher)
         self.assertTrue(key.can_export_grades)
-        self.assertFalse(key.can_import_roster)
+        self.assertTrue(key.can_import_roster)
         roster = self.client.get('/api/v2/journal/roster/', HTTP_AUTHORIZATION='Bearer ' + key.key).json()
         self.assertEqual(roster['classes'][0]['name'], '7-А')
         other = Teacher.objects.create(user=get_user_model().objects.create_user(username='other-private-key'), full_name='Інший')
