@@ -89,3 +89,72 @@ class JournalRosterReceiveTests(TestCase):
         before = list(Student.objects.order_by('pk').values())
         self.assertTrue(sync_roster_data(payload, teacher=self.teacher)['blocked'])
         self.assertEqual(list(Student.objects.order_by('pk').values()), before)
+
+    def test_simple_copy_requires_explicit_pupil_selection_without_peers(self):
+        from feed.forms import SubmissionForm
+        self.assertEqual(self.send(self.payload()).status_code, 200)
+        historical = fixtures.SchoolAPIV2Tests.sub(self)
+        historical.student = None; historical.last_name = 'Поза'; historical.first_name = 'Списком'; historical.save()
+        roster = self.client.get('/api/students-autocomplete/', {'class_group_id': self.group.pk}).json()
+        self.assertTrue(roster['stable_roster'])
+        self.assertTrue(all(row['id'] for row in roster['students']))
+        data = {'full_name': 'Вигаданий Учень', 'class_group': self.group.pk,
+                'comment_student': 'Синтетична відповідь'}
+        self.assertFalse(SubmissionForm(data, assignment=self.assignment).is_valid())
+        data['student_id'] = self.twin.pk
+        form = SubmissionForm(data, assignment=self.assignment)
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.save(self.assignment).student_id, self.twin.pk)
+
+    def test_unlisted_name_is_saved_without_merging_pupil_or_previous_attempt(self):
+        from feed.forms import SubmissionForm
+        previous = fixtures.SchoolAPIV2Tests.sub(self)
+        self.assertEqual(self.send(self.payload()).status_code, 200)
+        for name in ('Вигаданий Учень', 'Вигадан У.'):
+            form = SubmissionForm({'full_name': name, 'class_group': self.group.pk,
+                'other_student': 'on', 'comment_student': 'Поза списком'}, assignment=self.assignment)
+            self.assertTrue(form.is_valid(), form.errors)
+            result = form.save(self.assignment)
+            self.assertIsNone(result.student_id)
+            self.assertIsNone(result.previous_submission_id)
+            self.assertEqual(result.get_student_full_name(), name)
+            self.assertTrue(result.is_latest_attempt)
+            self.assertEqual([row.pk for row in result.get_all_attempts()], [result.pk])
+        previous.refresh_from_db()
+        self.assertTrue(previous.is_latest_attempt)
+        self.assertEqual(previous.grade, '8')
+        self.assertEqual(Student.objects.count(), 3)
+        self.assertEqual([row.pk for row in previous.get_all_attempts()], [previous.pk])
+        old = fixtures.SchoolAPIV2Tests.sub(self)
+        old.student = None; old.save()
+        linked = fixtures.SchoolAPIV2Tests.sub(self)
+        linked.student = None; linked.previous_submission = old; linked.save()
+        self.assertEqual({row.pk for row in linked.get_all_attempts()}, {old.pk, linked.pk})
+        self.assertEqual({row.pk for row in old.get_all_attempts()}, {old.pk, linked.pk})
+
+    def test_standalone_name_entry_and_retakes_remain_unchanged(self):
+        from feed.forms import SubmissionForm
+        self.assertFalse(self.client.get('/api/students-autocomplete/', {'class_group_id': self.group.pk}).json()['stable_roster'])
+        data = {'full_name': 'Самостійний Учень', 'class_group': self.group.pk,
+                'comment_student': 'Синтетична відповідь'}
+        first = SubmissionForm(data, assignment=self.assignment)
+        self.assertTrue(first.is_valid(), first.errors)
+        previous = first.save(self.assignment)
+        second = SubmissionForm(data, assignment=self.assignment)
+        self.assertTrue(second.is_valid(), second.errors)
+        result = second.save(self.assignment)
+        self.assertEqual(result.student_id, previous.student_id)
+        self.assertEqual(result.previous_submission_id, previous.pk)
+        self.assertEqual(result.resubmission_attempt, 2)
+
+    def test_copy_between_validation_and_save_does_not_match_by_name(self):
+        from django.core.exceptions import ValidationError
+        from feed.forms import SubmissionForm
+        data = {'full_name': 'Самостійний Учень', 'class_group': self.group.pk,
+                'comment_student': 'Синтетична відповідь'}
+        form = SubmissionForm(data, assignment=self.assignment)
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(self.send(self.payload()).status_code, 200)
+        with self.assertRaises(ValidationError):
+            form.save(self.assignment)
+        self.assertFalse(Submission.objects.exists())

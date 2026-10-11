@@ -484,6 +484,7 @@ function fetchStudentSuggestions() {
 
 function selectStudentName(fullName, id) {
     document.getElementById('id_student_id').value=id || '';
+    document.getElementById('id_other_student').checked=false;
     if (nameInput) {
         nameInput.value = fullName;
     }
@@ -497,8 +498,10 @@ const rosterSelect = document.getElementById('student-roster-select');
 const manualWrapper = document.getElementById('student-manual-input-wrapper');
 const toggleModeBtn = document.getElementById('btn-toggle-student-mode');
 let isManualStudentMode = false;
+let isStableClassRoster = false;
 
 function loadClassRoster(classId) {
+    isStableClassRoster = false;
     if (!classId) {
         if (rosterSelect) rosterSelect.style.display = 'none';
         if (manualWrapper) manualWrapper.style.display = 'block';
@@ -510,6 +513,7 @@ function loadClassRoster(classId) {
         .then(function(r) { return r.json(); })
         .then(function(data) {
             const students = data.students || [];
+            isStableClassRoster = !!data.stable_roster;
             if (students.length > 0 && rosterSelect) {
                 rosterSelect.replaceChildren(new Option('— Оберіть себе зі списку —',''));
                 const currentVal = nameInput ? nameInput.value.trim().toLowerCase() : '';
@@ -562,6 +566,7 @@ function onRosterStudentSelected(val) {
         const option=rosterSelect.selectedOptions[0];
         nameInput.value = option ? (option.dataset.name || '') : '';
         document.getElementById('id_student_id').value=val || '';
+        document.getElementById('id_other_student').checked=false;
         const clientErr = document.getElementById('full-name-client-error');
         if (clientErr && val) clientErr.style.display = 'none';
     }
@@ -571,6 +576,7 @@ function toggleStudentInputMode(forceManual) {
     if (forceManual === true || !isManualStudentMode) {
         isManualStudentMode = true;
         document.getElementById('id_student_id').value='';
+        document.getElementById('id_other_student').checked=isStableClassRoster;
         if (rosterSelect) rosterSelect.style.display = 'none';
         if (manualWrapper) manualWrapper.style.display = 'block';
         if (toggleModeBtn) {
@@ -580,6 +586,7 @@ function toggleStudentInputMode(forceManual) {
         if (nameInput) nameInput.focus();
     } else {
         isManualStudentMode = false;
+        document.getElementById('id_other_student').checked=false;
         if (rosterSelect && rosterSelect.options.length > 1) {
             rosterSelect.style.display = 'block';
             if (manualWrapper) manualWrapper.style.display = 'none';
@@ -592,6 +599,9 @@ function toggleStudentInputMode(forceManual) {
 }
 
 // Завантаження ростеру при відкритті сторінки (якщо клас вже вибрано)
+document.getElementById('id_other_student').addEventListener('change', function() {
+    if (this.checked) document.getElementById('id_student_id').value='';
+});
 if (classSelect && classSelect.value) {
     loadClassRoster(classSelect.value);
 }

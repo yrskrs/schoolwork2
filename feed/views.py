@@ -2864,6 +2864,9 @@ def submit_assignment(request, pk):
         if form.is_valid():
             try:
                 submission = form.save(assignment=assignment)
+            except ValidationError as exc:
+                form.add_error(None, exc)
+                return render(request, 'feed/submit_assignment.html', _submission_form_context(assignment, form))
             except (PermissionError, OSError, IOError):
                 form.add_error(
                     None,
@@ -6782,8 +6785,8 @@ def api_students_autocomplete(request):
             students.append({'id': pupil.pk, 'last_name': pupil.last_name, 'first_name': pupil.first_name, 'full_name': full_name})
     # Historical names remain available in legacy, unshared classes. They have
     # no stable ID and cannot be silently matched to a synchronized pupil.
-    from .models import RosterReplica
-    shared = class_group_id and RosterReplica.objects.filter(data__kind='class', data__native_id=int(class_group_id)).exists()
+    from .roster_identity import has_stable_class_roster
+    shared = has_stable_class_roster(ClassGroup.objects.filter(pk=class_group_id).first()) if class_group_id else False
     if not shared:
         for ln, fn in submissions.values_list('last_name', 'first_name').distinct():
             key = (ln.strip().casefold(), fn.strip().casefold())
@@ -6798,7 +6801,7 @@ def api_students_autocomplete(request):
         limit = 100 if not query else 15
 
     students.sort(key=lambda x: (x['last_name'].lower(), x['first_name'].lower()))
-    return JsonResponse({'students': students[:max(1, min(limit, 1000))]})
+    return JsonResponse({'students': students[:max(1, min(limit, 1000))], 'stable_roster': bool(shared)})
 
 
 @teacher_required

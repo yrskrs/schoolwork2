@@ -15,6 +15,7 @@ from django.contrib.auth.models import User
 from django.utils import timezone
 from django.db.models import Q
 from .models import Assignment, Teacher, ClassGroup, Subject, Student
+from .roster_identity import has_stable_class_roster
 
 
 # ─── Кастомний widget для множинного завантаження файлів (Django 6+) ───────────
@@ -612,6 +613,7 @@ class SubmissionForm(forms.Form):
 
     student_id = forms.IntegerField(required=False, widget=forms.HiddenInput())
     coauthor_ids = forms.CharField(required=False, widget=forms.HiddenInput())
+    other_student = forms.BooleanField(required=False, label='Мене немає у списку класу')
 
     full_name = forms.CharField(
         label="Прізвище та ім'я",
@@ -695,16 +697,18 @@ class SubmissionForm(forms.Form):
 
     def clean(self):
         cleaned_data = super().clean()
-        from .models import Student, RosterReplica
+        from .models import Student
         import json
         group = cleaned_data.get('class_group')
-        shared = group and RosterReplica.objects.filter(data__kind='class', data__native_id=group.pk).exists()
+        shared = has_stable_class_roster(group)
         pupil_id = cleaned_data.get('student_id')
         pupil = Student.objects.filter(pk=pupil_id, class_group=group, integration_active=True).first() if pupil_id else None
         if pupil_id and not pupil:
             self.add_error('full_name', 'Оберіть активного учня цього класу.')
-        if shared and not pupil:
-            self.add_error('full_name', 'Для синхронізованого класу оберіть учня зі списку. Якщо запису немає, зверніться до вчителя.')
+        if pupil and cleaned_data.get('other_student'):
+            self.add_error('full_name', 'Оберіть своє ім’я або позначте, що вас немає у списку.')
+        if shared and not pupil and not cleaned_data.get('other_student'):
+            self.add_error('full_name', 'Оберіть своє ім’я зі списку або позначте «Мене немає у списку класу» та введіть його вручну.')
         if pupil:
             cleaned_data['full_name'] = pupil.get_full_name()
         cleaned_data['selected_student'] = pupil
@@ -858,12 +862,19 @@ class SubmissionForm(forms.Form):
         from .utils import optimize_uploaded_file
 
         class_grp = self.cleaned_data['class_group']
+        # The journal may have connected between form validation and this lock.
+        self.cleaned_data['shared_roster'] = has_stable_class_roster(class_grp)
         student_obj = self.cleaned_data.get('selected_student')
         if student_obj:
             # Recheck the selected ID inside the class-locked transaction.
             student_obj = Student.objects.get(pk=student_obj.pk, class_group=class_grp, integration_active=True)
             last_name, first_name = student_obj.last_name, student_obj.first_name
+        elif self.cleaned_data.get('other_student'):
+            parts = self.cleaned_data['full_name'].strip().split(maxsplit=1)
+            last_name, first_name = parts[0], parts[1] if len(parts) > 1 else ''
         else:
+            if self.cleaned_data['shared_roster']:
+                raise forms.ValidationError('Список класу оновився. Оберіть своє ім’я або позначте, що вас немає у списку.')
             last_name, first_name = resolve_canonical_student_name(self.cleaned_data['full_name'], class_group=class_grp)
             matches = [p for p in Student.objects.filter(class_group=class_grp, integration_active=True)
                 if is_same_student_identity(last_name, first_name, p.last_name, p.first_name)]
@@ -910,7 +921,7 @@ class SubmissionForm(forms.Form):
         if self.cleaned_data.get('shared_roster') or self.cleaned_data.get('selected_coauthors'):
             resolved_coauthors = [{'student': row, 'last_name': row.last_name, 'first_name': row.first_name, 'full_name': row.get_full_name()}
                 for row in self.cleaned_data.get('selected_coauthors', [])]
-            all_authors_display = [student_obj.get_full_name()] + [row['full_name'] for row in resolved_coauthors]
+            all_authors_display = [f"{last_name} {first_name}".strip()] + [row['full_name'] for row in resolved_coauthors]
 
         is_group = bool(resolved_coauthors)
         group_authors_str = ", ".join(all_authors_display) if is_group else ""
@@ -919,6 +930,9 @@ class SubmissionForm(forms.Form):
         q_prev = Q(assignment=assignment, class_group=class_grp)
         if student_obj:
             q_prev &= Q(student=student_obj) if self.cleaned_data.get('shared_roster') else (Q(student=student_obj) | (Q(student__isnull=True) & Q(last_name__iexact=last_name) & Q(first_name__iexact=first_name)))
+        elif self.cleaned_data.get('other_student'):
+            # A typed name alone cannot identify a previous pupil or attempt.
+            q_prev &= Q(pk__in=[])
         else:
             q_prev &= (Q(last_name__iexact=last_name) & Q(first_name__iexact=first_name))
 

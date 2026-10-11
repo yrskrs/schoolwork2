@@ -2375,7 +2375,24 @@ class Submission(models.Model):
             return [self]
         from django.db.models import Q
         q = Q(assignment=self.assignment, class_group=self.class_group)
-        if self.student_id:
+        from .roster_identity import has_stable_class_roster
+        if has_stable_class_roster(self.class_group):
+            if self.student_id:
+                q &= Q(student_id=self.student_id)
+            else:
+                # Follow only saved attempt links, never infer identity from a name.
+                links = {}
+                for pk, previous in Submission.objects.filter(q, student__isnull=True).values_list('pk', 'previous_submission_id'):
+                    if previous:
+                        links.setdefault(pk, set()).add(previous)
+                        links.setdefault(previous, set()).add(pk)
+                ids, pending = {self.pk}, [self.pk]
+                while pending:
+                    for pk in links.get(pending.pop(), set()) - ids:
+                        ids.add(pk)
+                        pending.append(pk)
+                q &= Q(student__isnull=True, pk__in=ids)
+        elif self.student_id:
             q &= (Q(student_id=self.student_id) | (Q(last_name__iexact=self.last_name) & Q(first_name__iexact=self.first_name)))
         else:
             q &= Q(last_name__iexact=self.last_name) & Q(first_name__iexact=self.first_name)
