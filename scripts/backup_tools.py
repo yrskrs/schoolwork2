@@ -9,7 +9,7 @@ import tempfile
 
 
 def entries(archive):
-    with tarfile.open(archive, 'r|gz') as package:
+    with tarfile.open(archive, 'r:gz') as package:
         for member in package:
             name = PurePosixPath(member.name)
             if name.is_absolute() or '..' in name.parts:
@@ -23,6 +23,14 @@ def entries(archive):
             if name == PurePosixPath('.') and not member.isdir():
                 raise ValueError('Некоректний кореневий запис архіву.')
             yield package, member, name
+            # TarFile.next() otherwise skips a large member with one huge stream read,
+            # repeatedly concatenating decompressed buffers. Drain unread data in bounded chunks.
+            remaining = max(0, member.offset_data + member.size - package.fileobj.tell())
+            while remaining:
+                chunk = package.fileobj.read(min(remaining, 1024 * 1024))
+                if not chunk:
+                    raise ValueError('Архів обірвано всередині файлу.')
+                remaining -= len(chunk)
 
 
 def validate(folder, legacy=False):
