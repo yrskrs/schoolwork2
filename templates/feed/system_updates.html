@@ -1,0 +1,1158 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Оновлення системи — Шкільні Завдання{% endblock %}
+
+{% block extra_head %}
+<style>
+/* ── Стилі розділу оновлення системи ───────────────────────────────────── */
+.updates-hero {
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.08) 0%, rgba(168, 85, 247, 0.05) 100%);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    padding: 24px;
+    margin-bottom: 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 16px;
+}
+
+.updates-hero-info h1 {
+    font-size: 24px;
+    font-weight: 800;
+    margin: 0 0 6px 0;
+    color: var(--color-text-primary);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.updates-hero-info p {
+    margin: 0;
+    color: var(--color-text-secondary);
+    font-size: 14px;
+    line-height: 1.5;
+    max-width: 640px;
+}
+
+.version-status-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    padding: 20px 24px;
+    margin-bottom: 24px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.version-status-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 16px;
+}
+
+.version-badge-container {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.version-label-sub {
+    font-size: 11px;
+    text-transform: uppercase;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    color: var(--color-text-muted);
+}
+
+.version-number-tag {
+    font-size: 18px;
+    font-weight: 800;
+    padding: 4px 12px;
+    border-radius: var(--radius-md);
+    background: rgba(99, 102, 241, 0.12);
+    color: var(--color-primary);
+    font-family: monospace;
+}
+
+.status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.status-pill-healthy {
+    background: rgba(16, 185, 129, 0.12);
+    color: #059669;
+    border: 1px solid rgba(16, 185, 129, 0.25);
+}
+
+.status-pill-running {
+    background: rgba(59, 130, 246, 0.12);
+    color: #2563eb;
+    border: 1px solid rgba(59, 130, 246, 0.25);
+}
+
+.status-pill-error {
+    background: rgba(239, 68, 68, 0.12);
+    color: #dc2626;
+    border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+.status-dot-pulse {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: currentColor;
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+    animation: dotPulse 2s infinite;
+}
+
+@keyframes dotPulse {
+    0% { transform: scale(0.95); opacity: 1; }
+    70% { transform: scale(1.4); opacity: 0.2; }
+    100% { transform: scale(0.95); opacity: 1; }
+}
+
+/* ── Картка доступного оновлення ────────────────────────────────────────── */
+.release-card-available {
+    background: var(--color-surface);
+    border: 2px solid rgba(99, 102, 241, 0.4);
+    border-radius: var(--radius-lg);
+    padding: 24px;
+    margin-bottom: 24px;
+    box-shadow: 0 10px 30px rgba(99, 102, 241, 0.08);
+}
+
+.release-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 16px;
+    padding-bottom: 18px;
+    border-bottom: 1px solid var(--color-border);
+    margin-bottom: 20px;
+}
+
+.release-title-group h2 {
+    font-size: 20px;
+    font-weight: 800;
+    margin: 0 0 6px 0;
+    color: var(--color-text-primary);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.release-version-diff {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--color-text-secondary);
+}
+
+.version-chip {
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-family: monospace;
+    font-size: 12px;
+}
+.version-chip-old { background: rgba(148, 163, 184, 0.2); color: var(--color-text-secondary); }
+.version-chip-new { background: rgba(99, 102, 241, 0.15); color: var(--color-primary); font-weight: 800; }
+.badge-count {
+    background: #f59e0b;
+    color: #fff;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 800;
+}
+
+/* ── Оформлення списку змін (Changelog) ─────────────────────────────────── */
+.changelog-section-title {
+    font-size: 14px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--color-text-muted);
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.releases-group {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.release-version-block {
+    background: var(--color-bg-secondary);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: 16px 18px;
+    transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.release-version-block:hover {
+    border-color: rgba(99, 102, 241, 0.3);
+}
+
+.release-version-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.release-v-name {
+    font-size: 15px;
+    font-weight: 800;
+    color: var(--color-text-primary);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.release-v-date {
+    font-size: 12px;
+    color: var(--color-text-muted);
+    font-weight: 600;
+}
+
+.release-v-title {
+    font-size: 13.5px;
+    font-weight: 700;
+    color: var(--color-primary);
+    margin-bottom: 10px;
+}
+
+.changelog-items-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.changelog-item {
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--color-text-secondary);
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+}
+
+.changelog-item-bullet {
+    color: #10b981;
+    font-weight: 800;
+    font-size: 14px;
+    line-height: 1.2;
+    flex-shrink: 0;
+}
+
+/* ── Покроковий степпер ────────────────────────────────────────────────── */
+.stepper-track {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: 24px 0 20px;
+    position: relative;
+}
+
+.stepper-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    z-index: 2;
+    flex: 1;
+    text-align: center;
+}
+
+.step-circle {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: var(--color-surface);
+    border: 2px solid var(--color-border);
+    color: var(--color-text-muted);
+    font-weight: 800;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.25s ease;
+}
+
+.step-label {
+    font-size: 11.5px;
+    font-weight: 700;
+    color: var(--color-text-muted);
+    max-width: 110px;
+    line-height: 1.25;
+}
+
+.stepper-line {
+    flex: 1;
+    height: 3px;
+    background: var(--color-border);
+    margin: 0 -8px 20px;
+    z-index: 1;
+    transition: background-color 0.25s ease;
+}
+
+.stepper-step.active .step-circle {
+    background: var(--color-primary);
+    border-color: var(--color-primary);
+    color: #fff;
+    box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.2);
+}
+
+.stepper-step.active .step-label {
+    color: var(--color-primary);
+}
+
+.stepper-step.completed .step-circle {
+    background: #10b981;
+    border-color: #10b981;
+    color: #fff;
+}
+
+.stepper-step.completed .step-label {
+    color: var(--color-text-primary);
+}
+
+.stepper-line.completed {
+    background: #10b981;
+}
+
+/* ── ProgressBar ───────────────────────────────────────────────────────── */
+.progress-bar-wrap {
+    background: var(--color-bg-secondary);
+    border-radius: 10px;
+    height: 10px;
+    overflow: hidden;
+    margin: 12px 0 8px;
+    border: 1px solid var(--color-border);
+}
+
+.progress-bar-fill {
+    background: linear-gradient(90deg, #6366f1, #10b981);
+    height: 100%;
+    width: 0%;
+    transition: width 0.4s ease;
+}
+
+.progress-subtext {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-text-secondary);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+/* ── Вікно терміналу ───────────────────────────────────────────────────── */
+.terminal-container {
+    background: #090d16;
+    border: 1px solid #1e293b;
+    border-radius: var(--radius-md);
+    margin-top: 20px;
+    overflow: hidden;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.35);
+}
+
+.terminal-header {
+    background: #0f172a;
+    padding: 8px 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #1e293b;
+}
+
+.terminal-title {
+    color: #94a3b8;
+    font-size: 12px;
+    font-family: monospace;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.terminal-title::before {
+    content: "● ● ●";
+    color: #64748b;
+    letter-spacing: 2px;
+    font-size: 10px;
+}
+
+.btn-terminal-action {
+    background: none;
+    border: 1px solid #334155;
+    color: #94a3b8;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+.btn-terminal-action:hover {
+    color: #fff;
+    border-color: #64748b;
+}
+
+.terminal-body {
+    padding: 14px;
+    max-height: 280px;
+    overflow-y: auto;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 12.5px;
+    color: #38bdf8;
+    line-height: 1.6;
+}
+
+.terminal-body.collapsed {
+    display: none;
+}
+
+.log-line {
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+/* ── Модальне вікно підтвердження ─────────────────────────────────────── */
+.custom-modal-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(15, 23, 42, 0.65);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+    padding: 16px;
+}
+
+.custom-modal-dialog {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    max-width: 650px;
+    width: 100%;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.25);
+    animation: modalPop 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes modalPop {
+    from { opacity: 0; transform: scale(0.95); }
+    to { opacity: 1; transform: scale(1); }
+}
+
+.custom-modal-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--color-border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.custom-modal-header h3 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 800;
+    color: var(--color-text-primary);
+}
+
+.custom-modal-body {
+    padding: 20px 24px;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.custom-modal-footer {
+    padding: 16px 24px;
+    border-top: 1px solid var(--color-border);
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    background: var(--color-bg-secondary);
+    border-bottom-left-radius: var(--radius-lg);
+    border-bottom-right-radius: var(--radius-lg);
+}
+
+.btn-close-modal {
+    background: none;
+    border: none;
+    color: var(--color-text-muted);
+    font-size: 20px;
+    cursor: pointer;
+    line-height: 1;
+}
+.btn-close-modal:hover { color: var(--color-text-primary); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-wrapper">
+    <div class="feed-layout">
+
+        <!-- Лівий сайдбар -->
+        {% include 'feed/components/settings_sidebar.html' %}
+
+        <!-- Центральна частина -->
+        <div class="feed-main-content">
+
+            <!-- Шапка сторінки -->
+            <div class="updates-hero">
+                <div class="updates-hero-info">
+                    <h1>🚀 Оновлення системи</h1>
+                    <p>
+                        Автономне керування оновленнями платформи SchoolNet: перевірка нових випусків на GitHub,
+                        детальний перегляд списку змін кожної версії, автоматичний бекап та захист від збоїв із rollback.
+                    </p>
+                </div>
+                <div>
+                    <button type="button" id="btnCheckUpdates" class="btn btn-primary" onclick="checkUpdates()" style="font-weight: 700; padding: 10px 18px; display: inline-flex; align-items: center; gap: 8px;">
+                        <span id="checkSpinner" class="spinner-border spinner-border-sm" style="display:none; width: 16px; height: 16px; border: 2px solid #fff; border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite;"></span>
+                        <span id="btnCheckText">🔍 Перевірити наявність оновлень</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Картка поточної встановленої версії -->
+            <div class="version-status-card">
+                <div class="version-status-row">
+                    <div class="version-badge-container">
+                        <div>
+                            <div class="version-label-sub">Поточна встановлена версія</div>
+                            <span class="version-number-tag" id="lblCurrentVersion">v{{ current_version }}</span>
+                        </div>
+                    </div>
+                    <div class="status-pill status-pill-healthy">
+                        <span class="status-dot-pulse"></span>
+                        <span>Система працює стабільно</span>
+                    </div>
+                </div>
+                <div style="margin-top: 12px; font-size: 13px; color: var(--color-text-secondary); line-height: 1.5;">
+                    🛡️ Перед кожним оновленням сервіс виконує повний перевірений знімок бази даних PostgreSQL та медіафайлів.
+                    Збірка кандидата відбувається в ізольованому робочому просторі, а в разі непроходження перевірки готовності система автоматично відкочується назад.
+                </div>
+            </div>
+
+            <!-- Блок результатів перевірки -->
+            <div id="updateCheckResult" hidden></div>
+
+            <!-- Блок прогресу оновлення (З'являється при активному процесі) -->
+            <div id="updateProgressSection" class="version-status-card" style="border: 2px solid var(--color-primary);" hidden>
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+                    <div>
+                        <h2 style="margin: 0 0 4px 0; font-size: 18px; font-weight: 800; color: var(--color-text-primary);">
+                            ⚙️ Виконується оновлення системи
+                        </h2>
+                        <div style="font-size: 13px; color: var(--color-text-secondary);" id="progressSummarySubtitle">
+                            Оновлення до версії <strong id="progressTargetVersion">...</strong>
+                        </div>
+                    </div>
+                    <span class="status-pill status-pill-running" id="progressPill">
+                        <span class="status-dot-pulse"></span>
+                        <span id="progressPillText">Виконується</span>
+                    </span>
+                </div>
+
+                <!-- 5-кроковий інтерактивний степпер -->
+                <div class="stepper-track">
+                    <div class="stepper-step" id="step1">
+                        <div class="step-circle">1</div>
+                        <div class="step-label">Код з GitHub</div>
+                    </div>
+                    <div class="stepper-line" id="line1"></div>
+                    <div class="stepper-step" id="step2">
+                        <div class="step-circle">2</div>
+                        <div class="step-label">Збірка образу</div>
+                    </div>
+                    <div class="stepper-line" id="line2"></div>
+                    <div class="stepper-step" id="step3">
+                        <div class="step-circle">3</div>
+                        <div class="step-label">Резервна копія</div>
+                    </div>
+                    <div class="stepper-line" id="line3"></div>
+                    <div class="stepper-step" id="step4">
+                        <div class="step-circle">4</div>
+                        <div class="step-label">Міграції та перезапуск</div>
+                    </div>
+                    <div class="stepper-line" id="line4"></div>
+                    <div class="stepper-step" id="step5">
+                        <div class="step-circle">5</div>
+                        <div class="step-label">Перевірка готовності</div>
+                    </div>
+                </div>
+
+                <!-- ProgressBar -->
+                <div class="progress-bar-wrap">
+                    <div class="progress-bar-fill" id="progressBarFill" style="width: 10%;"></div>
+                </div>
+                <div class="progress-subtext">
+                    <span id="progressSubtext">Отримання оновлень з репозиторію…</span>
+                    <span id="progressPercent" style="font-family: monospace; font-weight: 700;">10%</span>
+                </div>
+
+                <!-- Опис змін, які застосовуються (під час оновлення) -->
+                <div id="inProgressChangelogBox" style="margin-top: 16px; background: var(--color-bg-secondary); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 14px 18px;" hidden>
+                    <div style="font-size: 13px; font-weight: 800; color: var(--color-text-primary); margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between;">
+                        <span>📋 Зміни, які встановлюються цим оновленням:</span>
+                        <button type="button" class="btn-terminal-action" onclick="toggleInProgressChangelog()">Згорнути/Розгорнути</button>
+                    </div>
+                    <div id="inProgressChangelogContent" class="releases-group" style="max-height: 220px; overflow-y: auto;"></div>
+                </div>
+
+                <!-- Сповіщення при перезапуску контейнерів -->
+                <div id="restartAlert" class="alert alert-info" style="margin-top: 16px; display: flex; align-items: center; gap: 12px; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: var(--radius-md); padding: 12px 16px;" hidden>
+                    <span class="spinner-border spinner-border-sm" style="width: 18px; height: 18px; border: 2px solid #2563eb; border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; flex-shrink: 0;"></span>
+                    <div style="font-size: 13px; color: var(--color-text-primary);">
+                        <strong>Перезапуск вебсервісу:</strong> Контейнер застосовує міграції та перевіряє цілісність даних. Зв'язок відновиться автоматично за кілька секунд.
+                    </div>
+                </div>
+
+                <!-- Сповіщення про успіх -->
+                <div id="successAlert" class="alert alert-success" style="margin-top: 16px; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: var(--radius-md); padding: 16px; color: #065f46;" hidden>
+                    <div style="font-size: 16px; font-weight: 800; margin-bottom: 4px;">🎉 Оновлення успішно завершено!</div>
+                    <div style="font-size: 13px;">
+                        Встановлено нову версію системи. Перевірку справності пройfieldо успішно. Сторінка оновиться через <span id="reloadCountdown" style="font-weight: 800;">3</span> сек…
+                    </div>
+                </div>
+
+                <!-- Сповіщення про помилку -->
+                <div id="errorAlert" class="alert alert-danger" style="margin-top: 16px; background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: var(--radius-md); padding: 16px;" hidden>
+                    <div style="font-size: 15px; font-weight: 800; color: #dc2626; margin-bottom: 6px;">❌ Помилка під час оновлення</div>
+                    <div id="errorMessage" style="font-family: monospace; font-size: 12.5px; background: rgba(0, 0, 0, 0.06); padding: 8px 12px; border-radius: 4px; margin-bottom: 10px; color: #b91c1c;"></div>
+                    
+                    <div id="rollbackNotice" style="background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 6px; padding: 10px 14px; font-size: 13px; color: #065f46; margin-bottom: 12px;" hidden>
+                        ✅ <strong>Автоматичний відкат:</strong> Систему безпечно повернуто до вихідного робочого стану з резервної копії. Усі завдання, учні та оцінки цілі.
+                    </div>
+
+                    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                        <button type="button" class="btn btn-secondary btn-sm" onclick="resetUpdateUI()">Закрити</button>
+                        <button type="button" class="btn btn-primary btn-sm" onclick="checkUpdates()">Спробувати знову</button>
+                        <button type="button" id="btnManualRollback" class="btn btn-danger btn-sm" onclick="triggerManualRollback()" style="display:none;">Відкотити до бекапу</button>
+                    </div>
+                </div>
+
+                <!-- Журнал терміналу -->
+                <div class="terminal-container">
+                    <div class="terminal-header">
+                        <span class="terminal-title">Журнал виконання оновлення</span>
+                        <div style="display: flex; gap: 8px;">
+                            <button type="button" class="btn-terminal-action" onclick="copyTerminalLogs()">Копіювати логи</button>
+                            <button type="button" class="btn-terminal-action" onclick="toggleTerminal()">Згорнути/Розгорнути</button>
+                        </div>
+                    </div>
+                    <div class="terminal-body" id="terminalBody">
+                        <div class="log-line">Ініціалізація служби оновлення…</div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<!-- ════ МОДАЛЬНЕ ВІКНО ПІДТВЕРДЖЕННЯ ОНОВЛЕННЯ ═════════════════════════════ -->
+<div id="confirmModal" class="custom-modal-backdrop" hidden>
+    <div class="custom-modal-dialog">
+        <div class="custom-modal-header">
+            <h3>🚀 Підтвердження оновлення системи</h3>
+            <button type="button" class="btn-close-modal" onclick="closeConfirmModal()">✕</button>
+        </div>
+        <div class="custom-modal-body">
+            <div style="background: rgba(99, 102, 241, 0.08); border: 1px solid rgba(99, 102, 241, 0.2); border-radius: var(--radius-md); padding: 14px 16px; margin-bottom: 18px;">
+                <div style="font-size: 14px; font-weight: 800; color: var(--color-primary); margin-bottom: 4px;">
+                    Оновлення до версії <span id="modalTargetVersion" style="font-family: monospace;">...</span>
+                </div>
+                <div style="font-size: 12.5px; color: var(--color-text-secondary); line-height: 1.4;">
+                    Перед запуском буде створено повний перевірений знімок бази даних та завантажених робіт учнів.
+                    У разі будь-яких труднощів або відсутності зв'язку система автоматично відкотиться назад.
+                </div>
+            </div>
+
+            <!-- Детальний перелік змін усіх проміжних версій у модалці -->
+            <div class="changelog-section-title">
+                <span>📋 Перелік змін, які несе це оновлення:</span>
+            </div>
+            <div id="modalChangelogList" class="releases-group" style="max-height: 320px; overflow-y: auto; padding-right: 4px;"></div>
+        </div>
+        <div class="custom-modal-footer">
+            <button type="button" class="btn btn-secondary" onclick="closeConfirmModal()">Скасувати</button>
+            <button type="button" class="btn btn-primary" onclick="proceedWithUpdate()" style="font-weight: 700;">
+                🚀 Почати оновлення
+            </button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<style>
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+</style>
+<script>
+let currentTargetVersion = null;
+let currentTargetRef = 'origin/main';
+let currentReleasesBetween = [];
+let updatePollTimer = null;
+let isUpdating = false;
+let restartAttempts = 0;
+let lastBackupPath = null;
+
+function getCsrfToken() {
+    const el = document.querySelector('[name=csrfmiddlewaretoken]');
+    if (el) return el.value;
+    const cookie = document.cookie.split('; ').find(row => row.startsWith('csrftoken='));
+    return cookie ? cookie.split('=')[1] : '';
+}
+
+// ── Перевірка наявності оновлень ──────────────────────────────────────────
+async function checkUpdates() {
+    const btn = document.getElementById('btnCheckUpdates');
+    const spinner = document.getElementById('checkSpinner');
+    const btnText = document.getElementById('btnCheckText');
+    const resultBox = document.getElementById('updateCheckResult');
+
+    btn.disabled = true;
+    spinner.style.display = 'inline-block';
+    btnText.textContent = 'Перевірка GitHub…';
+    resultBox.hidden = true;
+
+    try {
+        const res = await fetch("{% url 'updates_check_api' %}", {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        });
+        const data = await res.json();
+
+        resultBox.hidden = false;
+
+        if (!data.ok) {
+            resultBox.innerHTML = `
+                <div class="version-status-card" style="border-left: 4px solid #ef4444;">
+                    <div style="font-weight: 800; color: #dc2626; margin-bottom: 4px;">⚠️ Не вдалося зв'язатися з GitHub</div>
+                    <div style="font-size: 13px; color: var(--color-text-secondary);">${escapeHtml(data.error || 'Помилка мережі')}</div>
+                </div>
+            `;
+            return;
+        }
+
+        if (data.has_update) {
+            currentTargetVersion = data.latest_version;
+            currentTargetRef = `v${data.latest_version}`;
+            currentReleasesBetween = data.releases_between || [];
+
+            // Рендеримо картку доступного оновлення з повним списком усіх версій
+            resultBox.innerHTML = renderAvailableUpdateCard(data);
+        } else {
+            resultBox.innerHTML = `
+                <div class="version-status-card" style="border-left: 4px solid #10b981; background: rgba(16, 185, 129, 0.04);">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <span style="font-size: 24px;">🎉</span>
+                        <div>
+                            <div style="font-size: 15px; font-weight: 800; color: #065f46;">У вас встановлено найновішу версію!</div>
+                            <div style="font-size: 13px; color: var(--color-text-secondary); margin-top: 2px;">
+                                Поточна версія <strong>v${escapeHtml(data.current_version)}</strong> є повністю актуальною. Новіших випусків на GitHub не знайдено.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+    } catch (err) {
+        resultBox.hidden = false;
+        resultBox.innerHTML = `
+            <div class="version-status-card" style="border-left: 4px solid #ef4444;">
+                <div style="font-weight: 800; color: #dc2626;">Помилка зв'язку з вебсервером: ${escapeHtml(err.message)}</div>
+            </div>
+        `;
+    } finally {
+        btn.disabled = false;
+        spinner.style.display = 'none';
+        btnText.textContent = '🔍 Перевірити наявність оновлень';
+    }
+}
+
+// ── Генерація HTML списку змін для проміжних версій ───────────────────────
+function renderChangelogHtml(releases) {
+    if (!releases || releases.length === 0) {
+        return `
+            <div class="release-version-block">
+                <div class="release-v-title">Планове оновлення системи</div>
+                <div style="font-size: 13px; color: var(--color-text-secondary);">Оптимізація та оновлення модулів SchoolNet.</div>
+            </div>
+        `;
+    }
+
+    return releases.map(rel => {
+        const changesList = (rel.changes && rel.changes.length > 0)
+            ? rel.changes.map(ch => `
+                <li class="changelog-item">
+                    <span class="changelog-item-bullet">✓</span>
+                    <span>${escapeHtml(ch)}</span>
+                </li>
+            `).join('')
+            : '<li class="changelog-item"><span class="changelog-item-bullet">•</span><span>Планове поліпшення компонентів системи</span></li>';
+
+        return `
+            <div class="release-version-block">
+                <div class="release-version-header">
+                    <div class="release-v-name">
+                        <span>📦 Версія v${escapeHtml(rel.version)}</span>
+                    </div>
+                    <div class="release-v-date">${escapeHtml(rel.date || '')}</div>
+                </div>
+                ${rel.title ? `<div class="release-v-title">${escapeHtml(rel.title)}</div>` : ''}
+                <ul class="changelog-items-list">
+                    ${changesList}
+                </ul>
+            </div>
+        `;
+    }).join('');
+}
+
+// ── Рендер картки доступного оновлення ────────────────────────────────────
+function renderAvailableUpdateCard(data) {
+    const releasesCount = data.releases_between ? data.releases_between.length : 1;
+    const countBadge = releasesCount > 1 
+        ? `<span class="badge-count">Включає ${releasesCount} випуски(ів)</span>` 
+        : '';
+
+    return `
+        <div class="release-card-available">
+            <div class="release-card-header">
+                <div class="release-title-group">
+                    <h2>
+                        <span>🚀 Доступне оновлення системи</span>
+                        ${countBadge}
+                    </h2>
+                    <div class="release-version-diff">
+                        <span>Поточна:</span>
+                        <span class="version-chip version-chip-old">v${escapeHtml(data.current_version)}</span>
+                        <span>➔</span>
+                        <span>Цільова:</span>
+                        <span class="version-chip version-chip-new">v${escapeHtml(data.latest_version)}</span>
+                    </div>
+                </div>
+                <div>
+                    <button type="button" class="btn btn-primary" onclick="openConfirmModal()" style="font-weight: 800; padding: 10px 22px; font-size: 14px; box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35);">
+                        🚀 Оновити до v${escapeHtml(data.latest_version)}
+                    </button>
+                </div>
+            </div>
+
+            <div class="changelog-section-title">
+                <span>📋 Детальний список змін усіх проміжних версій:</span>
+            </div>
+            <div class="releases-group">
+                ${renderChangelogHtml(data.releases_between)}
+            </div>
+        </div>
+    `;
+}
+
+// ── Модальне вікно підтвердження ──────────────────────────────────────────
+function openConfirmModal() {
+    document.getElementById('modalTargetVersion').textContent = `v${currentTargetVersion || 'останньої'}`;
+    const modalChangelog = document.getElementById('modalChangelogList');
+    modalChangelog.innerHTML = renderChangelogHtml(currentReleasesBetween);
+    document.getElementById('confirmModal').hidden = false;
+}
+
+function closeConfirmModal() {
+    document.getElementById('confirmModal').hidden = true;
+}
+
+// ── Запуск процесу оновлення ──────────────────────────────────────────────
+async function proceedWithUpdate() {
+    closeConfirmModal();
+    isUpdating = true;
+    restartAttempts = 0;
+
+    const progressSection = document.getElementById('updateProgressSection');
+    progressSection.hidden = false;
+    document.getElementById('updateCheckResult').hidden = true;
+    document.getElementById('errorAlert').hidden = true;
+    document.getElementById('successAlert').hidden = true;
+    document.getElementById('restartAlert').hidden = true;
+    document.getElementById('progressTargetVersion').textContent = `v${currentTargetVersion || 'останньої'}`;
+
+    // Відображаємо список змін під час оновлення
+    const inProgressBox = document.getElementById('inProgressChangelogBox');
+    const inProgressContent = document.getElementById('inProgressChangelogContent');
+    if (currentReleasesBetween && currentReleasesBetween.length > 0) {
+        inProgressContent.innerHTML = renderChangelogHtml(currentReleasesBetween);
+        inProgressBox.hidden = false;
+    }
+
+    updateStepper(1, 'Завантаження коду з GitHub…', 10);
+    addLogLine(`Запуск автономного оновлення до версії ${currentTargetVersion || 'останньої'}…`);
+
+    try {
+        const formData = new FormData();
+        formData.append('version', currentTargetVersion || '');
+        formData.append('ref', currentTargetRef || 'origin/main');
+        formData.append('csrfmiddlewaretoken', getCsrfToken());
+
+        const res = await fetch("{% url 'updates_start_api' %}", {
+            method: 'POST',
+            body: formData,
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        });
+        const data = await res.json();
+        if (data.error) {
+            showError(data.error);
+            return;
+        }
+    } catch (err) {
+        addLogLine(`Помилка виклику API: ${err.message}`);
+    }
+
+    startPollingStatus();
+}
+
+function startPollingStatus() {
+    if (updatePollTimer) clearInterval(updatePollTimer);
+    updatePollTimer = setInterval(pollUpdateStatus, 1500);
+}
+
+async function pollUpdateStatus() {
+    try {
+        const res = await fetch("{% url 'updates_status_api' %}?t=" + Date.now(), {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        });
+
+        if (!res.ok) {
+            handleNetworkDrop();
+            return;
+        }
+
+        const data = await res.json();
+        restartAttempts = 0;
+        document.getElementById('restartAlert').hidden = true;
+
+        if (data.backup_file) {
+            lastBackupPath = data.backup_file;
+        }
+
+        if (Array.isArray(data.logs)) {
+            renderLogs(data.logs);
+        }
+
+        if (data.step) {
+            updateStepper(data.step, data.step_name || 'Оновлення…', data.progress || (data.step * 20));
+        }
+
+        if (data.state === 'success') {
+            clearInterval(updatePollTimer);
+            showSuccess(data.target_version);
+        } else if (data.state === 'error') {
+            clearInterval(updatePollTimer);
+            showError(data.error, data.rolled_back);
+        }
+    } catch (err) {
+        handleNetworkDrop();
+    }
+}
+
+function handleNetworkDrop() {
+    if (isUpdating) {
+        restartAttempts++;
+        document.getElementById('restartAlert').hidden = false;
+        updateStepper(4, 'Перезапуск контейнерів та перевірка зв’язку…', 85);
+        addLogLine(`Перезапуск веб-сервісу… очікування відновлення (спроба ${restartAttempts})`);
+
+        fetch('/healthz/?t=' + Date.now())
+            .then(r => r.json())
+            .then(h => {
+                if (h.status === 'ok') {
+                    addLogLine(`Сервіс онлайн! Версія: ${h.version}`);
+                    document.getElementById('restartAlert').hidden = true;
+                    setTimeout(pollUpdateStatus, 1000);
+                }
+            })
+            .catch(() => {});
+    }
+}
+
+function updateStepper(stepNum, subtext, percent) {
+    const fillEl = document.getElementById('progressBarFill');
+    const percentEl = document.getElementById('progressPercent');
+    const subtextEl = document.getElementById('progressSubtext');
+
+    const pct = Math.max(5, Math.min(100, percent));
+    fillEl.style.width = pct + '%';
+    percentEl.textContent = pct + '%';
+    subtextEl.textContent = subtext;
+
+    for (let i = 1; i <= 5; i++) {
+        const el = document.getElementById('step' + i);
+        const line = document.getElementById('line' + (i - 1));
+        if (!el) continue;
+        el.classList.remove('active', 'completed');
+        if (line) line.classList.remove('completed');
+
+        if (i < stepNum) {
+            el.classList.add('completed');
+            el.querySelector('.step-circle').textContent = '✓';
+            if (line) line.classList.add('completed');
+        } else if (i === stepNum) {
+            el.classList.add('active');
+            el.querySelector('.step-circle').textContent = String(i);
+            if (line) line.classList.add('completed');
+        } else {
+            el.querySelector('.step-circle').textContent = String(i);
+        }
+    }
+}
+
+function renderLogs(logs) {
+    const terminal = document.getElementById('terminalBody');
+    terminal.innerHTML = logs.map(l => `<div class="log-line">${escapeHtml(l)}</div>`).join('');
+    terminal.scrollTop = terminal.scrollHeight;
+}
+
+function addLogLine(text) {
+    const terminal = document.getElementById('terminalBody');
+    const div = document.createElement('div');
+    div.className = 'log-line';
+    div.textContent = `[${new Date().toLocaleTimeString()}] ${text}`;
+    terminal.appendChild(div);
+    terminal.scrollTop = terminal.scrollHeight;
+}
+
+function showSuccess(ver) {
+    isUpdating = false;
+    document.getElementById('progressBarFill').style.width = '100%';
+    document.getElementById('progressPercent').textContent = '100%';
+    document.getElementById('progressPill').className = 'status-pill status-pill-healthy';
+    document.getElementById('progressPillText').textContent = 'Успішно';
+    document.getElementById('successAlert').hidden = false;
+
+    if (ver) {
+        document.getElementById('lblCurrentVersion').textContent = `v${ver}`;
+    }
+
+    let count = 3;
+    const countdownEl = document.getElementById('reloadCountdown');
+    const timer = setInterval(() => {
+        count--;
+        if (countdownEl) countdownEl.textContent = String(count);
+        if (count <= 0) {
+            clearInterval(timer);
+            window.location.reload();
+        }
+    }, 1000);
+}
+
+function showError(msg, rolledBack) {
+    isUpdating = false;
+    document.getElementById('progressPill').className = 'status-pill status-pill-error';
+    document.getElementById('progressPillText').textContent = 'Помилка';
+    document.getElementById('errorAlert').hidden = false;
+    document.getElementById('errorMessage').textContent = msg || 'Невідома помилка під час оновлення.';
+
+    if (rolledBack) {
+        document.getElementById('rollbackNotice').hidden = false;
+    } else if (lastBackupPath) {
+        document.getElementById('btnManualRollback').style.display = 'inline-block';
+    }
+}
+
+async function triggerManualRollback() {
+    if (!confirm('Ви впевнені, що бажаєте відкотити систему до останнього збереженого бекапу?')) return;
+    addLogLine(`Запуск відновлення з резервної копії: ${lastBackupPath}…`);
+
+    const formData = new FormData();
+    formData.append('backup_file', lastBackupPath || '');
+    formData.append('csrfmiddlewaretoken', getCsrfToken());
+
+    try {
+        const res = await fetch("{% url 'updates_rollback_api' %}", {
+            method: 'POST',
+            body: formData,
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        });
+        const data = await res.json();
+        if (data.ok) {
+            addLogLine("Відновлення запущено в службі оновлення.");
+            startPollingStatus();
+        } else {
+            addLogLine(`Помилка: ${data.error}`);
+        }
+    } catch (e) {
+        addLogLine(`Помилка запиту: ${e.message}`);
+    }
+}
+
+function resetUpdateUI() {
+    document.getElementById('updateProgressSection').hidden = true;
+    document.getElementById('errorAlert').hidden = true;
+    isUpdating = false;
+}
+
+function toggleTerminal() {
+    document.getElementById('terminalBody').classList.toggle('collapsed');
+}
+
+function toggleInProgressChangelog() {
+    const el = document.getElementById('inProgressChangelogContent');
+    el.style.display = (el.style.display === 'none') ? 'flex' : 'none';
+}
+
+function copyTerminalLogs() {
+    const terminal = document.getElementById('terminalBody');
+    navigator.clipboard.writeText(terminal.innerText).then(() => {
+        alert('Логи успішно скопійовано в буфер обміну!');
+    });
+}
+
+function escapeHtml(str) {
+    return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// Перевіряємо статус при відкритті сторінки (якщо процес уже триває)
+document.addEventListener('DOMContentLoaded', () => {
+    fetch("{% url 'updates_status_api' %}")
+        .then(r => r.json())
+        .then(data => {
+            if (data && data.state === 'running') {
+                document.getElementById('updateProgressSection').hidden = false;
+                isUpdating = true;
+                currentTargetVersion = data.target_version;
+                if (data.releases_between) {
+                    currentReleasesBetween = data.releases_between;
+                }
+                startPollingStatus();
+            }
+        })
+        .catch(() => {});
+});
+</script>
+{% endblock %}

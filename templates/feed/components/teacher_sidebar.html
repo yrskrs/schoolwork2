@@ -31,6 +31,11 @@
             <li {% if request.resolver_match.url_name == 'teacher_settings' or request.resolver_match.url_name == 'activity_log' %}class="active"{% endif %}>
                 <a href="{% url 'teacher_settings' %}"><span>⚙️</span><span>Налаштування</span></a>
             </li>
+            {% if user.is_superuser or is_superadmin_mode %}
+            <li {% if request.resolver_match.url_name == 'system_updates' %}class="active"{% endif %}>
+                <a href="{% url 'system_updates' %}"><span>🚀</span><span>Оновлення</span></a>
+            </li>
+            {% endif %}
         </ul>
     </div>
 

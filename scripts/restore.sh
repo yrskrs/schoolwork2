@@ -4,22 +4,39 @@ set -euo pipefail
 umask 077
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-TARGET_BACKUP='' AUTO_CONFIRM=0 VERIFY_ONLY=0 LEGACY=()
+TARGET_BACKUP='' AUTO_CONFIRM=0 VERIFY_ONLY=0 NO_SAFETY_BACKUP=0 LEGACY=()
 for arg in "$@"; do
     case "$arg" in
         -y|--yes) AUTO_CONFIRM=1;;
         --verify-only) VERIFY_ONLY=1;;
         --allow-legacy) LEGACY=(--allow-legacy);;
+        --no-safety-backup) NO_SAFETY_BACKUP=1;;
         -*) echo "Невідомий параметр: $arg" >&2; exit 1;;
         *) [ -z "$TARGET_BACKUP" ] || { echo 'Вкажіть лише один каталог копії.' >&2; exit 1; }; TARGET_BACKUP="$arg";;
     esac
 done
-[ -n "$TARGET_BACKUP" ] && [ -d "$TARGET_BACKUP" ] || { echo 'Використання: scripts/restore.sh КАТАЛОГ [--yes] [--verify-only] [--allow-legacy]' >&2; exit 1; }
+[ -n "$TARGET_BACKUP" ] && [ -d "$TARGET_BACKUP" ] || { echo 'Використання: scripts/restore.sh КАТАЛОГ [--yes] [--verify-only] [--allow-legacy] [--no-safety-backup]' >&2; exit 1; }
 # Resolve before changing cwd, so paths from another directory work.
 TARGET_BACKUP="$(cd "$TARGET_BACKUP" && pwd)"
 python3 "$SCRIPT_DIR/backup_tools.py" validate "$TARGET_BACKUP" "${LEGACY[@]}"
 gzip -t "$TARGET_BACKUP/media.tar.gz"
 cd "$PROJECT_ROOT"
+
+# Resolve host directory path if running within a container with /workspace mounted
+HOST_PROJECT_ROOT="${HOST_PROJECT_ROOT:-}"
+if [ -z "$HOST_PROJECT_ROOT" ] && [ -f /.dockerenv ]; then
+    HOST_PROJECT_ROOT=$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/workspace"}}{{.Source}}{{end}}{{end}}' "$(hostname)" 2>/dev/null || true)
+fi
+
+resolve_host_path() {
+    local p="$1"
+    if [ -n "$HOST_PROJECT_ROOT" ] && [[ "$p" == "$PROJECT_ROOT"* ]]; then
+        printf '%s%s' "$HOST_PROJECT_ROOT" "${p#"$PROJECT_ROOT"}"
+    else
+        printf '%s' "$p"
+    fi
+}
+
 docker compose run --rm --no-deps -T --entrypoint pg_restore postgres --list < "$TARGET_BACKUP/database.dump" > /dev/null
 if [ "$VERIFY_ONLY" -eq 1 ]; then echo 'Копія пройшла перевірку; дані не змінено.'; exit 0; fi
 if [ "$AUTO_CONFIRM" -ne 1 ]; then
@@ -34,7 +51,9 @@ SQL_FILE=$(mktemp)
 trap 'rm -f "$SQL_FILE"' EXIT
 docker compose exec -T postgres pg_restore --no-owner --no-privileges --file=- < "$TARGET_BACKUP/database.dump" > "$SQL_FILE"
 # Capture the current state for recovery even when restoring an older copy.
-SCHOOLNET_BACKUP_KEEP_STOPPED=1 bash "$SCRIPT_DIR/backup.sh"
+if [ "$NO_SAFETY_BACKUP" -ne 1 ]; then
+    SCHOOLNET_BACKUP_KEEP_STOPPED=1 bash "$SCRIPT_DIR/backup.sh"
+fi
 docker compose stop app ai_worker
 on_exit() {
     status=$?
@@ -45,13 +64,15 @@ on_exit() {
     fi
 }
 trap on_exit EXIT
+HOST_BACKUP=$(resolve_host_path "$TARGET_BACKUP")
+HOST_SCRIPT=$(resolve_host_path "$SCRIPT_DIR")
 STAGED=$(docker compose run --rm --no-deps -T \
-    -v "$TARGET_BACKUP:/backup:ro" -v "$SCRIPT_DIR/backup_tools.py:/restore_tools.py:ro" \
+    -v "$HOST_BACKUP:/backup:ro" -v "$HOST_SCRIPT/backup_tools.py:/restore_tools.py:ro" \
     --entrypoint python app /restore_tools.py stage /backup/media.tar.gz /app/media)
 # DROP and all restored objects/data belong to one transaction. Any SQL error rolls it back.
 { printf 'DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public;\n'; cat "$SQL_FILE"; } |
     docker compose exec -T postgres sh -c 'exec psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" --single-transaction -v ON_ERROR_STOP=1' > /dev/null
-docker compose run --rm --no-deps -T -v "$SCRIPT_DIR/backup_tools.py:/restore_tools.py:ro" \
+docker compose run --rm --no-deps -T -v "$HOST_SCRIPT/backup_tools.py:/restore_tools.py:ro" \
     --entrypoint python app /restore_tools.py install /app/media "$STAGED"
 # Conversion caches must not refer to files from the previous database.
 docker compose run --rm --no-deps -T --entrypoint python app manage.py shell -c "from django.core.cache import caches; caches['ai_materials'].clear()" > /dev/null

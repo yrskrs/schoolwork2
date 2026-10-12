@@ -26,6 +26,13 @@
                     <span>🌐</span><span>API та журнал</span>
                 </a>
             </li>
+            {% if user.is_superuser or is_superadmin_mode %}
+            <li class="sidebar-tab-item {% if active_tab == 'updates' %}active{% endif %}">
+                <a href="{% url 'system_updates' %}">
+                    <span>🚀</span><span>Оновлення системи</span>
+                </a>
+            </li>
+            {% endif %}
         </ul>
     </div>
 

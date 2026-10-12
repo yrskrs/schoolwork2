@@ -4,9 +4,16 @@ from django.urls import path
 from . import views
 from . import journal_api
 from . import school_api_v2
+from . import views_updates
 from school_sync import django_backend as roster_views
 
 urlpatterns = [
+    path('healthz/', views_updates.healthz_view, name='healthz'),
+    path('teacher/updates/', views_updates.system_updates_view, name='system_updates'),
+    path('teacher/updates/api/check/', views_updates.updates_check_api_view, name='updates_check_api'),
+    path('teacher/updates/api/start/', views_updates.updates_start_api_view, name='updates_start_api'),
+    path('teacher/updates/api/status/', views_updates.updates_status_api_view, name='updates_status_api'),
+    path('teacher/updates/api/rollback/', views_updates.updates_rollback_api_view, name='updates_rollback_api'),
     path("api/ai/jobs/<uuid:job_id>/", views.ai_job_status, name="ai_job_status"),
     # ── Публічна частина ──────────────────────────────────────────────────────
     path('', views.index, name='index'),

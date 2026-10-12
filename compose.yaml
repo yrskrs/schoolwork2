@@ -1,7 +1,7 @@
 name: ${COMPOSE_PROJECT_NAME:-schoolwork2}
 services:
   app:
-    image: ${SCHOOLWORK_IMAGE:-schoolwork2-app:4.4.4}
+    image: ${SCHOOLWORK_IMAGE:-schoolwork2-app:4.4.5}
     build:
       context: .
       dockerfile: Dockerfile
@@ -31,7 +31,7 @@ services:
       start_period: 45s
 
   ai_worker:
-    image: ${SCHOOLWORK_IMAGE:-schoolwork2-app:4.4.4}
+    image: ${SCHOOLWORK_IMAGE:-schoolwork2-app:4.4.5}
     container_name: schoolnet_ai_worker
     restart: unless-stopped
     command: ["python", "manage.py", "process_ai_jobs"]
@@ -73,6 +73,25 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+
+  updater:
+    image: ${UPDATER_IMAGE:-schoolwork2-updater:latest}
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.updater
+    container_name: schoolnet_updater
+    restart: unless-stopped
+    environment:
+      SCHOOLWORK_ROOT: /workspace
+      ENV_FILE: /workspace/.env
+      COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME:-schoolwork2}
+      UPDATER_PORT: 8001
+      GITHUB_REPO: yrskrs/schoolwork2
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - .:/workspace
+    ports:
+      - "${UPDATER_PORT:-8001}:8001"
 
 volumes:
   postgres_data:
