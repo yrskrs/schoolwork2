@@ -31,7 +31,12 @@ gzip -t "$BACKUP_PATH/media.tar.gz.partial"
 mv "$BACKUP_PATH/database.dump.partial" "$BACKUP_PATH/database.dump"
 mv "$BACKUP_PATH/media.tar.gz.partial" "$BACKUP_PATH/media.tar.gz"
 git rev-parse HEAD > "$BACKUP_PATH/code-commit.txt" 2>/dev/null || echo "unknown" > "$BACKUP_PATH/code-commit.txt"
-docker compose images -q app > "$BACKUP_PATH/docker-image.txt"
+if [ -n "${BACKUP_IMAGE:-}" ]; then
+    printf '%s\n' "$BACKUP_IMAGE" > "$BACKUP_PATH/docker-image.txt"
+else
+    APP_CONTAINER=$(docker compose ps -aq app)
+    docker inspect --format '{{.Image}}' "$APP_CONTAINER" > "$BACKUP_PATH/docker-image.txt"
+fi
 (cd "$BACKUP_PATH" && sha256sum database.dump media.tar.gz > SHA256SUMS)
 BACKUP_COMPLETE=1
 printf 'Резервна копія перевірена: %s\n' "$BACKUP_PATH"
