@@ -1,16 +1,3 @@
-
-def _get_database_size_display():
-    try:
-        from django.conf import settings
-        db_path = settings.DATABASES['default'].get('NAME')
-        if db_path and os.path.exists(str(db_path)):
-            sz = os.path.getsize(str(db_path))
-            if sz > 1024 * 1024:
-                return f"{sz / (1024 * 1024):.2f} MB"
-            return f"{sz / 1024:.1f} KB"
-    except Exception:
-        pass
-    return "—"
 """
 Views (представлення) для SchoolNet.
 
@@ -103,6 +90,7 @@ from .grading import validate_grade, member_grades
 from .settings_navigation import AI_SETTINGS_SECTIONS, ai_settings_section, ai_settings_url
 from .file_serving import file_response
 from .pagination import AssignmentChain
+from .environment_storage import get_storage_snapshot
 
 logger = logging.getLogger(__name__)
 
@@ -7670,7 +7658,7 @@ def teacher_settings_view(request):
         'total_classes': ClassGroup.objects.count(),
         'total_assignments': Assignment.objects.count(),
         'total_submissions': Submission.objects.count(),
-        'db_size': _get_database_size_display(),
+        **get_storage_snapshot(),
     }
 
     from .ai_model_catalog import PROVIDER_CATALOG, CATALOG_CHECKED_AT

@@ -60,7 +60,7 @@
         </div>
         <button type="button" class="btn btn-secondary btn-sm" id="btn-reload-queue" onclick="loadQueuePreview()">🔄 Оновити список робіт</button>
         {% elif tools_area == 'settings' %}
-        <button type="button" class="btn btn-secondary btn-sm" onclick="openGuideModal(document.getElementById('tab-section-ai') &amp;&amp; document.getElementById('tab-section-ai').style.display !== 'none' ? 'teacher_ai_settings' : 'teacher_settings')">📖 Довідка налаштувань</button>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="openGuideModal()" aria-haspopup="dialog" aria-controls="guide-modal">📖 Довідка налаштувань</button>
         <a href="{% url 'activity_log' %}" class="btn btn-secondary btn-sm">🕒 Журнал дій</a>
         <a href="{% url 'download_database_backup' %}" class="btn btn-secondary btn-sm">💾 Резервна копія БД</a>
         {% if request.user.is_superuser %}

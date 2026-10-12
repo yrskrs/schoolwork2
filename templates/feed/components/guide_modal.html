@@ -10,7 +10,6 @@
     <div class="custom-modal-content guide-modal-dialog" 
          style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);width:100%;max-width:780px;box-shadow:0 25px 60px rgba(0,0,0,0.3);overflow:hidden;height:85vh;max-height:90vh;display:flex;flex-direction:column;animation:rescheduleModalIn 0.22s cubic-bezier(0.16, 1, 0.3, 1);">
 
-<section style="padding:12px 20px"><h2>Списки та журнал</h2><p>Без підключення журналу працюйте як раніше: місцеві класи, учні, здача й перевірка не залежать від інших сайтів. Для підключення вчитель створює ключ у «API та журнал» й вставляє його та адресу сайту в журнал. Один ключ дає журналу передавати сюди копію учнів і отримувати остаточні оцінки лише кнопкою.</p><p>Учень обирає своє ім’я у класі або вводить його самостійно. Помилки й скорочення ПІБ підтверджує вчитель; дитина без відповідності та її результати залишаються в позакласному списку журналу. Цілі 1–12 імпортуються без зміни шкали; інші оцінки потребують ручного рішення. Лічильники запитів видно у налаштуваннях API.</p></section>
         <!-- 1. Шапка модального вікна -->
         <div style="padding:14px 20px;background:var(--color-bg-secondary);border-bottom:1px solid var(--color-border);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-shrink:0;">
             <div style="display:flex;align-items:center;gap:10px;">
@@ -143,13 +142,13 @@
                 </div>
 
                 <!-- Вчитель 2: ЦЕНТР НАЛАШТУВАНЬ ТА ЗАКЛАД -->
-                <div class="guide-card" id="guide-category-teacher-settings" data-category="teacher_settings" data-keywords="налаштування профіль заклад освіта школа семестри чверті розклад дзвінків дзвінки зміни пароль аватар супер-адміністратор гр нуш">
+                <div class="guide-card" id="guide-category-teacher-settings" data-category="teacher_settings" data-keywords="налаштування профіль заклад освіта школа семестри чверті розклад дзвінків дзвінки зміни пароль аватар супер-адміністратор гр нуш розмір бд диск пам'ять файли матеріали кеш">
                     <button type="button" class="guide-card-header" onclick="toggleGuideCategory('teacher_settings')" aria-expanded="false">
                         <div class="guide-header-title">
                             <span class="guide-cat-icon">⚙️</span>
                             <div class="guide-header-text">
                                 <strong>Центр налаштувань: Профіль, Заклад та Розклад</strong>
-                                <span class="guide-cat-sub">Особисті дані, назва школи, структура року, розклад дзвінків 1/2 змін та групи результатів</span>
+                                <span class="guide-cat-sub">Особисті дані, заклад, дзвінки, навчальні періоди та обсяг даних на диску</span>
                             </div>
                         </div>
                         <div class="guide-header-meta">
@@ -159,11 +158,12 @@
                     </button>
                     <div class="guide-card-body" id="body-guide-teacher-settings" style="display:none;">
                         <div class="guide-content-inner">
-<p>Налаштування розділено на «Профіль», «Середовище та заклад» і «Модуль ШІ». На телефоні користуйтеся компактними вкладками.</p>
+<p>Центр має чотири вкладки: «Профіль», «Середовище та заклад», «Модуль ШІ» та «API та журнал». На телефоні користуйтеся компактними вкладками. Кнопка «Довідка налаштувань» відкриває тему активної вкладки.</p>
 <div class="guide-step"><span class="guide-step-num">1</span><div><strong>Профіль.</strong><p>Тут змінюються особисті дані, аватар, пароль, предмети й класи вчителя.</p></div></div>
 <div class="guide-step"><span class="guide-step-num">2</span><div><strong>Середовище та заклад.</strong><p>Тут доступні шкільні дані, користувачі, час дзвінків і навчальні періоди. Системні зміни адміністратора доступні у відповідному режимі.</p></div></div>
-<div class="guide-step"><span class="guide-step-num">3</span><div><strong>Додаткові дії.</strong><p>Довідка, журнал дій, завантаження резервної копії та перемикач режиму адміністратора зібрані в правому блоці. На телефоні цей блок згорнутий.</p></div></div>
-<div class="guide-step"><span class="guide-step-num">4</span><div><strong>Збереження.</strong><p>Збережіть зміни кнопкою відповідної форми. Переходи до робочих розділів доступні у верхній навігації та мобільному меню кабінету.</p></div></div>
+<div class="guide-step"><span class="guide-step-num">3</span><div><strong>Стан шкільного середовища та пам’ять.</strong><p>Розмір БД підтримує PostgreSQL і SQLite. «Матеріали вчителів» включають прикріплені файли завдань і документи критеріїв; «Файли учнів» — усі здачі та повторні спроби. Спільний файл групової роботи рахується один раз. «Інші медіафайли» включають аватари, архіви й файли без запису в БД. Окремо видно кеш переглядів і журнали сервера.</p><p>«Усього даних на диску» — сума БД, усіх медіафайлів, кешу й журналів усього закладу. Це не зайнятість усього сервера: Docker-образи, системні файли, службові WAL PostgreSQL і зовнішні резервні копії сюди не входять. Показники кешуються на 60 секунд; час вимірювання видно під картками. Якщо частина сховища недоступна, показано попередження й мінімальний відомий обсяг із позначкою ≥.</p></div></div>
+<div class="guide-step"><span class="guide-step-num">4</span><div><strong>Додаткові дії та резервні копії.</strong><p>Довідка, журнал дій, завантаження резервної копії БД та перемикач режиму адміністратора зібрані в правому блоці. На телефоні цей блок згорнутий. Завантаження БД не замінює повного знімка БД і медіафайлів перед оновленням.</p></div></div>
+<div class="guide-step"><span class="guide-step-num">5</span><div><strong>Збереження.</strong><p>Збережіть зміни кнопкою відповідної форми. Переходи до робочих розділів доступні у верхній навігації та мобільному меню кабінету. Адміністратор має окрему сторінку «Оновлення системи».</p></div></div>
 </div>
                     </div>
                 </div>
@@ -175,7 +175,7 @@
                             <span class="guide-cat-icon">🤖</span>
                             <div class="guide-header-text">
                                 <strong>Модуль ШІ: Налаштування API, моделі та пакетна перевірка</strong>
-                                <span class="guide-cat-sub">Ключі Google Gemini, перевірка з'єднання, резервний Failover та пакетна автоперевірка</span>
+                                <span class="guide-cat-sub">Підключення провайдерів, критерії, черга моделей, статистика та помилки</span>
                             </div>
                         </div>
                         <div class="guide-header-meta">
@@ -190,11 +190,41 @@
 <div class="guide-step"><span class="guide-step-num">2</span><div><strong>Черга моделей, fallback та каталог.</strong><p>У «Моделях» налаштуйте чергу пріоритетів перевірки. Система контролює одночасні запити (Concurrency Check), переходить до наступної моделі при збоях, активує тимчасову паузу (Cooldown) після помилок 429/503 та запам'ятовує обмеження ліміту контексту 413. Великий каталог моделей із квотами за замовчуванням охайно згорнутий під формою.</p></div></div>
 <div class="guide-step"><span class="guide-step-num">3</span><div><strong>Графік використання.</strong><p>У «Статистиці → Графік» оберіть період від 24 годин до всього часу й вигляд: стовпчики, лінії або криві. Кольори й легенда позначають окремі моделі. На графіку можна перемикати запити або токени, фільтрувати модель, провайдера, тип запиту й успіх чи помилку. Натисніть стовпчик або точку для точного значення; з клавіатури використовуйте Tab і стрілки.</p></div></div>
 <div class="guide-step"><span class="guide-step-num">4</span><div><strong>Показники моделей.</strong><p>У «Статистиці → Моделі» використайте пошук і сторінки. Розгорніть показники потрібної моделі: RPM за останню хвилину та пік, RPD за сьогодні й середнє, кількість запитів, успішність, токени й останній запит. Картки враховують обраний період; фільтри графіка діють окремо. Час — за часовим поясом школи.</p></div></div>
-<div class="guide-step"><span class="guide-step-num">5</span><div><strong>Помилки й пакетна перевірка.</strong><p>Причини невдалих запитів доступні у «Помилках». Для групової перевірки відкрийте «ШІ-перевірка» у меню «Робота»: основні фільтри й запуск біля черги, пауза між запитами та оновлення списку — у «Додаткових діях».</p></div></div>
+<div class="guide-step"><span class="guide-step-num">5</span><div><strong>Критерії та вказівки для ШІ.</strong><p>У «Критеріях» налаштовуються шаблони оцінювання й ГР. У редакторі завдання можна перевизначити критерії для окремих класів та додати приватні вказівки для ШІ. Ці налаштування зберігаються під час дублювання й ZIP-експорту/імпорту завдань; учні не бачать приватних вказівок.</p></div></div>
+<div class="guide-step"><span class="guide-step-num">6</span><div><strong>Помилки й пакетна перевірка.</strong><p>Причини невдалих запитів, позначення прочитаних помилок і звіти аналізу доступні у «Помилках». Для групової перевірки відкрийте «ШІ-перевірка» у меню «Робота»: основні фільтри й запуск біля черги, пауза між запитами та оновлення списку — у «Додаткових діях».</p></div></div>
 <div class="guide-tip-box info">Перегляд і фільтрація графіка використовують журнал запитів та не запускають нових перевірок ШІ.</div>
 </div>
                     </div>
                 </div>
+
+                <div class="guide-card" id="guide-category-teacher-api-settings" data-category="teacher_api_settings" data-keywords="api журнал ключ адреса ip порт синхронізація учні списки оцінки інтеграція">
+                    <button type="button" class="guide-card-header" onclick="toggleGuideCategory('teacher_api_settings')" aria-expanded="false">
+                        <div class="guide-header-title"><span class="guide-cat-icon">🌐</span><div class="guide-header-text"><strong>API та журнал: підключення і синхронізація</strong><span class="guide-cat-sub">Ключ API, адреса сайту, локальні списки та остаточні оцінки</span></div></div>
+                        <div class="guide-header-meta"><span class="guide-active-page-badge" id="badge-guide-teacher-api-settings" style="display:none;">📍 Ви зараз на цій сторінці</span><span class="guide-chevron">▾</span></div>
+                    </button>
+                    <div class="guide-card-body" id="body-guide-teacher-api-settings" style="display:none;"><div class="guide-content-inner">
+                        <div class="guide-step"><span class="guide-step-num">1</span><div><strong>Створіть підключення.</strong><p>У «API та журнал» натисніть «Створити ключ API». Скопіюйте адресу цього сайту й ключ у відповідні поля «Підключити тести / завдання» у журналі. Готовий код підключення доступний для попередніх версій журналу. Після зміни IP оновіть адресу в журналі; ключ залишається чинним.</p></div></div>
+                        <div class="guide-step"><span class="guide-step-num">2</span><div><strong>Перевірте списки.</strong><p>Журнал передає копію класу й учнів у власну БД SchoolNet. Схожі імена та скорочення ПІБ підтверджує вчитель. Учні обирають власне ім’я та співавторів за іменами; служби використовують приховані ID. Локальні списки, здача й перевірка працюють під час недоступності журналу.</p></div></div>
+                        <div class="guide-step"><span class="guide-step-num">3</span><div><strong>Передавайте остаточні оцінки.</strong><p>Один ключ дозволяє синхронізацію учнів і отримання остаточних оцінок. Журнал отримує оцінки лише за кнопкою. Цілі бали 1–12 імпортуються без зміни шкали; інші оцінки потребують ручного рішення. Результати без підтвердженої відповідності залишаються в позакласному списку журналу.</p></div></div>
+                        <div class="guide-step"><span class="guide-step-num">4</span><div><strong>Керуйте доступом.</strong><p>У таблиці ключів видно дозволи, кількість запитів і останнє використання. Непотрібний ключ можна деактивувати або видалити. Власник керує своїми ключами; адміністратор бачить усі ключі закладу.</p></div></div>
+                    </div></div>
+                </div>
+
+                {% if user.is_superuser %}
+                <div class="guide-card" id="guide-category-teacher-updates" data-category="teacher_updates" data-keywords="оновлення github версія перезбірка відкат резервна копія docker журнал термінал">
+                    <button type="button" class="guide-card-header" onclick="toggleGuideCategory('teacher_updates')" aria-expanded="false">
+                        <div class="guide-header-title"><span class="guide-cat-icon">🔄</span><div class="guide-header-text"><strong>Оновлення системи: версія, перезбірка та відкат</strong><span class="guide-cat-sub">Зміни випусків, п’ять етапів і діагностика операції</span></div></div>
+                        <div class="guide-header-meta"><span class="guide-active-page-badge" id="badge-guide-teacher-updates" style="display:none;">📍 Ви зараз на цій сторінці</span><span class="guide-chevron">▾</span></div>
+                    </button>
+                    <div class="guide-card-body" id="body-guide-teacher-updates" style="display:none;"><div class="guide-content-inner">
+                        <p>«Оновлення системи» доступне адміністратору. Для запуску операцій потрібна налаштована служба Docker <code>updater</code>.</p>
+                        <div class="guide-step"><span class="guide-step-num">1</span><div><strong>Перевірте версію та зміни.</strong><p>Сторінка показує встановлену версію й опис. «Перевірити наявність оновлень» отримує дані GitHub і показує зміни всіх проміжних випусків. Мережевий збій відображається окремою помилкою перевірки.</p></div></div>
+                        <div class="guide-step"><span class="guide-step-num">2</span><div><strong>Оновіть або перезберіть.</strong><p>Оновлення завантажує нову версію. «⚡ Перезібрати поточну версію» використовує чинний код; checkout має бути чистим і відповідати встановленій версії. Операція проходить п’ять етапів: код, збірка, перевірена копія БД і файлів, міграції/запуск, перевірка БД та образу. 100% і всі п’ять зелених галочок означають перевірений успіх.</p></div></div>
+                        <div class="guide-step"><span class="guide-step-num">3</span><div><strong>Перегляньте результат.</strong><p>Живий термінал показує виконання команд. Завершений успішний результат згорнутий; розгорніть заголовок, щоб переглянути етапи й журнал. Статус зберігається після перезавантаження сторінки; журнал можна скопіювати.</p></div></div>
+                        <div class="guide-step"><span class="guide-step-num">4</span><div><strong>Відкат після збою.</strong><p>Після помилки під час застосування оновлювач відновлює попередні образ, БД, файли й ревізію коду. Помилка відкату повідомляється окремо. Ручний відкат скасовує зміни даних після знімка; запускайте його одразу після невдалого оновлення.</p></div></div>
+                    </div></div>
+                </div>
+                {% endif %}
 
                 <!-- Вчитель 4: ПЕРЕВІРКА РОБІТ ТА FILE VIEWER -->
                 <div class="guide-card" id="guide-category-teacher-fileviewer" data-category="teacher_fileviewer" data-keywords="перевірка робіт file viewer оцінювання бали гр нуш коментарі відгук зауваження zip детекція ші плагіат доопрацювання звіт розгорнути згорнути">
@@ -782,6 +812,9 @@
         const path = window.location.pathname || '/';
 
         // Сторінки вчителя
+        if (path.indexOf('/teacher/updates/') === 0) {
+            return { tab: 'teacher', cat: 'teacher_updates', label: 'Оновлення системи' };
+        }
         if (path.indexOf('/teacher/view-file/') === 0) {
             return { tab: 'teacher', cat: 'teacher_fileviewer', label: 'Перевірка роботи у File Viewer' };
         }
@@ -802,7 +835,11 @@
             return { tab: 'teacher', cat: 'teacher_ai_settings', label: 'Модуль ШІ: Налаштування та пакетна перевірка' };
         }
         if (path.indexOf('/teacher/settings/') === 0 || path.indexOf('/teacher/profile/') === 0 || path.indexOf('/teacher/school/settings/') === 0) {
-            return { tab: 'teacher', cat: 'teacher_settings', label: 'Центр налаштувань (Профіль, заклад, дзвінки)' };
+            const activePane = Array.from(document.querySelectorAll('.settings-tab-pane')).find(pane => pane.style.display !== 'none');
+            const settingsTab = activePane ? activePane.id.replace('tab-section-', '') : new URLSearchParams(window.location.search).get('tab');
+            if (settingsTab === 'ai') return { tab: 'teacher', cat: 'teacher_ai_settings', label: 'Модуль ШІ: підключення, критерії, моделі, статистика й помилки' };
+            if (settingsTab === 'api') return { tab: 'teacher', cat: 'teacher_api_settings', label: 'API та журнал' };
+            return { tab: 'teacher', cat: 'teacher_settings', label: settingsTab === 'environment' ? 'Середовище та заклад: розклад і обсяг даних' : 'Профіль і налаштування закладу' };
         }
         if (path.indexOf('/teacher/submissions/') === 0 || /\/teacher\/assignment\/\d+\/submissions\/?/.test(path)) {
             return { tab: 'teacher', cat: 'teacher_submissions', label: 'Всі здані роботи та черга перевірки' };
@@ -924,7 +961,13 @@
         allBadges.forEach(b => b.style.display = 'none');
 
         const allCards = modal.querySelectorAll('.guide-card');
-        allCards.forEach(c => c.classList.remove('guide-card-active'));
+        allCards.forEach(card => {
+            card.classList.remove('guide-card-active', 'guide-card-open');
+            const body = card.querySelector('.guide-card-body');
+            const button = card.querySelector('.guide-card-header');
+            if (body) body.style.display = 'none';
+            if (button) button.setAttribute('aria-expanded', 'false');
+        });
 
         const idSuffix = context.cat.replace(/_/g, '-');
         const targetBadge = document.getElementById('badge-guide-' + idSuffix);
@@ -936,7 +979,7 @@
 
         if (targetBadge && targetCard && targetBody) {
             targetBadge.style.display = 'inline-flex';
-            targetCard.classList.add('guide-card-active');
+            targetCard.classList.add('guide-card-active', 'guide-card-open');
 
             // Автоматично відкриваємо акордеон для поточної сторінки
             targetBody.style.display = 'block';

@@ -4667,18 +4667,47 @@ body {
 }
 
 /* ── Стилі інтерактивної інструкції (Guide Modal) ── */
+.environment-storage-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+.environment-storage-card {
+  padding: 12px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.environment-storage-card strong { font-size: 22px; font-weight: 900; }
+.environment-storage-card span { font-size: 12px; font-weight: 700; }
+.environment-storage-card small { font-size: 11px; color: var(--color-text-muted); }
+.environment-storage-total { border-color: var(--color-primary); }
+.environment-storage-total strong { color: var(--color-primary); }
 .guide-modal-dialog {
-  height: 85vh !important;
-  max-height: 90vh !important;
+  height: min(85dvh, 900px) !important;
+  max-height: calc(100dvh - 32px) !important;
   width: 100%;
   max-width: 780px;
 }
+.guide-modal-dialog > :not(#guide-accordion-container) { flex-shrink: 0; }
+.guide-modal-dialog button { white-space: normal; }
+#guide-current-context-banner { flex-wrap: wrap; }
 @media (max-width: 640px) {
   .guide-modal-dialog {
-    height: 94vh !important;
-    max-height: 96vh !important;
+    height: calc(100dvh - 32px) !important;
+    max-height: calc(100dvh - 32px) !important;
     max-width: 96vw;
   }
+  .guide-header-title { min-width: 0; }
+  .guide-header-text { min-width: 0; overflow-wrap: anywhere; }
+  .guide-header-meta { flex-shrink: 0; }
+  .guide-active-page-badge { display: none !important; }
+  .guide-modal-dialog .guide-card-header { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+  .guide-modal-dialog .guide-header-meta { width: auto; }
 }
 .guide-card {
   border: 1.5px solid var(--color-border);
