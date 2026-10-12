@@ -1,3 +1,4 @@
+from scripts.update_metadata import check_remote, local_release
 import json
 import logging
 import os
@@ -89,96 +90,22 @@ def filter_releases_between(all_releases, current_ver, target_ver):
 
 
 def check_updates_available():
-    """
-    Check for new versions on GitHub either via updater service daemon or directly.
-    Computes releases_between to show changelogs for all intermediate versions.
-    """
-    # 1. Try updater service daemon first
-    try:
-        req = urllib.request.Request(
-            f"{UPDATER_URL}/api/check",
-            data=b'{}',
-            headers={'Content-Type': 'application/json'}
-        )
-        with urllib.request.urlopen(req, timeout=4) as resp:
-            data = json.loads(resp.read().decode('utf-8'))
-            if data.get('ok'):
-                return data
-    except Exception as exc:
-        logger.debug(f"Updater service check unreachable, checking GitHub directly: {exc}")
-
-    # 2. Fallback: query GitHub directly
     current_ver = get_current_local_version()
-    repo_url = os.environ.get('GITHUB_REPO', 'yrskrs/schoolwork2')
-    version_url = f"https://raw.githubusercontent.com/{repo_url}/main/VERSION"
-    releases_url = f"https://raw.githubusercontent.com/{repo_url}/main/RELEASES.json"
-    changelog_url = f"https://raw.githubusercontent.com/{repo_url}/main/CHANGELOG.md"
-    headers = {'User-Agent': 'SchoolNet-Django/1.0'}
-
-    all_releases = []
+    payload = json.dumps({'current_version': current_ver}).encode('utf-8')
     try:
-        req_v = urllib.request.Request(version_url, headers=headers)
-        with urllib.request.urlopen(req_v, timeout=6) as resp:
-            remote_ver = resp.read().decode('utf-8').strip()
-
-        # Try RELEASES.json
-        try:
-            req_r = urllib.request.Request(releases_url, headers=headers)
-            with urllib.request.urlopen(req_r, timeout=6) as resp_r:
-                all_releases = json.loads(resp_r.read().decode('utf-8'))
-        except Exception:
-            # Fallback to CHANGELOG.md
-            try:
-                req_c = urllib.request.Request(changelog_url, headers=headers)
-                with urllib.request.urlopen(req_c, timeout=6) as resp_c:
-                    all_releases = parse_changelog_markdown(resp_c.read().decode('utf-8'))
-            except Exception:
-                pass
-
-        # If remote releases failed, try local files
-        if not all_releases:
-            local_rel = Path(settings.BASE_DIR) / 'RELEASES.json'
-            local_cl = Path(settings.BASE_DIR) / 'CHANGELOG.md'
-            if local_rel.exists():
-                try:
-                    all_releases = json.loads(local_rel.read_text(encoding='utf-8'))
-                except Exception:
-                    pass
-            elif local_cl.exists():
-                try:
-                    all_releases = parse_changelog_markdown(local_cl.read_text(encoding='utf-8'))
-                except Exception:
-                    pass
-
-        has_update = parse_version_tuple(remote_ver) > parse_version_tuple(current_ver)
-        releases_between = filter_releases_between(all_releases, current_ver, remote_ver) if has_update else []
-
-        if has_update and not releases_between:
-            releases_between = [{
-                'version': remote_ver,
-                'date': time.strftime('%Y-%m-%d'),
-                'title': f'Оновлення {remote_ver}',
-                'changes': ['Планове оновлення системи SchoolNet']
-            }]
-
-        return {
-            'ok': True,
-            'current_version': current_ver,
-            'latest_version': remote_ver,
-            'has_update': has_update,
-            'releases_between': releases_between,
-            'target_release': releases_between[0] if releases_between else None,
-            'releases_count': len(releases_between)
-        }
+        req = urllib.request.Request(f"{UPDATER_URL}/api/check", data=payload,
+                                     headers={'Content-Type': 'application/json'})
+        with urllib.request.urlopen(req, timeout=35) as resp:
+            data = json.loads(resp.read().decode('utf-8'))
+        if isinstance(data, dict) and 'ok' in data:
+            return data
     except Exception as exc:
-        return {
-            'ok': False,
-            'current_version': current_ver,
-            'latest_version': current_ver,
-            'has_update': False,
-            'releases_between': [],
-            'error': f"Не вдалося перевірити оновлення на GitHub: {str(exc)}"
-        }
+        logger.debug("Updater check unavailable: %s", exc)
+    return check_remote(Path(settings.BASE_DIR), os.environ.get('GITHUB_REPO', 'yrskrs/schoolwork2'), current_ver)
+
+
+def get_current_release():
+    return local_release(Path(settings.BASE_DIR), get_current_local_version())
 
 
 def get_update_status():

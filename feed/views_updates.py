@@ -1,11 +1,13 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.db import connection
 from django.http import JsonResponse, HttpResponseForbidden
 from django.shortcuts import render, redirect
 from django.views.decorators.http import require_POST, require_GET
 
 from feed.services.updates import (
     get_current_local_version,
+    get_current_release,
     check_updates_available,
     get_update_status,
     start_update,
@@ -35,6 +37,7 @@ def system_updates_view(request):
 
     context = {
         'current_version': current_version,
+        'current_release': get_current_release(),
         'status_info': status_info,
         'can_update': can_update,
         'active_tab': 'updates',
@@ -89,8 +92,10 @@ def updates_rollback_api_view(request):
 
 @require_GET
 def healthz_view(request):
-    """Lightweight health check endpoint for container and updater validation."""
-    return JsonResponse({
-        'status': 'ok',
-        'version': get_current_local_version()
-    })
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute('SELECT 1')
+            cursor.fetchone()
+    except Exception:
+        return JsonResponse({'status': 'error', 'error': 'Database unavailable'}, status=503)
+    return JsonResponse({'status': 'ok', 'version': get_current_local_version()})

@@ -89,3 +89,7 @@ compose.override.yaml
 # Private image-tag backup created by the updater
 .env.before-image-update
 .env.image-*
+
+# Runtime updater files
+.maintenance.lock
+.release-image.yaml

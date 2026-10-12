@@ -1,7 +1,7 @@
 name: ${COMPOSE_PROJECT_NAME:-schoolwork2}
 services:
   app:
-    image: ${SCHOOLWORK_IMAGE:-schoolwork2-app:4.4.5}
+    image: ${SCHOOLWORK_IMAGE:-schoolwork2-app:4.4.6}
     build:
       context: .
       dockerfile: Dockerfile
@@ -24,14 +24,14 @@ services:
       - app_logs:/app/logs
       - app_cache:/var/cache/schoolnet
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/teacher/login/', timeout=5)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz/', timeout=5)"]
       interval: 15s
       timeout: 6s
       retries: 5
       start_period: 45s
 
   ai_worker:
-    image: ${SCHOOLWORK_IMAGE:-schoolwork2-app:4.4.5}
+    image: ${SCHOOLWORK_IMAGE:-schoolwork2-app:4.4.6}
     container_name: schoolnet_ai_worker
     restart: unless-stopped
     command: ["python", "manage.py", "process_ai_jobs"]

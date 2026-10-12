@@ -6,6 +6,7 @@ update_main() {
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 cd "$PROJECT_ROOT"
+source "$SCRIPT_DIR/maintenance.sh"
 TIMEOUT="${SCHOOLNET_DEPLOY_TIMEOUT:-240}"
 [[ "$TIMEOUT" =~ ^[1-9][0-9]*$ ]] || { echo 'Некоректний SCHOOLNET_DEPLOY_TIMEOUT' >&2; exit 1; }
 docker compose up --help | grep -q -- '--wait-timeout' || { echo 'Потрібен Docker Compose з --wait-timeout.' >&2; exit 1; }

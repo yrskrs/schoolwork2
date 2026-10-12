@@ -21,6 +21,7 @@ TARGET_BACKUP="$(cd "$TARGET_BACKUP" && pwd)"
 python3 "$SCRIPT_DIR/backup_tools.py" validate "$TARGET_BACKUP" "${LEGACY[@]}"
 gzip -t "$TARGET_BACKUP/media.tar.gz"
 cd "$PROJECT_ROOT"
+source "$SCRIPT_DIR/maintenance.sh"
 
 # Resolve host directory path if running within a container with /workspace mounted
 HOST_PROJECT_ROOT="${HOST_PROJECT_ROOT:-}"

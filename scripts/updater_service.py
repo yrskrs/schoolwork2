@@ -1,58 +1,58 @@
 #!/usr/bin/env python3
-"""
-Autonomous updater service for SchoolNet (schoolwork2).
-Executes updates in an isolated Docker container, reports progress,
-maintains changelog diffs between versions, and performs automatic rollbacks.
-"""
+"""Independent Docker updater with streamed logs, bounded jobs and verified rollback."""
+import copy
+import fcntl
 import http.server
 import json
 import os
 from pathlib import Path
 import re
-import socketserver
+import selectors
+import signal
 import subprocess
+import sys
+import tempfile
 import threading
 import time
-import urllib.error
+from urllib.parse import parse_qs, urlsplit
 import urllib.request
+import uuid
 
-ROOT = Path(os.environ.get('SCHOOLWORK_ROOT', Path(__file__).resolve().parent.parent))
-STATUS_FILE = ROOT / 'backups' / 'update_status.json'
-LOCK_FILE = ROOT / '.updater.lock'
+try:
+    from scripts.update_metadata import (read_version, version_tuple, parse_changelog_markdown,
+                                         releases_between, check_remote)
+except ModuleNotFoundError:
+    from update_metadata import (read_version, version_tuple, parse_changelog_markdown,
+                                 releases_between, check_remote)
 
-CURRENT_STATE = {
-    'state': 'idle',  # 'idle', 'running', 'success', 'error'
-    'step': 0,
-    'step_name': 'Готово до роботи',
-    'progress': 0,
-    'logs': [],
-    'error': None,
-    'rolled_back': False,
-    'target_version': None,
-    'current_version': None,
-    'backup_file': None,
-    'started_at': None,
-    'updated_at': None,
-    'releases_between': [],
-}
-
-STATE_LOCK = threading.Lock()
+PROJECT = 'schoolwork2'
+REPO = 'yrskrs/schoolwork2'
+APP_SERVICE = 'app'
+WRITERS = ['app', 'ai_worker']
+HEALTH_URL = 'http://app:8000/healthz/'
+ROOT = Path(os.environ.get('PROJECT_ROOT', Path(__file__).resolve().parent.parent))
+STATUS_FILE = ROOT / 'backups/update_status.json'
+LOCK_FILE = ROOT / '.maintenance.lock'
+STATE_LOCK = threading.RLock()
+CURRENT_STATE = {'state': 'idle', 'step': 0, 'step_name': 'Готово до роботи', 'progress': 0,
+                 'logs': [], 'error': None, 'rolled_back': False, 'rollback_error': None,
+                 'target_version': None, 'current_version': None, 'releases': [],
+                 'backup_file': None, 'backup_dir': None, 'job_id': None}
+_version_tuple = parse_version_tuple = version_tuple
+filter_releases_between = filter_intermediate_releases = get_releases_between = releases_between
+parse_changelog_all_releases = parse_changelog_markdown
 
 
 def get_current_version():
-    version_file = ROOT / 'VERSION'
-    if version_file.exists():
-        return version_file.read_text(encoding='utf-8').strip()
-    return '4.4.5'
+    return read_version(ROOT)
 
 
 def save_status():
-    try:
-        STATUS_FILE.parent.mkdir(parents=True, exist_ok=True)
-        with open(STATUS_FILE, 'w', encoding='utf-8') as f:
-            json.dump(CURRENT_STATE, f, ensure_ascii=False, indent=2)
-    except Exception as e:
-        print(f"Failed to write status file: {e}")
+    STATUS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    temporary = STATUS_FILE.with_suffix('.tmp')
+    temporary.write_text(json.dumps(CURRENT_STATE, ensure_ascii=False, indent=2), encoding='utf-8')
+    temporary.chmod(0o644)
+    os.replace(temporary, STATUS_FILE)
 
 
 def update_state(**kwargs):
@@ -63,477 +63,457 @@ def update_state(**kwargs):
 
 
 def append_log(line):
-    clean_line = line.strip()
-    if not clean_line:
+    line = str(line).strip()
+    if not line:
         return
+    entry = f'[{time.strftime("%H:%M:%S")}] {line}'
+    print(entry, flush=True)
     with STATE_LOCK:
-        CURRENT_STATE['logs'].append(clean_line)
-        if len(CURRENT_STATE['logs']) > 300:
-            CURRENT_STATE['logs'] = CURRENT_STATE['logs'][-300:]
-        CURRENT_STATE['updated_at'] = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
-        save_status()
+        logs = CURRENT_STATE['logs']
+        logs.append(entry)
+        CURRENT_STATE['logs'] = logs[-1500:]
+        update_state()
 
 
-def _version_tuple(v_str):
-    try:
-        parts = [int(p) for p in re.findall(r'\d+', str(v_str))]
-        return tuple(parts) if parts else (0,)
-    except Exception:
-        return (0,)
-
-
-def parse_changelog_markdown(text):
-    """Fallback parser for markdown CHANGELOG.md."""
-    releases = []
-    current = None
-    for line in text.splitlines():
-        line = line.strip()
-        header_match = re.match(r'^##\s+\[?v?(\d+\.\d+(?:\.\d+)*)\]?(.*)$', line)
-        if header_match:
-            if current:
-                releases.append(current)
-            ver = header_match.group(1)
-            rest = header_match.group(2).strip()
-            rest = re.sub(r'^[-–—:]\s*', '', rest)
-            parts = re.split(r'\s+[-–—:]\s+', rest, maxsplit=1)
-            if len(parts) == 2:
-                date_str, title = parts[0].strip(), parts[1].strip()
-            elif len(parts) == 1:
-                date_str, title = '', parts[0].strip()
-            else:
-                date_str, title = '', ''
-            current = {
-                'version': ver,
-                'date': date_str,
-                'title': title or f'Версія {ver}',
-                'changes': []
-            }
-        elif current and (line.startswith('- ') or line.startswith('* ')):
-            change_text = line[2:].strip()
-            if change_text:
-                current['changes'].append(change_text)
-    if current:
-        releases.append(current)
-    return releases
-
-
-def filter_releases_between(all_releases, current_ver, target_ver):
-    """
-    Returns all releases between current_ver and target_ver (inclusive of target_ver, exclusive of current_ver),
-    sorted in descending order (latest version first).
-    """
-    curr_t = _version_tuple(current_ver)
-    target_t = _version_tuple(target_ver)
-    matching = []
-    for rel in all_releases:
-        v_t = _version_tuple(rel.get('version', ''))
-        if curr_t < v_t <= target_t:
-            matching.append(rel)
-    matching.sort(key=lambda r: _version_tuple(r.get('version', '')), reverse=True)
-    return matching
-
-
-def check_github_updates():
-    """
-    Checks GitHub for the latest version and computes the full list of releases between
-    the currently installed version and the latest remote version.
-    """
-    current_ver = get_current_version()
-    repo_url = os.environ.get('GITHUB_REPO', 'yrskrs/schoolwork2')
-    version_url = f"https://raw.githubusercontent.com/{repo_url}/main/VERSION"
-    releases_url = f"https://raw.githubusercontent.com/{repo_url}/main/RELEASES.json"
-    changelog_url = f"https://raw.githubusercontent.com/{repo_url}/main/CHANGELOG.md"
-
-    headers = {'User-Agent': 'SchoolNet-Updater/1.0'}
-    remote_ver = None
-    all_releases = []
-
-    try:
-        # 1. Fetch remote VERSION
-        req_v = urllib.request.Request(version_url, headers=headers)
-        with urllib.request.urlopen(req_v, timeout=7) as resp:
-            remote_ver = resp.read().decode('utf-8').strip()
-
-        # 2. Try fetching RELEASES.json first
+def load_status():
+    if STATUS_FILE.exists():
         try:
-            req_r = urllib.request.Request(releases_url, headers=headers)
-            with urllib.request.urlopen(req_r, timeout=7) as resp_rel:
-                all_releases = json.loads(resp_rel.read().decode('utf-8'))
-        except Exception:
-            # 3. Fallback to CHANGELOG.md if RELEASES.json is unavailable
-            try:
-                req_c = urllib.request.Request(changelog_url, headers=headers)
-                with urllib.request.urlopen(req_c, timeout=7) as resp_c:
-                    md_text = resp_c.read().decode('utf-8')
-                    all_releases = parse_changelog_markdown(md_text)
-            except Exception:
-                pass
-
-        # If both remote files failed, check local RELEASES.json / CHANGELOG.md
-        if not all_releases:
-            local_rel_file = ROOT / 'RELEASES.json'
-            local_cl_file = ROOT / 'CHANGELOG.md'
-            if local_rel_file.exists():
-                try:
-                    all_releases = json.loads(local_rel_file.read_text(encoding='utf-8'))
-                except Exception:
-                    pass
-            elif local_cl_file.exists():
-                try:
-                    all_releases = parse_changelog_markdown(local_cl_file.read_text(encoding='utf-8'))
-                except Exception:
-                    pass
-
-        has_update = _version_tuple(remote_ver) > _version_tuple(current_ver)
-        releases_between = filter_releases_between(all_releases, current_ver, remote_ver) if has_update else []
-
-        # If has_update but releases_between is empty, generate a fallback entry
-        if has_update and not releases_between:
-            releases_between = [{
-                'version': remote_ver,
-                'date': time.strftime('%Y-%m-%d'),
-                'title': f'Оновлення до версії {remote_ver}',
-                'changes': ['Планове оновлення компонентів SchoolNet']
-            }]
-
-        return {
-            'ok': True,
-            'current_version': current_ver,
-            'latest_version': remote_ver,
-            'has_update': has_update,
-            'releases_between': releases_between,
-            'target_release': releases_between[0] if releases_between else None,
-            'releases_count': len(releases_between)
-        }
-    except Exception as exc:
-        return {
-            'ok': False,
-            'current_version': current_ver,
-            'latest_version': current_ver,
-            'has_update': False,
-            'releases_between': [],
-            'error': f"Не вдалося зв'язатися з GitHub: {str(exc)}"
-        }
+            saved = json.loads(STATUS_FILE.read_text(encoding='utf-8'))
+            CURRENT_STATE.update(saved)
+            if saved.get('state') == 'running':
+                CURRENT_STATE.update(state='error', error='Службу оновлення перезапущено під час операції. Перевірте журнал і резервну копію перед повторним запуском.',
+                                     step_name='Операцію перервано', progress=min(saved.get('progress', 0), 99))
+        except (ValueError, OSError):
+            pass
+    save_status()
 
 
-def execute_update_job(target_ref='origin/main', target_ver=None):
-    """Background update execution with rollback on failure."""
-    current_ver = get_current_version()
-    update_state(
-        state='running',
-        step=1,
-        step_name='Отримання коду з GitHub',
-        progress=10,
-        logs=[],
-        error=None,
-        rolled_back=False,
-        target_version=target_ver or 'останньої версії',
-        current_version=current_ver,
-        started_at=time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
-    )
-    append_log(f"Розпочато процес оновлення з {current_ver} до {target_ver or target_ref}...")
+def check_github_updates(current_ver=None):
+    return check_remote(ROOT, os.environ.get('GITHUB_REPO', REPO), current_ver or get_current_version(),
+                        os.environ.get('GITHUB_BRANCH', 'main'))
 
-    backup_path = None
-    try:
-        # Step 1: Fetch from GitHub
-        append_log("Крок 1/5: Завантаження коду з GitHub...")
-        fetch_proc = subprocess.run(
-            ['python3', str(ROOT / 'scripts' / 'fetch_update.py')],
-            cwd=str(ROOT),
-            capture_output=True,
-            text=True,
-            timeout=90
-        )
-        if fetch_proc.returncode != 0:
-            err_msg = fetch_proc.stderr or fetch_proc.stdout or 'Помилка fetch_update'
-            raise RuntimeError(f"Не вдалося отримати код із GitHub: {err_msg.strip()}")
-        append_log("Код успішно завантажено з GitHub.")
 
-        # Step 2: Target revision & candidate build in separate worktree
-        update_state(step=2, step_name='Збірка образу кандидата у тимчасовому оточенні', progress=30)
-        append_log(f"Крок 2/5: Визначення цільової ревізії {target_ref}...")
+def capture(command, env=None):
+    proc = subprocess.run(command, cwd=ROOT, env=env, capture_output=True, text=True, timeout=60)
+    if proc.returncode:
+        raise RuntimeError(f'{command[0]}: {proc.stderr.strip() or proc.stdout.strip()}')
+    return proc.stdout.strip()
 
-        target_commit = None
-        for candidate_ref in [target_ref, f"refs/tags/{target_ref}", f"refs/remotes/origin/{target_ref}", f"v{target_ref}", "origin/main", "HEAD"]:
-            if not candidate_ref:
-                continue
-            try:
-                target_commit = subprocess.check_output(
-                    ['git', 'rev-parse', '--verify', f"{candidate_ref}^{{commit}}"],
-                    cwd=str(ROOT),
-                    text=True,
-                    stderr=subprocess.DEVNULL
-                ).strip()
-                break
-            except Exception:
-                continue
-        if not target_commit:
-            raise RuntimeError(f"Не вдалося знайти цільову ревізію для {target_ref}")
-        current_commit = subprocess.check_output(
-            ['git', 'rev-parse', 'HEAD'],
-            cwd=str(ROOT),
-            text=True
-        ).strip()
-        append_log(f"Поточний коміт: {current_commit[:10]}, Цільовий коміт: {target_commit[:10]}")
 
-        candidate_image = f"schoolwork2-candidate:{target_commit[:12]}"
-        build_workdir = Path(f"/tmp/schoolwork2-build.{target_commit[:8]}")
-        if build_workdir.exists():
-            subprocess.run(['rm', '-rf', str(build_workdir)], check=False)
-        subprocess.run(['git', 'worktree', 'add', '--detach', str(build_workdir), target_commit], cwd=str(ROOT), check=True)
-
+def run_command(command, env=None, timeout=600):
+    """Drain both output streams while running; terminate the process group on timeout."""
+    output, pending = [], b''
+    with subprocess.Popen(command, cwd=ROOT, env=env, stdout=subprocess.PIPE,
+                          stderr=subprocess.STDOUT, start_new_session=True) as process:
+        selector = selectors.DefaultSelector()
+        selector.register(process.stdout, selectors.EVENT_READ)
+        deadline, heartbeat = time.monotonic() + timeout, time.monotonic()
         try:
-            append_log(f"Збірка Docker-образу кандидата {candidate_image}...")
-            build_proc = subprocess.run(
-                ['docker', 'build', '--build-arg', f'VCS_REF={target_commit}', '-t', candidate_image, str(build_workdir)],
-                capture_output=True,
-                text=True,
-                timeout=600
-            )
-            if build_proc.returncode != 0:
-                raise RuntimeError(f"Помилка збірки Docker-образу: {build_proc.stderr or build_proc.stdout}")
-            append_log("Docker-образ кандидата успішно зібрано.")
+            while selector.get_map():
+                if time.monotonic() > deadline:
+                    raise TimeoutError(f'Перевищено час виконання ({timeout} с): {command[0]}')
+                for key, _ in selector.select(1):
+                    chunk = os.read(key.fd, 65536)
+                    if not chunk:
+                        selector.unregister(key.fileobj)
+                        break
+                    pending += chunk.replace(b'\r', b'\n')
+                    while b'\n' in pending:
+                        line, pending = pending.split(b'\n', 1)
+                        text = line.decode('utf-8', errors='replace').strip()
+                        if text:
+                            output.append(text)
+                            append_log(text)
+                if time.monotonic() - heartbeat >= 10:
+                    append_log('Команда працює; очікуємо завершення…')
+                    heartbeat = time.monotonic()
+            if pending:
+                text = pending.decode('utf-8', errors='replace')
+                output.append(text)
+                append_log(text)
+            returncode = process.wait(timeout=max(1, deadline - time.monotonic()))
+            if returncode:
+                raise RuntimeError(f'Команда {command[0]} завершилася з кодом {returncode}:\n' + '\n'.join(output[-25:]))
+        except BaseException:
+            if process.poll() is None:
+                os.killpg(process.pid, signal.SIGTERM)
+                try:
+                    process.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    os.killpg(process.pid, signal.SIGKILL)
+                    process.wait()
+            raise
         finally:
-            subprocess.run(['git', 'worktree', 'remove', '--force', str(build_workdir)], cwd=str(ROOT), check=False)
+            selector.close()
+    return '\n'.join(output)
 
-        # Step 3: Consistent snapshot / backup
-        update_state(step=3, step_name='Створення резервної копії перед оновленням', progress=55)
-        append_log("Крок 3/5: Створення повного знімка бази даних, файлів та образу...")
-        backup_proc = subprocess.run(
-            ['bash', str(ROOT / 'scripts' / 'backup.sh')],
-            cwd=str(ROOT),
-            capture_output=True,
-            text=True,
-            timeout=240
-        )
-        if backup_proc.returncode != 0:
-            raise RuntimeError(f"Помилка створення резервної копії: {backup_proc.stderr or backup_proc.stdout}")
-        
-        # Extract backup path from backup script output
-        backup_path = None
-        for line in backup_proc.stdout.strip().splitlines():
-            if 'Резервна копія перевірена:' in line:
-                backup_path = line.split('Резервна копія перевірена:', 1)[1].strip()
-            elif line.strip().startswith('/') and 'backups/' in line:
-                backup_path = line.strip()
 
-        if not backup_path:
-            # Fallback to the latest directory in backups
-            backups_dir = ROOT / 'backups'
-            subdirs = [d for d in backups_dir.iterdir() if d.is_dir() and not d.name.startswith('.')]
-            if subdirs:
-                backup_path = str(max(subdirs, key=lambda d: d.stat().st_mtime))
+class Deployment:
+    """Freeze Compose config and translate bind paths for the host Docker daemon."""
+    def __init__(self):
+        self.env = dict(os.environ, COMPOSE_PROJECT_NAME=os.environ.get('COMPOSE_PROJECT_NAME', PROJECT),
+                        MAINTENANCE_LOCK_HELD='1', PYTHONUNBUFFERED='1')
+        files = [ROOT / 'compose.yaml', ROOT / '.release-image.yaml', ROOT / 'compose.override.yaml']
+        command = ['docker', 'compose', '--env-file', str(ROOT / '.env')]
+        for file in files:
+            if file.exists():
+                command += ['-f', str(file)]
+        self.config = json.loads(capture(command + ['config', '--format', 'json'], self.env))
+        host_root = str(ROOT)
+        if Path('/.dockerenv').exists():
+            mounts = json.loads(capture(['docker', 'inspect', '--format', '{{json .Mounts}}', os.uname().nodename]))
+            host_root = next((m['Source'] for m in mounts if m['Destination'] == str(ROOT)), '')
+            if not host_root:
+                raise RuntimeError('Не знайдено шлях проєкту на Docker-хості')
+        for service in self.config['services'].values():
+            for volume in service.get('volumes', []):
+                if volume.get('type') == 'bind' and volume['source'].startswith(str(ROOT) + '/'):
+                    volume['source'] = host_root + volume['source'][len(str(ROOT)):]
+                elif volume.get('type') == 'bind' and volume['source'] == str(ROOT):
+                    volume['source'] = host_root
+        fd, path = tempfile.mkstemp(prefix='.compose-update-', suffix='.json', dir=ROOT / 'backups')
+        os.close(fd)
+        self.path = Path(path)
+        self.env.update(COMPOSE_FILE=path, UPDATER_COMPOSE_FILE=path)
+        self.write()
 
-        append_log(f"Резервну копію збережено: {Path(backup_path).name if backup_path else 'успішно'}")
-        update_state(backup_file=backup_path)
+    def write(self):
+        self.path.write_text(json.dumps(self.config), encoding='utf-8')
 
-        # Step 4: Merge, update image configuration, migrate & restart
-        update_state(step=4, step_name='Застосування міграцій та перезапуск сервісів', progress=75)
-        append_log("Крок 4/5: Оновлення ревізії Git та конфігурації образу...")
-
-        merge_proc = subprocess.run(
-            ['git', 'merge', '--ff-only', target_commit],
-            cwd=str(ROOT),
-            capture_output=True,
-            text=True
-        )
-        if merge_proc.returncode != 0:
-            raise RuntimeError(f"Не вдалося виконати швидке злиття (fast-forward merge): {merge_proc.stderr or merge_proc.stdout}")
-
-        # Update .env image tag
+    def select_image(self, image, persist=True):
+        for service in WRITERS:
+            self.config['services'][service]['image'] = image
+            self.config['services'][service]['pull_policy'] = 'never'
+        self.write()
+        if not persist:
+            return
+        services = ''.join(f'  {service}:\n    image: {image}\n    pull_policy: never\n' for service in WRITERS)
+        (ROOT / '.release-image.yaml').write_text('services:\n' + services, encoding='utf-8')
         env_file = ROOT / '.env'
-        if env_file.exists():
-            content = env_file.read_text(encoding='utf-8')
-            if 'SCHOOLWORK_IMAGE=' in content:
-                content = re.sub(r'SCHOOLWORK_IMAGE=[^\n]*', f'SCHOOLWORK_IMAGE={candidate_image}', content)
-                env_file.write_text(content, encoding='utf-8')
+        content = env_file.read_text(encoding='utf-8')
+        entry = 'SCHOOLWORK_IMAGE=' + image
+        if re.search(r'^SCHOOLWORK_IMAGE=', content, re.MULTILINE):
+            content = re.sub(r'^SCHOOLWORK_IMAGE=[^\n]*', entry, content, flags=re.MULTILINE)
+        else:
+            content = content.rstrip() + '\n' + entry + '\n'
+        temporary = env_file.with_suffix('.image-update')
+        temporary.write_text(content, encoding='utf-8')
+        temporary.chmod(0o600)
+        os.replace(temporary, env_file)
 
-        append_log("Збір статичних файлів (collectstatic)...")
-        subprocess.run(
-            ['docker', 'compose', 'run', '--rm', '--no-deps', '-T', 'app', 'python', 'manage.py', 'collectstatic', '--noinput'],
-            cwd=str(ROOT),
-            capture_output=True,
-            text=True,
-            check=True
-        )
 
-        append_log("Застосування міграцій бази даних...")
-        subprocess.run(
-            ['docker', 'compose', 'run', '--rm', '--no-deps', '-T', 'app', 'python', 'manage.py', 'migrate', '--noinput'],
-            cwd=str(ROOT),
-            capture_output=True,
-            text=True,
-            check=True
-        )
+    def dc(self, *args, timeout=600):
+        return run_command(['docker', 'compose', *args], self.env, timeout)
 
-        append_log("Перезапуск сервісів...")
-        subprocess.run(
-            ['docker', 'compose', 'stop', 'app', 'ai_worker'],
-            cwd=str(ROOT),
-            capture_output=True,
-            text=True,
-            check=False
-        )
-        subprocess.run(
-            ['docker', 'compose', 'up', '-d', '--wait', '--wait-timeout', '180', 'app', 'ai_worker'],
-            cwd=str(ROOT),
-            capture_output=True,
-            text=True,
-            check=True
-        )
+    def query(self, *args):
+        return capture(['docker', 'compose', *args], self.env)
 
-        # Step 5: Health check
-        update_state(step=5, step_name='Перевірка працездатності системи (/healthz)', progress=90)
-        append_log("Крок 5/5: Перевірка працездатності оновленої системи...")
+    def close(self):
+        self.path.unlink(missing_ok=True)
 
-        healthy = False
-        new_version = get_current_version()
-        test_urls = [
-            'http://schoolnet_app:8000/healthz/',
-            'http://app:8000/healthz/',
-            'http://127.0.0.1:8000/healthz/',
-            'http://schoolnet_app:8000/teacher/login/',
-            'http://app:8000/teacher/login/',
-        ]
 
-        for attempt in range(20):
+def installed_health(expected=None, timeout=180):
+    deadline = time.monotonic() + timeout
+    error = ''
+    while time.monotonic() < deadline:
+        try:
+            with urllib.request.urlopen(os.environ.get('APP_URL', HEALTH_URL), timeout=4) as response:
+                data = json.load(response)
+            if data.get('status') != 'ok' or not data.get('version'):
+                raise ValueError('Некоректний healthcheck')
+            if expected and data['version'] != expected:
+                raise ValueError(f'Запущено {data["version"]}, очікується {expected}')
+            return data['version']
+        except Exception as exc:
+            error = str(exc)
             time.sleep(2)
-            for test_url in test_urls:
+    raise RuntimeError(f'Перевірка готовності не пройдена: {error}')
+
+
+def verify_deployment(deployment, image, version):
+    ids = deployment.query('ps', '-aq', *WRITERS).splitlines()
+    if len(ids) != len(WRITERS):
+        raise RuntimeError('Запущено не всі служби сайту')
+    expected_id = capture(['docker', 'image', 'inspect', '--format', '{{.Id}}', image])
+    for container in ids:
+        actual = capture(['docker', 'inspect', '--format', '{{.Image}}', container])
+        if actual != expected_id:
+            raise RuntimeError('Контейнер запущено зі старого або іншого образу')
+    installed_health(version)
+
+
+def perform_rollback(deployment, backup, old_image, old_commit, old_version):
+    update_state(state='running', step_name='Автоматичний відкат до попередньої версії', progress=95)
+    append_log('Відновлюємо попередній Docker-образ, БД, файли та ревізію коду…')
+    deployment.select_image(old_image)
+    deployment.env['EXPECTED_VERSION'] = old_version
+    flags = ['--yes']
+    if PROJECT == 'schooljournal':
+        flags += ['--no-safety-backup', '--keep-code']
+    elif PROJECT == 'schoolwork2':
+        flags += ['--no-safety-backup']
+    run_command(['bash', str(ROOT / 'scripts/restore.sh'), str(backup), *flags], deployment.env, 600)
+    run_command(['git', 'reset', '--hard', old_commit], deployment.env, 60)
+    deployment.select_image(old_image)
+    verify_deployment(deployment, old_image, old_version)
+    update_state(rolled_back=True, current_version=old_version)
+    append_log(f'✅ Відкат перевірено: попередня версія {old_version}, БД та файли відновлені.')
+
+
+def execute_update_job(target_ref='origin/main', target_ver=None, releases_list=None):
+    deployment, backup, worktree = None, None, None
+    backup_complete = deploy_started = False
+    try:
+        if target_ref not in ('HEAD', 'origin/main'):
+            raise ValueError('Дозволено оновлення origin/main або перезбірку HEAD')
+        if capture(['git', 'status', '--porcelain']):
+            raise RuntimeError('Є незакомічені зміни. Закомітьте або збережіть їх перед оновленням.')
+        old_commit = capture(['git', 'rev-parse', 'HEAD'])
+        deployment = Deployment()
+        old_version = installed_health(timeout=10)
+        container = deployment.query('ps', '-aq', APP_SERVICE)
+        if not container:
+            raise RuntimeError('Відсутній контейнер застосунку')
+        old_image = capture(['docker', 'inspect', '--format', '{{.Image}}', container])
+        # Capture labels from the container even if a rebuild replaced its image tag.
+        revision = capture(['docker', 'inspect', '--format', '{{index .Config.Labels "org.opencontainers.image.revision"}}', container])
+        if len(revision) == 40:
+            capture(['git', 'cat-file', '-e', revision + '^{commit}'])
+            old_commit = revision
+        elif read_version(ROOT) != old_version:
+            # Older installations built with VCS_REF=local: use the nearest matching release revision.
+            for candidate in capture(['git', 'log', '-50', '--format=%H']).splitlines():
                 try:
-                    with urllib.request.urlopen(test_url, timeout=4) as resp:
-                        if resp.status == 200:
-                            healthy = True
-                            break
-                except Exception:
-                    pass
-            if healthy:
-                break
-
-        if not healthy:
-            raise RuntimeError("Сервіс не пройшов перевірку справності (healthcheck) після перезапуску.")
-
-        append_log(f"Оновлення успішно завершено! Нова версія: {new_version}")
-        update_state(
-            state='success',
-            step=5,
-            step_name='Оновлення успішно завершено',
-            progress=100,
-            target_version=new_version,
-            current_version=new_version
-        )
-
+                    source_version = capture(['git', 'show', candidate + ':VERSION'])
+                except RuntimeError:
+                    continue
+                if source_version == old_version:
+                    old_commit = candidate
+                    break
+            else:
+                raise RuntimeError('Не знайдено ревізію попередньої версії; оновлення скасовано')
+        try:
+            capture(['docker', 'image', 'inspect', '--format', '{{.Id}}', old_image])
+        except RuntimeError:
+            append_log('Попередній образ видалено зі сховища; зберігаємо код чинного контейнера…')
+            # Volumes are excluded by Docker commit. Clear runtime env defaults so secrets
+            # are not baked into the snapshot; Compose supplies them again at restore.
+            environment = json.loads(capture(['docker', 'inspect', '--format', '{{json .Config.Env}}', container]))
+            changes = []
+            for entry in environment:
+                key = entry.split('=', 1)[0]
+                if key not in ('PATH', 'LANG', 'PYTHON_VERSION', 'PYTHON_SHA256', 'PYTHONDONTWRITEBYTECODE', 'PYTHONUNBUFFERED', 'DEBIAN_FRONTEND'):
+                    changes += ['--change', f'ENV {key}=""']
+            snapshot = f'{PROJECT}-rollback:container-{CURRENT_STATE["job_id"][:12]}'
+            run_command(['docker', 'commit', *changes, container, snapshot], deployment.env, 300)
+            old_image = capture(['docker', 'image', 'inspect', '--format', '{{.Id}}', snapshot])
+        deployment.select_image(old_image, persist=False)
+        deployment.env.update(BACKUP_IMAGE=old_image, BACKUP_SOURCE_COMMIT=old_commit)
+        update_state(current_version=old_version, step=1, progress=10, step_name='Перевірка ревізії коду')
+        append_log('Крок 1/5: Перевірка коду та джерела оновлення…')
+        if target_ref != 'HEAD':
+            run_command(['python3', str(ROOT / 'scripts/fetch_update.py'), '--branch', 'main'], deployment.env, 90)
+            capture(['git', 'merge-base', '--is-ancestor', 'HEAD', target_ref])
+        commit = capture(['git', 'rev-parse', '--verify', target_ref + '^{commit}'])
+        worktree = Path(tempfile.mkdtemp(prefix=f'.build-{PROJECT}-', dir=ROOT / 'backups'))
+        run_command(['git', 'worktree', 'add', '--detach', str(worktree), commit], deployment.env, 60)
+        version = read_version(worktree)
+        if target_ver and version != target_ver:
+            raise RuntimeError(f'Цільова ревізія має версію {version}; перевірено {target_ver}. Перевірте оновлення знову.')
+        from_release = check_remote(worktree, os.environ.get('GITHUB_REPO', REPO), old_version) if target_ref != 'HEAD' else {}
+        update_state(target_version=version, releases=from_release.get('releases', []), step=2,
+                     progress=30, step_name='Збірка Docker-образу')
+        append_log(f'Крок 2/5: Збираємо версію {version}, коміт {commit[:12]}…')
+        image = f'{PROJECT}-candidate:{commit[:12]}-{CURRENT_STATE["job_id"][:8]}'
+        run_command(['docker', 'build', '--progress=plain', '--build-arg', f'VCS_REF={commit}',
+                     '--build-arg', f'APP_VERSION={version}', '-t', image, str(worktree)], deployment.env, 1200)
+        run_command(['git', 'worktree', 'remove', '--force', str(worktree)], deployment.env, 60)
+        worktree = None
+        update_state(step=3, progress=55, step_name='Зупинка запису та створення резервної копії')
+        append_log('Крок 3/5: Зупиняємо запис і створюємо перевірений знімок…')
+        deployment.dc('stop', *WRITERS, timeout=120)
+        if PROJECT == 'schooltest5':
+            backup = Path(tempfile.mkdtemp(prefix=time.strftime('%Y%m%d-%H%M%S-'), dir=ROOT / 'backups'))
+            run_command(['bash', str(ROOT / 'scripts/backup.sh'), '--output', str(backup), '--keep-stopped'], deployment.env, 600)
+        elif PROJECT == 'schooljournal':
+            output = run_command(['bash', str(ROOT / 'scripts/backup.sh'), '--quiesced'], deployment.env, 1200)
+            backup = Path(output.splitlines()[-1])
+        else:
+            deployment.env['SCHOOLNET_BACKUP_KEEP_STOPPED'] = '1'
+            output = run_command(['bash', str(ROOT / 'scripts/backup.sh')], deployment.env, 600)
+            backup = Path(output.split('Резервна копія перевірена:', 1)[1].strip().splitlines()[0])
+        if not backup.exists():
+            raise RuntimeError('Резервну копію не знайдено після backup.sh')
+        backup_complete = True
+        update_state(backup_file=str(backup), backup_dir=str(backup),
+                     rollback={'backup': str(backup), 'image': old_image, 'commit': old_commit, 'version': old_version})
+        rollback_tag = f'{PROJECT}-rollback:{CURRENT_STATE["job_id"][:12]}'
+        run_command(['docker', 'image', 'tag', old_image, rollback_tag], deployment.env, 60)
+        update_state(step=4, progress=75, step_name='Міграції та запуск зібраного образу')
+        append_log('Крок 4/5: Застосовуємо ревізію і запускаємо зібраний образ…')
+        deploy_started = True
+        run_command(['git', 'merge', '--ff-only', commit], deployment.env, 60)
+        deployment.select_image(image)
+        if PROJECT != 'schooltest5':
+            deployment.dc('run', '--rm', '--no-deps', '-T', '-e', 'SKIP_INIT=1', APP_SERVICE,
+                          'python', 'manage.py', 'check')
+            deployment.dc('run', '--rm', '--no-deps', '-T', '-e', 'SKIP_INIT=1', APP_SERVICE,
+                          'python', 'manage.py', 'migrate', '--noinput')
+            deployment.dc('run', '--rm', '--no-deps', '-T', '-e', 'SKIP_INIT=1', APP_SERVICE,
+                          'python', 'manage.py', 'collectstatic', '--noinput')
+        deployment.dc('up', '-d', '--no-build', '--no-deps', '--wait', '--wait-timeout', '180', *WRITERS, timeout=240)
+        if PROJECT == 'schooljournal':
+            deployment.dc('up', '-d', '--no-deps', 'nginx', timeout=120)
+            deployment.dc('restart', 'nginx', timeout=120)
+        update_state(step=5, progress=90, step_name='Перевірка БД, версії та запущеного образу')
+        append_log('Крок 5/5: Перевіряємо готовність і точний образ кожної служби…')
+        verify_deployment(deployment, image, version)
+        append_log(f'✅ Успішно завершено. Встановлено {version}; коміт {commit[:12]}.')
+        update_state(state='success', progress=100, step_name='Успішно завершено', current_version=version, error=None)
     except Exception as exc:
-        err_msg = str(exc)
-        append_log(f"ПОМИЛКА ОНОВЛЕННЯ: {err_msg}")
-        update_state(
-            state='error',
-            error=err_msg,
-            step_name='Помилка під час оновлення'
-        )
-
-        if backup_path and Path(backup_path).exists():
-            append_log(f"АВТОМАТИЧНЕ ВІДНОВЛЕННЯ: Повернення до резервної копії {Path(backup_path).name}...")
+        error = str(exc)
+        append_log(f'❌ Помилка: {error}')
+        rollback_error = None
+        if deploy_started and backup_complete:
             try:
-                restore_proc = subprocess.run(
-                    ['bash', str(ROOT / 'scripts' / 'restore.sh'), backup_path, '--yes', '--no-safety-backup'],
-                    cwd=str(ROOT),
-                    capture_output=True,
-                    text=True,
-                    timeout=300
-                )
-                if restore_proc.returncode == 0:
-                    append_log("Систему успішно відновлено до попередньої стабільної версії з резервної копії.")
-                    update_state(rolled_back=True)
-                else:
-                    append_log(f"Помилка автоматичного відновлення: {restore_proc.stderr or restore_proc.stdout}")
-            except Exception as r_exc:
-                append_log(f"Критична помилка при відновленні: {r_exc}")
+                perform_rollback(deployment, backup, old_image, old_commit, old_version)
+            except Exception as rollback_exc:
+                rollback_error = str(rollback_exc)
+                append_log(f'❌ Помилка відкату: {rollback_error}')
+        elif deployment:
+            try:
+                deployment.dc('start', *WRITERS, timeout=120)
+                installed_health(old_version, timeout=90)
+                append_log('Попередню версію збережено; її готовність перевірено.')
+            except Exception as resume_exc:
+                rollback_error = str(resume_exc)
+        update_state(state='error', error=error, rollback_error=rollback_error,
+                     progress=min(CURRENT_STATE.get('progress', 0), 99),
+                     step_name='Оновлення не вдалося; попередню версію відновлено' if CURRENT_STATE.get('rolled_back') else 'Оновлення не вдалося')
+    finally:
+        if worktree:
+            try:
+                run_command(['git', 'worktree', 'remove', '--force', str(worktree)], timeout=60)
+            except Exception as exc:
+                append_log(f'Очищення робочого дерева: {exc}')
+        if deployment:
+            deployment.close()
+
+
+def execute_rollback_job(backup=None):
+    deployment = None
+    try:
+        info = CURRENT_STATE.get('rollback')
+        if not info or (backup and str(backup) != info['backup']):
+            raise ValueError('Немає перевіреної копії з відповідним образом для цього відкату')
+        if not Path(info['backup']).exists():
+            raise ValueError('Резервну копію не знайдено')
+        if capture(['git', 'status', '--porcelain']):
+            raise ValueError('Відкат вимагає чистого Git checkout')
+        deployment = Deployment()
+        perform_rollback(deployment, info['backup'], info['image'], info['commit'], info['version'])
+        update_state(state='success', progress=100, target_version=info['version'], step_name='Відкат успішно завершено')
+    except Exception as exc:
+        append_log(f'Помилка відкату: {exc}')
+        update_state(state='error', error=str(exc), progress=99)
+    finally:
+        if deployment:
+            deployment.close()
+
+
+def start_job(function, args):
+    """Reserve state and the cross-process maintenance lock before returning HTTP 202."""
+    with STATE_LOCK:
+        if CURRENT_STATE.get('state') == 'running':
+            return None
+        lock = LOCK_FILE.open('a')
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            lock.close()
+            return None
+        job_id = uuid.uuid4().hex
+        update_state(state='running', job_id=job_id, step=1, progress=5, step_name='Підготовка операції',
+                     logs=[], error=None, rollback_error=None, rolled_back=False,
+                     started_at=time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()))
+        def worker():
+            try:
+                function(*args)
+            except Exception as exc:
+                update_state(state='error', error=str(exc), step_name='Помилка служби оновлення', progress=0)
+            finally:
+                fcntl.flock(lock, fcntl.LOCK_UN)
+                lock.close()
+        threading.Thread(target=worker, daemon=True).start()
+        return job_id
 
 
 class UpdaterHTTPHandler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
-        if self.path in ('/', '/health', '/healthz'):
-            self._send_json(200, {'status': 'ok', 'service': 'updater', 'version': get_current_version()})
-        elif self.path in ('/status', '/api/status'):
+        parsed = urlsplit(self.path)
+        if parsed.path in ('/', '/health', '/healthz'):
+            self.send_json(200, {'status': 'ok', 'service': PROJECT + '-updater'})
+        elif parsed.path in ('/status', '/api/status'):
             with STATE_LOCK:
-                st = dict(CURRENT_STATE)
-            self._send_json(200, st)
-        elif self.path in ('/check', '/api/check'):
-            result = check_github_updates()
-            self._send_json(200, result)
+                status = copy.deepcopy(CURRENT_STATE)
+            self.send_json(200, status)
+        elif parsed.path in ('/check', '/api/check'):
+            current = parse_qs(parsed.query).get('current_version', [None])[0]
+            self.send_json(200, check_github_updates(current))
         else:
-            self._send_json(404, {'error': 'Маршрут не знайдено'})
+            self.send_json(404, {'ok': False, 'error': 'Маршрут не знайдено'})
 
     def do_POST(self):
-        content_len = int(self.headers.get('Content-Length', 0))
-        body = self.rfile.read(content_len).decode('utf-8') if content_len > 0 else '{}'
         try:
-            data = json.loads(body)
-        except Exception:
-            data = {}
-
-        if self.path in ('/check', '/api/check'):
-            result = check_github_updates()
-            self._send_json(200, result)
-
-        elif self.path in ('/update', '/api/update'):
-            with STATE_LOCK:
-                if CURRENT_STATE.get('state') == 'running':
-                    self._send_json(409, {'error': 'Оновлення вже виконується'})
-                    return
-            target_ref = data.get('ref', 'origin/main')
-            target_ver = data.get('version')
-            thread = threading.Thread(target=execute_update_job, args=(target_ref, target_ver), daemon=True)
-            thread.start()
-            self._send_json(200, {'ok': True, 'message': 'Оновлення розпочато', 'target_version': target_ver})
-
-        elif self.path in ('/rollback', '/api/rollback'):
-            backup = data.get('backup_file') or CURRENT_STATE.get('backup_file')
-            if not backup or not Path(backup).exists():
-                self._send_json(400, {'error': 'Файл резервної копії не знайдено'})
+            length = int(self.headers.get('Content-Length', 0))
+            if length < 0 or length > 65536:
+                raise ValueError('Некоректний розмір запиту')
+            data = json.loads(self.rfile.read(length) or b'{}')
+            if not isinstance(data, dict):
+                raise ValueError('Очікується JSON object')
+            if self.path in ('/check', '/api/check'):
+                self.send_json(200, check_github_updates(data.get('current_version')))
                 return
-            def run_rollback():
-                append_log(f"Ручний запуск відновлення з {backup}...")
-                proc = subprocess.run(
-                    ['bash', str(ROOT / 'scripts' / 'restore.sh'), backup, '--yes', '--no-safety-backup'],
-                    cwd=str(ROOT),
-                    capture_output=True,
-                    text=True
-                )
-                if proc.returncode == 0:
-                    append_log("Відновлення успішно завершено.")
-                    update_state(state='idle', rolled_back=True, error=None)
-                else:
-                    append_log(f"Помилка відновлення: {proc.stderr or proc.stdout}")
-            threading.Thread(target=run_rollback, daemon=True).start()
-            self._send_json(200, {'ok': True, 'message': 'Відновлення запущено'})
-        else:
-            self._send_json(404, {'error': 'Маршрут не знайдено'})
+            if self.path in ('/update', '/api/update'):
+                ref = data.get('ref', 'origin/main')
+                if ref not in ('HEAD', 'origin/main'):
+                    raise ValueError('Дозволено лише origin/main або HEAD')
+                job_id = start_job(execute_update_job, (ref, data.get('version')))
+            elif self.path in ('/rollback', '/api/rollback'):
+                job_id = start_job(execute_rollback_job, (data.get('backup_file') or data.get('backup_dir'),))
+            else:
+                self.send_json(404, {'ok': False, 'error': 'Маршрут не знайдено'})
+                return
+            self.send_json(202 if job_id else 409, {'ok': bool(job_id), 'job_id': job_id,
+                           'error': None if job_id else 'Інша операція обслуговування вже виконується'})
+        except (ValueError, TypeError) as exc:
+            self.send_json(400, {'ok': False, 'error': str(exc)})
 
-    def _send_json(self, status, payload):
-        text = json.dumps(payload, ensure_ascii=False)
-        self.send_response(status)
+    def send_json(self, code, payload):
+        body = json.dumps(payload, ensure_ascii=False).encode('utf-8')
+        self.send_response(code)
         self.send_header('Content-Type', 'application/json; charset=utf-8')
-        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Content-Length', str(len(body)))
+        self.send_header('Cache-Control', 'no-store')
         self.end_headers()
-        self.wfile.write(text.encode('utf-8'))
+        try:
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
 
-    def log_message(self, format, *args):
+    def log_message(self, *args):
         pass
 
 
 def run_server(port=8001):
-    try:
-        subprocess.run(['git', 'config', '--global', '--add', 'safe.directory', '*'], check=False)
-    except Exception:
-        pass
-    socketserver.TCPServer.allow_reuse_address = True
-    with socketserver.TCPServer(('0.0.0.0', port), UpdaterHTTPHandler) as httpd:
-        print(f"SchoolNet Updater service listening on 0.0.0.0:{port}...")
-        save_status()
-        httpd.serve_forever()
+    # Trust only the mounted checkout, not arbitrary repositories.
+    subprocess.run(['git', 'config', '--global', '--add', 'safe.directory', str(ROOT)], check=True)
+    load_status()
+    http.server.ThreadingHTTPServer.allow_reuse_address = True
+    with http.server.ThreadingHTTPServer(('0.0.0.0', port), UpdaterHTTPHandler) as server:
+        print(f'{PROJECT} updater on :{port}', flush=True)
+        server.serve_forever()
 
 
 if __name__ == '__main__':
-    port = int(os.environ.get('UPDATER_PORT', 8001))
-    run_server(port)
+    run_server(int(os.environ.get('UPDATER_PORT', 8001)))
