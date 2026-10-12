@@ -131,6 +131,10 @@ class SystemUpdatesViewAndAPITests(TestCase):
         self.assertContains(resp, '⚡ Перезібрати поточну версію')
         self.assertContains(resp, 'Опис встановленої версії')
         self.assertContains(resp, 'Скопіювати помилку та журнал')
+        self.assertContains(resp, 'onclick="checkUpdates()"', count=1)
+        self.assertContains(resp, '<details id="updateProgressSection"')
+        self.assertNotContains(resp, 'initialCheckPrompt')
+        self.assertNotContains(resp, 'progressTargetVersion')
         self.assertTrue(resp.context['can_update'])
 
     def test_superadmin_mode_session_allows_access(self):
