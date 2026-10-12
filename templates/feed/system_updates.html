@@ -436,19 +436,38 @@
 }
 
 /* ── Модальне вікно підтвердження ─────────────────────────────────────── */
+[hidden] {
+    display: none !important;
+}
+
+#restartAlert {
+    display: none;
+}
+#restartAlert:not([hidden]) {
+    display: flex !important;
+}
+
 .custom-modal-backdrop {
+    display: none !important;
     position: fixed;
     top: 0;
     left: 0;
     right: 0;
     bottom: 0;
-    background: rgba(15, 23, 42, 0.65);
+    background: rgba(15, 23, 42, 0.7);
     backdrop-filter: blur(4px);
-    display: flex;
     align-items: center;
     justify-content: center;
     z-index: 2000;
     padding: 16px;
+}
+
+.custom-modal-backdrop.is-open {
+    display: flex !important;
+}
+
+.custom-modal-backdrop[hidden] {
+    display: none !important;
 }
 
 .custom-modal-dialog {
@@ -560,6 +579,20 @@
                 </div>
             </div>
 
+            <!-- Початкова підказка перед перевіркою -->
+            <div id="initialCheckPrompt" class="version-status-card" style="border: 1px dashed var(--color-border); text-align: center; padding: 36px 20px; background: var(--color-surface); margin-top: 16px;">
+                <div style="font-size: 38px; margin-bottom: 10px;">🔍</div>
+                <div style="font-size: 16px; font-weight: 800; color: var(--color-text-primary); margin-bottom: 6px;">
+                    Перевірка оновлень на GitHub
+                </div>
+                <div style="font-size: 13.5px; color: var(--color-text-secondary); max-width: 520px; margin: 0 auto 18px; line-height: 1.5;">
+                    Натисніть кнопку, щоб отримати актуальну інформацію про випуски з GitHub, переглянути перелік змін усіх версій та підготувати систему до оновлення.
+                </div>
+                <button type="button" class="btn btn-primary" onclick="checkUpdates()" style="font-weight: 700; padding: 10px 24px; font-size: 14px; box-shadow: 0 4px 12px rgba(99, 102, 241, 0.25);">
+                    🔍 Перевірити наявність оновлень
+                </button>
+            </div>
+
             <!-- Блок результатів перевірки -->
             <div id="updateCheckResult" hidden></div>
 
@@ -627,7 +660,7 @@
                 </div>
 
                 <!-- Сповіщення при перезапуску контейнерів -->
-                <div id="restartAlert" class="alert alert-info" style="margin-top: 16px; display: flex; align-items: center; gap: 12px; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: var(--radius-md); padding: 12px 16px;" hidden>
+                <div id="restartAlert" class="alert alert-info" style="margin-top: 16px; align-items: center; gap: 12px; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: var(--radius-md); padding: 12px 16px;" hidden>
                     <span class="spinner-border spinner-border-sm" style="width: 18px; height: 18px; border: 2px solid #2563eb; border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; flex-shrink: 0;"></span>
                     <div style="font-size: 13px; color: var(--color-text-primary);">
                         <strong>Перезапуск вебсервісу:</strong> Контейнер застосовує міграції та перевіряє цілісність даних. Зв'язок відновиться автоматично за кілька секунд.
@@ -638,7 +671,7 @@
                 <div id="successAlert" class="alert alert-success" style="margin-top: 16px; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: var(--radius-md); padding: 16px; color: #065f46;" hidden>
                     <div style="font-size: 16px; font-weight: 800; margin-bottom: 4px;">🎉 Оновлення успішно завершено!</div>
                     <div style="font-size: 13px;">
-                        Встановлено нову версію системи. Перевірку справності пройfieldо успішно. Сторінка оновиться через <span id="reloadCountdown" style="font-weight: 800;">3</span> сек…
+                        Встановлено нову версію системи. Перевірку справності пройдено успішно. Сторінка оновиться через <span id="reloadCountdown" style="font-weight: 800;">3</span> сек…
                     </div>
                 </div>
 
@@ -678,21 +711,26 @@
 </div>
 
 <!-- ════ МОДАЛЬНЕ ВІКНО ПІДТВЕРДЖЕННЯ ОНОВЛЕННЯ ═════════════════════════════ -->
-<div id="confirmModal" class="custom-modal-backdrop" hidden>
-    <div class="custom-modal-dialog">
+<div id="confirmModal" class="custom-modal-backdrop" style="display: none !important;" onclick="closeConfirmModal()" hidden>
+    <div class="custom-modal-dialog" onclick="event.stopPropagation()">
         <div class="custom-modal-header">
             <h3>🚀 Підтвердження оновлення системи</h3>
-            <button type="button" class="btn-close-modal" onclick="closeConfirmModal()">✕</button>
+            <button type="button" class="btn-close-modal" onclick="closeConfirmModal()" aria-label="Закрити">✕</button>
         </div>
         <div class="custom-modal-body">
-            <div style="background: rgba(99, 102, 241, 0.08); border: 1px solid rgba(99, 102, 241, 0.2); border-radius: var(--radius-md); padding: 14px 16px; margin-bottom: 18px;">
+            <div style="background: rgba(99, 102, 241, 0.08); border: 1px solid rgba(99, 102, 241, 0.2); border-radius: var(--radius-md); padding: 14px 16px; margin-bottom: 14px;">
                 <div style="font-size: 14px; font-weight: 800; color: var(--color-primary); margin-bottom: 4px;">
-                    Оновлення до версії <span id="modalTargetVersion" style="font-family: monospace;">...</span>
+                    Оновлення до версії <span id="modalTargetVersion" style="font-family: monospace; font-size: 15px;">...</span>
                 </div>
                 <div style="font-size: 12.5px; color: var(--color-text-secondary); line-height: 1.4;">
-                    Перед запуском буде створено повний перевірений знімок бази даних та завантажених робіт учнів.
-                    У разі будь-яких труднощів або відсутності зв'язку система автоматично відкотиться назад.
+                    Перед запуском буде створено повний перевірений знімок бази даних PostgreSQL та завантажених робіт учнів.
+                    У разі будь-яких труднощів або відсутності зв'язку система автоматично повернеться до робочого стану.
                 </div>
+            </div>
+
+            <div class="alert alert-warning" style="font-size: 13px; margin-bottom: 16px; padding: 10px 14px; border-radius: var(--radius-md); background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.25); color: #92400e; display: flex; align-items: center; gap: 8px;">
+                <span>⚠️</span>
+                <div><strong>Увага:</strong> Під час оновлення сервіс буде короткочасно перезапущено (близько 15–30 секунд) для застосування нових міграцій.</div>
             </div>
 
             <!-- Детальний перелік змін усіх проміжних версій у модалці -->
@@ -703,8 +741,8 @@
         </div>
         <div class="custom-modal-footer">
             <button type="button" class="btn btn-secondary" onclick="closeConfirmModal()">Скасувати</button>
-            <button type="button" class="btn btn-primary" onclick="proceedWithUpdate()" style="font-weight: 700;">
-                🚀 Почати оновлення
+            <button type="button" class="btn btn-primary" onclick="proceedWithUpdate()" style="font-weight: 700; box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35);">
+                🚀 Розпочати оновлення зараз
             </button>
         </div>
     </div>
@@ -739,10 +777,12 @@ async function checkUpdates() {
     const spinner = document.getElementById('checkSpinner');
     const btnText = document.getElementById('btnCheckText');
     const resultBox = document.getElementById('updateCheckResult');
+    const initPrompt = document.getElementById('initialCheckPrompt');
 
-    btn.disabled = true;
-    spinner.style.display = 'inline-block';
-    btnText.textContent = 'Перевірка GitHub…';
+    if (btn) btn.disabled = true;
+    if (spinner) spinner.style.display = 'inline-block';
+    if (btnText) btnText.textContent = 'Перевірка GitHub…';
+    if (initPrompt) initPrompt.hidden = true;
     resultBox.hidden = true;
 
     try {
@@ -757,7 +797,8 @@ async function checkUpdates() {
             resultBox.innerHTML = `
                 <div class="version-status-card" style="border-left: 4px solid #ef4444;">
                     <div style="font-weight: 800; color: #dc2626; margin-bottom: 4px;">⚠️ Не вдалося зв'язатися з GitHub</div>
-                    <div style="font-size: 13px; color: var(--color-text-secondary);">${escapeHtml(data.error || 'Помилка мережі')}</div>
+                    <div style="font-size: 13px; color: var(--color-text-secondary); margin-bottom: 10px;">${escapeHtml(data.error || 'Помилка мережі')}</div>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="checkUpdates()">Спробувати знову</button>
                 </div>
             `;
             return;
@@ -773,14 +814,19 @@ async function checkUpdates() {
         } else {
             resultBox.innerHTML = `
                 <div class="version-status-card" style="border-left: 4px solid #10b981; background: rgba(16, 185, 129, 0.04);">
-                    <div style="display: flex; align-items: center; gap: 10px;">
-                        <span style="font-size: 24px;">🎉</span>
-                        <div>
-                            <div style="font-size: 15px; font-weight: 800; color: #065f46;">У вас встановлено найновішу версію!</div>
-                            <div style="font-size: 13px; color: var(--color-text-secondary); margin-top: 2px;">
-                                Поточна версія <strong>v${escapeHtml(data.current_version)}</strong> є повністю актуальною. Новіших випусків на GitHub не знайдено.
+                    <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <span style="font-size: 28px;">🎉</span>
+                            <div>
+                                <div style="font-size: 15px; font-weight: 800; color: #065f46;">У вас встановлено найновішу версію!</div>
+                                <div style="font-size: 13px; color: var(--color-text-secondary); margin-top: 2px;">
+                                    Поточна версія <strong>v${escapeHtml(data.current_version)}</strong> є повністю актуальною. Новіших випусків на GitHub не знайдено.
+                                </div>
                             </div>
                         </div>
+                        <button type="button" class="btn btn-secondary btn-sm" onclick="checkUpdates()">
+                            Перевірити знову
+                        </button>
                     </div>
                 </div>
             `;
@@ -789,13 +835,14 @@ async function checkUpdates() {
         resultBox.hidden = false;
         resultBox.innerHTML = `
             <div class="version-status-card" style="border-left: 4px solid #ef4444;">
-                <div style="font-weight: 800; color: #dc2626;">Помилка зв'язку з вебсервером: ${escapeHtml(err.message)}</div>
+                <div style="font-weight: 800; color: #dc2626; margin-bottom: 4px;">Помилка зв'язку з вебсервером: ${escapeHtml(err.message)}</div>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="checkUpdates()">Спробувати знову</button>
             </div>
         `;
     } finally {
-        btn.disabled = false;
-        spinner.style.display = 'none';
-        btnText.textContent = '🔍 Перевірити наявність оновлень';
+        if (btn) btn.disabled = false;
+        if (spinner) spinner.style.display = 'none';
+        if (btnText) btnText.textContent = '🔍 Перевірити наявність оновлень';
     }
 }
 
@@ -861,7 +908,7 @@ function renderAvailableUpdateCard(data) {
                     </div>
                 </div>
                 <div>
-                    <button type="button" class="btn btn-primary" onclick="openConfirmModal()" style="font-weight: 800; padding: 10px 22px; font-size: 14px; box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35);">
+                    <button type="button" class="btn btn-primary" onclick="openConfirmModal('${escapeHtml(data.latest_version)}')" style="font-weight: 800; padding: 10px 22px; font-size: 14px; box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35);">
                         🚀 Оновити до v${escapeHtml(data.latest_version)}
                     </button>
                 </div>
@@ -878,15 +925,34 @@ function renderAvailableUpdateCard(data) {
 }
 
 // ── Модальне вікно підтвердження ──────────────────────────────────────────
-function openConfirmModal() {
-    document.getElementById('modalTargetVersion').textContent = `v${currentTargetVersion || 'останньої'}`;
+function openConfirmModal(ver) {
+    if (ver) {
+        currentTargetVersion = ver;
+    }
+    const targetVerText = currentTargetVersion ? `v${currentTargetVersion}` : 'нової версії';
+    document.getElementById('modalTargetVersion').textContent = targetVerText;
     const modalChangelog = document.getElementById('modalChangelogList');
-    modalChangelog.innerHTML = renderChangelogHtml(currentReleasesBetween);
-    document.getElementById('confirmModal').hidden = false;
+    if (currentReleasesBetween && currentReleasesBetween.length > 0) {
+        modalChangelog.innerHTML = renderChangelogHtml(currentReleasesBetween);
+    } else {
+        modalChangelog.innerHTML = `
+            <div class="release-version-block">
+                <div class="release-v-title">Планове оновлення системи</div>
+                <div style="font-size: 13px; color: var(--color-text-secondary);">Оптимізація та оновлення модулів SchoolNet.</div>
+            </div>
+        `;
+    }
+    const modal = document.getElementById('confirmModal');
+    modal.classList.add('is-open');
+    modal.style.setProperty('display', 'flex', 'important');
+    modal.hidden = false;
 }
 
 function closeConfirmModal() {
-    document.getElementById('confirmModal').hidden = true;
+    const modal = document.getElementById('confirmModal');
+    modal.classList.remove('is-open');
+    modal.style.setProperty('display', 'none', 'important');
+    modal.hidden = true;
 }
 
 // ── Запуск процесу оновлення ──────────────────────────────────────────────
@@ -1114,8 +1180,16 @@ async function triggerManualRollback() {
 function resetUpdateUI() {
     document.getElementById('updateProgressSection').hidden = true;
     document.getElementById('errorAlert').hidden = true;
+    const initPrompt = document.getElementById('initialCheckPrompt');
+    if (initPrompt) initPrompt.hidden = false;
     isUpdating = false;
 }
+
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        closeConfirmModal();
+    }
+});
 
 function toggleTerminal() {
     document.getElementById('terminalBody').classList.toggle('collapsed');

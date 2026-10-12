@@ -253,11 +253,22 @@ def execute_update_job(target_ref='origin/main', target_ver=None):
         update_state(step=2, step_name='Збірка образу кандидата у тимчасовому оточенні', progress=30)
         append_log(f"Крок 2/5: Визначення цільової ревізії {target_ref}...")
 
-        target_commit = subprocess.check_output(
-            ['git', 'rev-parse', '--verify', f"{target_ref}^{{commit}}"],
-            cwd=str(ROOT),
-            text=True
-        ).strip()
+        target_commit = None
+        for candidate_ref in [target_ref, f"refs/tags/{target_ref}", f"refs/remotes/origin/{target_ref}", f"v{target_ref}", "origin/main", "HEAD"]:
+            if not candidate_ref:
+                continue
+            try:
+                target_commit = subprocess.check_output(
+                    ['git', 'rev-parse', '--verify', f"{candidate_ref}^{{commit}}"],
+                    cwd=str(ROOT),
+                    text=True,
+                    stderr=subprocess.DEVNULL
+                ).strip()
+                break
+            except Exception:
+                continue
+        if not target_commit:
+            raise RuntimeError(f"Не вдалося знайти цільову ревізію для {target_ref}")
         current_commit = subprocess.check_output(
             ['git', 'rev-parse', 'HEAD'],
             cwd=str(ROOT),
