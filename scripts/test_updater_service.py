@@ -58,7 +58,8 @@ class UpdaterServiceUnitTests(unittest.TestCase):
                 return resp
             raise ValueError(f"Unknown {url}")
 
-        with patch('urllib.request.urlopen', side_effect=fake_urlopen):
+        with patch.object(updater, 'get_current_version', return_value='4.4.4'), \
+             patch('urllib.request.urlopen', side_effect=fake_urlopen):
             res = updater.check_github_updates()
             self.assertTrue(res['ok'])
             self.assertTrue(res['has_update'])

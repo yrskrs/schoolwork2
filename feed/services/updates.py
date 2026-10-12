@@ -25,7 +25,7 @@ def get_current_local_version():
         from feed.changelog import SITE_VERSION
         return SITE_VERSION
     except Exception:
-        return '4.4.4'
+        return '4.4.5'
 
 
 def parse_version_tuple(version_str):

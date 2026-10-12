@@ -43,7 +43,7 @@ def get_current_version():
     version_file = ROOT / 'VERSION'
     if version_file.exists():
         return version_file.read_text(encoding='utf-8').strip()
-    return '4.4.4'
+    return '4.4.5'
 
 
 def save_status():
