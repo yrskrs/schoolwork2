@@ -1,0 +1,27 @@
+.assignment-export { max-width: 1050px; }
+.assignment-export p { line-height: 1.6; }
+.export-heading, .export-actions, .export-selection-bar, .export-day-heading {
+    display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;
+}
+.export-actions { justify-content: flex-start; }
+.export-card { margin: 16px 0; padding: 18px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); }
+.export-filter-fields { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.export-filter-fields .form-input { width: 100%; min-width: 0; }
+.export-weekdays { margin: 0 0 16px; padding: 0; border: 0; }
+.export-weekdays legend { margin-bottom: 8px; font-weight: 700; font-size: 13px; }
+.export-weekdays > div { display: flex; flex-wrap: wrap; gap: 10px 18px; }
+.assignment-export input[type="checkbox"] { width: 18px; height: 18px; vertical-align: middle; flex-shrink: 0; accent-color: var(--color-primary); }
+.export-day-heading label, .export-weekdays label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.export-muted, .export-assignment-meta { color: var(--color-text-secondary); font-size: 13px; }
+.export-day-heading { padding-bottom: 12px; }
+.export-assignment { display: flex; align-items: flex-start; gap: 12px; padding: 14px 0; border-top: 1px solid var(--color-border); cursor: pointer; }
+.export-assignment input { margin-top: 3px; }
+.export-assignment-info { display: flex; flex-direction: column; gap: 5px; min-width: 0; overflow-wrap: anywhere; }
+.export-assignment:hover { background: var(--color-bg-secondary); }
+.assignment-export .errorlist { color: var(--color-danger); font-size: 13px; padding-left: 20px; }
+@media (max-width: 760px) { .export-filter-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 420px) {
+    .export-filter-fields { grid-template-columns: minmax(0, 1fr); }
+    .export-card { padding: 14px; }
+    .export-selection-bar > button { width: 100%; }
+}

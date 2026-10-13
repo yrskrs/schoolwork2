@@ -8736,357 +8736,87 @@ def update_conducted_lessons(request):
 
 @teacher_required
 def export_assignment_zip(request, pk):
-    """
-    Експорт конкретного завдання з усіма його файлами у структурований ZIP-пакет для флешки.
-    """
-    import zipfile
-    import io
-    import json
-    from django.http import HttpResponse
+    from .assignment_archive import archive_assignments, export_bundle
 
     teacher = request.user.teacher_profile
+    assignments = archive_assignments(teacher)
     if request.user.is_superuser or request.session.get('superadmin_mode'):
-        assignment = get_object_or_404(Assignment, pk=pk)
-    else:
-        assignment = get_object_or_404(Assignment, pk=pk, teacher=teacher)
-
-    zip_buffer = tempfile.TemporaryFile(mode='w+b')
-    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-        files_metadata = []
-        for idx, af in enumerate(assignment.files.all()):
-            if af.file and os.path.exists(af.file.path):
-                ext = af.get_extension() or ''
-                safe_name = os.path.basename(af.original_name or af.file.name)
-                arc_name = f"files/{idx+1}_{safe_name}"
-                zip_file.write(af.file.path, arc_name)
-                files_metadata.append({
-                    'original_name': af.original_name or safe_name,
-                    'zip_path': arc_name,
-                    'file_type': af.get_file_type(),
-                    'is_task_source_for_ai': af.is_task_source_for_ai,
-                })
-
-        # Прив'язки до розкладу
-        st_list = []
-        for st in assignment.schedule_targets.all():
-            st_list.append({
-                'class_name': st.class_group.name if st.class_group else '',
-                'target_date': st.target_date.strftime('%Y-%m-%d') if st.target_date else None,
-                'target_day_of_week': st.target_day_of_week,
-                'lesson_number': st.bell_slot.lesson_number if st.bell_slot else None,
-            })
-
-        assignment_data = {
-            'title': assignment.title,
-            'description': assignment.description,
-            'subject_name': assignment.subject.name if assignment.subject else None,
-            'subject_color': assignment.subject.color if assignment.subject else '#2563eb',
-            'subject_icon': assignment.subject.icon if assignment.subject else '📚',
-            'class_names': [c.name for c in assignment.classes.all()],
-            'is_individual': assignment.is_individual,
-            'student_name': assignment.student_name,
-            'link_url': assignment.link_url,
-            'link_label': assignment.link_label,
-            'youtube_url': assignment.youtube_url,
-            'status': assignment.status,
-            'due_date': assignment.due_date.strftime('%Y-%m-%d') if assignment.due_date else None,
-            'allow_student_ai_check': assignment.allow_student_ai_check,
-            'allow_ai_usage': assignment.allow_ai_usage,
-            'custom_criteria': assignment.custom_criteria,
-            'ai_policy': export_ai_policy(assignment, zip_file),
-            'no_submission_required': assignment.no_submission_required,
-            'additional_links': [{'url': l.url, 'label': l.label} for l in assignment.additional_links.all()],
-            'youtube_links': [{'url': y.url, 'title': y.title} for y in assignment.youtube_links.all()],
-            'schedule_targets': st_list,
-            'files': files_metadata,
-        }
-
-        manifest = {
-            'version': '1.0',
-            'exported_at': timezone.now().isoformat(),
-            'teacher_name': teacher.full_name,
-            'assignments': [assignment_data]
-        }
-
-        zip_file.writestr('manifest.json', json.dumps(manifest, ensure_ascii=False, indent=2))
-
-    zip_buffer.seek(0)
-    safe_title = "".join(c for c in assignment.title if c.isalnum() or c in (' ', '_', '-')).strip()[:40] or "task"
-    filename = f"schoolnet_task_{assignment.id}_{safe_title}.zip"
-
-    response = FileResponse(zip_buffer, as_attachment=True, filename=filename, content_type='application/zip')
-    return response
+        assignments = assignments.model.objects.select_related('subject', 'default_ai_preset').prefetch_related(
+            'classes', 'files', 'additional_links', 'youtube_links',
+            'schedule_targets__class_group', 'schedule_targets__bell_slot')
+    assignment = get_object_or_404(assignments, pk=pk)
+    try:
+        buffer = export_bundle([assignment], teacher)
+    except ValueError as error:
+        messages.error(request, str(error))
+        return redirect('teacher_dashboard')
+    title = ''.join(char for char in assignment.title if char.isalnum() or char in ' _-').strip()[:40] or 'task'
+    return FileResponse(buffer, as_attachment=True, filename=f'schoolnet_task_{pk}_{title}.zip',
+                        content_type='application/zip')
 
 
 @teacher_required
 def export_assignments_day_zip(request):
-    """
-    Масовий експорт завдань на обраний день або всіх активних завдань вчителя у ZIP-пакет для флешки.
-    """
-    import zipfile
-    import io
-    import json
-    from django.http import HttpResponse
+    from .assignment_archive import archive_assignments, export_bundle, ExportSelectionForm, export_selection_groups
 
     teacher = request.user.teacher_profile
-    date_str = request.GET.get('date')
-    if date_str:
-        try:
-            target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
-        except ValueError:
-            target_date = timezone.localtime(timezone.now()).date()
-    else:
-        target_date = timezone.localtime(timezone.now()).date()
-
-    # Завдання, прив'язані до цієї дати уроку або створені/опубліковані в цей день
-    assignments = list(Assignment.objects.filter(
-        Q(schedule_targets__target_date=target_date) | Q(published_at__date=target_date),
-        teacher=teacher
-    ).distinct())
-
-    if not assignments:
-        # Якщо немає на дату, експортуємо останні активні опубліковані завдання
-        assignments = list(Assignment.objects.filter(
-            teacher=teacher,
-            status=Assignment.STATUS_PUBLISHED
-        ).order_by('-published_at')[:10])
-
-    if not assignments:
-        messages.warning(request, "Не знайдено завдань для експорту на цю дату.")
-        return redirect('teacher_dashboard')
-
-    zip_buffer = tempfile.TemporaryFile(mode='w+b')
-    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-        assignments_meta = []
-        for a_idx, assignment in enumerate(assignments):
-            files_metadata = []
-            for f_idx, af in enumerate(assignment.files.all()):
-                if af.file and os.path.exists(af.file.path):
-                    safe_name = os.path.basename(af.original_name or af.file.name)
-                    arc_name = f"files/task_{a_idx+1}_{f_idx+1}_{safe_name}"
-                    zip_file.write(af.file.path, arc_name)
-                    files_metadata.append({
-                        'original_name': af.original_name or safe_name,
-                        'zip_path': arc_name,
-                        'file_type': af.get_file_type(),
-                    'is_task_source_for_ai': af.is_task_source_for_ai,
-                    })
-
-            st_list = []
-            for st in assignment.schedule_targets.all():
-                st_list.append({
-                    'class_name': st.class_group.name if st.class_group else '',
-                    'target_date': st.target_date.strftime('%Y-%m-%d') if st.target_date else None,
-                    'target_day_of_week': st.target_day_of_week,
-                    'lesson_number': st.bell_slot.lesson_number if st.bell_slot else None,
-                })
-
-            assignments_meta.append({
-                'title': assignment.title,
-                'description': assignment.description,
-                'subject_name': assignment.subject.name if assignment.subject else None,
-                'subject_color': assignment.subject.color if assignment.subject else '#2563eb',
-                'subject_icon': assignment.subject.icon if assignment.subject else '📚',
-                'class_names': [c.name for c in assignment.classes.all()],
-                'is_individual': assignment.is_individual,
-                'student_name': assignment.student_name,
-                'link_url': assignment.link_url,
-                'link_label': assignment.link_label,
-                'youtube_url': assignment.youtube_url,
-                'status': assignment.status,
-                'due_date': assignment.due_date.strftime('%Y-%m-%d') if assignment.due_date else None,
-                'allow_student_ai_check': assignment.allow_student_ai_check,
-                'allow_ai_usage': assignment.allow_ai_usage,
-                'custom_criteria': assignment.custom_criteria,
-                'ai_policy': export_ai_policy(assignment, zip_file),
-                'no_submission_required': assignment.no_submission_required,
-                'additional_links': [{'url': l.url, 'label': l.label} for l in assignment.additional_links.all()],
-                'youtube_links': [{'url': y.url, 'title': y.title} for y in assignment.youtube_links.all()],
-                'schedule_targets': st_list,
-                'files': files_metadata,
-            })
-
-        manifest = {
-            'version': '1.0',
-            'exported_at': timezone.now().isoformat(),
-            'teacher_name': teacher.full_name,
-            'target_date': target_date.strftime('%Y-%m-%d'),
-            'assignments': assignments_meta,
-        }
-        zip_file.writestr('manifest.json', json.dumps(manifest, ensure_ascii=False, indent=2))
-
-    zip_buffer.seek(0)
-    filename = f"schoolnet_export_{target_date.strftime('%Y%m%d')}_{len(assignments)}_tasks.zip"
-    response = FileResponse(zip_buffer, as_attachment=True, filename=filename, content_type='application/zip')
-    return response
+    assignments = archive_assignments(teacher)
+    selection_error = ''
+    selected_ids = set()
+    response_status = 200
+    if request.method == 'POST':
+        raw_ids = request.POST.getlist('assignments')
+        if not raw_ids:
+            selection_error = 'Позначте хоча б одне завдання або оберіть цілий день.'
+        else:
+            try:
+                try:
+                    selected_ids = {int(value) for value in raw_ids}
+                except ValueError:
+                    raise ValueError('Некоректний вибір завдань.') from None
+                if any(value < 1 or value > 9223372036854775807 for value in selected_ids):
+                    raise ValueError('Некоректний вибір завдань.')
+                selected = list(assignments.filter(pk__in=selected_ids).order_by('pk'))
+                if {assignment.pk for assignment in selected} != selected_ids:
+                    selection_error = 'Одне з обраних завдань недоступне. Оновіть список і повторіть вибір.'
+                    response_status = 400
+                else:
+                    buffer = export_bundle(selected, teacher)
+                    stamp = timezone.localdate().strftime('%Y%m%d')
+                    return FileResponse(buffer, as_attachment=True,
+                                        filename=f'schoolnet_export_{stamp}_{len(selected)}_tasks.zip',
+                                        content_type='application/zip')
+            except (ValueError, OverflowError) as error:
+                selection_error = str(error) if isinstance(error, ValueError) else 'Некоректний вибір завдань.'
+                response_status = 400
+    form = ExportSelectionForm(request.GET)
+    groups = export_selection_groups(assignments, form.cleaned_data) if form.is_valid() else []
+    return render(request, 'feed/export_assignments.html', {
+        'teacher': teacher, 'filter_form': form, 'groups': groups,
+        'assignment_count': len({row['assignment'].pk for group in groups for row in group['rows']}),
+        'selection_error': selection_error, 'selected_ids': selected_ids,
+    }, status=response_status)
 
 
 @teacher_required
 def import_assignments_zip(request):
-    """
-    Імпорт завдань із ZIP-пакету з флешки (відновлює завдання, налаштування та бінарні файли).
-    """
-    import zipfile
-    import json
-    from django.core.files.base import ContentFile
-
-    teacher = request.user.teacher_profile
+    from .assignment_archive import import_bundle
 
     if request.method == 'POST':
-        zip_file = request.FILES.get('archive')
-        if not zip_file:
-            messages.error(request, 'Будь ласка, оберіть ZIP-архів із завданнями для завантаження.')
+        archive = request.FILES.get('archive')
+        if not archive:
+            messages.error(request, 'Оберіть ZIP-архів із завданнями.')
             return redirect('teacher_dashboard')
-
         try:
-            with zipfile.ZipFile(zip_file, 'r') as zf:
-                if 'manifest.json' not in zf.namelist():
-                    messages.error(request, 'Некоректний ZIP-архів: відсутній файл опису manifest.json.')
-                    return redirect('teacher_dashboard')
-
-                manifest_content = zf.read('manifest.json').decode('utf-8')
-                manifest = json.loads(manifest_content)
-
-                assignments_data = manifest.get('assignments', [])
-                if not assignments_data:
-                    messages.warning(request, 'В архіві не знайдено жодного завдання для імпорту.')
-                    return redirect('teacher_dashboard')
-
-                imported_count = 0
-                imported_files_count = 0
-
-                for a_data in assignments_data:
-                    # 1. Предмет
-                    subject = None
-                    s_name = a_data.get('subject_name')
-                    if s_name and str(s_name).strip():
-                        subject, _ = Subject.objects.get_or_create(
-                            name=str(s_name).strip(),
-                            defaults={
-                                'color': a_data.get('subject_color', '#2563eb'),
-                                'icon': a_data.get('subject_icon', '📚')
-                            }
-                        )
-                        teacher.subjects.add(subject)
-
-                    # 2. Термін виконання
-                    due_d = None
-                    if a_data.get('due_date'):
-                        try:
-                            due_d = datetime.strptime(a_data['due_date'], '%Y-%m-%d').date()
-                        except ValueError:
-                            pass
-
-                    # 3. Створюємо завдання
-                    assignment = Assignment.objects.create(
-                        teacher=teacher,
-                        subject=subject,
-                        title=a_data.get('title', 'Імпортоване завдання'),
-                        description=a_data.get('description', ''),
-                        is_individual=bool(a_data.get('is_individual', False)),
-                        student_name=a_data.get('student_name', ''),
-                        link_url=a_data.get('link_url', ''),
-                        link_label=a_data.get('link_label', ''),
-                        youtube_url=a_data.get('youtube_url', ''),
-                        status=a_data.get('status', Assignment.STATUS_PUBLISHED),
-                        due_date=due_d,
-                        published_at=timezone.now(),
-                        allow_student_ai_check=bool(a_data.get('allow_student_ai_check', False)),
-                        allow_ai_usage=bool(a_data.get('allow_ai_usage', False)),
-                        custom_criteria=a_data.get('custom_criteria', ''),
-                        no_submission_required=bool(a_data.get('no_submission_required', False)),
-                    )
-
-                    # 4. Прив'язка класів
-                    for c_name in a_data.get('class_names', []):
-                        if c_name and str(c_name).strip():
-                            cg, _ = ClassGroup.objects.get_or_create(name=str(c_name).strip())
-                            assignment.classes.add(cg)
-                            teacher.classes.add(cg)
-
-                    import_ai_policy(assignment, a_data.get('ai_policy'), zf)
-
-                    # 5. Додаткові посилання
-                    for link_item in a_data.get('additional_links', []):
-                        if link_item.get('url'):
-                            AssignmentLink.objects.create(
-                                assignment=assignment,
-                                url=link_item['url'],
-                                label=link_item.get('label', '')
-                            )
-
-                    # 6. YouTube відео
-                    for y_item in a_data.get('youtube_links', []):
-                        if y_item.get('url'):
-                            AssignmentYouTubeLink.objects.create(
-                                assignment=assignment,
-                                url=y_item['url'],
-                                title=y_item.get('title', '')
-                            )
-
-                    # 7. Файли завдання
-                    for f_info in a_data.get('files', []):
-                        zpath = f_info.get('zip_path')
-                        orig_name = f_info.get('original_name', 'document')
-                        if zpath and zpath in zf.namelist():
-                            file_bytes = zf.read(zpath)
-                            af = AssignmentFile(
-                                assignment=assignment,
-                                original_name=orig_name,
-                                is_task_source_for_ai=bool(f_info.get('is_task_source_for_ai'))
-                            )
-                            af.file.save(orig_name, ContentFile(file_bytes), save=True)
-                            imported_files_count += 1
-
-                    # 8. Прив'язки до розкладу уроків
-                    for st_item in a_data.get('schedule_targets', []):
-                        c_name = st_item.get('class_name')
-                        t_date_str = st_item.get('target_date')
-                        l_num = st_item.get('lesson_number')
-
-                        cg = ClassGroup.objects.filter(name=c_name).first() if c_name else None
-                        t_date = None
-                        if t_date_str:
-                            try:
-                                t_date = datetime.strptime(t_date_str, '%Y-%m-%d').date()
-                            except ValueError:
-                                pass
-
-                        bell_slot = BellSchedule.objects.filter(lesson_number=l_num).first() if l_num else None
-
-                        if cg or t_date:
-                            AssignmentScheduleTarget.objects.update_or_create(
-                                assignment=assignment,
-                                class_group=cg,
-                                defaults={
-                                    'target_date': t_date,
-                                    'target_day_of_week': (t_date.weekday() + 1) if t_date else None,
-                                    'bell_slot': bell_slot,
-                                }
-                            )
-
-                    imported_count += 1
-
-                log_submission_activity(
-                    request.user,
-                    'assignment_imported',
-                    f"Вчитель імпортував {imported_count} завдань та {imported_files_count} файлів з флешки"
-                )
-
-                messages.success(
-                    request,
-                    f"🎉 Успішно імпортовано з флешки {imported_count} завдань та {imported_files_count} навчальних файлів! Всі матеріали повністю готові до роботи."
-                )
-
-        except Exception as e:
-            messages.error(request, f"Помилка під час обробки ZIP-архіву: {e}")
-
+            count, files = import_bundle(archive, request.user.teacher_profile)
+        except (ValueError, ValidationError, zipfile.BadZipFile, UnicodeError, OSError, RuntimeError, TypeError, KeyError) as error:
+            logger.warning('Assignment archive import failed: %s', error)
+            messages.error(request, f'Імпорт не виконано: {error}')
+        else:
+            log_submission_activity(request.user, 'assignment_imported',
+                                    f'Вчитель імпортував {count} завдань та {files} файлів із ZIP-архіву')
+            messages.success(request, f'Імпортовано {count} завдань та {files} файлів. Класи, дати, уроки й налаштування відновлено.')
     return redirect('teacher_dashboard')
-
-
-
-
-
 
 
 

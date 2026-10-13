@@ -1,0 +1,50 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Експорт завдань (ZIP){% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'css/assignment_export.css' %}">{% endblock %}
+{% block content %}
+<div class="page-wrapper assignment-export">
+    <div class="page-hero export-heading">
+        <div><div class="page-hero-kicker">Перенесення навчальних матеріалів</div><h1>Експорт завдань (ZIP)</h1></div>
+        <a href="{% url 'teacher_dashboard' %}" class="btn btn-secondary">← Мої завдання</a>
+    </div>
+    <p>Оберіть окремі завдання або цілі дні й завантажте їх одним архівом. Наприклад, позначте «Вівторок», натисніть «Показати», а потім «Обрати всі знайдені». Спільне завдання показане в кожному своєму дні, а в ZIP потрапляє один раз з усіма класами.</p>
+    <form method="get" class="export-card export-filters">
+        <div class="export-filter-fields">
+            {% for field in filter_form %}{% if field.name != 'weekdays' %}
+            <div class="form-group"><label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{{ field.errors }}</div>
+            {% endif %}{% endfor %}
+        </div>
+        <fieldset class="export-weekdays"><legend>Дні тижня</legend>{{ filter_form.weekdays }}{{ filter_form.weekdays.errors }}</fieldset>
+        {{ filter_form.non_field_errors }}
+        <div class="export-actions"><button type="submit" class="btn btn-primary">Показати</button><a href="{% url 'export_assignments_day_zip' %}" class="btn btn-secondary">Скинути фільтри</a><span class="export-muted">Знайдено завдань: {{ assignment_count }}</span></div>
+        <p class="export-muted">Дата й день тижня визначаються за прив’язкою до уроку. Для завдань без прив’язки — за датою публікації, відкладеної публікації або створення. Без кінцевої дати вибирається один день.</p>
+    </form>
+    {% if selection_error %}<div class="alert alert-error" role="alert">{{ selection_error }}</div>{% endif %}
+    <form method="post" id="assignment-export-form" data-no-progress>
+        {% csrf_token %}
+        <div class="export-card export-selection-bar">
+            <div class="export-actions"><button type="button" class="btn btn-secondary btn-sm" id="export-select-all">Обрати всі знайдені</button><button type="button" class="btn btn-secondary btn-sm" id="export-clear-all">Зняти вибір</button></div>
+            <span id="export-selected-count" role="status" aria-live="polite">Обрано: 0</span>
+            <button type="submit" class="btn btn-primary" id="export-download">💾 Завантажити ZIP</button>
+        </div>
+        {% for group in groups %}
+        <section class="export-card export-day" aria-labelledby="export-day-{{ forloop.counter }}">
+            <div class="export-day-heading"><label><input type="checkbox" class="export-day-checkbox" aria-label="Обрати всі завдання: {{ group.title }}"> <strong id="export-day-{{ forloop.counter }}">{{ group.title }}</strong></label><span class="export-muted">{{ group.rows|length }} завдань</span></div>
+            {% for row in group.rows %}{% with assignment=row.assignment %}
+            <label class="export-assignment">
+                <input type="checkbox" name="assignments" value="{{ assignment.pk }}" {% if assignment.pk in selected_ids %}checked{% endif %}>
+                <span class="export-assignment-info">
+                    <strong>{{ assignment.title }}</strong>
+                    <span class="export-assignment-meta">{% if assignment.subject %}{{ assignment.subject.icon }} {{ assignment.subject.name }} · {% endif %}{{ assignment.get_status_display }} · {% for group in assignment.classes.all %}{{ group.name }}{% if not forloop.last %}, {% endif %}{% empty %}Без класу{% endfor %}{% if assignment.is_individual %} · {{ assignment.student_name }}{% endif %} · Файлів: {{ assignment.files.all|length }}</span>
+                    {% for occurrence in row.occurrences %}<span class="export-assignment-meta">{% if occurrence.class_name %}{{ occurrence.class_name }} — {% endif %}{{ occurrence.label }}{% if occurrence.lesson %} · {{ occurrence.lesson }} урок{% endif %}</span>{% endfor %}
+                </span>
+            </label>
+            {% endwith %}{% endfor %}
+        </section>
+        {% empty %}<div class="export-card">Немає завдань за обраними фільтрами. Змініть дату, день тижня або номер уроку.</div>{% endfor %}
+    </form>
+    <div class="export-card export-muted">Архів зберігає тексти, файли, посилання, класи, прив’язки до дат і номерів уроків, статуси, час публікації та критерії оцінювання. Для відновлення відкрийте «Мої завдання → Імпорт завдань (ZIP)» на іншому комп’ютері. Імпорт створює копії у вашому профілі зі збереженою структурою.</div>
+</div>
+{% endblock %}
+{% block extra_scripts %}<script src="{% static 'js/assignment_export.js' %}"></script>{% endblock %}

@@ -521,14 +521,49 @@ document.addEventListener('DOMContentLoaded', function () {
     const menu = document.getElementById('user-menu');
     const btn = document.getElementById('user-menu-btn');
     if (menu && btn) {
+        const panel = menu.querySelector('.user-menu-panel');
+        function fitUserMenu() {
+            if (!menu.classList.contains('open') || !panel) return;
+            // Geometry is in viewport pixels; CSS sizes must account for text zoom.
+            const scale = parseFloat(getComputedStyle(document.documentElement).zoom) || 1;
+            const viewport = window.visualViewport;
+            const left = viewport ? viewport.offsetLeft : 0;
+            const width = viewport ? viewport.width : window.innerWidth;
+            const bottom = viewport ? viewport.offsetTop + viewport.height : window.innerHeight;
+            const bounds = menu.getBoundingClientRect();
+            const top = bounds.bottom + 8 * scale;
+            panel.style.maxWidth = Math.max(0, (width - 16) / scale) + 'px';
+            panel.style.maxHeight = Math.max(0, (bottom - top - 8) / scale) + 'px';
+            const panelWidth = Math.min(250 * scale, width - 16);
+            const right = Math.max(left + 8 + panelWidth, Math.min(bounds.right, left + width - 8));
+            panel.style.right = (bounds.right - right) / scale + 'px';
+        }
+        function closeUserMenu() {
+            menu.classList.remove('open');
+            btn.setAttribute('aria-expanded', 'false');
+        }
         btn.addEventListener('click', function (e) {
             e.stopPropagation();
             const open = menu.classList.toggle('open');
             btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+            if (open) fitUserMenu();
         });
-        document.addEventListener('click', function () {
-            menu.classList.remove('open');
-            btn.setAttribute('aria-expanded', 'false');
+        document.addEventListener('click', function (e) {
+            if (!menu.contains(e.target) || e.target.closest('.user-menu-panel a')) closeUserMenu();
+        });
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape' && menu.classList.contains('open')) {
+                closeUserMenu();
+                btn.focus();
+            }
+        });
+        window.addEventListener('resize', fitUserMenu);
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', fitUserMenu);
+            window.visualViewport.addEventListener('scroll', fitUserMenu);
+        }
+        new MutationObserver(fitUserMenu).observe(document.documentElement, {
+            attributes: true, attributeFilter: ['data-font-scale']
         });
     }
 

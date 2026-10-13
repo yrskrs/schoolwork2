@@ -19,17 +19,17 @@
             {% csrf_token %}
 
             <div style="font-size:13px;color:var(--color-text-secondary);line-height:1.5;margin-bottom:16px;">
-                Оберіть ZIP-архів завдань, створений на домашньому або іншому комп'ютері. Система автоматично відновить усі завдання, тексти, посилання, налаштування та прикріплені файли (презентації, документи, PDF тощо).
+                Оберіть архів із «Експорт завдань (ZIP)». Система створить копії завдань у вашому профілі: відновить тексти, файли, посилання, класи, дати й номери уроків, статуси, відкладену публікацію та критерії оцінювання. Повторний імпорт створює нові копії.
             </div>
 
             <!-- Зона завантаження файлу -->
             <div style="border:2px dashed var(--color-border);border-radius:var(--radius-md);padding:24px;text-align:center;background:var(--color-bg-secondary);margin-bottom:16px;cursor:pointer;" onclick="document.getElementById('zip-archive-file-input').click()">
                 <div style="font-size:36px;margin-bottom:8px;">📦</div>
                 <div style="font-weight:700;font-size:14px;color:var(--color-text-primary);margin-bottom:4px;">
-                    Оберіть або перетягніть ZIP-архів
+                    Оберіть ZIP-архів
                 </div>
                 <div style="font-size:12px;color:var(--color-text-muted);" id="zip-file-selected-name">
-                    Підтримуються файли <code>.zip</code>, створені функцією «Експорт на флешку»
+                    Файли <code>.zip</code> із «Експорт завдань (ZIP)»
                 </div>
                 <input type="file" id="zip-archive-file-input" name="archive" accept=".zip" required style="display:none;" onchange="onZipFileSelected(this)">
             </div>
@@ -59,7 +59,7 @@ function onZipFileSelected(input) {
     if (input.files && input.files[0]) {
         var el = document.getElementById('zip-file-selected-name');
         if (el) {
-            el.innerHTML = '<strong style="color:var(--color-primary);">Обрано: ' + input.files[0].name + ' (' + (input.files[0].size / 1024).toFixed(1) + ' КБ)</strong>';
+            el.textContent = 'Обрано: ' + input.files[0].name + ' (' + (input.files[0].size / 1024).toFixed(1) + ' КБ)';
         }
     }
 }

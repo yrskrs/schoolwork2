@@ -4,7 +4,7 @@ import hashlib
 
 from django.core.files.base import ContentFile
 
-from .models import AICriteriaPreset
+from .models import AICriteriaPreset, Assignment
 
 
 def _document_hash(path):
@@ -26,6 +26,8 @@ def export_ai_policy(assignment, archive):
             fields = ('name', 'description', 'evaluation_type', 'system_prompt', 'gr_definitions',
                       'document_name', 'extracted_criteria_text')
             presets[key] = {field: getattr(preset, field) for field in fields}
+            if preset.document_file and not os.path.exists(preset.document_file.path):
+                raise ValueError(f'Не знайдено файл критеріїв «{preset.document_name or preset.name}».')
             if preset.document_file and os.path.exists(preset.document_file.path):
                 path = f'criteria/{assignment.pk}/{preset.pk}/{os.path.basename(preset.document_file.name)}'
                 archive.write(preset.document_file.path, path)
@@ -45,7 +47,7 @@ def export_ai_policy(assignment, archive):
             'teacher_ai_instructions': assignment.teacher_ai_instructions}
 
 
-def import_ai_policy(assignment, data, archive):
+def import_ai_policy(assignment, data, archive, saved_files=None):
     if not isinstance(data, dict):
         return
     loaded = {}
@@ -73,6 +75,8 @@ def import_ai_policy(assignment, data, archive):
             preset = AICriteriaPreset(**values)
             if document_path and document_path in archive.namelist():
                 preset.document_file.save(os.path.basename(document_path), ContentFile(archive.read(document_path)), save=False)
+                if saved_files is not None:
+                    saved_files.append((preset.document_file.storage, preset.document_file.name))
             preset.save()
         loaded[str(key)] = preset
     assignment.default_ai_preset = loaded.get(str(data.get('default_preset')))
@@ -91,6 +95,7 @@ def import_ai_policy(assignment, data, archive):
     assignment.allow_student_ai_understanding = bool(data.get('student_understanding'))
     notes = data.get('teacher_ai_instructions', '')
     assignment.teacher_ai_instructions = notes if isinstance(notes, str) else ''
-    assignment.save(update_fields=['default_ai_preset', 'default_ai_grs', 'class_ai_overrides',
-                                   'ai_thinking_mode', 'allow_student_ai_understanding',
-                                   'teacher_ai_instructions'])
+    # Restoring a policy must not republish the assignment or fetch link titles.
+    super(Assignment, assignment).save(update_fields=[
+        'default_ai_preset', 'default_ai_grs', 'class_ai_overrides',
+        'ai_thinking_mode', 'allow_student_ai_understanding', 'teacher_ai_instructions'])
