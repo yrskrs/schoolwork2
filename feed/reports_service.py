@@ -458,7 +458,7 @@ def generate_teacher_report_pdf(buffer, report_meta, submissions, mode='grades_o
         # Примітки (коментар, наявність ШІ, файли)
         notes_parts = []
         if sub.ai_generated_detected:
-            if sub.assignment and sub.assignment.allow_ai:
+            if sub.assignment and getattr(sub.assignment, 'allow_ai_usage', False):
                 notes_parts.append("ШІ (дозв.)")
             else:
                 notes_parts.append("ШІ виявлено!")
@@ -578,7 +578,7 @@ def generate_teacher_report_pdf(buffer, report_meta, submissions, mode='grades_o
 
             # Перевірка ШІ
             if sub.ai_generated_detected:
-                ai_perm = "ШІ ДОЗВОЛЕНО вчителем" if (sub.assignment and sub.assignment.allow_ai) else "САМОСТІЙНА РОБОТА (ШІ не дозволено)"
+                ai_perm = "ШІ ДОЗВОЛЕНО вчителем" if (sub.assignment and getattr(sub.assignment, 'allow_ai_usage', False)) else "САМОСТІЙНА РОБОТА (ШІ не дозволено)"
                 sub_elements.append(Spacer(1, 2))
                 sub_elements.append(Paragraph(
                     f"<b>Перевірка ШІ:</b> Виявлено ознаки штучного інтелекту ({ai_perm}). "
