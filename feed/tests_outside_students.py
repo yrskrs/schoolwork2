@@ -15,6 +15,45 @@ class OutsideStudentsTests(TestCase):
     setUp = fixtures.SchoolAPIV2Tests.setUp
     export = fixtures.SchoolAPIV2Tests.export
 
+    def test_service_class_with_recalculated_letter_is_hidden_everywhere(self):
+        from feed.outside_students import teaching_classes
+        fake = ClassGroup.objects.create(name='7-А (Позакласні)', letter='ПК')
+        self.assertEqual(fake.letter, 'А')
+        self.assertNotIn(fake, teaching_classes(ClassGroup.objects.all()))
+        page = self.client.get('/teacher/reports/')
+        self.assertNotContains(page, fake.name)
+
+    def test_outside_report_and_pdf_use_same_teacher_scoped_selection(self):
+        from unittest.mock import patch
+        from feed.reports_service import get_report_submissions
+        known = fixtures.SchoolAPIV2Tests.sub(self)
+        outside = self.submit(uuid.uuid4())
+        outside.grade, outside.graded_by, outside.graded_at = '9', self.user, timezone.now()
+        outside.save()
+        RosterState.objects.update_or_create(pk=1, defaults={'data': {'journal_imports': {
+            f'{self.teacher.pk}:synthetic': {'class_id': self.group.pk,
+                'students': {'known': {'native_id': self.student.pk}}}}}})
+        filters = {'pupil_scope': 'outside', 'class_id': str(self.group.pk)}
+        self.assertEqual(list(get_report_submissions(self.user, filters)), [outside])
+        page = self.client.get('/teacher/reports/', filters)
+        self.assertEqual(list(page.context['submissions']), [outside])
+        with patch('feed.reports_service.generate_teacher_report_pdf') as generate:
+            response = self.client.get('/teacher/reports/pdf/', filters)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(generate.call_args.args[2], [outside])
+        self.assertIn('Позакласні', generate.call_args.args[1]['classes_str'])
+        self.assertEqual(list(get_report_submissions(self.user, {'pupil_scope': 'roster'})), [known])
+
+    def test_report_all_scope_does_not_expose_another_teachers_grades(self):
+        from feed.reports_service import get_report_submissions
+        fixtures.SchoolAPIV2Tests.sub(self)
+        other_user = get_user_model().objects.create_user(username='outside-report-other')
+        other = Teacher.objects.create(user=other_user, full_name='Інший')
+        self.assignment.teacher = other
+        self.assignment.save()
+        Submission.objects.update(graded_by=other_user, teacher=other)
+        self.assertFalse(get_report_submissions(self.user, {'scope': 'all'}).exists())
+
     def submit(self, identity):
         form = SubmissionForm({'full_name': 'Підмінний Учень', 'class_group': self.group.pk,
             'other_student': 'on', 'comment_student': 'Синтетична відповідь'}, assignment=self.assignment)

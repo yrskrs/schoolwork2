@@ -20,6 +20,15 @@ from feed.services.updates import (
 class SystemUpdatesUnitTests(TestCase):
     """Unit tests for version parsing, changelog parsing, and intermediate releases filtering."""
 
+    def test_published_version_and_release_metadata_match_site(self):
+        from pathlib import Path
+        from feed.changelog import SITE_VERSION
+        root = Path(__file__).resolve().parents[1]
+        self.assertEqual((root / 'VERSION').read_text().strip(), SITE_VERSION)
+        releases = json.loads((root / 'RELEASES.json').read_text())
+        self.assertEqual(releases[0]['version'], SITE_VERSION)
+        self.assertTrue(releases[0]['changes'])
+
     def test_version_tuple_parsing(self):
         self.assertEqual(parse_version_tuple('4.4.4'), (4, 4, 4))
         self.assertEqual(parse_version_tuple('v4.4.4'), (4, 4, 4))

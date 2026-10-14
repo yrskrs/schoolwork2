@@ -4,6 +4,7 @@
 from django.db.models import Q
 from .models import Submission, School, BellSchedule, AssignmentRescheduleLog, Teacher, ClassGroup
 from .changelog import SITE_VERSION, SITE_VERSION_SHORT, CHANGELOG_DATA
+from .outside_students import teaching_classes
 
 def teacher_stats_context(request):
     """
@@ -36,7 +37,7 @@ def teacher_stats_context(request):
     try:
         context['current_school'] = School.objects.first()
         context['all_bell_slots'] = list(BellSchedule.objects.all().order_by('lesson_number'))
-        context['all_classes'] = list(ClassGroup.objects.all().order_by('grade', 'letter', 'name'))
+        context['all_classes'] = list(teaching_classes(ClassGroup.objects.all()).order_by('grade', 'letter', 'name'))
     except Exception:
         pass
 

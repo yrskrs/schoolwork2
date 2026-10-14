@@ -32,6 +32,7 @@ import shutil
 import subprocess
 import logging
 from .assignment_ai_policy import export_ai_policy, import_ai_policy
+from .outside_students import teaching_classes
 from functools import wraps
 from datetime import datetime, timedelta
 
@@ -670,7 +671,7 @@ def assignment_detail(request, pk):
         'can_edit': can_edit,
         'related_assignments': related_assignments,
         'submissions_count': submissions_count,
-        'all_classes': ClassGroup.objects.all().order_by('grade', 'letter'),
+        'all_classes': teaching_classes(ClassGroup.objects.all()).order_by('grade', 'letter'),
         'files_with_preview': files_with_preview,
         'has_assignment_materials': bool(files_with_preview or assignment.link_url or assignment.additional_links.all() or assignment.all_youtube_videos),
         'assignment_submit_url': assignment_submit_url,
@@ -686,7 +687,7 @@ def student_submissions_portal(request):
     - Переглянути статус (Очікує перевірки / Оцінено).
     - Прочитати коментарі та зауваження вчителя.
     """
-    class_groups = ClassGroup.objects.all().order_by('grade', 'letter', 'name')
+    class_groups = teaching_classes(ClassGroup.objects.all()).order_by('grade', 'letter', 'name')
     selected_class_id = request.GET.get('class')
     search_query = request.GET.get('search', '').strip()
 
@@ -2192,7 +2193,7 @@ def teacher_profile(request):
 
     # Отримуємо дані для сторінки (тільки предмети та класи, створені вчителями)
     teacher_subjects = teacher.subjects.all()
-    teacher_classes = teacher.classes.all().order_by('grade', 'letter')
+    teacher_classes = teaching_classes(teacher.classes.all()).order_by('grade', 'letter')
 
     other_subjects = Subject.objects.filter(created_by__isnull=False).exclude(id__in=teacher_subjects.values_list('id', flat=True))
     other_classes = ClassGroup.objects.filter(created_by__isnull=False).exclude(id__in=teacher_classes.values_list('id', flat=True)).order_by('grade', 'letter')
@@ -2898,7 +2899,7 @@ def submit_assignment(request, pk):
     class_param = request.GET.get('class')
     if class_param:
         try:
-            available_classes = assignment.classes.all() if assignment.classes.exists() else ClassGroup.objects.all()
+            available_classes = teaching_classes(assignment.classes.all()) if assignment.classes.exists() else teaching_classes(ClassGroup.objects.all())
             initial_data['class_group'] = available_classes.get(id=class_param)
         except (ClassGroup.DoesNotExist, ValueError):
             pass
@@ -4369,7 +4370,7 @@ def all_submissions_dashboard(request):
     page_obj = paginator.get_page(request.GET.get('page'))
 
     if request.user.is_superuser:
-        all_classes = ClassGroup.objects.all().order_by('grade', 'letter')
+        all_classes = teaching_classes(ClassGroup.objects.all()).order_by('grade', 'letter')
         all_assignments = Assignment.objects.all().order_by('-published_at')
     else:
         teacher_class_ids = teacher.classes.values_list('id', flat=True)
@@ -5103,15 +5104,14 @@ def teacher_students(request):
 
     # Отримуємо доступні класи (суперадмін бачить усі, вчитель — свої або всі для школи)
     if request.user.is_superuser:
-        all_class_groups = list(ClassGroup.objects.all().order_by('grade', 'letter'))
+        all_class_groups = list(teaching_classes(ClassGroup.objects.all()).order_by('grade', 'letter'))
     elif teacher and teacher.classes.exists():
-        my_classes = list(teacher.classes.all().order_by('grade', 'letter'))
+        my_classes = list(teaching_classes(teacher.classes.all()).order_by('grade', 'letter'))
         other_classes = list(ClassGroup.objects.exclude(id__in=[c.id for c in my_classes]).order_by('grade', 'letter'))
         all_class_groups = my_classes + other_classes
     else:
-        all_class_groups = list(ClassGroup.objects.all().order_by('grade', 'letter'))
+        all_class_groups = list(teaching_classes(ClassGroup.objects.all()).order_by('grade', 'letter'))
 
-    from .outside_students import teaching_classes
     all_class_groups = list(teaching_classes(ClassGroup.objects.filter(pk__in=[c.pk for c in all_class_groups])).order_by('grade', 'letter'))
     selected_class_id = request.GET.get('class_group') or request.GET.get('class')
     search_query = request.GET.get('search', '').strip()
@@ -5271,7 +5271,7 @@ def teacher_students(request):
 
     teacher_classes = []
     if teacher and teacher.classes.exists():
-        teacher_classes = list(teacher.classes.all().order_by('grade', 'letter'))
+        teacher_classes = list(teaching_classes(teacher.classes.all()).order_by('grade', 'letter'))
     else:
         teacher_classes = all_class_groups
 
@@ -5844,9 +5844,9 @@ def gradebook(request):
     teacher = request.user.teacher_profile
 
     if request.user.is_superuser:
-        class_groups = list(ClassGroup.objects.all().order_by('grade', 'letter'))
+        class_groups = list(teaching_classes(ClassGroup.objects.all()).order_by('grade', 'letter'))
     else:
-        class_groups = list(teacher.classes.all().order_by('grade', 'letter'))
+        class_groups = list(teaching_classes(teacher.classes.all()).order_by('grade', 'letter'))
 
     selected_class_id = request.GET.get('class_group') or request.GET.get('class')
     view_mode = request.GET.get('view')
@@ -6174,6 +6174,7 @@ def teacher_reports(request):
 
     # Отримуємо фільтри з запиту
     class_id = request.GET.get('class_id', 'all')
+    pupil_scope = request.GET.get('pupil_scope', 'all')
     student_name = request.GET.get('student_name', '').strip()
     date_from = request.GET.get('date_from', '')
     date_to = request.GET.get('date_to', '')
@@ -6187,6 +6188,7 @@ def teacher_reports(request):
     from .reports_service import get_report_submissions
     submissions = get_report_submissions(request.user, {
         'class_id': class_id,
+        'pupil_scope': pupil_scope,
         'student_name': student_name,
         'date_from': date_from,
         'date_to': date_to,
@@ -6212,7 +6214,7 @@ def teacher_reports(request):
     low_cnt = sum(1 for g in grades_nums if g < 4)
 
     # Дані для фільтрів у формі
-    classes = ClassGroup.objects.all().order_by('grade', 'letter')
+    classes = teaching_classes(ClassGroup.objects.all()).order_by('grade', 'letter')
 
     assignments_qs = Assignment.objects.all()
     if scope == 'mine' and teacher and not request.user.is_superuser:
@@ -6235,6 +6237,7 @@ def teacher_reports(request):
         'school': school,
         'filters': {
             'class_id': class_id,
+            'pupil_scope': pupil_scope,
             'student_name': student_name,
             'date_from': date_from,
             'date_to': date_to,
@@ -6270,6 +6273,7 @@ def teacher_reports_pdf(request):
 
     # Параметри запиту
     class_id = request.GET.get('class_id', 'all')
+    pupil_scope = request.GET.get('pupil_scope', 'all')
     student_name = request.GET.get('student_name', '').strip()
     date_from = request.GET.get('date_from', '')
     date_to = request.GET.get('date_to', '')
@@ -6286,6 +6290,7 @@ def teacher_reports_pdf(request):
 
     submissions = get_report_submissions(request.user, {
         'class_id': class_id,
+        'pupil_scope': pupil_scope,
         'student_name': student_name,
         'date_from': date_from,
         'date_to': date_to,
@@ -6335,7 +6340,7 @@ def teacher_reports_pdf(request):
         'target_teacher': target_teacher,
         'subject_name': subject_name,
         'date_range_str': date_range_str,
-        'classes_str': classes_str,
+        'classes_str': ('Позакласні учні — ' + classes_str) if pupil_scope == 'outside' else classes_str,
         'notes': report_notes,
         'school_name': school_name,
     }
@@ -7546,7 +7551,7 @@ def teacher_settings_view(request):
 
     # Підготовка даних контексту для сторінки налаштувань
     teacher_subjects = teacher.subjects.all().order_by('name')
-    teacher_classes = teacher.classes.all().order_by('grade', 'letter', 'name')
+    teacher_classes = teaching_classes(teacher.classes.all()).order_by('grade', 'letter', 'name')
     other_subjects = Subject.objects.exclude(id__in=teacher_subjects.values_list('id', flat=True)).order_by('name')
     other_classes = ClassGroup.objects.exclude(id__in=teacher_classes.values_list('id', flat=True)).order_by('grade', 'letter', 'name')
     all_teachers = Teacher.objects.select_related('user').all()
@@ -7998,7 +8003,7 @@ def teacher_generate_assignment_criteria(request):
 def api_classes_list(request):
     """Повертає список усіх класів школи для випадаючих списків та модальних вікон."""
     from .models import ClassGroup
-    classes = ClassGroup.objects.all().order_by('grade', 'letter', 'name')
+    classes = teaching_classes(ClassGroup.objects.all()).order_by('grade', 'letter', 'name')
     return JsonResponse({
         'status': 'ok',
         'classes': [{'id': c.id, 'name': c.name, 'grade': c.grade, 'letter': c.letter} for c in classes]
@@ -8050,7 +8055,7 @@ def ai_batch_check_view(request):
     - Інтерактивний покроковий запуск із прогрес-баром
     """
     ai_settings = AISettings.get_solo()
-    all_classes = ClassGroup.objects.all().order_by('grade', 'letter')
+    all_classes = teaching_classes(ClassGroup.objects.all()).order_by('grade', 'letter')
     all_assignments = Assignment.objects.all().order_by('-published_at')
 
     AICriteriaPreset.ensure_default_presets()
@@ -8568,7 +8573,7 @@ def teacher_rescheduled_calendar(request):
                 'percent': int((count / len(logs_30_days)) * 100) if logs_30_days else 0,
             }
 
-    teacher_classes = teacher.classes.all().order_by('grade', 'letter', 'name') if teacher else ClassGroup.objects.all().order_by('grade', 'letter', 'name')
+    teacher_classes = teaching_classes(teacher.classes.all()).order_by('grade', 'letter', 'name') if teacher else teaching_classes(ClassGroup.objects.all()).order_by('grade', 'letter', 'name')
 
     context = {
         'today': today,

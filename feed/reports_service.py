@@ -120,12 +120,18 @@ def get_report_submissions(teacher_user, filters):
     # Фільтрація по викладачу (якщо не суперкористувач і не вказано дивитись все)
     # Якщо вчитель замінював іншого — він міг оцінювати будь-яку роботу або свої
     scope = filters.get('scope', 'mine')
-    if scope == 'mine' and not teacher_user.is_superuser:
+    if scope == 'mine' or not teacher_user.is_superuser:
         qs = qs.filter(
             Q(graded_by=teacher_user) |
             Q(teacher__user=teacher_user) |
             Q(assignment__teacher__user=teacher_user)
         )
+
+    from .outside_students import outside_predicate
+    if filters.get('pupil_scope') == 'outside':
+        qs = qs.filter(outside_predicate(teacher_user))
+    elif filters.get('pupil_scope') == 'roster':
+        qs = qs.exclude(outside_predicate(teacher_user))
 
     # Фільтр по класу
     class_id = filters.get('class_id')
