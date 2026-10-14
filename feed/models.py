@@ -141,13 +141,14 @@ class Student(LocalRosterMixin, models.Model):
     def get_submissions_count(self):
         """Рахує кількість зданих робіт цього учня."""
         from .student_matcher import is_same_student_identity
+        from .roster_identity import has_stable_class_roster
         bound = Submission.objects.filter(student=self).count()
-        if RosterReplica.objects.filter(data__kind='class', data__native_id=self.class_group_id).exists():
+        if has_stable_class_roster(self.class_group):
             return bound
         # Legacy names can only add unbound historical rows when unambiguous.
         if Student.objects.filter(class_group_id=self.class_group_id, first_name=self.first_name, last_name=self.last_name).exclude(pk=self.pk).exists():
             return bound
-        return bound + sum(1 for sub in Submission.objects.filter(student__isnull=True, class_group_id=self.class_group_id)
+        return bound + sum(1 for sub in Submission.objects.filter(student__isnull=True, outside_student_id__isnull=True, class_group_id=self.class_group_id)
             if is_same_student_identity(self.last_name,self.first_name,sub.last_name,sub.first_name))
 
     def sync_submissions(self, old_last_name=None, old_first_name=None, old_class_group=None):
@@ -164,9 +165,12 @@ class Student(LocalRosterMixin, models.Model):
             return 0
 
         qs = Submission.objects.filter(class_group=search_class)
+        from .roster_identity import has_stable_class_roster
+        allow_name_match = not has_stable_class_roster(search_class) and not Student.objects.filter(
+            class_group=search_class, last_name__iexact=search_last, first_name__iexact=search_first).exclude(pk=self.pk).exists()
         matching_ids = []
         for sub in qs:
-            if sub.student_id == self.pk or (sub.student_id is None and not RosterReplica.objects.filter(data__kind='class', data__native_id=search_class.pk).exists() and is_same_student_identity(search_last, search_first, sub.last_name, sub.first_name)):
+            if sub.student_id == self.pk or (sub.student_id is None and sub.outside_student_id is None and allow_name_match and is_same_student_identity(search_last, search_first, sub.last_name, sub.first_name)):
                 matching_ids.append(sub.id)
 
         updated_count = 0
@@ -2089,6 +2093,7 @@ def submission_upload_path(instance, filename):
 
 
 class Submission(models.Model):
+    outside_student_id = models.UUIDField(null=True, blank=True, db_index=True)
     """Здача роботи учнем по конкретному завданню."""
 
     assignment = models.ForeignKey(
@@ -2412,7 +2417,9 @@ class Submission(models.Model):
         from django.db.models import Q
         q = Q(assignment=self.assignment, class_group=self.class_group)
         from .roster_identity import has_stable_class_roster
-        if has_stable_class_roster(self.class_group):
+        if self.outside_student_id and not self.student_id:
+            q &= Q(student__isnull=True, outside_student_id=self.outside_student_id)
+        elif has_stable_class_roster(self.class_group):
             if self.student_id:
                 q &= Q(student_id=self.student_id)
             else:

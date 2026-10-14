@@ -16,6 +16,7 @@ from django.utils import timezone
 from django.db.models import Q
 from .models import Assignment, Teacher, ClassGroup, Subject, Student
 from .roster_identity import has_stable_class_roster
+from .outside_students import teaching_classes
 
 
 # ─── Кастомний widget для множинного завантаження файлів (Django 6+) ───────────
@@ -222,7 +223,7 @@ class ClassSelectForm(forms.Form):
     """Форма вибору класу учнем при вході до стрічки."""
 
     class_group = forms.ModelChoiceField(
-        queryset=ClassGroup.objects.all().order_by('grade', 'letter'),
+        queryset=teaching_classes(ClassGroup.objects.all()).order_by('grade', 'letter'),
         label='Ваш клас',
         empty_label='— Всі класи —',
         required=False,
@@ -492,16 +493,16 @@ class AssignmentForm(forms.ModelForm):
                 self.fields['subject'].queryset = Subject.objects.all()
 
             if teacher.classes.exists():
-                self.fields['classes'].queryset = teacher.classes.all().order_by('grade', 'letter', 'name')
+                self.fields['classes'].queryset = teaching_classes(teacher.classes.all()).order_by('grade', 'letter', 'name')
             else:
-                self.fields['classes'].queryset = ClassGroup.objects.all().order_by('grade', 'letter', 'name')
+                self.fields['classes'].queryset = teaching_classes(ClassGroup.objects.all()).order_by('grade', 'letter', 'name')
 
             default_subject = teacher.get_default_subject()
             if default_subject and not self.initial.get('subject'):
                 self.initial['subject'] = default_subject.pk
         else:
             self.fields['subject'].queryset = Subject.objects.all().order_by('name')
-            self.fields['classes'].queryset = ClassGroup.objects.all().order_by('grade', 'letter', 'name')
+            self.fields['classes'].queryset = teaching_classes(ClassGroup.objects.all()).order_by('grade', 'letter', 'name')
 
 
 
@@ -698,9 +699,9 @@ class SubmissionForm(forms.Form):
                     self.fields['class_group'].initial = first_class
                 self.fields['class_group'].empty_label = None
             else:
-                self.fields['class_group'].queryset = ClassGroup.objects.filter(integration_active=True).order_by('grade', 'letter', 'name')
+                self.fields['class_group'].queryset = teaching_classes(ClassGroup.objects.filter(integration_active=True)).order_by('grade', 'letter', 'name')
         else:
-            self.fields['class_group'].queryset = ClassGroup.objects.filter(integration_active=True).order_by('grade', 'letter', 'name')
+            self.fields['class_group'].queryset = teaching_classes(ClassGroup.objects.filter(integration_active=True)).order_by('grade', 'letter', 'name')
 
     def clean(self):
         cleaned_data = super().clean()
@@ -938,8 +939,9 @@ class SubmissionForm(forms.Form):
         if student_obj:
             q_prev &= Q(student=student_obj) if self.cleaned_data.get('shared_roster') else (Q(student=student_obj) | (Q(student__isnull=True) & Q(last_name__iexact=last_name) & Q(first_name__iexact=first_name)))
         elif self.cleaned_data.get('other_student'):
-            # A typed name alone cannot identify a previous pupil or attempt.
-            q_prev &= Q(pk__in=[])
+            from uuid import uuid4
+            self.outside_student_id = getattr(self, 'outside_student_id', None) or uuid4()
+            q_prev &= Q(student__isnull=True, outside_student_id=self.outside_student_id)
         else:
             q_prev &= (Q(last_name__iexact=last_name) & Q(first_name__iexact=first_name))
 
@@ -949,6 +951,7 @@ class SubmissionForm(forms.Form):
         latest_prev = prev_submissions[0] if prev_submissions else None
 
         submission = Submission(
+            outside_student_id=getattr(self, 'outside_student_id', None) if not student_obj else None,
             assignment=assignment,
             student=student_obj,
             last_name=last_name,
@@ -1097,7 +1100,7 @@ class StudentForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields['class_group'].queryset = ClassGroup.objects.all().order_by('grade', 'letter')
+        self.fields['class_group'].queryset = teaching_classes(ClassGroup.objects.all()).order_by('grade', 'letter')
 
 
 # ─── Форма імпорту списку учнів та класів ────────────────────────────────────
@@ -1134,7 +1137,7 @@ class StudentImportForm(forms.Form):
         })
     )
     default_class = forms.ModelChoiceField(
-        queryset=ClassGroup.objects.all().order_by('grade', 'letter'),
+        queryset=teaching_classes(ClassGroup.objects.all()).order_by('grade', 'letter'),
         label="Клас за замовчуванням (якщо клас не вказано в рядку)",
         required=False,
         empty_label="— Визначити автоматично з рядка —",
