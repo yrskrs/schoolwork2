@@ -75,6 +75,22 @@ class OutsideStudentsTests(TestCase):
         outside_subs = list(get_report_submissions(self.user, {'class_id': str(self.group.pk), 'pupil_scope': 'outside'}))
         self.assertEqual(outside_subs, [sub_outside])
 
+    def test_report_pdf_generation_with_ai_detected_submission(self):
+        # AI detected submission with allow_ai_usage
+        fixtures.SchoolAPIV2Tests.sub(self)
+        self.assignment.allow_ai_usage = True
+        self.assignment.save(update_fields=['allow_ai_usage'])
+        sub = Submission.objects.create(
+            assignment=self.assignment, student=self.twin, class_group=self.group,
+            last_name=self.twin.last_name, first_name=self.twin.first_name,
+            grade='11', graded_by=self.user, graded_at=timezone.now(),
+            ai_generated_detected=True, ai_generated_confidence='95%'
+        )
+        self.client.force_login(self.user)
+        response = self.client.get(f'/teacher/reports/pdf/?class_id={self.group.pk}&pupil_scope=all')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'application/pdf')
+
     def test_journal_roster_auto_binds_unambiguous_single_student_in_class(self):
         # Create a unique student in group
         solo = Student.objects.create(class_group=self.group, first_name='Соло', last_name='Унікальний')
