@@ -127,11 +127,13 @@ def get_report_submissions(teacher_user, filters):
             Q(assignment__teacher__user=teacher_user)
         )
 
+    target_teacher = filters.get('target_teacher')
+    class_id = filters.get('class_id')
     from .outside_students import outside_predicate
     if filters.get('pupil_scope') == 'outside':
-        qs = qs.filter(outside_predicate(teacher_user))
+        qs = qs.filter(outside_predicate(teacher_user, target_teacher=target_teacher, class_id=class_id))
     elif filters.get('pupil_scope') == 'roster':
-        qs = qs.exclude(outside_predicate(teacher_user))
+        qs = qs.exclude(outside_predicate(teacher_user, target_teacher=target_teacher, class_id=class_id))
 
     # Фільтр по класу
     class_id = filters.get('class_id')

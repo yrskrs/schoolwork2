@@ -24,13 +24,22 @@ def teaching_classes(queryset):
     return queryset.exclude(name__endswith=' (Позакласні)')
 
 
-def outside_predicate(user):
+def outside_predicate(user, target_teacher=None, class_id=None):
     from django.db.models import Q
     from .models import RosterState
     state = RosterState.objects.filter(pk=1).values_list('data', flat=True).first() or {}
-    teacher_id = getattr(getattr(user, 'teacher_profile', None), 'pk', None)
+    teacher_id = None
+    if target_teacher and str(target_teacher).isdigit():
+        teacher_id = int(target_teacher)
+    if not teacher_id:
+        teacher_id = getattr(getattr(user, 'teacher_profile', None), 'pk', None)
     bindings = [item for key, item in state.get('journal_imports', {}).items()
-                if key.startswith(str(teacher_id) + ':')]
+                if (teacher_id and key.startswith(str(teacher_id) + ':')) or (user.is_superuser and not teacher_id)]
+    if class_id and str(class_id).isdigit():
+        cls_int = int(class_id)
+        class_bindings = [item for item in bindings if item.get('class_id') == cls_int]
+        if class_bindings:
+            bindings = class_bindings
     known = {entry['native_id'] for item in bindings
              if not item.get('remote_class', {}).get('name', '').endswith(' (Позакласні)')
              for entry in item.get('students', {}).values()}

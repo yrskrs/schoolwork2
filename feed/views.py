@@ -6195,6 +6195,7 @@ def teacher_reports(request):
         'assignment_id': assignment_id,
         'graded_only': graded_only,
         'scope': scope,
+        'target_teacher': target_teacher,
     })
 
     # Підрахунок статистики
@@ -6297,6 +6298,7 @@ def teacher_reports_pdf(request):
         'assignment_id': assignment_id,
         'graded_only': graded_only,
         'scope': scope,
+        'target_teacher': target_teacher,
         'selected_ids': selected_ids,
     })
 

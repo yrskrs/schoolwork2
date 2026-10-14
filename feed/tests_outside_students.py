@@ -54,6 +54,51 @@ class OutsideStudentsTests(TestCase):
         Submission.objects.update(graded_by=other_user, teacher=other)
         self.assertFalse(get_report_submissions(self.user, {'scope': 'all'}).exists())
 
+    def test_class_scoped_roster_and_outside_report_filtering(self):
+        from feed.reports_service import get_report_submissions
+        # In self.group (7-А), self.student is in journal, twin is outside
+        sub_roster = fixtures.SchoolAPIV2Tests.sub(self)
+        sub_outside = Submission.objects.create(
+            assignment=self.assignment, student=self.twin, class_group=self.group,
+            last_name=self.twin.last_name, first_name=self.twin.first_name,
+            grade='10', graded_by=self.user, graded_at=timezone.now()
+        )
+        RosterState.objects.update_or_create(pk=1, defaults={'data': {'journal_imports': {
+            f'{self.teacher.pk}:synthetic_class': {'class_id': self.group.pk,
+                'students': {'k1': {'native_id': self.student.pk}}}}}})
+
+        # Roster filter for this class
+        roster_subs = list(get_report_submissions(self.user, {'class_id': str(self.group.pk), 'pupil_scope': 'roster'}))
+        self.assertEqual(roster_subs, [sub_roster])
+
+        # Outside filter for this class
+        outside_subs = list(get_report_submissions(self.user, {'class_id': str(self.group.pk), 'pupil_scope': 'outside'}))
+        self.assertEqual(outside_subs, [sub_outside])
+
+    def test_journal_roster_auto_binds_unambiguous_single_student_in_class(self):
+        # Create a unique student in group
+        solo = Student.objects.create(class_group=self.group, first_name='Соло', last_name='Унікальний')
+        payload = {
+            'schema_version': 2,
+            'journal_instance_id': str(uuid.uuid4()),
+            'class': {'id': str(uuid.uuid4()), 'name': self.group.name, 'grade_level': self.group.grade, 'letter': self.group.letter},
+            'source_class_id': self.group.pk,
+            'subject': {'name': self.subject.name},
+            'students': [
+                {'id': str(uuid.uuid4()), 'last_name': 'Унікальний', 'first_name': 'Соло'},
+                {'id': str(uuid.uuid4()), 'last_name': 'Вигаданий', 'first_name': 'Учень'},  # Twins -> needs review
+            ]
+        }
+        response = self.client.post('/api/v2/journal/roster/', data=payload, content_type='application/json', HTTP_AUTHORIZATION='Bearer synthetic-key')
+        self.assertEqual(response.status_code, 200, response.content)
+        data = response.json()
+        # Solo student was uniquely matched and mapped
+        mapped_local_ids = [m['local_id'] for m in data.get('mappings', [])]
+        self.assertIn(solo.pk, mapped_local_ids)
+        # Twins remain in needs_review
+        review_names = [r['name'] for r in data.get('needs_review', [])]
+        self.assertIn('Вигаданий Учень', review_names)
+
     def submit(self, identity):
         form = SubmissionForm({'full_name': 'Підмінний Учень', 'class_group': self.group.pk,
             'other_student': 'on', 'comment_student': 'Синтетична відповідь'}, assignment=self.assignment)
