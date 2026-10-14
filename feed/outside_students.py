@@ -38,15 +38,14 @@ def outside_predicate(user, target_teacher=None, class_id=None):
         teacher_id = getattr(getattr(user, 'teacher_profile', None), 'pk', None)
     bindings = [item for key, item in state.get('journal_imports', {}).items()
                 if (teacher_id and key.startswith(str(teacher_id) + ':')) or (user.is_superuser and not teacher_id)]
+    has_roster_bindings = bool(bindings)
     if class_id and str(class_id).isdigit():
         cls_int = int(class_id)
-        class_bindings = [item for item in bindings if item.get('class_id') == cls_int]
-        if class_bindings:
-            bindings = class_bindings
+        bindings = [item for item in bindings if str(item.get('class_id')) == str(cls_int)]
     known = {entry['native_id'] for item in bindings
              if not item.get('remote_class', {}).get('name', '').endswith(' (Позакласні)')
-             for entry in item.get('students', {}).values()}
-    return Q(student__isnull=True) | ~Q(student_id__in=known) if bindings else Q(student__isnull=True)
+             for entry in item.get('students', {}).values() if entry.get('native_id') is not None}
+    return Q(student__isnull=True) | ~Q(student_id__in=known) if has_roster_bindings else Q(student__isnull=True)
 
 
 def outside_works(user):

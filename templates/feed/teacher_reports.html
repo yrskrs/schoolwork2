@@ -62,6 +62,9 @@
                             </label>
                             <select name="assignment_id" id="assignment_id" class="form-input" style="width:100%;font-size:13px;padding:7px 10px;">
                                 <option value="all" {% if filters.assignment_id == 'all' %}selected{% endif %}>Всі завдання / теми</option>
+                                {% if selected_assignment_unavailable %}
+                                <option value="{{ filters.assignment_id }}" data-classes="{{ filters.class_id }}" selected>Вибране завдання недоступне для цих параметрів</option>
+                                {% endif %}
                                 {% for a in assignments %}
                                 <option value="{{ a.id }}" data-classes="{{ a.class_ids_str }}" {% if filters.assignment_id == a.id|stringformat:"s" %}selected{% endif %}>
                                     {% if a.subject %}[{{ a.subject.name }}] {% endif %}{{ a.title|truncatechars:45 }}{% if a.class_names_str and filters.class_id == 'all' %} ({{ a.class_names_str }}){% endif %}
@@ -77,7 +80,7 @@
                                 <option value="outside" {% if filters.pupil_scope == 'outside' %}selected{% endif %}>Позакласні учні (поза моїми журналами)</option>
                                 <option value="roster" {% if filters.pupil_scope == 'roster' %}selected{% endif %}>Учні моїх журналів</option>
                             </select>
-                            <small>Позакласних визначаємо за переданими списками ваших журналів. Фільтр діє також у PDF для передачі оцінок.</small>
+                            <small>Позакласних визначаємо за списком журналу обраного класу. Клас відбираємо за здачею роботи; «Лише оцінені» змінює тільки відбір за оцінкою. Ті самі умови діють у PDF.</small>
                         </div>
 
                         <!-- Пошук учня -->

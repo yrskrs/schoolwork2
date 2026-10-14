@@ -97,6 +97,58 @@ class NumberedCanvas(canvas.Canvas):
         self.restoreState()
 
 
+def report_class_predicate(class_id):
+    """Use the class recorded on the work, including historical attempts."""
+    return Q(class_group_id=class_id)
+
+
+def report_access_predicate(user, scope='mine'):
+    if user.is_superuser and scope == 'all':
+        return Q()
+    return Q(graded_by=user) | Q(teacher__user=user) | Q(assignment__teacher__user=user)
+
+
+def report_class_name(submission):
+    group = submission.class_group
+    return group.name if group else '—'
+
+
+def report_filters_from_request(request):
+    filters = {key: request.GET.get(key, '').strip() for key in (
+        'student_name', 'date_from', 'date_to', 'target_teacher', 'report_title', 'report_notes')}
+    filters.update(
+        class_id=request.GET.get('class_id') or 'all',
+        assignment_id=request.GET.get('assignment_id') or 'all',
+        pupil_scope=request.GET.get('pupil_scope', 'all'),
+        scope=request.GET.get('scope', 'all' if request.user.is_superuser else 'mine'),
+        graded_only=('1' if not request.GET or request.GET.get('graded_only', '').lower() in ('1', 'true', 'on', 'yes') else '0'),
+    )
+    if 'selected_ids' in request.GET:
+        filters['selected_ids'] = request.GET['selected_ids']
+    return filters
+
+
+def get_report_assignments(user, filters):
+    """Offer owned tasks and tasks with accessible works, including substitutions."""
+    from .models import Assignment
+    scope = filters.get('scope', 'mine')
+    visible = get_report_submissions(user, {'scope': scope, 'graded_only': '0'})
+    qs = Assignment.objects.select_related('subject', 'teacher').prefetch_related('classes')
+    if not (user.is_superuser and scope == 'all'):
+        qs = qs.filter(Q(teacher__user=user) | Q(pk__in=visible.values('assignment_id')))
+    class_id = filters.get('class_id')
+    if class_id and class_id != 'all':
+        try:
+            cid = int(class_id)
+            if not 0 < cid <= 9223372036854775807:
+                return qs.none()
+        except (ValueError, TypeError):
+            return qs.none()
+        works = visible.filter(report_class_predicate(cid))
+        qs = qs.filter(Q(classes__id=cid) | Q(pk__in=works.values('assignment_id')))
+    return qs.distinct().order_by('-created_at', '-pk')
+
+
 def get_report_submissions(teacher_user, filters):
     """
     Отримує відфільтровані здачі робіт (Submission) для звіту.
@@ -120,6 +172,7 @@ def get_report_submissions(teacher_user, filters):
     # Фільтрація по викладачу (з підтримкою замін через target_teacher)
     target_teacher = (filters.get('target_teacher') or '').strip()
     scope = filters.get('scope', 'mine')
+    qs = qs.filter(report_access_predicate(teacher_user, scope))
     if target_teacher:
         qs = qs.filter(
             Q(teacher__full_name__icontains=target_teacher) |
@@ -128,40 +181,36 @@ def get_report_submissions(teacher_user, filters):
             Q(teacher__user=teacher_user) |
             Q(assignment__teacher__user=teacher_user)
         )
-    elif scope == 'mine' or not teacher_user.is_superuser:
-        qs = qs.filter(
-            Q(graded_by=teacher_user) |
-            Q(teacher__user=teacher_user) |
-            Q(assignment__teacher__user=teacher_user)
-        )
 
     class_id = filters.get('class_id')
+    if filters.get('pupil_scope', 'all') not in ('all', 'roster', 'outside'):
+        return qs.none()
     from .outside_students import outside_predicate
     if filters.get('pupil_scope') == 'outside':
         qs = qs.filter(outside_predicate(teacher_user, target_teacher=target_teacher, class_id=class_id))
     elif filters.get('pupil_scope') == 'roster':
         qs = qs.exclude(outside_predicate(teacher_user, target_teacher=target_teacher, class_id=class_id))
 
-    # Фільтр по класу: враховуємо учнів цього класу, здачі за цим класом,
-    # а також завдання, призначені цьому класу (навіть якщо учень здав з іншого класу)
+    # Shared assignments never widen a class's report to their other classes.
     if class_id and class_id != 'all':
         try:
             cid = int(class_id)
-            qs = qs.filter(
-                Q(class_group_id=cid) |
-                Q(student__class_group_id=cid) |
-                Q(assignment__classes__id=cid)
-            ).distinct()
+            if not 0 < cid <= 9223372036854775807:
+                return qs.none()
+            qs = qs.filter(report_class_predicate(cid))
         except (ValueError, TypeError):
-            pass
+            return qs.none()
 
     # Фільтр по завданню
     assignment_id = filters.get('assignment_id')
     if assignment_id and assignment_id != 'all':
         try:
-            qs = qs.filter(assignment_id=int(assignment_id))
+            aid = int(assignment_id)
+            if not 0 < aid <= 9223372036854775807:
+                return qs.none()
+            qs = qs.filter(assignment_id=aid)
         except (ValueError, TypeError):
-            pass
+            return qs.none()
 
     # Фільтр по імені учня
     student_name = (filters.get('student_name') or '').strip()
@@ -176,7 +225,7 @@ def get_report_submissions(teacher_user, filters):
             df = datetime.strptime(str(date_from), '%Y-%m-%d').date()
             qs = qs.filter(Q(graded_at__date__gte=df) | (Q(graded_at__isnull=True) & Q(submitted_at__date__gte=df)))
         except (ValueError, TypeError):
-            pass
+            return qs.none()
 
     date_to = filters.get('date_to')
     if date_to:
@@ -184,20 +233,25 @@ def get_report_submissions(teacher_user, filters):
             dt = datetime.strptime(str(date_to), '%Y-%m-%d').date()
             qs = qs.filter(Q(graded_at__date__lte=dt) | (Q(graded_at__isnull=True) & Q(submitted_at__date__lte=dt)))
         except (ValueError, TypeError):
-            pass
+            return qs.none()
 
     # Лише оцінені
     graded_only = filters.get('graded_only', '1')
-    if str(graded_only).lower() in ('1', 'true', 'yes'):
+    if str(graded_only).lower() in ('1', 'true', 'on', 'yes'):
         qs = qs.exclude(grade__isnull=True).exclude(grade='')
 
     # Вибір конкретних ID (якщо користувач позначив галочками)
     selected_ids = filters.get('selected_ids')
-    if selected_ids:
+    if 'selected_ids' in filters:
         if isinstance(selected_ids, str):
-            selected_ids = [int(x.strip()) for x in selected_ids.split(',') if x.strip().isdigit()]
-        if selected_ids:
-            qs = qs.filter(id__in=selected_ids)
+            selected_ids = selected_ids.split(',')
+        try:
+            selected_ids = [int(x) for x in (selected_ids or [])]
+            if not selected_ids or any(not 0 < x <= 9223372036854775807 for x in selected_ids):
+                return qs.none()
+        except (ValueError, TypeError):
+            return qs.none()
+        qs = qs.filter(id__in=selected_ids)
 
     # Впорядкування: спочатку за датою (зростання), потім клас, потім прізвище
     return qs.order_by('submitted_at', 'class_group__name', 'last_name', 'first_name')
@@ -452,7 +506,7 @@ def generate_teacher_report_pdf(buffer, report_meta, submissions, mode='grades_o
         d_str = d.strftime("%d.%m.%Y") if d else "—"
 
         # Клас
-        cls_name = sub.class_group.name if sub.class_group else "—"
+        cls_name = report_class_name(sub)
 
         # Учень
         student_display = sub.get_student_full_name()
@@ -548,7 +602,7 @@ def generate_teacher_report_pdf(buffer, report_meta, submissions, mode='grades_o
             sub_elements = []
 
             # Заголовок картки
-            card_title = f"#{idx}. {sub.get_student_full_name()} — Клас: {sub.class_group.name if sub.class_group else '—'}"
+            card_title = f"#{idx}. {sub.get_student_full_name()} — Клас: {report_class_name(sub)}"
             d_sub = sub.submitted_at.strftime("%d.%m.%Y %H:%M") if sub.submitted_at else "—"
             
             sub_elements.append(Paragraph(

@@ -239,13 +239,13 @@ class OutsideStudentsTests(TestCase):
 
         self.client.force_login(self.user)
 
-        # 1. graded_only unchecked (omitted from GET) -> should include graded + ungraded + cross
+        # 1. Unchecked includes graded and ungraded works of this class only.
         url = reverse('teacher_reports') + f'?class_id={self.group.pk}'
         resp = self.client.get(url)
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, 'Неоцінений')
         self.assertContains(resp, 'Оцінений')
-        self.assertContains(resp, 'Чужий')
+        self.assertNotContains(resp, 'Чужий')
         # Checkbox should NOT be checked
         self.assertNotContains(resp, 'name="graded_only" id="graded_only" value="1" checked')
 

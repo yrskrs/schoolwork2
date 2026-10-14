@@ -6172,87 +6172,38 @@ def teacher_reports(request):
     """
     teacher = getattr(request.user, 'teacher_profile', None)
 
-    # Отримуємо фільтри з запиту
-    class_id = request.GET.get('class_id', 'all')
-    pupil_scope = request.GET.get('pupil_scope', 'all')
-    student_name = request.GET.get('student_name', '').strip()
-    date_from = request.GET.get('date_from', '')
-    date_to = request.GET.get('date_to', '')
-    assignment_id = request.GET.get('assignment_id', 'all')
-    if request.GET:
-        val = request.GET.get('graded_only', '')
-        graded_only = '1' if val in ('1', 'true', 'on', 'yes') else '0'
-    else:
-        graded_only = '1'
-    scope = request.GET.get('scope', 'mine' if not request.user.is_superuser else 'all')
-    target_teacher = request.GET.get('target_teacher', '').strip()
-    report_title = request.GET.get('report_title', '').strip()
-    report_notes = request.GET.get('report_notes', '').strip()
+    from .reports_service import get_report_submissions, get_report_assignments, report_filters_from_request
+    filters = report_filters_from_request(request)
+    class_id, assignment_id = filters['class_id'], filters['assignment_id']
+    target_teacher, scope = filters['target_teacher'], filters['scope']
 
-    # Дані для фільтрів у формі
     classes = teaching_classes(ClassGroup.objects.all()).order_by('grade', 'letter')
+    class_names = {c.pk: c.name for c in classes}
+    assignments_qs = get_report_assignments(request.user, filters)
+    assignments = list(assignments_qs[:200])
+    try:
+        aid = int(assignment_id)
+        if 0 < aid <= 9223372036854775807 and not any(a.pk == aid for a in assignments):
+            selected = assignments_qs.filter(pk=aid).first()
+            if selected:
+                assignments.append(selected)
+    except (ValueError, TypeError):
+        pass
 
-    assignments_qs = Assignment.objects.all().select_related('subject', 'teacher').prefetch_related('classes', 'submissions__class_group')
-    if target_teacher:
-        assignments_qs = assignments_qs.filter(
-            Q(teacher__full_name__icontains=target_teacher) |
-            Q(submissions__teacher__full_name__icontains=target_teacher) |
-            Q(teacher=teacher) |
-            Q(submissions__graded_by=request.user)
-        )
-    elif scope == 'mine' and teacher and not request.user.is_superuser:
-        assignments_qs = assignments_qs.filter(teacher=teacher)
-    if class_id and class_id != 'all':
-        try:
-            cid = int(class_id)
-            assignments_qs = assignments_qs.filter(
-                Q(classes__id=cid) |
-                Q(submissions__class_group_id=cid) |
-                Q(submissions__student__class_group_id=cid)
-            )
-        except (ValueError, TypeError):
-            pass
+    # Include classes of accessible historical/substitution works in topic labels.
+    work_classes = {}
+    accessible = get_report_submissions(request.user, {'scope': scope, 'graded_only': '0'})
+    for row in accessible.filter(assignment_id__in=[a.pk for a in assignments]).values(
+            'assignment_id', 'class_group_id'):
+        cid = row['class_group_id']
+        if cid:
+            work_classes.setdefault(row['assignment_id'], set()).add(cid)
+    for a in assignments:
+        c_ids = {c.pk for c in a.classes.all()} | work_classes.get(a.pk, set())
+        a.class_ids_str = ','.join(map(str, sorted(c_ids)))
+        a.class_names_str = ', '.join(class_names[cid] for cid in sorted(c_ids) if cid in class_names)
 
-    assignments_qs = assignments_qs.distinct().order_by('-created_at')
-
-    # Якщо раніше було обрано завдання іншого класу — скидаємо на 'all'
-    if class_id and class_id != 'all' and assignment_id and assignment_id != 'all':
-        if not assignments_qs.filter(id=assignment_id).exists():
-            assignment_id = 'all'
-
-    assignments_raw = list(assignments_qs[:200])
-
-    assignments = []
-    seen_ids = set()
-    for a in assignments_raw:
-        if a.id in seen_ids:
-            continue
-        seen_ids.add(a.id)
-        c_ids = [c.id for c in a.classes.all()]
-        c_names = [c.name for c in a.classes.all()]
-        if not c_ids:
-            sub_c_dict = {}
-            for s in a.submissions.all():
-                if s.class_group:
-                    sub_c_dict[s.class_group.id] = s.class_group.name
-            c_ids = list(sub_c_dict.keys())
-            c_names = list(sub_c_dict.values())
-        a.class_ids_str = ",".join(str(i) for i in c_ids)
-        a.class_names_str = ", ".join(c_names)
-        assignments.append(a)
-
-    from .reports_service import get_report_submissions
-    submissions = get_report_submissions(request.user, {
-        'class_id': class_id,
-        'pupil_scope': pupil_scope,
-        'student_name': student_name,
-        'date_from': date_from,
-        'date_to': date_to,
-        'assignment_id': assignment_id,
-        'graded_only': graded_only,
-        'scope': scope,
-        'target_teacher': target_teacher,
-    })
+    submissions = get_report_submissions(request.user, filters)
 
     # Підрахунок статистики
     grades_nums = []
@@ -6284,19 +6235,8 @@ def teacher_reports(request):
         'assignments': assignments,
         'other_teachers': other_teachers,
         'school': school,
-        'filters': {
-            'class_id': class_id,
-            'pupil_scope': pupil_scope,
-            'student_name': student_name,
-            'date_from': date_from,
-            'date_to': date_to,
-            'assignment_id': assignment_id,
-            'graded_only': graded_only,
-            'scope': scope,
-            'target_teacher': target_teacher,
-            'report_title': report_title,
-            'report_notes': report_notes,
-        },
+        'filters': filters,
+        'selected_assignment_unavailable': assignment_id != 'all' and not any(str(a.pk) == assignment_id for a in assignments),
         'stats': {
             'total_count': len(submissions),
             'grades_count': len(grades_nums),
@@ -6320,61 +6260,37 @@ def teacher_reports_pdf(request):
     teacher = getattr(request.user, 'teacher_profile', None)
     teacher_name = teacher.full_name if teacher else request.user.get_full_name() or request.user.username
 
-    # Параметри запиту
-    class_id = request.GET.get('class_id', 'all')
-    pupil_scope = request.GET.get('pupil_scope', 'all')
-    student_name = request.GET.get('student_name', '').strip()
-    date_from = request.GET.get('date_from', '')
-    date_to = request.GET.get('date_to', '')
-    assignment_id = request.GET.get('assignment_id', 'all')
-    if request.GET:
-        val = request.GET.get('graded_only', '')
-        graded_only = '1' if val in ('1', 'true', 'on', 'yes') else '0'
-    else:
-        graded_only = '1'
-    scope = request.GET.get('scope', 'mine' if not request.user.is_superuser else 'all')
+    from .reports_service import get_report_submissions, get_report_assignments, generate_teacher_report_pdf, report_filters_from_request
+    filters = report_filters_from_request(request)
+    class_id, assignment_id = filters['class_id'], filters['assignment_id']
+    pupil_scope = filters['pupil_scope']
+    date_from, date_to = filters['date_from'], filters['date_to']
+    target_teacher = filters['target_teacher']
+    report_title, report_notes = filters['report_title'], filters['report_notes']
     mode = request.GET.get('mode', 'grades_only')
-    target_teacher = request.GET.get('target_teacher', '').strip()
-    report_title = request.GET.get('report_title', '').strip()
-    report_notes = request.GET.get('report_notes', '').strip()
-    selected_ids = request.GET.get('selected_ids', '')
+    submissions = get_report_submissions(request.user, filters)
 
-    from .reports_service import get_report_submissions, generate_teacher_report_pdf
-
-    submissions = get_report_submissions(request.user, {
-        'class_id': class_id,
-        'pupil_scope': pupil_scope,
-        'student_name': student_name,
-        'date_from': date_from,
-        'date_to': date_to,
-        'assignment_id': assignment_id,
-        'graded_only': graded_only,
-        'scope': scope,
-        'target_teacher': target_teacher,
-        'selected_ids': selected_ids,
-    })
-
-    # Отримуємо назви класів
-    classes_str = "Всі класи"
-    if class_id and class_id != 'all':
+    classes_str = 'Всі класи'
+    if class_id != 'all':
         try:
-            cg = ClassGroup.objects.get(id=class_id)
-            classes_str = cg.name
-        except ClassGroup.DoesNotExist:
-            pass
+            cid = int(class_id)
+            cg = ClassGroup.objects.filter(pk=cid).first() if 0 < cid <= 9223372036854775807 else None
+            classes_str = cg.name if cg else 'Невідомий клас'
+        except (ValueError, TypeError):
+            classes_str = 'Невідомий клас'
     elif submissions:
-        unique_classes = sorted(list(set(s.class_group.name for s in submissions if s.class_group)))
+        unique_classes = sorted({s.class_group.name for s in submissions if s.class_group})
         if unique_classes:
-            classes_str = ", ".join(unique_classes)
+            classes_str = ', '.join(unique_classes)
 
-    # Отримуємо предмет
-    subject_name = ""
-    if assignment_id and assignment_id != 'all':
+    subject_name = ''
+    if assignment_id != 'all':
         try:
-            assign = Assignment.objects.select_related('subject').get(id=assignment_id)
-            if assign.subject:
+            aid = int(assignment_id)
+            assign = get_report_assignments(request.user, filters).filter(pk=aid).first() if 0 < aid <= 9223372036854775807 else None
+            if assign and assign.subject:
                 subject_name = assign.subject.name
-        except Assignment.DoesNotExist:
+        except (ValueError, TypeError):
             pass
 
     date_range_str = "Весь період"
