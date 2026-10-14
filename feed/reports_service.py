@@ -117,17 +117,24 @@ def get_report_submissions(teacher_user, filters):
         'class_group', 'teacher', 'graded_by'
     ).prefetch_related('files')
 
-    # Фільтрація по викладачу (якщо не суперкористувач і не вказано дивитись все)
-    # Якщо вчитель замінював іншого — він міг оцінювати будь-яку роботу або свої
+    # Фільтрація по викладачу (з підтримкою замін через target_teacher)
+    target_teacher = (filters.get('target_teacher') or '').strip()
     scope = filters.get('scope', 'mine')
-    if scope == 'mine' or not teacher_user.is_superuser:
+    if target_teacher:
+        qs = qs.filter(
+            Q(teacher__full_name__icontains=target_teacher) |
+            Q(assignment__teacher__full_name__icontains=target_teacher) |
+            Q(graded_by=teacher_user) |
+            Q(teacher__user=teacher_user) |
+            Q(assignment__teacher__user=teacher_user)
+        )
+    elif scope == 'mine' or not teacher_user.is_superuser:
         qs = qs.filter(
             Q(graded_by=teacher_user) |
             Q(teacher__user=teacher_user) |
             Q(assignment__teacher__user=teacher_user)
         )
 
-    target_teacher = filters.get('target_teacher')
     class_id = filters.get('class_id')
     from .outside_students import outside_predicate
     if filters.get('pupil_scope') == 'outside':
@@ -135,11 +142,16 @@ def get_report_submissions(teacher_user, filters):
     elif filters.get('pupil_scope') == 'roster':
         qs = qs.exclude(outside_predicate(teacher_user, target_teacher=target_teacher, class_id=class_id))
 
-    # Фільтр по класу
-    class_id = filters.get('class_id')
+    # Фільтр по класу: враховуємо учнів цього класу, здачі за цим класом,
+    # а також завдання, призначені цьому класу (навіть якщо учень здав з іншого класу)
     if class_id and class_id != 'all':
         try:
-            qs = qs.filter(class_group_id=int(class_id))
+            cid = int(class_id)
+            qs = qs.filter(
+                Q(class_group_id=cid) |
+                Q(student__class_group_id=cid) |
+                Q(assignment__classes__id=cid)
+            ).distinct()
         except (ValueError, TypeError):
             pass
 

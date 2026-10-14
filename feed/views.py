@@ -6179,11 +6179,67 @@ def teacher_reports(request):
     date_from = request.GET.get('date_from', '')
     date_to = request.GET.get('date_to', '')
     assignment_id = request.GET.get('assignment_id', 'all')
-    graded_only = request.GET.get('graded_only', '1')
+    if request.GET:
+        val = request.GET.get('graded_only', '')
+        graded_only = '1' if val in ('1', 'true', 'on', 'yes') else '0'
+    else:
+        graded_only = '1'
     scope = request.GET.get('scope', 'mine' if not request.user.is_superuser else 'all')
     target_teacher = request.GET.get('target_teacher', '').strip()
     report_title = request.GET.get('report_title', '').strip()
     report_notes = request.GET.get('report_notes', '').strip()
+
+    # Дані для фільтрів у формі
+    classes = teaching_classes(ClassGroup.objects.all()).order_by('grade', 'letter')
+
+    assignments_qs = Assignment.objects.all().select_related('subject', 'teacher').prefetch_related('classes', 'submissions__class_group')
+    if target_teacher:
+        assignments_qs = assignments_qs.filter(
+            Q(teacher__full_name__icontains=target_teacher) |
+            Q(submissions__teacher__full_name__icontains=target_teacher) |
+            Q(teacher=teacher) |
+            Q(submissions__graded_by=request.user)
+        )
+    elif scope == 'mine' and teacher and not request.user.is_superuser:
+        assignments_qs = assignments_qs.filter(teacher=teacher)
+    if class_id and class_id != 'all':
+        try:
+            cid = int(class_id)
+            assignments_qs = assignments_qs.filter(
+                Q(classes__id=cid) |
+                Q(submissions__class_group_id=cid) |
+                Q(submissions__student__class_group_id=cid)
+            )
+        except (ValueError, TypeError):
+            pass
+
+    assignments_qs = assignments_qs.distinct().order_by('-created_at')
+
+    # Якщо раніше було обрано завдання іншого класу — скидаємо на 'all'
+    if class_id and class_id != 'all' and assignment_id and assignment_id != 'all':
+        if not assignments_qs.filter(id=assignment_id).exists():
+            assignment_id = 'all'
+
+    assignments_raw = list(assignments_qs[:200])
+
+    assignments = []
+    seen_ids = set()
+    for a in assignments_raw:
+        if a.id in seen_ids:
+            continue
+        seen_ids.add(a.id)
+        c_ids = [c.id for c in a.classes.all()]
+        c_names = [c.name for c in a.classes.all()]
+        if not c_ids:
+            sub_c_dict = {}
+            for s in a.submissions.all():
+                if s.class_group:
+                    sub_c_dict[s.class_group.id] = s.class_group.name
+            c_ids = list(sub_c_dict.keys())
+            c_names = list(sub_c_dict.values())
+        a.class_ids_str = ",".join(str(i) for i in c_ids)
+        a.class_names_str = ", ".join(c_names)
+        assignments.append(a)
 
     from .reports_service import get_report_submissions
     submissions = get_report_submissions(request.user, {
@@ -6213,14 +6269,6 @@ def teacher_reports(request):
     good_cnt = sum(1 for g in grades_nums if 7 <= g < 10)
     avg_cnt = sum(1 for g in grades_nums if 4 <= g < 7)
     low_cnt = sum(1 for g in grades_nums if g < 4)
-
-    # Дані для фільтрів у формі
-    classes = teaching_classes(ClassGroup.objects.all()).order_by('grade', 'letter')
-
-    assignments_qs = Assignment.objects.all()
-    if scope == 'mine' and teacher and not request.user.is_superuser:
-        assignments_qs = assignments_qs.filter(teacher=teacher)
-    assignments = assignments_qs.order_by('-created_at')[:100]
 
     other_teachers = Teacher.objects.all()
     if teacher:
@@ -6279,7 +6327,11 @@ def teacher_reports_pdf(request):
     date_from = request.GET.get('date_from', '')
     date_to = request.GET.get('date_to', '')
     assignment_id = request.GET.get('assignment_id', 'all')
-    graded_only = request.GET.get('graded_only', '1')
+    if request.GET:
+        val = request.GET.get('graded_only', '')
+        graded_only = '1' if val in ('1', 'true', 'on', 'yes') else '0'
+    else:
+        graded_only = '1'
     scope = request.GET.get('scope', 'mine' if not request.user.is_superuser else 'all')
     mode = request.GET.get('mode', 'grades_only')
     target_teacher = request.GET.get('target_teacher', '').strip()

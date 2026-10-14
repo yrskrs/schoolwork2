@@ -31,6 +31,9 @@ def outside_predicate(user, target_teacher=None, class_id=None):
     teacher_id = None
     if target_teacher and str(target_teacher).isdigit():
         teacher_id = int(target_teacher)
+    if not teacher_id and target_teacher:
+        from .models import Teacher
+        teacher_id = Teacher.objects.filter(full_name__iexact=str(target_teacher).strip()).values_list('pk', flat=True).first()
     if not teacher_id:
         teacher_id = getattr(getattr(user, 'teacher_profile', None), 'pk', None)
     bindings = [item for key, item in state.get('journal_imports', {}).items()

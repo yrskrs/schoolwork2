@@ -206,3 +206,57 @@ class OutsideStudentsTests(TestCase):
         page = self.client.get(reverse('outside_students'))
         self.assertEqual(len(page.context['page_obj']), 1)
         self.assertEqual(page.context['page_obj'][0]['key'], f'student:{self.twin.pk}')
+
+    def test_reports_view_graded_only_toggle_and_class_topic_filtering(self):
+        from django.urls import reverse
+        from feed.models import Assignment, Submission, ClassGroup
+
+        group_b = ClassGroup.objects.create(name='7-Б', grade=7, letter='Б')
+        asgn_b = Assignment.objects.create(
+            teacher=self.teacher, subject=self.assignment.subject,
+            title='Завдання 7-Б', description='Desc'
+        )
+        asgn_b.classes.add(group_b)
+
+        # 1 graded submission for 7-А
+        sub_graded = Submission.objects.create(
+            assignment=self.assignment, student=self.student, class_group=self.group,
+            last_name='Оцінений', first_name='Учень',
+            grade='11', graded_by=self.user, graded_at=timezone.now()
+        )
+        # 1 ungraded submission for 7-А
+        sub_ungraded = Submission.objects.create(
+            assignment=self.assignment, student=self.twin, class_group=self.group,
+            last_name='Неоцінений', first_name='Учень',
+            grade=None
+        )
+        # 1 cross-class submission (student from 7-Б submitting to 7-А's assignment)
+        sub_cross = Submission.objects.create(
+            assignment=self.assignment, class_group=group_b,
+            last_name='Чужий', first_name='Клас',
+            grade=None
+        )
+
+        self.client.force_login(self.user)
+
+        # 1. graded_only unchecked (omitted from GET) -> should include graded + ungraded + cross
+        url = reverse('teacher_reports') + f'?class_id={self.group.pk}'
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, 'Неоцінений')
+        self.assertContains(resp, 'Оцінений')
+        self.assertContains(resp, 'Чужий')
+        # Checkbox should NOT be checked
+        self.assertNotContains(resp, 'name="graded_only" id="graded_only" value="1" checked')
+
+        # 2. graded_only checked (graded_only=1) -> should only include graded
+        url_graded = reverse('teacher_reports') + f'?class_id={self.group.pk}&graded_only=1'
+        resp_graded = self.client.get(url_graded)
+        self.assertEqual(resp_graded.status_code, 200)
+        self.assertContains(resp_graded, 'Оцінений')
+        self.assertNotContains(resp_graded, 'Неоцінений')
+        self.assertContains(resp_graded, 'name="graded_only" id="graded_only" value="1" checked')
+
+        # 3. Topic filtering: assignment options for 7-А should NOT include 'Завдання 7-Б'
+        self.assertContains(resp, self.assignment.title)
+        self.assertNotContains(resp, 'Завдання 7-Б')
