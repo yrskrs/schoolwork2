@@ -64,7 +64,8 @@ def roster(request):
             return reply(operate(receive))
         except (SyncError, ValueError, TypeError, KeyError, AttributeError):
             return reply({'error': 'Не вдалося передати список. Перевірте відповідності та права власника ключа; місцеві дані збережено.'}, 400)
-    classes = ClassGroup.objects.all()
+    from .outside_students import teaching_classes
+    classes = teaching_classes(ClassGroup.objects.all())
     subjects = Subject.objects.all()
     if key.teacher_id:
         classes = classes.filter(teacher=key.teacher)
@@ -102,7 +103,7 @@ def grades(request):
     # attempt must not resurrect an older mark. Preserve explicit coauthor IDs.
     winners = {}
     for sub in qs.order_by('-submitted_at', '-pk').iterator():
-        identity = (sub.assignment_id, sub.student_id, sub.class_group_id) if sub.student_id else ('unmapped', sub.pk)
+        identity = (sub.assignment_id, sub.student_id or str(sub.outside_student_id), sub.class_group_id) if sub.student_id or sub.outside_student_id else ('unmapped', sub.pk)
         winners.setdefault(identity, sub)
     records = []
     for sub in sorted(winners.values(), key=lambda sub: sub.pk):
@@ -119,9 +120,11 @@ def grades(request):
             points = 0
         records.append((sub.pk, {
             'source': 'schoolwork',
-            'id': f'schoolwork:assignment:{sub.assignment_id}:class:{sub.class_group_id}:student:{sub.student_id}' if sub.student_id else f'schoolwork:unmapped:{sub.pk}',
+            'id': f'schoolwork:assignment:{sub.assignment_id}:class:{sub.class_group_id}:student:{sub.student_id}' if sub.student_id else f'schoolwork:assignment:{sub.assignment_id}:class:{sub.class_group_id}:outside:{sub.outside_student_id}' if sub.outside_student_id else f'schoolwork:unmapped:{sub.pk}',
             'student_id': sub.student_id, 'student_name': sub.student.get_full_name() if sub.student_id else sub.get_student_full_name(),
-            'student_key': str(sub.student_id) if sub.student_id else f'unmapped:{sub.pk}', 'class_id': sub.class_group_id,
+            'student_key': str(sub.student_id) if sub.student_id else f'outside:{sub.outside_student_id}' if sub.outside_student_id else f'unmapped:{sub.pk}',
+            'outside_student_id': str(sub.outside_student_id) if sub.outside_student_id and not sub.student_id else None,
+            'class_id': sub.class_group_id,
             'subject_id': sub.assignment.subject_id, 'work_id': sub.assignment_id,
             'title': sub.assignment.title, 'attempt_id': sub.pk,
             'points': points, 'max_points': 12, 'value': sub.grade, 'grading_scale': 12,

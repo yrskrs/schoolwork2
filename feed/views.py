@@ -1212,7 +1212,7 @@ def teacher_dashboard(request):
         'tab': tab,
         'counts': counts,
         'total_ungraded': total_ungraded,
-        'all_classes': ClassGroup.objects.all().order_by('grade', 'letter', 'name'),
+        'all_classes': ClassGroup.objects.exclude(letter='ПК', name__endswith=' (Позакласні)').order_by('grade', 'letter', 'name'),
         'all_subjects': Subject.objects.all().order_by('name'),
         'selected_class_id': str(class_id) if class_id and class_id != 'all' else '',
         'selected_subject_id': str(subject_id) if subject_id and subject_id != 'all' else '',
@@ -2910,6 +2910,9 @@ def submit_assignment(request, pk):
     if request.method == 'POST':
         form = SubmissionForm(request.POST, request.FILES, assignment=assignment)
         if form.is_valid():
+            if form.cleaned_data.get('other_student'):
+                from .outside_students import browser_identity
+                form.outside_student_id = browser_identity(request, assignment.teacher_id, form.cleaned_data['full_name'])
             try:
                 submission = form.save(assignment=assignment)
             except ValidationError as exc:
@@ -5108,6 +5111,8 @@ def teacher_students(request):
     else:
         all_class_groups = list(ClassGroup.objects.all().order_by('grade', 'letter'))
 
+    from .outside_students import teaching_classes
+    all_class_groups = list(teaching_classes(ClassGroup.objects.filter(pk__in=[c.pk for c in all_class_groups])).order_by('grade', 'letter'))
     selected_class_id = request.GET.get('class_group') or request.GET.get('class')
     search_query = request.GET.get('search', '').strip()
     current_tab = request.GET.get('tab', 'students')
@@ -5156,7 +5161,7 @@ def teacher_students(request):
     # Список учнів з підрахунком робіт
     students_list = list(students_qs)
     submissions_by_class = {}
-    for sub in Submission.objects.filter(class_group_id__in=[s.class_group_id for s in students_list if s.class_group_id]).values('id', 'last_name', 'first_name', 'class_group_id', 'grade'):
+    for sub in Submission.objects.filter(class_group_id__in=[s.class_group_id for s in students_list if s.class_group_id]).values('id', 'student_id', 'outside_student_id', 'last_name', 'first_name', 'class_group_id', 'grade'):
         cid = sub['class_group_id']
         if cid not in submissions_by_class:
             submissions_by_class[cid] = []
@@ -5165,7 +5170,11 @@ def teacher_students(request):
     from .student_matcher import is_same_student_identity
     for st in students_list:
         c_subs = submissions_by_class.get(st.class_group_id, [])
-        st_subs = [s for s in c_subs if is_same_student_identity(st.last_name, st.first_name, s['last_name'], s['first_name'])]
+        from .roster_identity import has_stable_class_roster
+        allow_names = not has_stable_class_roster(st.class_group) and not Student.objects.filter(
+            class_group_id=st.class_group_id, last_name__iexact=st.last_name, first_name__iexact=st.first_name).exclude(pk=st.pk).exists()
+        st_subs = [s for s in c_subs if s['student_id'] == st.pk or (allow_names and s['student_id'] is None
+            and s['outside_student_id'] is None and is_same_student_identity(st.last_name, st.first_name, s['last_name'], s['first_name']))]
         st.subs_count = len(st_subs)
         st.graded_count = len([s for s in st_subs if s.get('grade')])
 

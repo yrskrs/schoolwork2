@@ -9,7 +9,8 @@ def can_access(user):
 
 def allowed_classes(user):
     groups = ClassGroup.objects.all() if user.is_superuser else user.teacher_profile.classes.all()
-    return list(groups.values('id', 'name'))
+    from .outside_students import teaching_classes
+    return list(teaching_classes(groups).values('id', 'name'))
 
 
 class Native:

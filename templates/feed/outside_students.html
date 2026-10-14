@@ -1,0 +1,23 @@
+{% extends 'base.html' %}
+{% block title %}Окремі учні та їхні роботи{% endblock %}
+{% block content %}
+<h1>Окремі учні та їхні роботи</h1>
+<p>Учні, які здавали роботи поза списком класу, зокрема під час замін. Клас біля роботи — місце її проведення. Окремий навчальний клас для цих учнів не створюється.</p>
+<p><a href="{% url 'teacher_students' %}">До списків класів</a></p>
+<form method="get">
+  <label>Пошук учня <input name="q" value="{{ search }}"></label>
+  <label>Клас проведення роботи <select name="class"><option value="">Усі класи</option>{% for group in classes %}<option value="{{ group.pk }}"{% if selected_class_id == group.pk|stringformat:'s' %} selected{% endif %}>{{ group.name }}</option>{% endfor %}</select></label>
+  <button class="btn btn-primary">Показати</button>
+</form>
+{% for pupil in page_obj %}
+<article class="card" style="padding:1rem;margin:1rem 0">
+  <h2>{{ pupil.name }}</h2>
+  <p>Окремий учень · запис {{ pupil.key|slice:'-8:' }}</p>
+  {% for work in pupil.works %}<p>{{ work.submitted_at|date:'d.m.Y' }} · {{ work.class_group.name }} · <a href="{% url 'view_file' work.pk %}">{{ work.assignment.title }}</a> · <strong>{{ work.grade|default:'Ще не оцінено' }}</strong>{% if not work.is_latest_attempt %} · попередня спроба{% endif %}</p>{% endfor %}
+</article>
+{% empty %}<p>Окремих учнів за цими фільтрами немає.</p>{% endfor %}
+{% if page_obj.has_previous %}<a href="?page={{ page_obj.previous_page_number }}&amp;q={{ search|urlencode }}&amp;class={{ selected_class_id|urlencode }}">Назад</a>{% endif %}
+<span>{{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
+{% if page_obj.has_next %}<a href="?page={{ page_obj.next_page_number }}&amp;q={{ search|urlencode }}&amp;class={{ selected_class_id|urlencode }}">Далі</a>{% endif %}
+<p>Старі роботи без сталої прив’язки показано окремими записами. Однакові імена автоматично не об’єднуються.</p>
+{% endblock %}

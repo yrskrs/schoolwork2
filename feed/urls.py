@@ -1,7 +1,7 @@
 """Маршрути застосунку feed для SchoolNet+."""
 
 from django.urls import path
-from . import views
+from . import views, outside_students
 from . import journal_api
 from . import school_api_v2
 from . import views_updates
@@ -87,6 +87,7 @@ urlpatterns = [
 
     # ── Керування профілями учнів та імпорт класів ───────────────────────────
     path('teacher/students/', views.teacher_students, name='teacher_students'),
+    path('teacher/outside-students/', outside_students.overview, name='outside_students'),
     path('teacher/students/merge/', views.teacher_student_merge, name='teacher_student_merge'),
     path('teacher/students/<int:student_id>/edit/', views.teacher_student_edit, name='teacher_student_edit'),
     path('teacher/students/<int:student_id>/delete/', views.teacher_student_delete, name='teacher_student_delete'),

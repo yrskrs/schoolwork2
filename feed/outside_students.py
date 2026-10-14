@@ -1,0 +1,67 @@
+"""Browser-held identities for pupils who explicitly submit outside a roster."""
+import hashlib
+from uuid import uuid4
+from django.contrib.auth.decorators import login_required
+from django.core.exceptions import PermissionDenied
+from django.core.paginator import Paginator
+from django.shortcuts import render
+from django.views.decorators.http import require_GET
+
+
+def browser_identity(request, teacher_id, name):
+    key = hashlib.sha256(f'{teacher_id}:{" ".join(name.split()).casefold()}'.encode()).hexdigest()
+    identities = dict(request.session.get('outside_students', {}))
+    if key not in identities:
+        identities[key] = str(uuid4())
+        identities = dict(list(identities.items())[-30:])
+        request.session['outside_students'] = identities
+    return identities[key]
+
+
+def teaching_classes(queryset):
+    return queryset.exclude(letter='ПК', name__endswith=' (Позакласні)')
+
+
+def outside_works(user):
+    from django.db.models import Q
+    from .models import Submission, RosterState
+    rows = Submission.objects.all().select_related('assignment', 'class_group')
+    if not user.is_superuser:
+        rows = rows.filter(assignment__teacher__user=user)
+    state = RosterState.objects.filter(pk=1).values_list('data', flat=True).first() or {}
+    bindings = [item for key, item in state.get('journal_imports', {}).items()
+                if user.is_superuser or key.startswith(str(user.teacher_profile.pk) + ':')]
+    known = {entry['native_id'] for item in bindings
+             if not (item.get('remote_class', {}).get('letter') == 'ПК'
+                     and item.get('remote_class', {}).get('name', '').endswith(' (Позакласні)'))
+             for entry in item.get('students', {}).values()}
+    rows = rows.filter(Q(student__isnull=True) | ~Q(student_id__in=known)) if bindings else rows.filter(student__isnull=True)
+    return rows.order_by('-submitted_at', '-pk')
+
+
+@login_required
+@require_GET
+def overview(request):
+    if not request.user.is_superuser and not hasattr(request.user, 'teacher_profile'):
+        raise PermissionDenied
+    rows = outside_works(request.user)
+    from .models import ClassGroup
+    classes = teaching_classes(ClassGroup.objects.filter(
+        pk__in=rows.values('class_group_id')))
+    search = request.GET.get('q', '').strip()
+    if search:
+        from django.db.models import Q
+        for token in search.split():
+            rows = rows.filter(Q(last_name__icontains=token) | Q(first_name__icontains=token))
+    class_id = request.GET.get('class', '')
+    if class_id.isdigit():
+        rows = rows.filter(class_group_id=int(class_id))
+    groups = {}
+    for row in rows:
+        key = f'student:{row.student_id}' if row.student_id else f'outside:{row.outside_student_id}' if row.outside_student_id else f'legacy:{row.pk}'
+        group = groups.setdefault(key, {'name': row.get_student_full_name(), 'works': [], 'key': key})
+        group['works'].append(row)
+    return render(request, 'feed/outside_students.html', {
+        'page_obj': Paginator(list(groups.values()), 25).get_page(request.GET.get('page')),
+        'classes': classes, 'search': search, 'selected_class_id': class_id,
+    })
