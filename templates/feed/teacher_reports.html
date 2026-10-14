@@ -70,6 +70,16 @@
                             </select>
                         </div>
 
+                        <div>
+                            <label for="pupil_scope" style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;">Учні:</label>
+                            <select name="pupil_scope" id="pupil_scope" class="form-input" style="width:100%;">
+                                <option value="all" {% if filters.pupil_scope == 'all' %}selected{% endif %}>Усі учні</option>
+                                <option value="outside" {% if filters.pupil_scope == 'outside' %}selected{% endif %}>Позакласні учні (поза моїми журналами)</option>
+                                <option value="roster" {% if filters.pupil_scope == 'roster' %}selected{% endif %}>Учні моїх журналів</option>
+                            </select>
+                            <small>Позакласних визначаємо за переданими списками ваших журналів. Фільтр діє також у PDF для передачі оцінок.</small>
+                        </div>
+
                         <!-- Пошук учня -->
                         <div>
                             <label for="student_name" style="display:block;font-size:12px;font-weight:700;color:var(--color-text-secondary);margin-bottom:4px;">

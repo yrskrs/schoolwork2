@@ -19,23 +19,30 @@ def browser_identity(request, teacher_id, name):
 
 
 def teaching_classes(queryset):
-    return queryset.exclude(letter='ПК', name__endswith=' (Позакласні)')
+    # ClassGroup.save() derives the letter from the name, so old copies may
+    # have letter='А' even when the journal originally sent 'ПК'.
+    return queryset.exclude(name__endswith=' (Позакласні)')
+
+
+def outside_predicate(user):
+    from django.db.models import Q
+    from .models import RosterState
+    state = RosterState.objects.filter(pk=1).values_list('data', flat=True).first() or {}
+    teacher_id = getattr(getattr(user, 'teacher_profile', None), 'pk', None)
+    bindings = [item for key, item in state.get('journal_imports', {}).items()
+                if key.startswith(str(teacher_id) + ':')]
+    known = {entry['native_id'] for item in bindings
+             if not item.get('remote_class', {}).get('name', '').endswith(' (Позакласні)')
+             for entry in item.get('students', {}).values()}
+    return Q(student__isnull=True) | ~Q(student_id__in=known) if bindings else Q(student__isnull=True)
 
 
 def outside_works(user):
-    from django.db.models import Q
-    from .models import Submission, RosterState
+    from .models import Submission
     rows = Submission.objects.all().select_related('assignment', 'class_group')
     if not user.is_superuser:
         rows = rows.filter(assignment__teacher__user=user)
-    state = RosterState.objects.filter(pk=1).values_list('data', flat=True).first() or {}
-    bindings = [item for key, item in state.get('journal_imports', {}).items()
-                if user.is_superuser or key.startswith(str(user.teacher_profile.pk) + ':')]
-    known = {entry['native_id'] for item in bindings
-             if not (item.get('remote_class', {}).get('letter') == 'ПК'
-                     and item.get('remote_class', {}).get('name', '').endswith(' (Позакласні)'))
-             for entry in item.get('students', {}).values()}
-    rows = rows.filter(Q(student__isnull=True) | ~Q(student_id__in=known)) if bindings else rows.filter(student__isnull=True)
+    rows = rows.filter(outside_predicate(user))
     return rows.order_by('-submitted_at', '-pk')
 
 

@@ -1,5 +1,7 @@
 # SchoolNet 4.4.10
 
+Поточний випуск: **4.4.11** — Позакласні учні у звітах та справне визначення оновлень. Деталі: [CHANGELOG.md](CHANGELOG.md).
+
 Окремі учні та встановлення виправлення: [OUTSIDE_STUDENTS.md](OUTSIDE_STUDENTS.md).
 
 Поточний випуск онлайн-оновлювача: **4.4.10**. Перевірки й обмеження: [ONLINE_UPDATE_CHECKS.md](ONLINE_UPDATE_CHECKS.md).
