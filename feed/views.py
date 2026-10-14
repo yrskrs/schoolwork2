@@ -2196,7 +2196,7 @@ def teacher_profile(request):
     teacher_classes = teaching_classes(teacher.classes.all()).order_by('grade', 'letter')
 
     other_subjects = Subject.objects.filter(created_by__isnull=False).exclude(id__in=teacher_subjects.values_list('id', flat=True))
-    other_classes = ClassGroup.objects.filter(created_by__isnull=False).exclude(id__in=teacher_classes.values_list('id', flat=True)).order_by('grade', 'letter')
+    other_classes = teaching_classes(ClassGroup.objects.filter(created_by__isnull=False).exclude(id__in=teacher_classes.values_list('id', flat=True))).order_by('grade', 'letter')
 
 
     all_teachers = Teacher.objects.select_related('user').all() if request.user.is_superuser else []
@@ -7553,7 +7553,7 @@ def teacher_settings_view(request):
     teacher_subjects = teacher.subjects.all().order_by('name')
     teacher_classes = teaching_classes(teacher.classes.all()).order_by('grade', 'letter', 'name')
     other_subjects = Subject.objects.exclude(id__in=teacher_subjects.values_list('id', flat=True)).order_by('name')
-    other_classes = ClassGroup.objects.exclude(id__in=teacher_classes.values_list('id', flat=True)).order_by('grade', 'letter', 'name')
+    other_classes = teaching_classes(ClassGroup.objects.exclude(id__in=teacher_classes.values_list('id', flat=True))).order_by('grade', 'letter', 'name')
     all_teachers = Teacher.objects.select_related('user').all()
 
     # Гарантуємо наявність базових шаблонів критеріїв оцінювання
