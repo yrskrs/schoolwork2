@@ -34,6 +34,7 @@
         <button type="button" class="btn btn-secondary btn-sm" onclick="downloadReportPdf('detailed')">📄 Детальний звіт (PDF)</button>
         <button type="button" class="btn btn-secondary btn-sm" onclick="openGuideModal('teacher_reports')">📖 Довідка звітів</button>
         {% elif current_page == 'teacher_students' %}
+        <a href="{% url 'outside_students' %}" class="btn btn-secondary btn-sm">👤 Окремі учні та їхні роботи</a>
         {% if current_tab == 'schedule' %}
         <a href="{% url 'teacher_settings' %}?tab=environment#bell-schedule-section" class="btn btn-secondary btn-sm">⚙️ Час уроків / дзвінки</a>
         <button type="button" class="btn btn-secondary btn-sm" onclick="window.print()">🖨️ Друкувати розклад</button>
