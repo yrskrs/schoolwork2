@@ -20,6 +20,27 @@ class EvaluationProgressTests(TestCase):
     def job(self, kind='teacher_check'):
         return AIJob.objects.create(kind=kind, submission=self.sub, requested_by=self.user)
 
+    @patch('feed.gemini_service.call_ai_api')
+    def test_verbose_level_is_saved_without_wasting_a_second_model_request(self, call):
+        self.add_connection('gemini', 'first')
+        self.add_connection('groq', 'never-called')
+        code, text, error, raw = self.answer()
+        answer = json.loads(text)
+        level = 'Достатній рівень: учень виконав завдання та пояснив отриманий результат. ' * 5
+        level = level.strip()
+        answer['level'] = level
+        call.return_value = code, json.dumps(answer), error, raw
+        result = evaluate_submission_with_gemini(self.sub)
+        self.assertEqual(result['status'], 'success')
+        self.sub.refresh_from_db()
+        self.assertEqual(self.sub.ai_score_level, level)
+        self.sub.student_ai_level = level
+        self.sub._meta.get_field('student_ai_level').clean(level, self.sub)
+        self.sub.save(update_fields=['student_ai_level'])
+        self.sub.refresh_from_db()
+        self.assertEqual(self.sub.student_ai_level, level)
+        call.assert_called_once()
+
     @patch('feed.gemini_service.time.sleep')
     @patch('feed.gemini_service.call_ai_api')
     def test_free_router_retries_received_gateway_failure_once_then_succeeds(self,call,sleep):

@@ -161,7 +161,7 @@ class TransportTests(TestCase):
     @patch('feed.gemini_service._http_post_json',return_value=(200,{'choices':[{'finish_reason':'length','message':{'content':None}}],'model':'actual-model','usage':{'completion_tokens_details':{'reasoning_tokens':5380}}},''))
     def test_exhausted_reasoning_budget_has_specific_diagnostic(self,http):
         result=_raw_call_ai_api('test',provider='openrouter',model_name='openrouter/free',thinking_budget=0)
-        self.assertEqual(http.call_args.args[1]['reasoning'],{'enabled':False})
+        self.assertNotIn('reasoning',http.call_args.args[1])
         self.assertIn('actual-model',result[2])
         self.assertIn('5380',result[2])
 
@@ -191,6 +191,30 @@ class TransportTests(TestCase):
         self.assertEqual(payload['messages'][-1]['content'], 'Важливий текст учня. ' * 1600)
         self.assertGreaterEqual(payload['max_completion_tokens'],3500)
         self.assertNotIn('max_tokens',payload)
+
+    @patch('feed.gemini_service._http_post_json')
+    def test_mandatory_reasoning_rejection_uses_backend_defaults_once(self, http):
+        payloads = []
+        def respond(url, payload, **kwargs):
+            payloads.append(dict(payload))
+            if len(payloads) == 1:
+                return 400, {'error': {'message': 'Reasoning is mandatory for this endpoint and cannot be disabled.'}}, ''
+            return 200, {'choices': [{'message': {'content': 'OK'}}]}, ''
+        http.side_effect = respond
+        result = _raw_call_ai_api('test', provider='openrouter', model_name='explicit-model', thinking_budget=0)
+        self.assertEqual(result[:2], (200, 'OK'))
+        self.assertEqual(payloads[0]['reasoning'], {'enabled': False})
+        self.assertNotIn('reasoning', payloads[1])
+        self.assertEqual(http.call_count, 2)
+
+    @patch('feed.gemini_service._http_post_json')
+    def test_unrelated_400_and_timeout_do_not_retry_reasoning(self, http):
+        for status, message in ((400, 'Invalid messages'), (0, 'The read operation timed out')):
+            http.reset_mock()
+            http.return_value = status, {'error': {'message': message}}, ''
+            result = _raw_call_ai_api('test', provider='openrouter', model_name='explicit-model', thinking_budget=0)
+            self.assertEqual(result[0], status)
+            http.assert_called_once()
 
     def test_groq_keeps_enough_output_for_complete_assessment_even_near_input_target(self):
         budget = groq_output_budget('openai/gpt-oss-120b','а'*11000,'',[],5380)

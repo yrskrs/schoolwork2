@@ -259,3 +259,46 @@ class AIErrorReportsAndModelStatsTests(TestCase):
 
         self.assertEqual(AIErrorLog.objects.filter(is_read=False).count(), 0)
         self.assertEqual(AIErrorLog.objects.filter(is_read=True).count(), 2)
+
+    def test_history_opens_and_exports_a_report_older_than_ten_entries(self):
+        from lxml import html
+        from datetime import timedelta
+        from django.utils import timezone
+
+        old = AIErrorReport.objects.create(report_text='Старий звіт\n<script>unsafe()</script>')
+        AIErrorReport.objects.filter(pk=old.pk).update(created_at=timezone.now() - timedelta(days=30))
+        for n in range(11):
+            latest = AIErrorReport.objects.create(report_text=f'Новий звіт {n}')
+        error = AIErrorLog.objects.create(error_message='Залишити незчитаним')
+        params = {'tab': 'ai', 'ai_section': 'errors', 'errors_view': 'analysis', 'stats_days': '7', 'report_page': '2'}
+        response = self.client.get(reverse('teacher_settings'), params)
+        page = html.fromstring(response.content)
+        link = page.xpath(f'//*[@id="ai-error-history"]//a[contains(@href, "report_id={old.pk}#")]')[0]
+        self.assertIsNotNone(link)
+        opened = self.client.get(link.get('href'))
+        self.assertEqual(opened.context['selected_ai_error_report'].pk, old.pk)
+        self.assertEqual(opened.context['latest_ai_error_report'].pk, latest.pk)
+        page = html.fromstring(opened.content)
+        self.assertEqual(page.get_element_by_id('raw-ai-error-report-text').text, old.report_text)
+        self.assertFalse(page.get_element_by_id('ai-error-report-content').xpath('.//script'))
+        self.assertEqual(page.get_element_by_id('ai-error-history').xpath('.//*[@aria-current]')[0].get('aria-current'), 'true')
+        download = self.client.get(page.xpath('//a[contains(@href, "report_download=markdown")]')[0].get('href'))
+        self.assertEqual(download.status_code, 200)
+        self.assertEqual(download.content.decode(), old.report_text)
+        self.assertIn(f'schoolnet-ai-report-{old.pk}.md', download['Content-Disposition'])
+        error.refresh_from_db()
+        self.assertFalse(error.is_read)
+        self.assertEqual(AIErrorReport.objects.count(), 12)
+
+    def test_unknown_report_is_not_replaced_by_latest_and_export_requires_login(self):
+        report = AIErrorReport.objects.create(report_text='Приватна діагностика')
+        url = reverse('teacher_settings')
+        for invalid in ('bad', '0', '-1', str(report.pk + 1), '9' * 50):
+            with self.subTest(invalid=invalid):
+                self.assertEqual(self.client.get(url, {'report_id': invalid}).status_code, 404)
+        response = self.client.get(url, {'tab': 'ai', 'ai_section': 'errors', 'errors_view': 'analysis'})
+        self.assertEqual(response.context['selected_ai_error_report'].pk, report.pk)
+        self.client.logout()
+        response = self.client.get(url, {'report_id': report.pk, 'report_download': 'markdown'})
+        self.assertEqual(response.status_code, 302)
+        self.assertNotIn(report.report_text, response.content.decode())

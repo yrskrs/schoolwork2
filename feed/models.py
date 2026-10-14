@@ -2155,7 +2155,7 @@ class Submission(models.Model):
 
     # ── Поля ШІ (Google Gemini) для попереднього оцінювання за системою НУШ ──
     ai_suggested_grade = models.CharField('Попередня оцінка ШІ', max_length=32, blank=True, null=True)
-    ai_score_level = models.CharField('Рівень оцінки ШІ', max_length=40, blank=True, default='')
+    ai_score_level = models.TextField('Рівень оцінки ШІ', blank=True, default='')
     ai_feedback = models.TextField('Педагогічний відгук ШІ', blank=True, default='')
     ai_gr_results = models.TextField('Оцінки за групами результатів (ГР)', blank=True, default='')
     ai_model_used = models.CharField('Використана модель ШІ', max_length=100, blank=True, default='')
@@ -2190,8 +2190,8 @@ class Submission(models.Model):
     student_ai_grade = models.CharField(
         'Чернова оцінка ШІ (від учня)', max_length=32, blank=True, null=True
     )
-    student_ai_level = models.CharField(
-        'Рівень чернової оцінки (від учня)', max_length=40, blank=True, default=''
+    student_ai_level = models.TextField(
+        'Рівень чернової оцінки (від учня)', blank=True, default=''
     )
     student_ai_summary = models.TextField(
         'Чернове резюме ШІ (від учня)', blank=True, default=''

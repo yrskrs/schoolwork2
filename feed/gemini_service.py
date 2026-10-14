@@ -531,9 +531,9 @@ def _raw_call_ai_api(prompt_text, system_prompt="", inline_media=None, provider=
                     payload['reasoning_effort'] = 'none'
                 elif model in _text_only_groq:
                     payload['reasoning_effort'] = 'low'
-        if provider == 'openrouter' and thinking_budget == 0:
-            # Merely hiding reasoning still spends the answer budget. Disable it
-            # in fast mode; the gateway normalizes this for the selected backend.
+        if provider == 'openrouter' and thinking_budget == 0 and model not in ('openrouter/free', 'openrouter/auto'):
+            # Dynamic routers may select a backend with mandatory reasoning.
+            # Let that backend choose its defaults instead of forcing a 400.
             payload['reasoning'] = {'enabled': False}
         if provider == 'openrouter' and any(item['mime_type'] == 'application/pdf' for item in inline_media):
             # OCR fallback can silently omit graphics. Require the complete file.
@@ -545,6 +545,15 @@ def _raw_call_ai_api(prompt_text, system_prompt="", inline_media=None, provider=
 
         try:
             status_code, data, text = post_chat(payload)
+
+            # An explicit model may also require reasoning. A rejected 400 has
+            # no assessment to save; retry once with the backend's defaults.
+            if (status_code == 400 and provider == 'openrouter'
+                    and payload.get('reasoning', {}).get('enabled') is False):
+                error_text = api_error_message(data or {}, text, api_key).lower()
+                if 'reasoning' in error_text and any(term in error_text for term in ('mandatory', 'cannot be disabled', 'required')):
+                    payload.pop('reasoning')
+                    status_code, data, text = post_chat(payload)
 
             # Якщо endpoint не підтримує response_format (400), пробуємо повторити без нього
             if status_code == 400 and json_mode and ('response_format' in text or 'json_object' in text):

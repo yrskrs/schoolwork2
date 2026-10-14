@@ -7530,7 +7530,7 @@ def teacher_settings_view(request):
                 messages.success(request, f"Звіт сформовано ШІ ({report.errors_count} помилок): {report.verdict_title} 🌐")
             else:
                 messages.warning(request, f"Звіт сформовано ШІ ({report.errors_count} помилок): {report.verdict_title} ⚠️")
-            return redirect(ai_settings_url(request, extra_params={'errors_view': 'analysis'}))
+            return redirect(ai_settings_url(request, extra_params={'errors_view': 'analysis', 'report_id': report.pk}))
 
         elif action == 'mark_all_errors_read':
             count = AIErrorLog.objects.filter(is_read=False).update(is_read=True, read_at=timezone.now())
@@ -7781,8 +7781,26 @@ def teacher_settings_view(request):
 
     from .models import AIErrorReport
     from .ai_error_analyzer import get_error_summary_stats
-    ai_error_reports = list(AIErrorReport.objects.select_related('created_by').order_by('-created_at')[:10])
-    latest_ai_error_report = ai_error_reports[0] if ai_error_reports else None
+    reports = AIErrorReport.objects.select_related('created_by').order_by('-created_at', '-pk')
+    latest_ai_error_report = reports.first()
+    selected_ai_error_report = latest_ai_error_report
+    report_id = request.GET.get('report_id')
+    if report_id is not None:
+        try:
+            report_pk = int(report_id)
+        except (TypeError, ValueError):
+            raise Http404('Некоректний номер звіту.')
+        if not 0 < report_pk <= 9223372036854775807:
+            raise Http404('Некоректний номер звіту.')
+        selected_ai_error_report = get_object_or_404(reports, pk=report_pk)
+    if request.GET.get('report_download') == 'markdown':
+        if selected_ai_error_report is None:
+            raise Http404('Звітів ще немає.')
+        response = HttpResponse(selected_ai_error_report.report_text, content_type='text/markdown; charset=utf-8')
+        response['Content-Disposition'] = f'attachment; filename="schoolnet-ai-report-{selected_ai_error_report.pk}.md"'
+        return response
+    ai_error_reports_page = Paginator(reports, 10).get_page(request.GET.get('report_page'))
+    ai_error_reports = ai_error_reports_page.object_list
     error_summary_stats = get_error_summary_stats()
     unread_ai_errors_count = AIErrorLog.objects.filter(is_read=False).count()
 
@@ -7834,6 +7852,8 @@ def teacher_settings_view(request):
         'errors_view': errors_view,
         'ai_error_reports': ai_error_reports,
         'latest_ai_error_report': latest_ai_error_report,
+        'selected_ai_error_report': selected_ai_error_report,
+        'ai_error_reports_page': ai_error_reports_page,
         'error_summary_stats': error_summary_stats,
         'unread_ai_errors_count': unread_ai_errors_count,
         'used_model_usage_stats': used_model_usage_stats,

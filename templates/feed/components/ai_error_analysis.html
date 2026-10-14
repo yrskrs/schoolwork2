@@ -239,21 +239,21 @@
         </div>
 
         <!-- Відображення звіту -->
-        {% if latest_ai_error_report %}
-        <div style="padding:20px;">
-            
+        {% if selected_ai_error_report %}
+        <div id="ai-error-report" style="padding:20px;">
+            <h3 style="margin:0 0 12px;">Звіт №{{ selected_ai_error_report.pk }} · {{ selected_ai_error_report.created_at|date:"d.m.Y H:i" }}</h3>
             <!-- Вердиктна плашка -->
             <div style="border-radius:var(--radius-md);padding:14px 18px;margin-bottom:18px;display:flex;align-items:flex-start;gap:12px;
-                {% if latest_ai_error_report.verdict == 'external_issue' %}
+                {% if selected_ai_error_report.verdict == 'external_issue' %}
                 background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3);color:#065f46;
-                {% elif latest_ai_error_report.verdict == 'needs_fix' %}
+                {% elif selected_ai_error_report.verdict == 'needs_fix' %}
                 background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);color:#991b1b;
                 {% else %}
                 background:rgba(99,102,241,0.1);border:1px solid rgba(99,102,241,0.3);color:#3730a3;
                 {% endif %}">
                 <span style="font-size:24px;line-height:1;">
-                    {% if latest_ai_error_report.verdict == 'external_issue' %}🟢
-                    {% elif latest_ai_error_report.verdict == 'needs_fix' %}🔴
+                    {% if selected_ai_error_report.verdict == 'external_issue' %}🟢
+                    {% elif selected_ai_error_report.verdict == 'needs_fix' %}🔴
                     {% else %}⚪{% endif %}
                 </span>
                 <div style="flex:1;">
@@ -261,13 +261,14 @@
                         Вердикт діагностики ШІ
                     </div>
                     <div style="font-size:16px;font-weight:800;margin-top:2px;">
-                        {{ latest_ai_error_report.verdict_title|default:latest_ai_error_report.verdict }}
+                        {{ selected_ai_error_report.verdict_title|default:selected_ai_error_report.verdict }}
                     </div>
                     <div style="font-size:12px;margin-top:4px;opacity:0.9;">
-                        Проаналізовано {{ latest_ai_error_report.errors_count }} помилок. Модель: {{ latest_ai_error_report.model_used }}. Час створення: {{ latest_ai_error_report.created_at|date:"d.m.Y H:i:s" }}
+                        Проаналізовано {{ selected_ai_error_report.errors_count }} помилок. Модель: {{ selected_ai_error_report.model_used }}. Час створення: {{ selected_ai_error_report.created_at|date:"d.m.Y H:i:s" }}
                     </div>
                 </div>
-                <div>
+                <div style="display:flex;flex-wrap:wrap;gap:8px;">
+                    <a class="btn btn-secondary btn-sm" href="{% url 'teacher_settings' %}?tab=ai&amp;ai_section=errors&amp;errors_view=analysis&amp;stats_days={{ stats_days }}&amp;report_id={{ selected_ai_error_report.pk }}&amp;report_download=markdown">Завантажити .md</a>
                     <button type="button" class="btn btn-secondary btn-sm" onclick="copyErrorReportText()" id="btn-copy-error-report" style="font-weight:700;font-size:12px;padding:6px 12px;display:inline-flex;align-items:center;gap:6px;background:var(--color-surface);color:var(--color-text-primary);">
                         <span>📋</span>
                         <span id="btn-copy-text">Копіювати звіт для іншого ШІ</span>
@@ -278,32 +279,43 @@
             <!-- Текст звіту (Markdown) -->
             <div style="background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:24px;position:relative;">
                 <div id="ai-error-report-content" class="markdown-body" style="font-size:13.5px;line-height:1.65;color:var(--color-text-primary);">
-                    {{ latest_ai_error_report.report_text|linebreaksbr }}
+                    {{ selected_ai_error_report.report_text|linebreaksbr }}
                 </div>
                 
                 <!-- Прихований блок з сирим текстом для швидкого копіювання в буфер -->
-                <textarea id="raw-ai-error-report-text" style="position:absolute;left:-9999px;top:-9999px;" readonly>{{ latest_ai_error_report.report_text }}</textarea>
+                <textarea id="raw-ai-error-report-text" style="position:absolute;left:-9999px;top:-9999px;" readonly>{{ selected_ai_error_report.report_text }}</textarea>
             </div>
 
             <!-- Історія попередніх звітів -->
-            {% if ai_error_reports|length > 1 %}
-            <details style="margin-top:18px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:12px 16px;">
+            {% if ai_error_reports %}
+            <details id="ai-error-history" {% if request.GET.report_id or request.GET.report_page %}open{% endif %} style="margin-top:18px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:12px 16px;">
                 <summary style="font-weight:700;font-size:13px;color:var(--color-text-primary);cursor:pointer;">
-                    📜 Історія попередніх звітів ({{ ai_error_reports|length }})
+                    📜 Історія звітів ({{ ai_error_reports_page.paginator.count }})
                 </summary>
                 <div style="margin-top:12px;display:flex;flex-direction:column;gap:8px;">
                     {% for r in ai_error_reports %}
-                    <div style="padding:8px 12px;background:var(--color-bg-secondary);border-radius:var(--radius-sm);display:flex;justify-content:space-between;align-items:center;font-size:12.5px;">
+                    <a href="{% url 'teacher_settings' %}?tab=ai&amp;ai_section=errors&amp;errors_view=analysis&amp;stats_days={{ stats_days }}&amp;report_page={{ ai_error_reports_page.number }}&amp;report_id={{ r.pk }}#ai-error-report" {% if r.pk == selected_ai_error_report.pk %}aria-current="true"{% endif %} style="padding:8px 12px;background:var(--color-bg-secondary);border-radius:var(--radius-sm);display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between;align-items:center;font-size:12.5px;color:var(--color-text-primary);text-decoration:none;border:1px solid {% if r.pk == selected_ai_error_report.pk %}var(--color-primary){% else %}var(--color-border){% endif %};">
                         <div>
                             <strong>#{{ r.pk }}</strong> · {{ r.created_at|date:"d.m.Y H:i" }} · 
                             <span style="font-weight:600;">{{ r.verdict_title }}</span> ({{ r.errors_count }} помилок)
                         </div>
                         <div style="font-size:11.5px;color:var(--color-text-muted);">
-                            {{ r.model_used }}
+                            {{ r.model_used }} · {% if r.pk == selected_ai_error_report.pk %}Відкрито{% else %}Відкрити звіт →{% endif %}
                         </div>
-                    </div>
+                    </a>
                     {% endfor %}
                 </div>
+                {% if ai_error_reports_page.has_other_pages %}
+                <nav aria-label="Сторінки історії звітів" style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-top:12px;font-size:13px;">
+                    {% if ai_error_reports_page.has_previous %}
+                    <a href="?tab=ai&amp;ai_section=errors&amp;errors_view=analysis&amp;stats_days={{ stats_days }}&amp;report_id={{ selected_ai_error_report.pk }}&amp;report_page={{ ai_error_reports_page.previous_page_number }}#ai-error-history">← Новіші звіти</a>
+                    {% endif %}
+                    <span>Сторінка {{ ai_error_reports_page.number }} з {{ ai_error_reports_page.paginator.num_pages }}</span>
+                    {% if ai_error_reports_page.has_next %}
+                    <a href="?tab=ai&amp;ai_section=errors&amp;errors_view=analysis&amp;stats_days={{ stats_days }}&amp;report_id={{ selected_ai_error_report.pk }}&amp;report_page={{ ai_error_reports_page.next_page_number }}#ai-error-history">Старіші звіти →</a>
+                    {% endif %}
+                </nav>
+                {% endif %}
             </details>
             {% endif %}
 
