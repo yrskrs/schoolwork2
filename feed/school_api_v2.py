@@ -49,7 +49,37 @@ def roster(request):
                 classes = ClassGroup.objects.all()
                 if key.teacher_id:
                     classes = classes.filter(teacher=key.teacher)
-                result = import_students(engine, store, payload, key.teacher_id or 'admin', set(classes.values_list('pk', flat=True)))
+                owner_key = key.teacher_id or 'admin'
+                imports = store.meta.get('journal_imports', {})
+                binding_k = f"{owner_key}:{payload.get('journal_instance_id')}:{payload.get('class', {}).get('id')}"
+                binding = imports.get(binding_k)
+                target_class_id = binding['class_id'] if binding else payload.get('source_class_id')
+                if target_class_id:
+                    try:
+                        target_class_id = int(target_class_id)
+                        claimed_ids = {entry['native_id'] for entry in binding['students'].values()} if binding else set()
+                        for s_row in payload.get('students', []):
+                            if s_row.get('local_id'):
+                                claimed_ids.add(int(s_row['local_id']))
+                        local_students = [(sid, engine.native.read('student', sid)) for sid in engine.native.students(target_class_id)]
+                        local_students = [(sid, s) for sid, s in local_students if s and sid not in claimed_ids]
+
+                        def norm(n):
+                            return ' '.join(n.casefold().replace('’', "'").replace('`', "'").split())
+
+                        from collections import Counter
+                        local_counts = Counter(norm(s['name']) for sid, s in local_students)
+                        payload_counts = Counter(norm(' '.join(part for part in (r.get('last_name'), r.get('first_name'), r.get('middle_name')) if part)) for r in payload.get('students', []))
+                        for s_row in payload.get('students', []):
+                            if not s_row.get('local_id'):
+                                full_name = norm(' '.join(part for part in (s_row.get('last_name'), s_row.get('first_name'), s_row.get('middle_name')) if part))
+                                if local_counts.get(full_name) == 1 and payload_counts.get(full_name) == 1:
+                                    match_id = next(sid for sid, s in local_students if norm(s['name']) == full_name)
+                                    s_row['local_id'] = match_id
+                                    claimed_ids.add(match_id)
+                    except (ValueError, TypeError, KeyError):
+                        pass
+                result = import_students(engine, store, payload, owner_key, set(classes.values_list('pk', flat=True)))
                 group = ClassGroup.objects.get(pk=result['class_id'])
                 if key.teacher_id:
                     key.teacher.classes.add(group)
