@@ -109,6 +109,10 @@ def grades(request):
     for sub in sorted(winners.values(), key=lambda sub: sub.pk):
         if sub.pk <= cursor or not sub.grade or not sub.graded_by_id or not sub.graded_at:
             continue
+        # This is a request for another attempt, not a final journal mark.
+        # Filter after choosing the latest attempt so an older mark stays hidden.
+        if sub.grade.strip().casefold() == 'доопрацювати':
+            continue
         date = sub.effective_grade_date
         if not start <= date <= end:
             continue

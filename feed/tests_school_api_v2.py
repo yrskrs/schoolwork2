@@ -74,6 +74,18 @@ class SchoolAPIV2Tests(TestCase):
         self.assertEqual(self.export(class_id='bad').status_code,400)
         self.assertEqual(self.client.get('/api/v2/journal/grades/').status_code,401)
 
+    def test_rework_status_is_not_a_final_mark_and_does_not_restore_old_grade(self):
+        self.sub()
+        latest = self.sub()
+        latest.grade = 'Доопрацювати'
+        latest.save()
+        self.assertEqual(self.export().json()['grades'], [])
+        latest.grade = '10'
+        latest.save()
+        grades = self.export().json()['grades']
+        self.assertEqual(len(grades), 1)
+        self.assertEqual(grades[0]['value'], '10')
+
     def test_inactive_assignment_classes_do_not_allow_other_classes(self):
         self.group.integration_active=False;self.group.save()
         other=ClassGroup.objects.create(name='8-Б',grade=8,letter='Б')
