@@ -82,6 +82,10 @@ def check_remote(root, repo, current_ver, branch='main'):
             releases = json.loads(fetch('RELEASES.json'))
             if not isinstance(releases, list) or any(not isinstance(r, dict) or not r.get('version') for r in releases):
                 raise ValueError('Некоректний RELEASES.json')
+            if not any(r.get('version') == remote_ver for r in releases):
+                cl_releases = parse_changelog_markdown(fetch('CHANGELOG.md'))
+                if any(r.get('version') == remote_ver for r in cl_releases):
+                    releases = cl_releases
         except Exception:
             releases = parse_changelog_markdown(fetch('CHANGELOG.md'))
         target = next((r for r in releases if r.get('version') == remote_ver), None)
