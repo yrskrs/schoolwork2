@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <style id="navigation-transition-policy">
-        @view-transition { navigation: auto; }
+        @view-transition { navigation: none; }
         @media (prefers-reduced-motion: reduce) { @view-transition { navigation: none; } }
     </style>
-    <script src="{% static 'js/site_preferences.js' %}"></script>
+    <script src="{% static 'js/site_preferences.js' %}?ui=20261018"></script>
     <script>
         (function(){
             var t = window.matchMedia && window.matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 'light';
@@ -40,8 +40,10 @@
 
     {% block extra_head %}{% endblock %}
     <link rel="stylesheet" href="{% static 'css/platform_layout.css' %}">
+    <link rel="stylesheet" href="{% static 'css/school_ui.css' %}?ui=20261018-r2">
 </head>
 <body class="{% block body_class %}{% endblock %}" data-page-area="{% if request.path|slice:':9' == '/teacher/' %}teacher{% else %}student{% endif %}">
+<a class="skip-link" href="#main-content">Перейти до вмісту</a>
 <div id="global-progress-bar"></div>
 <div id="global-loading-indicator" class="global-loading-indicator" aria-hidden="true">
     <span class="loading-spinner-ring"></span>
@@ -81,99 +83,18 @@
         </form>
 
         <div class="navbar-actions">
-            <button id="simplified-site-toggle" class="simplified-site-toggle" type="button" role="switch"
-                    aria-checked="false" aria-describedby="simplified-site-help"
-                    title="Спрощений сайт: вимкнути анімації, розмиття та декоративні тіні для старих ноутбуків">
-                <span class="simplified-site-label">Спрощений сайт</span>
-                <span class="simplified-site-track" aria-hidden="true"></span>
-            </button>
+
             <button id="mobile-menu-btn" class="theme-toggle" type="button" aria-label="Відкрити меню" aria-expanded="false">☰</button>
 
             {% if not user.is_authenticated or not user.teacher_profile %}
-            <a href="{% url 'student_submissions_portal' %}" class="nav-link-quiet" title="Мої здані роботи">
+            <a href="{% url 'student_submissions_portal' %}" class="nav-link-quiet" title="Мої здані роботи" {% if request.resolver_match.url_name == 'student_submissions_portal' %}aria-current="page"{% endif %}>
                 📥 <span class="nav-btn-text">Мої роботи</span>
             </a>
 
-            <!-- 🔤 Масштабування шрифтів сайту (для учнів/гостей) -->
-            <div class="font-scale-wrapper" style="position:relative;display:inline-flex;align-items:center;">
-                <button type="button" id="font-scale-toggle-btn" class="theme-toggle" aria-label="Змінити розмір шрифту" title="Розмір тексту (безпечний діапазон: 85% - 125%)" onclick="toggleFontScaleMenu(event)">
-                    <span style="font-size:13px;font-weight:800;letter-spacing:-0.5px;">A<span style="font-size:10.5px;font-weight:700;">a</span></span>
-                </button>
-                <div id="font-scale-dropdown" class="font-scale-dropdown" style="display:none;position:absolute;top:calc(100% + 6px);right:0;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);box-shadow:0 10px 25px rgba(0,0,0,0.18);padding:8px 10px;min-width:210px;z-index:1050;">
-                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-                        <span style="font-size:10.5px;font-weight:800;color:var(--color-text-muted);text-transform:uppercase;letter-spacing:0.04em;">Розмір тексту</span>
-                        <div style="display:flex;align-items:center;gap:4px;">
-                            <button type="button" data-font-scale-step="-5" onclick="stepFontScale(-5)" class="btn btn-sm btn-secondary font-scale-step-btn" style="font-size:11px;padding:1px 6px;line-height:1.2;" title="Зменшити">−</button>
-                            <span id="font-scale-active-badge-guest" class="font-scale-val-badge">100%</span>
-                            <button type="button" data-font-scale-step="5" onclick="stepFontScale(5)" class="btn btn-sm btn-secondary font-scale-step-btn" style="font-size:11px;padding:1px 6px;line-height:1.2;" title="Збільшити">+</button>
-                        </div>
-                    </div>
-                    <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:4px;margin-bottom:6px;">
-                        <button type="button" onclick="applyFontScale(85)" class="btn btn-sm font-scale-choice-btn" data-scale="85" title="85%" style="font-size:11px;padding:4px 2px;font-weight:700;">85%</button>
-                        <button type="button" onclick="applyFontScale(90)" class="btn btn-sm font-scale-choice-btn" data-scale="90" title="90%" style="font-size:11px;padding:4px 2px;font-weight:700;">90%</button>
-                        <button type="button" onclick="applyFontScale(100)" class="btn btn-sm font-scale-choice-btn" data-scale="100" title="100%" style="font-size:11px;padding:4px 2px;font-weight:700;">100%</button>
-                        <button type="button" onclick="applyFontScale(110)" class="btn btn-sm font-scale-choice-btn" data-scale="110" title="110%" style="font-size:11px;padding:4px 2px;font-weight:700;">110%</button>
-                        <button type="button" onclick="applyFontScale(120)" class="btn btn-sm font-scale-choice-btn" data-scale="120" title="120%" style="font-size:11px;padding:4px 2px;font-weight:700;">120%</button>
-                        <button type="button" onclick="applyFontScale(125)" class="btn btn-sm font-scale-choice-btn" data-scale="125" title="125%" style="font-size:11px;padding:4px 2px;font-weight:700;">125%</button>
-                    </div>
-                    <div style="display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--color-border);padding-top:6px;font-size:11px;">
-                        <span style="color:var(--color-text-muted);">Безпечний ліміт 85%–125%</span>
-                        <button type="button" onclick="applyFontScale(100)" style="background:none;border:none;color:var(--color-primary);cursor:pointer;font-weight:700;font-size:11px;padding:0;">Скинути (100%)</button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- 📖 Інструкція та довідка сайту (для учнів/гостей) -->
-            <button type="button" 
-                    id="site-guide-btn" 
-                    class="nav-btn-guide" 
-                    onclick="openGuideModal()" 
-                    title="Інструкція: Як користуватися сайтом" 
-                    aria-label="Інструкція: Як користуватися сайтом">
-                <span class="guide-nav-icon" aria-hidden="true">📖</span>
-                <span class="nav-btn-text">Інструкція</span>
-            </button>
-
-            <!-- ✨ Оновлення та версія сайту (Changelog для учнів) -->
-            <button type="button" 
-                    id="site-changelog-btn" 
-                    class="nav-btn-changelog" 
-                    onclick="openChangelogModal()" 
-                    title="Що нового на сайті (версія {{ site_version_full|default:'2.9.1' }})" 
-                    aria-label="Оновлення та історія змін сайту">
-                <span class="changelog-sparkle" aria-hidden="true">✨</span>
-                <span class="changelog-version-tag">{{ site_version|default:"v2.9.1" }}</span>
-            </button>
+            {% include 'feed/components/student_menu.html' %}
             {% endif %}
 
             {% if user.is_authenticated and user.teacher_profile %}
-            <!-- 📅 Компактний статус-піл розкладу для вчителя -->
-            <button type="button" 
-                    id="today-schedule-nav-btn" 
-                    class="nav-schedule-pill {% if live_lesson_status and live_lesson_status.status_type == 'in_lesson' %}status-in-lesson{% elif live_lesson_status and live_lesson_status.status_type == 'in_break' %}status-in-break{% endif %}" 
-                    onclick="openTodayScheduleModal()" 
-                    title="{% if live_lesson_status and live_lesson_status.title %}{{ live_lesson_status.title }} — {{ live_lesson_status.time_info }}{% else %}Розклад уроків на сьогодні{% endif %}">
-                <span class="schedule-pill-icon">
-                    {% if live_lesson_status and live_lesson_status.status_type == 'in_lesson' %}
-                        <span class="live-dot-pulse green"></span>
-                    {% elif live_lesson_status and live_lesson_status.status_type == 'in_break' %}
-                        <span class="live-dot-pulse amber"></span>
-                    {% else %}
-                        📅
-                    {% endif %}
-                </span>
-                <span class="nav-btn-text" id="live-bell-text">
-                    {% if live_lesson_status and live_lesson_status.status_type == 'in_lesson' %}
-                        <span style="color:#10b981;">{{ live_lesson_status.badge_text }}</span>
-                    {% elif live_lesson_status and live_lesson_status.status_type == 'in_break' %}
-                        <span style="color:#f59e0b;">{{ live_lesson_status.badge_text }}</span>
-                    {% else %}
-                        Розклад
-                    {% endif %}
-                </span>
-                <div id="nav-schedule-progress-bar" class="schedule-pill-progress" style="width:{% if live_lesson_status and live_lesson_status.progress_percent %}{{ live_lesson_status.progress_percent }}{% else %}0{% endif %}%;display:{% if live_lesson_status and live_lesson_status.status_type in 'in_lesson in_break' %}block{% else %}none{% endif %};background:{% if live_lesson_status and live_lesson_status.status_type == 'in_break' %}#f59e0b{% else %}#10b981{% endif %};"></div>
-            </button>
-
             <!-- ➕ Створити нове завдання (компактна дія) -->
             {% if request.resolver_match.url_name != 'assignment_create' and request.resolver_match.url_name != 'assignment_edit' %}
             <a href="{% url 'assignment_create' %}" class="btn btn-primary btn-sm nav-btn-create" style="font-weight:700;display:inline-flex;align-items:center;gap:5px;padding:5px 11px;border-radius:var(--radius-md);text-decoration:none;" title="Створити нове навчальне завдання">
@@ -182,7 +103,7 @@
             {% endif %}
 
             <!-- 📋 Перехід до кабінету вчителя -->
-            <a href="{% url 'teacher_dashboard' %}" class="nav-link-quiet nav-btn-dashboard" title="Панель вчителя">
+            <a href="{% url 'teacher_dashboard' %}" class="nav-link-quiet nav-btn-dashboard" title="Панель вчителя" {% if request.resolver_match.url_name == 'teacher_dashboard' %}aria-current="page"{% endif %}>
                 <span>📋</span> <span class="nav-btn-text">Панель</span>
                 {% if pending_submissions_count and pending_submissions_count > 0 %}
                 <span class="nav-badge">{{ pending_submissions_count }}</span>
@@ -303,6 +224,34 @@
 
                     <!-- Робочий простір -->
                     <div class="user-menu-section-label">Робочий простір</div>
+            <!-- 📅 Компактний статус-піл розкладу для вчителя -->
+            <button type="button"
+                    id="today-schedule-nav-btn"
+                    class="nav-schedule-pill {% if live_lesson_status and live_lesson_status.status_type == 'in_lesson' %}status-in-lesson{% elif live_lesson_status and live_lesson_status.status_type == 'in_break' %}status-in-break{% endif %}"
+                    onclick="openTodayScheduleModal()"
+                    title="{% if live_lesson_status and live_lesson_status.title %}{{ live_lesson_status.title }} — {{ live_lesson_status.time_info }}{% else %}Розклад уроків на сьогодні{% endif %}">
+                <span class="schedule-pill-icon">
+                    {% if live_lesson_status and live_lesson_status.status_type == 'in_lesson' %}
+                        <span class="live-dot-pulse green"></span>
+                    {% elif live_lesson_status and live_lesson_status.status_type == 'in_break' %}
+                        <span class="live-dot-pulse amber"></span>
+                    {% else %}
+                        📅
+                    {% endif %}
+                </span>
+                <span class="nav-btn-text" id="live-bell-text">
+                    {% if live_lesson_status and live_lesson_status.status_type == 'in_lesson' %}
+                        <span style="color:#10b981;">{{ live_lesson_status.badge_text }}</span>
+                    {% elif live_lesson_status and live_lesson_status.status_type == 'in_break' %}
+                        <span style="color:#f59e0b;">{{ live_lesson_status.badge_text }}</span>
+                    {% else %}
+                        Розклад
+                    {% endif %}
+                </span>
+                <div id="nav-schedule-progress-bar" class="schedule-pill-progress" style="width:{% if live_lesson_status and live_lesson_status.progress_percent %}{{ live_lesson_status.progress_percent }}{% else %}0{% endif %}%;display:{% if live_lesson_status and live_lesson_status.status_type in 'in_lesson in_break' %}block{% else %}none{% endif %};background:{% if live_lesson_status and live_lesson_status.status_type == 'in_break' %}#f59e0b{% else %}#10b981{% endif %};"></div>
+            </button>
+
+
                     <a href="{% url 'teacher_dashboard' %}" class="user-menu-link">
                         <span>📋</span> <span>Мої завдання</span>
                     </a>
@@ -344,6 +293,12 @@
 
                     <!-- Вигляд та доступність -->
                     <div class="user-menu-section-label">Вигляд та система</div>
+            <button id="simplified-site-toggle" class="simplified-site-toggle" type="button" role="switch"
+                    aria-checked="false" aria-describedby="simplified-site-help"
+                    title="Спрощений сайт: вимкнути анімації, розмиття та декоративні тіні для старих ноутбуків">
+                <span class="simplified-site-label">Спрощений сайт</span>
+                <span class="simplified-site-track" aria-hidden="true"></span>
+            </button>
                     <div class="user-menu-font-control">
                         <div class="user-menu-font-header">
                             <span>🔤 Масштаб тексту</span>
@@ -389,8 +344,6 @@
                     </form>
                 </div>
             </div>
-            {% else %}
-            <a href="{% url 'teacher_login' %}" class="btn btn-secondary btn-sm" style="font-weight:700;">Вхід</a>
             {% endif %}
         </div>
     </div>
@@ -410,14 +363,14 @@
 </div>
 {% endif %}
 
-<main>
+<main id="main-content" tabindex="-1">
     {% if request.path|slice:':9' == '/teacher/' and user.is_authenticated %}{% include 'feed/components/teacher_mobile_nav.html' %}{% endif %}
     {% block content %}{% endblock %}
 </main>
 
 <footer class="site-footer">
     Шкільні Завдання · Локальна шкільна мережа{% if user.is_superuser or is_superadmin_mode %} · <a href="{% url 'system_updates' %}" style="color:var(--color-primary);text-decoration:none;font-weight:700;">🚀 Оновлення системи</a>{% endif %}
-    <p id="simplified-site-help">Сайт пригальмовує? Увімкніть «Спрощений сайт» у верхній панелі: анімації, розмиття й декоративні тіні вимкнуться. Вибір зберігається в цьому браузері; завдання та всі функції залишаються доступними.</p>
+    <p id="simplified-site-help">Сайт пригальмовує? Увімкніть «Спрощений сайт» у меню: анімації, розмиття й декоративні тіні вимкнуться. Вибір зберігається в цьому браузері; завдання та всі функції залишаються доступними.</p>
 </footer>
 
 <div id="assignment-modal-overlay" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title">
@@ -434,11 +387,12 @@
     </div>
 </div>
 
-<script src="{% static 'js/main.js' %}"></script>
+<script src="{% static 'js/main.js' %}?ui=20261018"></script>
 <script src="{% static 'js/teacher_tools.js' %}"></script>
 <script src="{% static 'js/responsive_tables.js' %}"></script>
-<script src="{% static 'js/ai_jobs.js' %}"></script>
+<script src="{% static 'js/ai_jobs.js' %}?ui=20261018"></script>
 <script src="{% static 'js/upload_progress.js' %}"></script>
+<script src="{% static 'js/school_ui.js' %}?ui=20261018-r2" defer></script>
 {% block extra_scripts %}{% endblock %}
 
 <script>

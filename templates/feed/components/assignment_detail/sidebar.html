@@ -1,5 +1,4 @@
 <aside class="assignment-detail-sidebar" id="detail-sidebar" aria-label="Допомога та інформація про завдання">
-{% if not is_teacher %}{% include 'feed/components/assignment_detail/student_actions.html' %}{% endif %}
             {% if can_edit %}
             <div class="sidebar-card" style="padding:16px;background:var(--color-bg-secondary);border:1px solid var(--color-border);border-left:4px solid #f59e0b;">
                 <div class="page-hero-kicker" style="margin-bottom:6px;color:var(--color-warning);">Режим вчителя</div>
@@ -9,6 +8,7 @@
                         <span>✏️</span>
                         <span>Відредагувати завдання</span>
                     </a>
+                    <details class="school-task-tools"><summary>Інші дії із завданням</summary><div class="school-task-tools-body">
                     <button type="button" class="btn btn-secondary btn-block" style="padding:10px 14px;font-weight:750;display:flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;" onclick="openDuplicateModal({{ assignment.pk }}, '{{ assignment.title|escapejs }}', [{% for c in assignment.classes.all %}{{ c.id }}{% if not forloop.last %},{% endif %}{% endfor %}], '{{ assignment.subject.name|default:""|escapejs }}')">
                         <span>📋</span>
                         <span>Копіювати завдання</span>
@@ -21,6 +21,7 @@
                         <span>🔍</span>
                         <span>Критерії оцінювання</span>
                     </button>
+                    </div></details>
                 </div>
             </div>
             {% endif %}
@@ -194,6 +195,8 @@
 
                 </div>
             </details>
+{% if not is_teacher %}{% include 'feed/components/assignment_detail/student_actions.html' %}{% endif %}
+
 
 <details class="assignment-detail-info" {% if is_teacher %}open{% endif %}>
 <summary>Інші сторінки та завдання</summary>
@@ -217,18 +220,6 @@
                     </li>
                     {% endif %}
                     {% if is_teacher %}
-                    <li>
-                        <a href="{% url 'assignment_edit' assignment.pk %}">
-                            <span>✏️</span>
-                            <span>Редагувати це завдання</span>
-                        </a>
-                    </li>
-                    <li>
-                        <a href="javascript:void(0)" onclick="openDuplicateModal({{ assignment.pk }}, '{{ assignment.title|escapejs }}', [{% for c in assignment.classes.all %}{{ c.id }}{% if not forloop.last %},{% endif %}{% endfor %}], '{{ assignment.subject.name|default:""|escapejs }}')">
-                            <span>📋</span>
-                            <span>Копіювати завдання</span>
-                        </a>
-                    </li>
                     <li>
                         <a href="javascript:void(0)" onclick="openRescheduleModalDirect({{ assignment.pk }}, '{{ assignment.title|escapejs }}', '{% if assignment.classes.first %}{{ assignment.classes.first.id }}{% endif %}')">
                             <span>🔄</span>

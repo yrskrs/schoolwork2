@@ -534,7 +534,7 @@ document.addEventListener('DOMContentLoaded', function () {
             const top = bounds.bottom + 8 * scale;
             panel.style.maxWidth = Math.max(0, (width - 16) / scale) + 'px';
             panel.style.maxHeight = Math.max(0, (bottom - top - 8) / scale) + 'px';
-            const panelWidth = Math.min(250 * scale, width - 16);
+            const panelWidth = Math.min(panel.getBoundingClientRect().width, width - 16);
             const right = Math.max(left + 8 + panelWidth, Math.min(bounds.right, left + width - 8));
             panel.style.right = (bounds.right - right) / scale + 'px';
         }

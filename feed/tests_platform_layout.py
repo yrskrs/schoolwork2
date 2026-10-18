@@ -54,17 +54,17 @@ class PlatformNavigationTests(TestCase):
                     html.tostring(self.cards(initial)[0]), html.tostring(self.cards(fragment)[0]),
                 )
 
-    def test_both_native_links_preserve_class_through_student_workflow(self):
+    def test_detail_then_submission_preserve_class_through_student_workflow(self):
         for group, assignment in zip(self.classes, self.assignments):
             with self.subTest(grade=group.grade):
                 page = self.page(self.client.get(reverse('index'), {'class': group.pk}))
                 card = self.cards(page)[0]
                 detail = reverse('assignment_detail', args=[assignment.pk])
                 submit = reverse('submit_assignment', args=[assignment.pk])
-                for target in [detail, submit]:
-                    links = [link for link in card.xpath('.//a/@href') if urlparse(link).path == target]
-                    self.assertTrue(links)
-                    self.assertEqual(set(links), {target + f'?class={group.pk}'})
+                links = [link for link in card.xpath('.//a/@href') if urlparse(link).path == detail]
+                self.assertTrue(links)
+                self.assertEqual(set(links), {detail + f'?class={group.pk}'})
+                self.assertFalse(card.xpath('.//a[starts-with(@href, $url)]', url=submit))
                 detail_page = self.page(self.client.get(detail + f'?class={group.pk}'))
                 self.assertTrue(detail_page.xpath('//a[@href=$target]', target=submit + f'?class={group.pk}'))
                 submit_page = self.page(self.client.get(submit + f'?class={group.pk}'))
@@ -106,13 +106,14 @@ class PlatformNavigationTests(TestCase):
             with self.subTest(url=url):
                 page = self.page(self.client.get(url))
                 styles = page.xpath('//head/link[@rel="stylesheet"]/@href')
-                self.assertEqual(styles[-1], '/static/css/platform_layout.css')
+                self.assertEqual([urlparse(style).path for style in styles[-2:]],
+                                 ['/static/css/platform_layout.css', '/static/css/school_ui.css'])
                 switch = page.get_element_by_id('simplified-site-toggle')
                 self.assertEqual(switch.get('role'), 'switch')
                 self.assertTrue(switch.xpath('ancestor::nav[@aria-label="Головна навігація"]'))
                 self.assertIn('Спрощений сайт', switch.text_content())
                 self.assertIn('Вибір зберігається', page.get_element_by_id(switch.get('aria-describedby')).text_content())
-                self.assertTrue(page.xpath('//head/script[@src="/static/js/site_preferences.js"]'))
+                self.assertTrue(page.xpath('//head/script[starts-with(@src,"/static/js/site_preferences.js?")]'))
                 self.assertEqual(len(page.xpath('//*[contains(concat(" ", @class, " "), " page-wrapper ")]')), 1)
 
     def test_teacher_mobile_navigation_has_read_only_links_and_is_not_on_student_pages(self):

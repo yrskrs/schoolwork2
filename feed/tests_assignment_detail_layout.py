@@ -114,11 +114,10 @@ class AssignmentDetailLayoutTests(TestCase):
         self.assertEqual(len(page.xpath('//button[contains(@onclick,"openAiUnderstandingModal")]')), 1)
         self.client.force_login(self.user)
         page = self.page(self.client.get(self.url))
-        self.assertIsNotNone(page.get_element_by_id('btn-quick-edit-top'))
-        self.assertIsNotNone(page.get_element_by_id('btn-quick-duplicate-top'))
-        self.assertIsNotNone(page.get_element_by_id('btn-ai-understanding-top'))
-        self.assertTrue(page.xpath('//a[@href=$url]', url=reverse('assignment_edit', args=[self.assignment.pk])))
-        self.assertTrue(page.xpath('//button[contains(@onclick,"openDuplicateModal")]'))
+        sidebar = page.get_element_by_id('detail-sidebar')
+        self.assertTrue(sidebar.xpath('.//a[@href=$url]', url=reverse('assignment_edit', args=[self.assignment.pk])))
+        self.assertTrue(sidebar.xpath('.//details//button[contains(@onclick,"openDuplicateModal")]'))
+        self.assertTrue(sidebar.xpath('.//details//button[contains(@onclick,"openAiUnderstandingModal")]'))
 
     def test_web_links_and_video_are_grouped_with_files(self):
         AssignmentLink.objects.create(assignment=self.assignment, url='https://example.org/material', label='Довідка до вправи')

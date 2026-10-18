@@ -9,8 +9,23 @@
     <div id="form-validation-alert-text" style="margin-top:2px;font-size:11.5px;color:var(--color-text-primary);line-height:1.35;"></div>
 </div>
 
+<h2 class="school-submission-step"><span class="school-step-number">1</span> Обери клас і своє ім’я</h2>
+<p class="school-form-help">Реєстрація не потрібна. Спочатку обери клас — тоді з’явиться список учнів.</p>
 <!-- Рядок особистих даних учня (Прізвище + Клас в 2 колонки поруч) -->
 <div class="submission-identification-grid">
+    <!-- Клас -->
+    <div class="form-group" style="margin:0;" id="group_class_group">
+        <label for="{{ form.class_group.id_for_label }}" class="form-label" style="margin-bottom:4px;">
+            🏫 {{ form.class_group.label }} <span style="color:var(--color-danger)">*</span>
+        </label>
+        {{ form.class_group }}
+        <div id="class-client-error" style="display:none;color:var(--color-danger);font-size:11px;font-weight:700;margin-top:3px;align-items:center;gap:4px;">
+            <span>⚠️ Оберіть клас!</span>
+        </div>
+        {% if form.class_group.errors %}
+        <div style="color:var(--color-danger);font-size:11px;margin-top:2px;">{{ form.class_group.errors|join:" " }}</div>
+        {% endif %}
+    </div>
     <!-- Прізвище та ім'я -->
     <div class="form-group" style="margin:0;position:relative;" id="group_full_name">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
@@ -23,7 +38,7 @@
         </div>
         <div style="position:relative;">
             <!-- Швидкий вибір зі списку класу (імпортованого з журналу) -->
-            <select id="student-roster-select" class="form-input form-select" style="display:none;" onchange="onRosterStudentSelected(this.value)">
+            <select aria-label="Прізвище та ім’я зі списку класу" aria-describedby="full-name-client-error" id="student-roster-select" class="form-input form-select" style="display:none;" onchange="onRosterStudentSelected(this.value)">
                 <option value="">— Оберіть своє ім'я зі списку класу —</option>
             </select>
 
@@ -45,19 +60,7 @@
         {% endif %}
     </div>
 
-    <!-- Клас -->
-    <div class="form-group" style="margin:0;" id="group_class_group">
-        <label for="{{ form.class_group.id_for_label }}" class="form-label" style="margin-bottom:4px;">
-            🏫 {{ form.class_group.label }} <span style="color:var(--color-danger)">*</span>
-        </label>
-        {{ form.class_group }}
-        <div id="class-client-error" style="display:none;color:var(--color-danger);font-size:11px;font-weight:700;margin-top:3px;align-items:center;gap:4px;">
-            <span>⚠️ Оберіть клас!</span>
-        </div>
-        {% if form.class_group.errors %}
-        <div style="color:var(--color-danger);font-size:11px;margin-top:2px;">{{ form.class_group.errors|join:" " }}</div>
-        {% endif %}
-    </div>
+
 </div>
 
 <!-- Блок додаткових співавторів (Колективна робота, максимум 5) -->
@@ -80,6 +83,8 @@
     </div>
 </div>
 
+<h2 class="school-submission-step"><span class="school-step-number">2</span> Додай свою виконану роботу</h2>
+<p class="school-form-help">Тут потрібно прикріпити твій результат, а не матеріали вчителя.</p>
 <!-- Блок завантаження файлів (Компактна зона Drag-and-Drop) -->
 <div class="form-group" style="margin:0;">
     <label class="form-label" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
@@ -133,7 +138,7 @@
 </div>
 
 <details class="submission-optional-fields" id="submission-optional-fields" {% if form.errors or form.link.value or form.comment_student.value %}open{% endif %}>
-    <summary>🔗 Посилання або 💬 коментар</summary>
+    <summary>Посилання, текстова відповідь або коментар</summary>
     <div class="submission-optional-body">
 <!-- Посилання (компактне поле) -->
 <div class="form-group" style="margin:0;">

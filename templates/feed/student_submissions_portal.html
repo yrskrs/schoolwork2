@@ -80,6 +80,7 @@
             <div class="page-hero">
                 <div class="page-hero-kicker">Навчальні роботи</div>
                 <h1>Мої здані роботи</h1>
+                <p class="school-intro">Обери клас і введи своє прізвище або ім’я, щоб знайти здані роботи та результати перевірки. Вхід у профіль не потрібен.</p>
                 <form method="GET" action="{% url 'student_submissions_portal' %}" style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px;">
                     {% if selected_class_id %}
                     <input type="hidden" name="class" value="{{ selected_class_id }}">

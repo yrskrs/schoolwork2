@@ -138,14 +138,22 @@
             </div>
 
             <!-- Нижній ряд дій (Опублікувати, Редагувати, Дублювати, До архіву, Видалити) -->
-            <div style="display:flex;align-items:center;gap:4px;justify-content:flex-end;">
+            <div class="school-card-actions">
+<a href="{% url 'assignment_edit' assignment.pk %}"
+                   class="btn btn-secondary btn-sm " title="Редагувати завдання">
+                    ✏️ Редагувати
+                </a>
+                <details class="school-card-menu" data-school-menu>
+                    <summary>Інші дії <span aria-hidden="true">▾</span></summary>
+                    <div class="school-card-menu-panel">
+
 
                 <!-- Опублікувати (для чернеток та запланованих) -->
                 {% if assignment.status == 'draft' or assignment.status == 'scheduled' %}
                 <form method="POST" action="{% url 'assignment_publish' assignment.pk %}" style="display:inline">
                     {% csrf_token %}
-                    <button type="submit" class="btn btn-success btn-sm btn-icon" title="Опублікувати завдання">
-                        ✅
+                    <button type="submit" class="btn btn-success btn-sm " title="Опублікувати завдання">
+                        ✅ Опублікувати
                     </button>
                 </form>
                 {% endif %}
@@ -163,38 +171,35 @@
                 <!-- Перенести урок (для опублікованих та запланованих) -->
                 {% if assignment.status == 'published' or assignment.status == 'scheduled' %}
                 <button type="button"
-                        class="btn btn-secondary btn-sm btn-icon"
+                        class="btn btn-secondary btn-sm "
                         onclick="openRescheduleModalDirect({{ assignment.pk }}, '{{ assignment.title|escapejs }}', '{% if assignment.classes.first %}{{ assignment.classes.first.id }}{% endif %}')"
                         title="Перенести цей урок на іншу дату/наступний урок (вказати причину)">
-                    🔄
+                    🔄 Перенести урок
                 </button>
                 {% endif %}
 
                 <!-- Експорт завдання на флешку (ZIP) -->
                 <a href="{% url 'export_assignment_zip' assignment.pk %}"
-                   class="btn btn-secondary btn-sm btn-icon"
+                   class="btn btn-secondary btn-sm "
                    title="Експортувати на флешку у ZIP (завдання з усіма файлами)">
-                    💾
+                    💾 Експорт ZIP
                 </a>
 
                 <!-- Редагувати -->
-                <a href="{% url 'assignment_edit' assignment.pk %}"
-                   class="btn btn-secondary btn-sm btn-icon" title="Редагувати завдання">
-                    ✏️
-                </a>
+
 
                 <!-- Дублювати (з можливістю вибору уроку, класу та дати) -->
-                <button type="button" class="btn btn-secondary btn-sm btn-icon" title="Створити копію завдання на новий урок"
+                <button type="button" class="btn btn-secondary btn-sm " title="Створити копію завдання на новий урок"
                         onclick="openDuplicateModal({{ assignment.pk }}, '{{ assignment.title|escapejs }}', [{% for c in assignment.classes.all %}{{ c.id }}{% if not forloop.last %},{% endif %}{% endfor %}], '{{ assignment.subject.name|default:""|escapejs }}')">
-                    📋
+                    📋 Створити копію
                 </button>
 
                 <!-- Архівувати (тільки для опублікованих) -->
                 {% if assignment.status == 'published' %}
                 <form method="POST" action="{% url 'assignment_archive' assignment.pk %}" style="display:inline">
                     {% csrf_token %}
-                    <button type="submit" class="btn btn-secondary btn-sm btn-icon" title="Перемістити до архіву">
-                        📦
+                    <button type="submit" class="btn btn-secondary btn-sm " title="Перемістити до архіву">
+                        📦 До архіву
                     </button>
                 </form>
                 {% endif %}
@@ -203,13 +208,15 @@
                 <form method="POST" action="{% url 'assignment_delete' assignment.pk %}" style="display:inline">
                     {% csrf_token %}
                     <button type="submit"
-                            class="btn btn-danger btn-sm btn-icon"
+                            class="btn btn-danger btn-sm "
                             title="Видалити завдання"
                             data-confirm="Видалити завдання «{{ assignment.title }}»? Цю дію не можна скасувати.">
-                        🗑️
+                        🗑️ Видалити
                     </button>
                 </form>
 
+                    </div>
+                </details>
             </div>
 
         </div>

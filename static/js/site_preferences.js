@@ -23,8 +23,7 @@
         root.classList.toggle('sn-lite', simplified);
         root.classList.toggle('sn-reduced-motion', reduced);
         const policy = document.getElementById('navigation-transition-policy');
-        if (policy) policy.textContent = reduced ? '@view-transition { navigation: none; }' :
-            '@view-transition { navigation: auto; } @media (prefers-reduced-motion: reduce) { @view-transition { navigation: none; } }';
+        if (policy) policy.textContent = '@view-transition { navigation: none; }';
         const button = document.getElementById('simplified-site-toggle');
         if (button) {
             button.setAttribute('aria-checked', String(simplified));

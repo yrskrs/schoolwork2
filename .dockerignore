@@ -29,6 +29,9 @@ staticfiles/
 *.tar.gz
 compose.override.yaml
 .release-image.yaml
+
+# Design source archives are not runtime assets.
+site-redesign*.zip
 .local-audits/
 test_media*/
 

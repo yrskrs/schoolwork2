@@ -50,22 +50,7 @@
                             {% endif %}
                         </div>
 
-                        {% if can_edit %}
-                        <div class="teacher-quick-edit-wrap" style="display:inline-flex;gap:8px;align-items:center;flex-wrap:wrap;">
-                            <a href="{% url 'assignment_edit' assignment.pk %}" class="btn btn-warning btn-sm" id="btn-quick-edit-top" style="display:inline-flex;align-items:center;gap:6px;font-weight:750;font-size:13px;padding:7px 14px;border-radius:var(--radius-sm);box-shadow:0 2px 8px rgba(245,158,11,0.25);text-decoration:none;">
-                                <span>✏️</span>
-                                <span>Відредагувати завдання</span>
-                            </a>
-                            <button type="button" class="btn btn-secondary btn-sm" id="btn-quick-duplicate-top" style="display:inline-flex;align-items:center;gap:6px;font-weight:750;font-size:13px;padding:7px 14px;border-radius:var(--radius-sm);cursor:pointer;" onclick="openDuplicateModal({{ assignment.pk }}, '{{ assignment.title|escapejs }}', [{% for c in assignment.classes.all %}{{ c.id }}{% if not forloop.last %},{% endif %}{% endfor %}], '{{ assignment.subject.name|default:""|escapejs }}')">
-                                <span>📋</span>
-                                <span>Копіювати завдання</span>
-                            </button>
-                            <button type="button" class="btn btn-secondary btn-sm" id="btn-ai-understanding-top" style="display:inline-flex;align-items:center;gap:6px;font-weight:750;font-size:13px;padding:7px 14px;border-radius:var(--radius-sm);cursor:pointer;border:1.5px solid var(--color-primary);color:var(--color-primary);background:rgba(var(--color-primary-rgb, 79, 70, 229), 0.06);" onclick="openAiUnderstandingModal({{ assignment.pk }})" title="Перевірити, як штучний інтелект сприймає це завдання та презентації">
-                                <span>🤖</span>
-                                <span>Як ШІ розуміє завдання</span>
-                            </button>
-                        </div>
-                        {% endif %}
+
                     </div>
 
 
@@ -86,10 +71,5 @@
 {% elif assignment.no_submission_required %}
 <p class="assignment-detail-status">📖 Без здачі. Це завдання не вимагає здачі робіт на сайті: опрацюй матеріал за вказівками вчителя.</p>
 {% endif %}
-<nav class="assignment-detail-jumps" aria-label="Розділи завдання">
-<a href="#assignment-instructions-card">📝 Завдання</a>
-{% if has_assignment_materials %}<a href="#assignment-materials-section">📎 Матеріали</a>{% endif %}
-{% if not is_teacher %}<a href="#assignment-submit-section">{% if assignment.no_submission_required or is_archived or assignment.is_archived %}✅ Завершення{% else %}📤 Як здати{% endif %}</a>{% endif %}
-{% if not is_teacher %}<a href="#assignment-help-card" id="assignment-help-button" onclick="openGuideModal('assignment_detail'); return false;" aria-haspopup="dialog" aria-controls="guide-modal">💡 Допомога</a>{% endif %}
-</nav>
+
 </header>

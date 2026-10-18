@@ -93,3 +93,6 @@ compose.override.yaml
 # Runtime updater files
 .maintenance.lock
 .release-image.yaml
+
+# Local design delivery packages; integrated source files are tracked separately.
+site-redesign*.zip

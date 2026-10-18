@@ -1,7 +1,8 @@
 {% if has_assignment_materials %}
 <section class="assignment-detail-materials" id="assignment-materials-section" aria-labelledby="assignment-materials-title">
-<h2 id="assignment-materials-title">Матеріали до завдання</h2>
-<p class="assignment-detail-section-help">Відкрий потрібний матеріал. «Відкрити тут» відкриває матеріал у центрі екрана. У вікні можна вибрати інший файл або текстовий вигляд.</p>
+<p class="assignment-detail-kicker">Крок 2 · Матеріали вчителя</p>
+<h2 id="assignment-materials-title">Файли й посилання до завдання</h2>
+<p class="assignment-detail-section-help">Це файли від учителя. Переглянь їх тут або завантаж на комп’ютер. Свою виконану роботу прикріпиш на наступній сторінці.</p>
                     <!-- Єдиний блок посилань на одному рівні -->
                     {% if assignment.link_url or assignment.additional_links.all %}
                     <div class="assignment-links-card">
@@ -50,9 +51,9 @@
                 </div>
                 <div class="assignment-detail-file-actions" style="display:flex;gap:8px;flex-wrap:wrap;">
                     {% if f.preview_type != 'download_only' %}
-                    <button type="button" class="btn btn-primary btn-sm" data-material-preview="{{ f.id }}" data-material-name="{{ f.original_name }}" data-material-extension="{{ f.extension }}" data-material-url="{% url 'file_view' f.id %}" data-material-download="{% url 'file_download' f.id %}" aria-haspopup="dialog" aria-controls="assignment-file-modal" title="Переглянути в браузері">👁️ Відкрити тут</button>
+                    <button type="button" class="btn btn-primary btn-sm" data-material-preview="{{ f.id }}" data-material-name="{{ f.original_name }}" data-material-extension="{{ f.extension }}" data-material-url="{% url 'file_view' f.id %}" data-material-download="{% url 'file_download' f.id %}" aria-haspopup="dialog" aria-controls="assignment-file-modal" title="Переглянути в браузері">Переглянути</button>
                     {% endif %}
-                    <a href="{% url 'file_download' f.id %}" class="btn btn-secondary btn-sm">⬇️ Завантажити файл</a>
+                    <a href="{% url 'file_download' f.id %}" class="btn btn-secondary btn-sm">↓ Завантажити</a>
                 </div>
             </div>
         </div>
@@ -78,7 +79,7 @@
                                     </a>
                                 </div>
                                 <div style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;border-radius:var(--radius-md);background:#000;">
-                                    <iframe src="{{ video.embed_url }}"
+                                    <iframe loading="lazy" src="{{ video.embed_url }}"
                                             title="{{ video.title|default:'YouTube відео' }}"
                                             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                                             referrerpolicy="strict-origin-when-cross-origin"

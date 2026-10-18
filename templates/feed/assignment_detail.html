@@ -13,9 +13,17 @@
 
 {% block content %}
 <div class="page-wrapper assignment-detail-page">
+{% include 'feed/components/assignment_detail/overview.html' %}
+<div class="assignment-detail-sticky-tools" aria-label="Навігація та здавання завдання">
+{% include 'feed/components/assignment_detail/navigation.html' %}
+{% if not is_teacher and not assignment.no_submission_required and not is_archived and not assignment.is_archived %}
+<div class="assignment-detail-send-bar">
+<a href="{{ assignment_submit_url }}" class="btn btn-primary">📤 Здати роботу</a>
+</div>
+{% endif %}
+</div>
 <div class="assignment-detail-layout">
 <article class="assignment-detail-main" aria-labelledby="assignment-topic">
-{% include 'feed/components/assignment_detail/overview.html' %}
 {% include 'feed/components/assignment_detail/instructions.html' %}
 {% include 'feed/components/assignment_detail/teacher_ai.html' %}
 {% include 'feed/components/assignment_detail/materials.html' %}
@@ -23,12 +31,6 @@
 </article>
 {% include 'feed/components/assignment_detail/sidebar.html' %}
 </div>
-{% if not is_teacher and not assignment.no_submission_required and not is_archived and not assignment.is_archived %}
-<div class="assignment-detail-send-bar">
-<span>Виконав / виконала завдання?</span>
-<a href="{{ assignment_submit_url }}" class="btn btn-primary">📤 Здати роботу</a>
-</div>
-{% endif %}
 </div>
 {% include 'feed/components/material_preview_dialog.html' %}
 {% endblock %}

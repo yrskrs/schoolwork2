@@ -84,7 +84,7 @@
 
         const title = document.createElement('strong');
         title.className = isStudent ? 'ai-kid-title' : '';
-        title.textContent = isStudent ? '🤖 Розумний робот читає та перевіряє твою роботу!' : 'Події перевірки ШІ';
+        title.textContent = isStudent ? 'Помічник перевіряє твою роботу' : 'Події перевірки ШІ';
 
         const status = document.createElement('p');
         status.className = isStudent ? 'ai-kid-status' : '';
@@ -113,6 +113,39 @@
         details.append(summary, list);
         root.append(title, status, bar, details);
         root.dataset.state = 'running';
+        let stages = null;
+        if (isStudent) {
+            const note = document.createElement('p');
+            note.className = 'school-ai-note';
+            note.textContent = 'Можна трохи перепочити. Перевірка триває; її результат з’явиться тут.';
+            const phaseList = document.createElement('ul');
+            phaseList.className = 'school-ai-stages';
+            phaseList.setAttribute('aria-label', 'Етапи перевірки');
+            stages = ['Підготовка', 'Перевірка', 'Результат'].map(function (label) {
+                const li = document.createElement('li');
+                li.textContent = label; phaseList.append(li); return li;
+            });
+            stages[0].setAttribute('aria-current', 'step');
+            const pause = document.createElement('button');
+            pause.type = 'button'; pause.className = 'school-animation-toggle';
+            pause.textContent = 'Призупинити анімацію';
+            pause.setAttribute('aria-pressed', 'false');
+            pause.addEventListener('click', function () {
+                const paused = root.dataset.animationPaused !== 'true';
+                root.dataset.animationPaused = String(paused);
+                pause.setAttribute('aria-pressed', String(paused));
+                pause.textContent = paused ? 'Продовжити анімацію' : 'Призупинити анімацію';
+            });
+            root.insertBefore(phaseList, details);
+            root.insertBefore(note, details);
+            root.insertBefore(pause, details);
+        }
+        function setPhase(index) {
+            if (stages) stages.forEach(function (li, i) {
+                if (i === index) li.setAttribute('aria-current', 'step');
+                else li.removeAttribute('aria-current');
+            });
+        }
         let lastSequence = 0;
         return {
             update(job) {
@@ -123,6 +156,8 @@
                     row.dataset.kind = event.kind;
                     list.append(row);
                     lastSequence = event.sequence;
+                    if (event.kind === 'model_start' || event.kind === 'switching') setPhase(1);
+                    if (event.kind === 'model_success') setPhase(2);
                     status.textContent = isStudent ? getFriendlyStudentMessage(event, status.textContent) : event.message;
                     if (!isStudent && event.kind === 'model_error') details.open = true;
                     while (list.children.length > 200) list.firstElementChild.remove();
@@ -130,6 +165,7 @@
                 if (!lastSequence && job.status === 'queued') {
                     status.textContent = isStudent ? '⏳ Займаю чергу до розумного робота…' : 'Перевірку додано до черги. Очікую вільного працівника…';
                 }
+                if (job.status === 'running') setPhase(1);
                 if (!lastSequence && job.status === 'running') {
                     status.textContent = isStudent ? '📖 Читаю написане та готую оцінку…' : 'Читаю матеріали та готую перевірку…';
                 }
@@ -145,8 +181,17 @@
                         status.textContent = success ? 'Перевірку завершено.' : (job.error || 'Перевірку завершено без оцінки.');
                     }
                 }
+                if (isStudent) {
+                    title.textContent = success ? 'Роботу перевірено!' : 'Не вдалося завершити перевірку';
+                    status.textContent = success ? 'Результат перевірки готовий.' : (job.error || 'Спробуй ще раз або звернися до вчителя.');
+                    if (success) setPhase(2);
+                    const pause = root.querySelector('.school-animation-toggle');
+                    if (pause) pause.remove();
+                    const note = root.querySelector('.school-ai-note');
+                    if (note) note.remove();
+                }
                 if (!success && isStudent) {
-                    title.textContent = '😢 Розумний робот не зміг завершити перевірку...';
+                    title.textContent = 'Не вдалося завершити перевірку';
                     if (bar) bar.style.display = 'none';
                 }
             },

@@ -230,7 +230,7 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
     def test_assignment_detail_new_layout(self):
         """Тест макету деталей завдання з вбудованим переглядом файлів."""
         test_file = SimpleUploadedFile("urok_material.txt", b"Test text content for lesson", content_type="text/plain")
-        AssignmentFile.objects.create(
+        material = AssignmentFile.objects.create(
             assignment=self.assignment,
             file=test_file,
             original_name="urok_material.txt"
@@ -242,7 +242,7 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
         self.assertContains(response, self.assignment.title)
         self.assertContains(response, 'urok_material.txt')
         self.assertContains(response, 'Переглянути в браузері')
-        self.assertContains(response, 'Завантажити файл')
+        self.assertContains(response, reverse('file_download', args=[material.pk]))
 
 
     def test_student_submissions_portal_view(self):

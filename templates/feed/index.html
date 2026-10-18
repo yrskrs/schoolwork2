@@ -31,6 +31,7 @@
 
             {% include 'feed/components/student_class_filter.html' with class_filter_groups=all_classes class_filter_ajax=True %}
 
+            <details class="school-extra-filters"><summary>Предмет і календар</summary>
             <!-- 2. Календар завдань (Google Calendar стиль) -->
             <details class="home-filter-disclosure"><summary>📅 Календар завдань</summary><div class="sidebar-card calendar-card" id="calendar-widget">{% include 'feed/calendar_widget.html' %}</div></details>
 
@@ -57,6 +58,7 @@
             </div>
             {% endif %}
 
+            </details>
         </aside>
 
     </div><!-- /.feed-layout -->
@@ -114,6 +116,8 @@ function applyFilter(classVal, subjectVal, dateVal, queryVal) {
     var clEl  = document.getElementById(clTarget);
     var subEl = document.getElementById(subTarget);
     if (clEl)  clEl.classList.add('active');
+    var compactClassSelect = document.getElementById('school-class-select');
+    if (compactClassSelect) compactClassSelect.value = _currentClass;
     if (subEl) subEl.classList.add('active');
 
     /* — Оновити мобільні чіпси — */

@@ -20,10 +20,7 @@
                     📋 Всі завдання
                 {% endif %}
             </h1>
-            <span style="font-size:11px;background:rgba(16,185,129,0.12);color:var(--color-success);border:1px solid rgba(16,185,129,0.25);border-radius:20px;padding:2px 8px;display:inline-flex;align-items:center;gap:4px;" title="Стрічка автоматично оновлюється при появі нових завдань">
-                <span class="live-dot-pulse"></span>
-                Наживо
-            </span>
+            <span class="school-live-label" title="Список оновлюється автоматично">Автооновлення</span>
         </div>
         <p class="text-muted text-sm mt-1">
             Знайдено: {{ assignments|length }} завдань
@@ -37,11 +34,11 @@
     {% endif %}
 </div>
 
+<p class="school-intro"><strong>Обери свій клас.</strong> Відкрий завдання, щоб прочитати умову й переглянути матеріали вчителя.</p>
 <div class="assignments-feed" role="feed" aria-label="Стрічка навчальних завдань">
 
     {% for assignment in assignments %}
     <article class="assignment-card {{ assignment.age_card_class }}"
-             onclick="openAssignment({{ assignment.id }})"
              aria-label="Відкрити завдання: {{ assignment.title }}"
 >
 
@@ -160,11 +157,7 @@
                 </span>
                 {% endif %}
 
-                {% if assignment.no_submission_required %}
-                <span class="badge" style="background:rgba(99,102,241,0.08);color:var(--color-primary);border:1px solid rgba(99,102,241,0.2);font-size:11.5px;padding:2px 7px;border-radius:4px;font-weight:600;" title="Завдання для опрацювання (без здачі робіт)">
-                    📖 Без здачі
-                </span>
-                {% elif assignment.due_date %}
+                {% if assignment.due_date and not assignment.no_submission_required %}
                 <span class="due-badge">
                     ⏰ до {{ assignment.due_date|date:"d.m" }}
                 </span>
@@ -173,18 +166,14 @@
 
             <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
                 <a href="{% url 'assignment_detail' assignment.id %}{% if selected_class_id %}?class={{ selected_class_id }}{% endif %}" class="btn btn-primary btn-sm" onclick="event.stopPropagation();" title="Відкрити завдання">
-                    📖 Переглянути
+                    Відкрити завдання →
                 </a>
                 {% if not user.is_authenticated or not user.teacher_profile %}
                     {% if assignment.is_archived or assignment.status == 'archived' %}
                     <span class="badge" style="background: rgba(245, 158, 11, 0.15); color:var(--color-warning); border: 1px solid rgba(245, 158, 11, 0.3); font-size: 12px; font-weight: 700; padding: 5px 10px; border-radius: var(--radius-sm);" title="Прийом робіт закрито (архів)">
                         🔒 Прийом закрито
                     </span>
-                    {% elif not assignment.no_submission_required %}
-                    <a href="{% url 'submit_assignment' assignment.id %}{% if selected_class_id %}?class={{ selected_class_id }}{% endif %}" class="btn btn-submit-work btn-sm" onclick="event.stopPropagation();" style="font-weight:700;" title="Здати виконану роботу">
-                        📤 Здати роботу
-                    </a>
-                    {% else %}
+                    {% elif assignment.no_submission_required %}
                     <span class="badge" style="background:var(--color-bg-secondary);border:1px solid var(--color-border);color:var(--color-primary);font-size:12px;font-weight:700;padding:5px 10px;border-radius:var(--radius-sm);" title="Це завдання не вимагає здачі робіт">
                         📖 Без здачі
                     </span>

@@ -36,31 +36,9 @@
                 </div>
                 {% endif %}
                 {% include 'feed/components/submission/form_fields.html' %}
+
             </section>
             <aside class="submission-sidebar" aria-labelledby="submission-help-title">
-                <details class="submission-side-card submission-more-options" open>
-                    <summary id="submission-help-title">Додаткові можливості</summary>
-                    <div class="submission-side-body">
-                        <div class="submission-side-actions">
-                            <button type="button" onclick="openCriteriaModal()" class="btn btn-secondary">📋 Критерії оцінювання</button>
-                            <button type="button" id="btn-add-coauthor" onclick="addCoauthorField()" class="btn btn-secondary" title="Для роботи, виконаної в парі чи групі">👥 Додати співавтора</button>
-                            <a href="{% url 'assignment_detail' assignment.pk %}" class="btn btn-secondary">← До сторінки завдання</a>
-                        </div>
-                        <details class="submission-side-disclosure" id="submission-condition-details">
-                            <summary>📄 Умова й матеріали</summary>
-                            <div class="submission-condition-body">
-                                {% include 'feed/components/submission/condition.html' %}
-                            </div>
-                        </details>
-                        <details class="submission-side-disclosure">
-                            <summary>💡 Як здати роботу</summary>
-                            <p class="submission-help-text">Перевірте тему й клас, укажіть своє ім’я та прикріпіть файли. Посилання або відповідь можна додати в розділі «Посилання або коментар». Натисніть «Надіслати виконану роботу» й дочекайтеся підтвердження.</p>
-                        </details>
-                        <div class="submission-ai-info">{% include 'feed/components/submission/ai_info.html' %}</div>
-                    </div>
-                </details>
-            </aside>
-        </div>
         <footer class="submission-send-bar">
             <div class="submission-send-check">
                 <span>Перед надсиланням перевірте клас:</span>
@@ -69,6 +47,32 @@
             <button type="submit" id="submission-send-button" class="btn btn-primary">📤 Надіслати виконану роботу</button>
             <div data-upload-progress-slot class="submission-progress-slot"></div>
         </footer>
+
+                <details class="submission-side-card submission-more-options" open>
+                    <summary id="submission-help-title">Допомога та групова робота</summary>
+                    <div class="submission-side-body">
+                        <div class="submission-side-actions">
+                            <button type="button" onclick="openCriteriaModal()" class="btn btn-secondary">📋 Критерії оцінювання</button>
+                            <button type="button" id="btn-add-coauthor" onclick="addCoauthorField()" class="btn btn-secondary" title="Для роботи, виконаної в парі чи групі">👥 Додати співавтора</button>
+                            <a href="{% url 'assignment_detail' assignment.pk %}" class="btn btn-secondary">← До сторінки завдання</a>
+                        </div>
+
+                        <details class="submission-side-disclosure">
+                            <summary>💡 Як здати роботу</summary>
+                            <p class="submission-help-text">Перевірте тему й клас, оберіть своє ім’я зі списку та прикріпіть файли. Посилання або відповідь можна додати в розділі «Посилання або коментар». Натисніть «Надіслати виконану роботу» й дочекайтеся підтвердження.</p>
+                        </details>
+                        <div class="submission-ai-info">{% include 'feed/components/submission/ai_info.html' %}</div>
+                    </div>
+                </details>
+                        <details class="submission-side-card submission-condition-card" id="submission-condition-details">
+                            <summary>Умова й матеріали вчителя</summary>
+                            <div class="submission-condition-body submission-side-body">
+                                {% include 'feed/components/submission/condition.html' %}
+                            </div>
+                        </details>
+            </aside>
+        </div>
+
     </form>
 </div>
 
@@ -1181,7 +1185,7 @@ if (submitForm) {
 
         if (!nameVal) {
             hasError = true;
-            if (!firstInvalid) firstInvalid = nameInput;
+            if (!firstInvalid) firstInvalid = rosterSelect && rosterSelect.offsetParent !== null ? rosterSelect : nameInput;
             if (nameInput) {
                 nameInput.style.borderColor = '#ef4444';
                 nameInput.style.boxShadow = '0 0 0 3px rgba(239, 68, 68, 0.2)';
@@ -1228,12 +1232,10 @@ if (submitForm) {
             if (firstInvalid) {
                 const details = firstInvalid.closest('details');
                 if (details) details.open = true;
-                firstInvalid.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                setTimeout(function() {
-                    if (typeof firstInvalid.focus === 'function') {
-                        firstInvalid.focus();
-                    }
-                }, 200);
+                firstInvalid.scrollIntoView({ behavior: window.SchoolNetPerformance && window.SchoolNetPerformance.isMotionReduced() ? 'auto' : 'smooth', block: 'center' });
+                if (typeof firstInvalid.focus === 'function') {
+                    firstInvalid.focus({preventScroll: true});
+                }
             }
             return false;
         }
