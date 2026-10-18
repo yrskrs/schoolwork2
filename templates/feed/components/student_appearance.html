@@ -1,11 +1,6 @@
 <div class="student-appearance" role="group" aria-label="Вигляд і зручність">
         {% include 'feed/components/theme_toggle.html' %}
-            <button id="simplified-site-toggle" class="simplified-site-toggle" type="button" role="switch"
-                    aria-checked="false" aria-describedby="simplified-site-help"
-                    title="Спрощений сайт: вимкнути анімації, розмиття та декоративні тіні для старих ноутбуків">
-                <span class="simplified-site-label">Спрощений сайт</span>
-                <span class="simplified-site-track" aria-hidden="true"></span>
-            </button>            <!-- 🔤 Масштабування шрифтів сайту (для учнів/гостей) -->
+        <!-- 🔤 Масштабування шрифтів сайту (для учнів/гостей) -->
             <div class="font-scale-wrapper" style="position:relative;display:inline-flex;align-items:center;">
                 <button type="button" id="font-scale-toggle-btn" class="theme-toggle" aria-label="Змінити розмір шрифту" title="Розмір тексту (безпечний діапазон: 85% - 125%)" onclick="toggleFontScaleMenu(event)">
                     <span style="font-size:13px;font-weight:800;letter-spacing:-0.5px;">A<span style="font-size:10.5px;font-weight:700;">a</span></span>

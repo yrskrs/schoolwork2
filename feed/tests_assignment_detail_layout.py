@@ -138,3 +138,10 @@ class AssignmentDetailLayoutTests(TestCase):
         guide = page.get_element_by_id('body-guide-assignment-detail').text_content()
         self.assertIn('Основна інструкція розташована одразу під темою', guide)
         self.assertNotIn('компактно згорнуті', guide)
+
+    def test_assignment_detail_jumps_has_initial_active_link(self):
+        page = self.page(self.client.get(self.url))
+        first_jump = page.xpath('//nav[@aria-label="Розділи завдання"]/a')[0]
+        self.assertIn('is-active', first_jump.get('class', ''))
+        self.assertEqual(first_jump.get('aria-current'), 'true')
+        self.assertEqual(first_jump.get('href'), '#assignment-instructions-card')

@@ -14,13 +14,15 @@ class PlatformNavigationTests(TestCase):
 
     def test_appearance_controls_are_on_student_panel_and_in_teacher_menu(self):
         page = self.page(self.client.get(reverse('index')))
-        for identifier in ['theme-toggle-btn', 'simplified-site-toggle', 'font-scale-toggle-btn']:
+        for identifier in ['theme-toggle-btn', 'font-scale-toggle-btn']:
             self.assertTrue(page.get_element_by_id(identifier).xpath('ancestor::*[contains(@class,"student-appearance")]'))
+        self.assertTrue(page.get_element_by_id('simplified-site-toggle').xpath('ancestor::*[contains(@class,"school-more-panel")]'))
         self.assertTrue(page.xpath('//*[@id="site-changelog-btn"]//*[contains(@class,"nav-menu-label") and text()="Що нового"]'))
         self.client.force_login(self.user)
         page = self.page(self.client.get(reverse('teacher_dashboard')))
         self.assertFalse(page.xpath('//*[contains(@class,"student-appearance")]'))
         self.assertTrue(page.get_element_by_id('theme-toggle-btn').xpath('ancestor::*[contains(@class,"user-menu-panel")]'))
+        self.assertTrue(page.get_element_by_id('simplified-site-toggle').xpath('ancestor::*[contains(@class,"user-menu-panel")]'))
     def setUp(self):
         set_has_admin(True)
         self.user = User.objects.create_user('platform_teacher', password='test-password')
