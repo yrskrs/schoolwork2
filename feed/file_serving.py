@@ -11,7 +11,7 @@ from django.utils.http import content_disposition_header
 from .permissions import require_assignment_access
 
 
-def file_response(request, path, content_type=None, filename=None, attachment=False, inline=False):
+def file_response(request, path, content_type=None, filename=None, attachment=False, inline=False, interactive_html=False):
     if not os.path.isfile(path):
         raise Http404('Файл не знайдено')
     filename = filename or os.path.basename(path)
@@ -29,7 +29,9 @@ def file_response(request, path, content_type=None, filename=None, attachment=Fa
     response = None
     raw_range = request.headers.get('Range', '')
     if raw_range and request.method in ('GET', 'HEAD'):
-        match = re.fullmatch(r'bytes=(\d*)-(\d*)', raw_range.strip())
+        # Bound integer parsing as well as the range itself. An arbitrarily
+        # long number can otherwise raise ValueError and turn a download into 500.
+        match = re.fullmatch(r'bytes=([0-9]{0,20})-([0-9]{0,20})', raw_range.strip())
         if not match or not any(match.groups()):
             response = HttpResponse(status=416)
         else:
@@ -64,7 +66,17 @@ def file_response(request, path, content_type=None, filename=None, attachment=Fa
     response['X-Content-Type-Options'] = 'nosniff'
     response['X-Frame-Options'] = 'SAMEORIGIN'
     if active:
-        response['Content-Security-Policy'] = "sandbox; default-src 'none'; base-uri 'none'"
+        if interactive_html and is_inline and content_type.split(';', 1)[0] == 'text/html':
+            # Teacher-only HTML previews may run local exercises, with an opaque
+            # origin: no parent DOM/cookies, forms, network API calls or popups.
+            response['Content-Security-Policy'] = (
+                "sandbox allow-scripts; default-src 'none'; "
+                "script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; "
+                "img-src 'self' data: blob:; font-src 'self' data:; media-src 'self' blob:; "
+                "connect-src 'none'; form-action 'none'; base-uri 'none'"
+            )
+        else:
+            response['Content-Security-Policy'] = "sandbox; default-src 'none'; base-uri 'none'"
     return response
 
 
@@ -75,6 +87,9 @@ def public_media(request, path):
     target = (root / path).resolve()
     if not target.is_relative_to(root):
         raise Http404('Файл не знайдено')
+    # Authorize the actual file, including dot segments and symlink targets,
+    # rather than an alternative spelling supplied in the URL.
+    path = target.relative_to(root).as_posix()
     if path.startswith(('school_archives/', 'logs_archives/')) and not (request.user.is_authenticated and
             (request.user.is_superuser or hasattr(request.user, 'teacher_profile'))):
         raise Http404('Файл не знайдено')

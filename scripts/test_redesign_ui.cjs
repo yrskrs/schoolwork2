@@ -14,6 +14,7 @@ const {chromium} = require(config.playwright);
     page.on('pageerror', error => errors.push(error.message));
     page.on('response', response => { if (response.status() >= 400) badResponses.push(`${response.status()} ${response.url()}`); });
     await context.addInitScript(() => {
+      if (window !== window.top) return; // Uploaded HTML has an opaque origin.
       if (!localStorage.getItem('sn-simplified-site')) localStorage.setItem('sn-simplified-site', 'off');
       if (!localStorage.getItem('sn-theme')) localStorage.setItem('sn-theme', 'light');
     });
@@ -106,6 +107,10 @@ const {chromium} = require(config.playwright);
     const previousTheme = await page.locator('html').getAttribute('data-theme');
     await page.locator('#theme-toggle-btn').click();
     assert.notEqual(await page.locator('html').getAttribute('data-theme'), previousTheme);
+    // Appearance controls outside <details> close the menu as an outside click.
+    if (!(await page.locator('.school-more').evaluate(el => el.open))) {
+      await page.locator('.school-more > summary').click();
+    }
     await page.locator('#simplified-site-toggle').click();
     assert(await page.locator('html').evaluate(el => el.classList.contains('sn-lite')));
     await page.locator('#simplified-site-toggle').click();
@@ -199,6 +204,14 @@ const {chromium} = require(config.playwright);
     assert(await page.locator('#today-schedule-nav-btn').isVisible());
     assert(await page.locator('#today-schedule-nav-btn').evaluate(el => !el.closest('.user-menu-panel')));
     assert(await page.locator('#theme-toggle-btn').evaluate(el => Boolean(el.closest('.user-menu-panel'))));
+    await visit(`/teacher/view-file/${config.htmlSubmission}/`);
+    const htmlFrame = page.frameLocator('#fv-html-sandbox-frame');
+    await htmlFrame.locator('#increment').click();
+    assert.equal(await htmlFrame.locator('#count').innerText(), '1');
+    assert.equal(await htmlFrame.locator('#title').evaluate(el => getComputedStyle(el).color), 'rgb(12, 34, 56)');
+    assert.deepEqual(await htmlFrame.locator('body').evaluate(() => ({assetLoaded: window.assetLoaded, parentBlocked: window.parentBlocked})), {assetLoaded: true, parentBlocked: true});
+    results.push({label: 'html-script-css-opaque-origin', ok: true});
+    await visit('/teacher/');
     await page.route('**/teacher/updates/api/status/', route => route.fulfill({json:{state:'success',job_id:'historical-test',step:5,progress:100,current_version:'4.0.0',installed_version:config.version,logs:[]}}));
     for (const [label, url] of [['teacher', '/teacher/'], ['editor', '/teacher/assignment/create/'],
       ['settings', '/teacher/settings/'], ['gradebook', '/teacher/gradebook/'],

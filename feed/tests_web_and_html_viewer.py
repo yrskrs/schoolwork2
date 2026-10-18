@@ -1,5 +1,8 @@
 """Tests for web links embed preview and HTML site interactive rendering in teacher file viewer."""
 import os
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from django.conf import settings
 from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
@@ -141,7 +144,8 @@ class WebAndHtmlViewerTests(TestCase):
 
         # Перевірка контексту
         self.assertEqual(resp.context['file_type'], 'html')
-        self.assertIn('inline=1', resp.context['html_raw_url'])
+        from django.urls import resolve
+        self.assertEqual(resolve(resp.context['html_raw_url']).url_name, 'submission_html_asset')
 
         # Перевірка наявності елементів на сторінці
         content = resp.content.decode('utf-8')
@@ -182,6 +186,80 @@ class WebAndHtmlViewerTests(TestCase):
         self.assertIn('inline', resp_inline.headers.get('Content-Disposition', ''))
         body = b''.join(resp_inline.streaming_content).decode('utf-8')
         self.assertEqual(body, html_code)
+
+    def test_interactive_html_keeps_scripts_and_styles_in_an_opaque_sandbox(self):
+        sub = Submission.objects.create(assignment=self.assignment, teacher=self.teacher,
+            class_group=self.group, first_name='Synthetic', last_name='HTML')
+        item = SubmissionFile.objects.create(submission=sub, original_name='index.html',
+            file=SimpleUploadedFile('index.html', b'<button onclick="this.textContent=1">0</button>'))
+        url = reverse('view_submission_raw_file', args=[sub.pk])
+        inline = self.client.get(url, {'inline': '1', 'file_id': item.pk})
+        policy = inline['Content-Security-Policy']
+        self.assertIn('sandbox allow-scripts;', policy)
+        self.assertNotIn('allow-same-origin', policy)
+        self.assertIn("style-src 'self' 'unsafe-inline'", policy)
+        self.assertIn("connect-src 'none'", policy)
+        b''.join(inline.streaming_content)
+        download = self.client.get(url, {'file_id': item.pk})
+        self.assertIn('attachment', download['Content-Disposition'])
+        self.assertNotIn('allow-scripts', download['Content-Security-Policy'])
+        b''.join(download.streaming_content)
+        public = self.client.get(item.file.url, {'inline': '1'})
+        self.assertNotIn('allow-scripts', public['Content-Security-Policy'])
+        b''.join(public.streaming_content)
+        page = self.client.get(reverse('view_file', args=[sub.pk]))
+        self.assertContains(page, 'sandbox="allow-scripts"')
+        self.assertNotContains(page, 'sandbox="allow-scripts allow-forms allow-same-origin')
+
+    def test_html_asset_grant_is_limited_expiring_and_cookie_independent(self):
+        from django.core import signing
+        from django.test import Client
+        from unittest.mock import patch
+        sub = Submission.objects.create(assignment=self.assignment, teacher=self.teacher,
+            class_group=self.group, first_name='Synthetic', last_name='Assets')
+        html = SubmissionFile.objects.create(submission=sub, original_name='index.html',
+            file=SimpleUploadedFile('index.html', b'<link rel="stylesheet" href="style.css">'))
+        css = SubmissionFile.objects.create(submission=sub, original_name='style.css',
+            file=SimpleUploadedFile('style.css', b'h1 {color:red}'))
+        page = self.client.get(reverse('view_file', args=[sub.pk]))
+        html_url = page.context['html_raw_url']
+        anonymous = Client()
+        response = anonymous.get(html_url)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('sandbox allow-scripts', response['Content-Security-Policy'])
+        b''.join(response.streaming_content)
+        asset_url = html_url.rsplit('/', 1)[0] + '/style.css'
+        response = anonymous.get(asset_url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(b''.join(response.streaming_content), b'h1 {color:red}')
+        self.assertEqual(response['Referrer-Policy'], 'no-referrer')
+        self.assertEqual(anonymous.post(asset_url).status_code, 405)
+        self.assertEqual(anonymous.get(asset_url.rsplit('/', 1)[0] + '/missing.css').status_code, 404)
+        with patch('django.core.signing.time.time', return_value=__import__('time').time() + 1801):
+            self.assertEqual(anonymous.get(asset_url).status_code, 404)
+        token = signing.dumps({'submission': sub.pk, 'teacher': self.teacher.pk}, salt='submission-html-preview')
+        other = Submission.objects.create(assignment=self.assignment, teacher=self.teacher,
+            class_group=self.group, first_name='Synthetic', last_name='Other')
+        self.assertEqual(anonymous.get(reverse('submission_html_asset', args=[other.pk, token, 'style.css'])).status_code, 404)
+        self.user.is_active = False
+        self.user.save(update_fields=['is_active'])
+        self.assertEqual(anonymous.get(asset_url).status_code, 404)
+
+    def test_raw_assets_cannot_escape_into_sibling_directory_or_return_wrong_file(self):
+        sub = Submission.objects.create(assignment=self.assignment, teacher=self.teacher,
+            class_group=self.group, first_name='Synthetic', last_name='Paths')
+        with TemporaryDirectory(dir=settings.MEDIA_ROOT, prefix='synthetic-asset-') as folder:
+            root = Path(folder)
+            inside = root / 'inside'
+            outside = root / 'inside-private'
+            inside.mkdir(); outside.mkdir()
+            (inside / 'index.html').write_text('<h1>Synthetic</h1>')
+            (outside / 'secret.txt').write_text('synthetic private file')
+            SubmissionFile.objects.create(submission=sub, original_name='index.html',
+                file=str((inside / 'index.html').relative_to(settings.MEDIA_ROOT)))
+            for asset in ('../inside-private/secret.txt', 'missing.css'):
+                url = reverse('view_submission_raw_file_asset', args=[sub.pk, asset])
+                self.assertEqual(self.client.get(url).status_code, 404)
 
     def test_web_proxy_serves_html_and_injects_base_tag(self):
         from unittest.mock import MagicMock, patch
