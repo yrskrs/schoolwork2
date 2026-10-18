@@ -19,6 +19,7 @@ Views (представлення) для SchoolNet.
 """
 
 import os
+from pathlib import Path
 import re
 import csv
 import json
@@ -4029,10 +4030,12 @@ def view_submission_raw_file(request, submission_id, sub_path=None):
             first_sf = submission.files.first()
             base_ref = first_sf.file if (first_sf and first_sf.file) else submission.file
             if base_ref and hasattr(base_ref, 'path') and os.path.exists(base_ref.path):
-                base_dir = os.path.dirname(os.path.abspath(base_ref.path))
-                candidate = os.path.abspath(os.path.join(base_dir, sub_path))
-                if candidate.startswith(base_dir) and os.path.isfile(candidate):
-                    file_path = candidate
+                base_dir = Path(base_ref.path).resolve().parent
+                candidate = (base_dir / sub_path).resolve()
+                if candidate.is_relative_to(base_dir) and candidate.is_file():
+                    file_path = str(candidate)
+        if not file_path:
+            raise Http404('Файл не знайдено')
 
     if not target_file and not file_path:
         file_id = request.GET.get('file_id')
@@ -4111,7 +4114,8 @@ def view_submission_raw_file(request, submission_id, sub_path=None):
                     mime_type = 'application/octet-stream'
 
         is_inline_request = (request.GET.get('inline') == '1') or (sub_path is not None)
-        return file_response(request, path, content_type=mime_type, inline=is_inline_request)
+        return file_response(request, path, content_type=mime_type, inline=is_inline_request,
+                             interactive_html=is_inline_request and ext in ('.html', '.htm'))
     except Http404:
         raise
     except Exception as e:

@@ -11,7 +11,7 @@ from django.utils.http import content_disposition_header
 from .permissions import require_assignment_access
 
 
-def file_response(request, path, content_type=None, filename=None, attachment=False, inline=False):
+def file_response(request, path, content_type=None, filename=None, attachment=False, inline=False, interactive_html=False):
     if not os.path.isfile(path):
         raise Http404('Файл не знайдено')
     filename = filename or os.path.basename(path)
@@ -66,7 +66,17 @@ def file_response(request, path, content_type=None, filename=None, attachment=Fa
     response['X-Content-Type-Options'] = 'nosniff'
     response['X-Frame-Options'] = 'SAMEORIGIN'
     if active:
-        response['Content-Security-Policy'] = "sandbox; default-src 'none'; base-uri 'none'"
+        if interactive_html and is_inline and content_type.split(';', 1)[0] == 'text/html':
+            # Teacher-only HTML previews may run local exercises, with an opaque
+            # origin: no parent DOM/cookies, forms, network API calls or popups.
+            response['Content-Security-Policy'] = (
+                "sandbox allow-scripts; default-src 'none'; "
+                "script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; "
+                "img-src 'self' data: blob:; font-src 'self' data:; media-src 'self' blob:; "
+                "connect-src 'none'; form-action 'none'; base-uri 'none'"
+            )
+        else:
+            response['Content-Security-Policy'] = "sandbox; default-src 'none'; base-uri 'none'"
     return response
 
 

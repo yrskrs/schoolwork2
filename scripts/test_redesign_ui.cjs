@@ -106,6 +106,10 @@ const {chromium} = require(config.playwright);
     const previousTheme = await page.locator('html').getAttribute('data-theme');
     await page.locator('#theme-toggle-btn').click();
     assert.notEqual(await page.locator('html').getAttribute('data-theme'), previousTheme);
+    // Appearance controls outside <details> close the menu as an outside click.
+    if (!(await page.locator('.school-more').evaluate(el => el.open))) {
+      await page.locator('.school-more > summary').click();
+    }
     await page.locator('#simplified-site-toggle').click();
     assert(await page.locator('html').evaluate(el => el.classList.contains('sn-lite')));
     await page.locator('#simplified-site-toggle').click();
