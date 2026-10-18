@@ -241,3 +241,89 @@ class WebAndHtmlViewerTests(TestCase):
         self.assertIn('switchWebFrameSource', content)
         self.assertIn(resp.context['web_proxy_url'], content)
 
+    def test_rewrite_html_resources_to_absolute_opencart_and_relative_assets(self):
+        from .views import _rewrite_html_resources_to_absolute
+
+        html = """<!DOCTYPE html>
+<html>
+<head>
+    <meta http-equiv="X-Frame-Options" content="SAMEORIGIN">
+    <meta http-equiv="Content-Security-Policy" content="frame-ancestors 'self'">
+    <base href="https://compx.ua/" />
+    <link href="catalog/view/theme/oct_ultrastore/stylesheet/dynamic.css?v=1" rel="stylesheet" />
+    <link rel="icon" href="/favicon.ico" />
+    <script src="catalog/view/javascript/jquery/jquery-3.7.1.min.js"></script>
+</head>
+<body>
+    <img src="image/catalog/logo.png" data-src="image/catalog/lazy-logo.png" alt="CompX">
+    <picture>
+        <source srcset="image/banner-1x.webp 1x, image/banner-2x.webp 2x">
+        <img src="image/banner.jpg" alt="Banner">
+    </picture>
+    <a href="ua/noutbuki/">Ноутбуки</a>
+    <a href="#reviews">Відгуки</a>
+    <a href="javascript:void(0)" onclick="openCart()">Кошик</a>
+</body>
+</html>"""
+
+        rewritten = _rewrite_html_resources_to_absolute(html, 'https://compx.ua/ua/noutbuki/')
+
+        # 1. Base URL збережено як ефективний https://compx.ua/ з target="_blank"
+        self.assertIn('<base href="https://compx.ua/" target="_blank">', rewritten)
+        # 2. X-Frame-Options та CSP видалено
+        self.assertNotIn('X-Frame-Options', rewritten)
+        self.assertNotIn('frame-ancestors', rewritten)
+        # 3. CSS-посилання перетворено на абсолютний URL
+        self.assertIn('href="https://compx.ua/catalog/view/theme/oct_ultrastore/stylesheet/dynamic.css?v=1"', rewritten)
+        self.assertIn('href="https://compx.ua/favicon.ico"', rewritten)
+        # 4. Скрипти та картинки перетворено на абсолютні URL
+        self.assertIn('src="https://compx.ua/catalog/view/javascript/jquery/jquery-3.7.1.min.js"', rewritten)
+        self.assertIn('src="https://compx.ua/image/catalog/logo.png"', rewritten)
+        self.assertIn('data-src="https://compx.ua/image/catalog/lazy-logo.png"', rewritten)
+        self.assertIn('srcset="https://compx.ua/image/banner-1x.webp 1x, https://compx.ua/image/banner-2x.webp 2x"', rewritten)
+        # 5. Посилання на сторінки отримали target="_blank" та абсолютний URL
+        self.assertIn('href="https://compx.ua/ua/noutbuki/"', rewritten)
+        self.assertIn('target="_blank"', rewritten)
+        # 6. Якорі та JS посилання не змінювались
+        self.assertIn('href="#reviews"', rewritten)
+        self.assertIn('href="javascript:void(0)"', rewritten)
+
+    def test_web_proxy_rewrites_relative_stylesheets_and_scripts(self):
+        from unittest.mock import MagicMock, patch
+
+        sub = Submission.objects.create(
+            assignment=self.assignment,
+            teacher=self.teacher,
+            class_group=self.group,
+            first_name='Леся',
+            last_name='Косач',
+            link='https://compx.ua/ua/noutbuki/'
+        )
+
+        sample_page = (
+            '<!DOCTYPE html><html><head><base href="https://compx.ua/" />'
+            '<link href="catalog/theme.css" rel="stylesheet">'
+            '</head><body><h1>Тест</h1></body></html>'
+        ).encode('utf-8')
+
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = sample_page
+        mock_resp.geturl.return_value = 'https://compx.ua/ua/noutbuki/'
+        mock_headers = MagicMock()
+        mock_headers.get.side_effect = lambda k, d=None: {
+            'content-type': 'text/html; charset=utf-8',
+            'content-encoding': '',
+        }.get(k.lower(), d)
+        mock_headers.get_content_charset.return_value = 'utf-8'
+        mock_resp.headers = mock_headers
+
+        proxy_url = reverse('view_submission_web_proxy', args=[sub.id])
+        with patch('urllib.request.urlopen', return_value=mock_resp):
+            resp = self.client.get(proxy_url)
+
+        self.assertEqual(resp.status_code, 200)
+        body = resp.content.decode('utf-8')
+        self.assertIn('href="https://compx.ua/catalog/theme.css"', body)
+        self.assertIn('<base href="https://compx.ua/" target="_blank">', body)
+
+

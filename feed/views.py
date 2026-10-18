@@ -4118,6 +4118,117 @@ def view_submission_raw_file(request, submission_id, sub_path=None):
         return HttpResponse(f'Помилка завантаження: {str(e)}', status=500)
 
 
+def _rewrite_html_resources_to_absolute(html_content, base_url):
+    """
+    Перетворює відносні посилання на ресурси (стилі CSS, скрипти JS, зображення, медіа)
+    на абсолютні URL відповідно до оригінального або ефективного base_url сайту.
+    Це усуває проблеми завантаження CSS та асетів при роботі всередині iframe проксі.
+    """
+    import re
+    from urllib.parse import urljoin, urlsplit
+
+    # 1. Визначаємо оригінальний base href, якщо він присутній у HTML (наприклад, у OpenCart як compx.ua)
+    orig_base_match = re.search(r'<base\s+[^>]*href=(?:([\'"])(.*?)\1|([^\s>]+))', html_content, flags=re.I)
+    if orig_base_match:
+        effective_base = orig_base_match.group(2) if orig_base_match.group(1) else orig_base_match.group(3)
+        effective_base = effective_base.strip()
+        if not effective_base.startswith(('http://', 'https://', '//')):
+            effective_base = urljoin(base_url, effective_base)
+        elif effective_base.startswith('//'):
+            scheme = urlsplit(base_url).scheme or 'https'
+            effective_base = f"{scheme}:{effective_base}"
+    else:
+        effective_base = base_url
+
+    # Видаляємо всі існуючі теги <base>, щоб сформувати єдиний чистий <base>
+    html_content = re.sub(r'<base\b[^>]*>', '', html_content, flags=re.I)
+
+    def make_abs(rel_url):
+        rel = (rel_url or '').strip()
+        if not rel or rel.startswith(('data:', 'blob:', 'javascript:', '#', 'mailto:', 'tel:')):
+            return rel
+        return urljoin(effective_base, rel)
+
+    # 2. Перетворення атрибутів посилань на ресурси:
+    # <link ... href="...">
+    def rewrite_link(match):
+        tag = match.group(0)
+        pattern = r'\bhref=(?:([\'"])(.*?)\1|([^\s>]+))'
+        def repl(m):
+            delim = m.group(1) or '"'
+            val = m.group(2) if m.group(1) else m.group(3)
+            return f'href={delim}{make_abs(val)}{delim}'
+        return re.sub(pattern, repl, tag, flags=re.I)
+
+    html_content = re.sub(r'<link\b[^>]+>', rewrite_link, html_content, flags=re.I)
+
+    # 3. Перетворення тегів з атрибутом src / data-src / poster:
+    # <script>, <img>, <source>, <video>, <audio>, <iframe>, <embed>, <input>
+    def rewrite_media_tag(match):
+        tag = match.group(0)
+        for attr in ('src', 'data-src', 'data-original', 'data-lazy-src', 'poster'):
+            pattern = rf'\b{attr}=(?:([\'"])(.*?)\1|([^\s>]+))'
+            def repl(m, a=attr):
+                delim = m.group(1) or '"'
+                val = m.group(2) if m.group(1) else m.group(3)
+                return f'{a}={delim}{make_abs(val)}{delim}'
+            tag = re.sub(pattern, repl, tag, flags=re.I)
+        return tag
+
+    html_content = re.sub(r'<(script|img|source|video|audio|iframe|embed|input)\b[^>]+>', rewrite_media_tag, html_content, flags=re.I)
+
+    # 4. Перетворення srcset та data-srcset
+    def rewrite_srcset(match):
+        attr = match.group(1)
+        delim = match.group(2) or '"'
+        srcset_val = match.group(3) if match.group(2) else match.group(4)
+        parts = srcset_val.split(',')
+        new_parts = []
+        for p in parts:
+            p_strip = p.strip()
+            if not p_strip:
+                continue
+            tokens = p_strip.split(None, 1)
+            url_part = tokens[0]
+            rest = f' {tokens[1]}' if len(tokens) > 1 else ''
+            new_parts.append(f'{make_abs(url_part)}{rest}')
+        return f'{attr}={delim}{", ".join(new_parts)}{delim}'
+
+    html_content = re.sub(r'\b(srcset|data-srcset)=(?:([\'"])(.*?)\2|([^\s>]+))', rewrite_srcset, html_content, flags=re.I)
+
+    # 5. Перетворення <a ... href="..."> на абсолютні та target="_blank"
+    def rewrite_a_tag(match):
+        tag = match.group(0)
+        href_match = re.search(r'\bhref=(?:([\'"])(.*?)\1|([^\s>]+))', tag, flags=re.I)
+        if href_match:
+            delim = href_match.group(1) or '"'
+            raw_href = href_match.group(2) if href_match.group(1) else href_match.group(3)
+            if raw_href and not raw_href.startswith(('#', 'javascript:')):
+                abs_href = make_abs(raw_href)
+                tag = re.sub(r'\bhref=(?:([\'"])(.*?)\1|([^\s>]+))', f'href={delim}{abs_href}{delim}', tag, count=1, flags=re.I)
+                if not re.search(r'\btarget\s*=', tag, flags=re.I):
+                    tag = re.sub(r'^<a\b', '<a target="_blank" rel="noopener noreferrer"', tag, flags=re.I)
+        return tag
+
+    html_content = re.sub(r'<a\b[^>]+>', rewrite_a_tag, html_content, flags=re.I)
+
+    # 6. Очищення від мета-тегів блокування вбудовування
+    html_content = re.sub(r'<meta[^>]*http-equiv\s*=\s*[\'"]?X-Frame-Options[\'"]?[^>]*>', '', html_content, flags=re.I)
+    html_content = re.sub(r'<meta[^>]*http-equiv\s*=\s*[\'"]?Content-Security-Policy[\'"]?[^>]*>', '', html_content, flags=re.I)
+
+    # 7. Вставка єдиного <base href="{effective_base}" target="_blank"> та захисту від frame-busting
+    base_tag = f'<base href="{effective_base}" target="_blank">'
+    anti_bust_script = '<script>try{Object.defineProperty(window,"top",{get:function(){return window;}});Object.defineProperty(window,"parent",{get:function(){return window;}});}catch(e){}</script>'
+    injection = base_tag + anti_bust_script
+
+    if '<head>' in html_content.lower():
+        html_content = re.sub(r'(<head[^>]*>)', r'\1' + injection, html_content, count=1, flags=re.I)
+    else:
+        html_content = injection + html_content
+
+    return html_content
+
+
 @teacher_required
 @xframe_options_sameorigin
 def view_submission_web_proxy(request, submission_id):
@@ -4274,26 +4385,15 @@ p {{ margin: 0 0 16px; font-size: 14px; color: #64748b; line-height: 1.5; }}
         except Exception:
             pass
 
-    if 'text/html' in content_type:
+    if 'text/html' in content_type or 'xhtml' in content_type:
         encoding = resp.headers.get_content_charset() or 'utf-8'
         try:
             html = raw_body.decode(encoding, errors='replace')
         except Exception:
             html = raw_body.decode('utf-8', errors='replace')
 
-        # Очищення від мета-тегів блокування вбудовування
-        html = re.sub(r'<meta[^>]*http-equiv\s*=\s*[\'"]?X-Frame-Options[\'"]?[^>]*>', '', html, flags=re.I)
-        html = re.sub(r'<meta[^>]*http-equiv\s*=\s*[\'"]?Content-Security-Policy[\'"]?[^>]*>', '', html, flags=re.I)
-
-        # Додавання base href для коректного завантаження відносних зображень/стилів та відкриття посилань у новій вкладці
-        base_tag = f'<base href="{final_url}" target="_blank">'
-        anti_bust_script = '<script>try{Object.defineProperty(window,"top",{get:function(){return window;}});Object.defineProperty(window,"parent",{get:function(){return window;}});}catch(e){}</script>'
-        injection = base_tag + anti_bust_script
-
-        if '<head>' in html.lower():
-            html = re.sub(r'(<head[^>]*>)', r'\1' + injection, html, count=1, flags=re.I)
-        else:
-            html = injection + html
+        # Повне перетворення ресурсів (CSS, JS, зображення, посилання) на абсолютні URL
+        html = _rewrite_html_resources_to_absolute(html, final_url)
 
         response = HttpResponse(html, content_type='text/html; charset=utf-8')
         response['X-Frame-Options'] = 'SAMEORIGIN'
