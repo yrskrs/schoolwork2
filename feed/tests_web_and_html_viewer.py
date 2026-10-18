@@ -220,7 +220,7 @@ class WebAndHtmlViewerTests(TestCase):
         self.assertIn('Object.defineProperty(window,"top"', body)
         self.assertIn('Ноутбуки', body)
 
-    def test_submission_viewer_includes_proxy_source_and_toggle(self):
+    def test_submission_viewer_includes_proxy_source_and_width_toggle(self):
         sub = Submission.objects.create(
             assignment=self.assignment,
             teacher=self.teacher,
@@ -236,9 +236,9 @@ class WebAndHtmlViewerTests(TestCase):
         self.assertIsNotNone(resp.context.get('web_proxy_url'))
 
         content = resp.content.decode('utf-8')
-        self.assertIn('btn-web-mode-proxy', content)
-        self.assertIn('btn-web-mode-direct', content)
-        self.assertIn('switchWebFrameSource', content)
+        self.assertIn('btn-web-toggle-width', content)
+        self.assertIn('toggleWebWidthExpand', content)
+        self.assertIn('reloadWebPreviewFrame', content)
         self.assertIn(resp.context['web_proxy_url'], content)
 
     def test_rewrite_html_resources_to_absolute_opencart_and_relative_assets(self):

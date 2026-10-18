@@ -302,11 +302,11 @@
 
                     <!-- HTML САЙТ (Автоматичний перегляд у браузері + кнопка перегляду коду) -->
                     {% elif file_type == 'html' %}
-                    <div class="fv-html-site-container" style="display:flex;flex-direction:column;min-height:75vh;height:100%;flex:1;">
+                    <div class="fv-html-site-container" style="display:flex;flex-direction:column;height:100%;min-height:0;flex:1;overflow:hidden;position:relative;">
                         <!-- Панель керування HTML-сайтом -->
-                        <div class="fv-html-toolbar" style="display:flex;justify-content:space-between;align-items:center;padding:10px 16px;background:var(--color-surface);border-bottom:1.5px solid var(--color-border);flex-wrap:wrap;gap:10px;z-index:5;">
+                        <div class="fv-html-toolbar" style="display:flex;justify-content:space-between;align-items:center;padding:7px 12px;background:var(--color-surface);border-bottom:1.5px solid var(--color-border);gap:8px;flex-shrink:0;z-index:5;">
                             <!-- Перемикач режимів: Сайт vs Код -->
-                            <div style="display:flex;align-items:center;gap:6px;">
+                            <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
                                 <button type="button" id="btn-html-view-preview" class="btn btn-sm btn-primary active" onclick="switchHtmlViewMode('preview')" title="Інтерактивний перегляд веб-сторінки у браузері" style="font-weight:700;display:inline-flex;align-items:center;gap:6px;">
                                     🌐 Перегляд сайту
                                 </button>
@@ -316,7 +316,7 @@
                             </div>
 
                             <!-- Додаткові дії -->
-                            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                            <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
                                 <div id="html-code-actions" style="display:none;align-items:center;gap:6px;">
                                     <button type="button" class="btn btn-secondary btn-sm" onclick="changeCodeFontSize(-1)" title="Зменшити розмір шрифту">A-</button>
                                     <button type="button" class="btn btn-secondary btn-sm" onclick="changeCodeFontSize(1)" title="Збільшити розмір шрифту">A+</button>
@@ -324,7 +324,7 @@
                                 </div>
                                 <div id="html-preview-actions" style="display:inline-flex;align-items:center;gap:6px;">
                                     <button type="button" class="btn btn-secondary btn-sm" onclick="reloadHtmlFrame()" title="Перезавантажити сайт у вікні">🔄 Оновити</button>
-                                    <button type="button" class="btn btn-secondary btn-sm" onclick="toggleHtmlPreviewFullscreen()" title="Розгорнути сайт на весь екран">⛶ На весь екран</button>
+                                    <button type="button" id="btn-html-toggle-width" class="btn btn-secondary btn-sm" onclick="toggleWebWidthExpand()" title="Розгорнути сайт на всю ширину екрана (або повернути панель оцінювання)">⤢ На всю ширину</button>
                                 </div>
                                 <a href="{{ html_raw_url|default:'' }}" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm" style="font-weight:700;" title="Відкрити HTML сайт у новій окремій вкладці браузера">
                                     ↗ Нова вкладка
@@ -336,17 +336,17 @@
                         </div>
 
                         <!-- 1. Інтерактивний рендеринг сайту (активний за замовчуванням) -->
-                        <div id="fv-html-preview-panel" style="flex:1;display:flex;flex-direction:column;min-height:550px;height:calc(100vh - 250px);background:#ffffff;">
+                        <div id="fv-html-preview-panel" style="flex:1 1 0;display:flex;flex-direction:column;height:100%;min-height:0;background:#ffffff;overflow:hidden;">
                             <iframe id="fv-html-sandbox-frame"
                                     src="{{ html_raw_url }}"
                                     title="HTML сайт: {{ file_name }}"
                                     sandbox="allow-scripts allow-forms allow-same-origin allow-modals allow-downloads"
                                     allowfullscreen
-                                    style="width:100%;height:100%;flex:1;border:none;background:#ffffff;display:block;"></iframe>
+                                    style="width:100%;height:100%;min-height:0;flex:1 1 0;border:none;background:#ffffff;display:block;"></iframe>
                         </div>
 
                         <!-- 2. Вихідний код (прихований за замовчуванням) -->
-                        <div id="fv-html-code-panel" style="display:none;padding:16px;">
+                        <div id="fv-html-code-panel" style="display:none;flex:1 1 0;height:100%;min-height:0;overflow:auto;padding:16px;">
                             <div style="background:#1e1e2e;border-radius:var(--radius-md);overflow:hidden;border:1px solid rgba(255,255,255,0.1);box-shadow:0 4px 20px rgba(0,0,0,0.2);">
                                 <pre style="margin:0;padding:24px;font-family:'JetBrains Mono','Fira Code',Consolas,monospace;font-size:14px;line-height:1.65;color:#f8fafc;overflow-x:auto;white-space:pre-wrap;word-break:break-word;" id="fv-code-pre"><code class="language-html">{{ content }}</code></pre>
                             </div>
@@ -501,46 +501,36 @@
 
                     <!-- ПОСИЛАННЯ / ВЕБ-САЙТИ / EMBED ПЛЕЄРИ -->
                     {% elif file_type == 'link' %}
-                    <div class="fv-web-preview-container" style="display:flex;flex-direction:column;min-height:75vh;height:100%;flex:1;background:var(--color-surface);border-radius:var(--radius-md);overflow:hidden;">
+                    <div class="fv-web-preview-container" style="display:flex;flex-direction:column;height:100%;min-height:0;flex:1;background:var(--color-surface);border-radius:var(--radius-md);overflow:hidden;position:relative;">
                         <!-- Браузерна панель інструментів для веб-посилань -->
-                        <div class="fv-web-toolbar" style="display:flex;justify-content:space-between;align-items:center;padding:10px 16px;background:var(--color-bg-secondary);border-bottom:1.5px solid var(--color-border);flex-wrap:wrap;gap:10px;z-index:5;">
+                        <div class="fv-web-toolbar" style="display:flex;justify-content:space-between;align-items:center;padding:7px 12px;background:var(--color-bg-secondary);border-bottom:1.5px solid var(--color-border);gap:8px;flex-shrink:0;z-index:5;">
                             <!-- Адресний блок -->
-                            <div style="display:flex;align-items:center;gap:8px;max-width:calc(100% - 320px);min-width:220px;overflow:hidden;">
-                                <span style="font-size:14px;display:inline-flex;align-items:center;">{{ embed_info.icon|default:'🌐' }}</span>
-                                <span style="font-size:12.5px;font-weight:700;color:var(--color-text-secondary);white-space:nowrap;">
-                                    {{ embed_info.platform|default:'Веб-сайт' }}:
+                            <div style="display:flex;align-items:center;gap:6px;min-width:0;flex:1;overflow:hidden;">
+                                <span style="font-size:13px;display:inline-flex;align-items:center;flex-shrink:0;">{{ embed_info.icon|default:'🌐' }}</span>
+                                <span class="badge" style="background:var(--color-primary-light);color:var(--color-primary-text);font-size:10.5px;font-weight:750;padding:2px 7px;border-radius:4px;flex-shrink:0;">
+                                    {{ embed_info.platform|default:'Веб-сайт' }}
                                 </span>
-                                <a href="{{ embed_info.original_url|default:submission.link }}" target="_blank" rel="noopener noreferrer" style="font-size:12.5px;font-weight:600;color:var(--color-primary);text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ embed_info.original_url|default:submission.link }}">
+                                <a href="{{ embed_info.original_url|default:submission.link }}" target="_blank" rel="noopener noreferrer" style="font-size:12px;font-weight:600;color:var(--color-primary);text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;" title="{{ embed_info.original_url|default:submission.link }}">
                                     {{ embed_info.original_url|default:submission.link }}
                                 </a>
                             </div>
 
                             <!-- Кнопки швидких дій -->
-                            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-                                {% if web_proxy_url and embed_info.embed_type != 'youtube' and embed_info.embed_type != 'vimeo' %}
-                                <div style="display:inline-flex;align-items:center;gap:4px;background:var(--color-bg-secondary);padding:2px 4px;border-radius:6px;border:1px solid var(--color-border);">
-                                    <button type="button" id="btn-web-mode-proxy" class="btn btn-sm btn-primary active" onclick="switchWebFrameSource('proxy')" title="Вбудований перегляд через захищений проксі SchoolNet (обходить обмеження блокування X-Frame-Options сторонніх серверів)" style="font-size:12px;padding:3px 9px;font-weight:700;">
-                                        ⚡ Вбудований перегляд
-                                    </button>
-                                    <button type="button" id="btn-web-mode-direct" class="btn btn-sm btn-secondary" onclick="switchWebFrameSource('direct')" title="Пряме завантаження адреси сайту" style="font-size:12px;padding:3px 9px;font-weight:700;">
-                                        🌐 Прямий перегляд
-                                    </button>
-                                </div>
-                                {% endif %}
-                                <button type="button" class="btn btn-secondary btn-sm" onclick="reloadWebPreviewFrame()" title="Перезавантажити сайт у вікні">
+                            <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+                                <button type="button" class="btn btn-secondary btn-sm" onclick="reloadWebPreviewFrame()" title="Перезавантажити сайт у вікні" style="font-size:12px;padding:4px 8px;font-weight:650;">
                                     🔄 Оновити
                                 </button>
-                                <button type="button" class="btn btn-secondary btn-sm" onclick="toggleWebPreviewFullscreen()" title="Розгорнути перегляд на весь екран">
-                                    ⛶ На весь екран
+                                <button type="button" id="btn-web-toggle-width" class="btn btn-secondary btn-sm" onclick="toggleWebWidthExpand()" title="Розгорнути перегляд на всю ширину екрана (або повернути панель оцінювання)" style="font-size:12px;padding:4px 8px;font-weight:650;">
+                                    ⤢ На всю ширину
                                 </button>
-                                <a href="{{ embed_info.original_url|default:submission.link }}" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-sm" style="font-weight:700;display:inline-flex;align-items:center;gap:5px;" title="Відкрити це посилання в окремій вкладці браузера">
+                                <a href="{{ embed_info.original_url|default:submission.link }}" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-sm" style="font-size:12px;padding:4px 10px;font-weight:700;display:inline-flex;align-items:center;gap:4px;" title="Відкрити це посилання в окремій вкладці браузера">
                                     ↗ Відкрити у новій вкладці
                                 </a>
                             </div>
                         </div>
 
                         <!-- Відображення контенту (Відеоплеєр, Scratch або Повний Iframe сайту) -->
-                        <div id="fv-web-frame-wrapper" style="flex:1;display:flex;flex-direction:column;min-height:550px;height:calc(100vh - 250px);position:relative;background:#ffffff;">
+                        <div id="fv-web-frame-wrapper" style="flex:1 1 0;display:flex;flex-direction:column;height:100%;min-height:0;position:relative;background:#ffffff;overflow:hidden;">
                             {% if embed_info and embed_info.embed_type == 'youtube' %}
                             <div style="background:#0f172a;padding:24px;display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;height:100%;">
                                 <div style="position:relative;padding-bottom:56.25%;width:100%;max-width:960px;height:0;border-radius:12px;overflow:hidden;box-shadow:0 10px 40px rgba(0,0,0,0.6);">
@@ -566,24 +556,14 @@
                             {% else %}
                             <iframe id="fv-web-preview-iframe"
                                     class="fv-web-preview-frame"
-                                    src="{% if web_proxy_url %}{{ web_proxy_url }}{% else %}{{ embed_info.embed_url|default:submission.link }}{% endif %}"
-                                    data-proxy-src="{{ web_proxy_url|default:'' }}"
-                                    data-direct-src="{{ embed_info.embed_url|default:submission.link }}"
+                                    src="{% if embed_info and embed_info.embed_type != 'generic' %}{{ embed_info.embed_url }}{% elif web_proxy_url %}{{ web_proxy_url }}{% else %}{{ embed_info.embed_url|default:submission.link }}{% endif %}"
                                     title="{{ embed_info.platform|default:'Веб-сайт' }}: {{ submission.link }}"
                                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                                     referrerpolicy="no-referrer-when-downgrade"
                                     sandbox="allow-scripts allow-forms allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-modals allow-downloads"
                                     allowfullscreen
-                                    style="width:100%!important;height:100%!important;min-height:550px;flex:1;border:none;display:block;background:#ffffff;"></iframe>
+                                    style="width:100%!important;height:100%!important;min-height:0!important;flex:1 1 0;border:none;display:block;background:#ffffff;"></iframe>
                             {% endif %}
-                        </div>
-
-                        <!-- Інформаційний рядок-підказка на випадок блокування вбудовування сторонніми серверами -->
-                        <div style="padding:6px 14px;background:var(--color-bg-secondary);border-top:1px solid var(--color-border);font-size:11.5px;color:var(--color-text-muted);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;">
-                            <span>💡 Сайт завантажується через безпечний вбудований проксі SchoolNet для обходу блокувань серверів (X-Frame-Options). Якщо сайт потребує особистої авторизації, скористайтеся кнопкою «↗ Відкрити у новій вкладці».</span>
-                            <a href="{{ embed_info.original_url|default:submission.link }}" target="_blank" rel="noopener noreferrer" style="color:var(--color-primary);font-weight:700;text-decoration:underline;">
-                                Пряме посилання ↗
-                            </a>
                         </div>
                     </div>
 
@@ -965,32 +945,10 @@ function reloadWebPreviewFrame() {
     }
 }
 
-function toggleWebPreviewFullscreen() {
-    var el = document.getElementById('fv-web-frame-wrapper') || document.getElementById('fv-document-card');
-    if (!el) return;
-    if (document.fullscreenElement) {
-        document.exitFullscreen();
-    } else if (el.requestFullscreen) {
-        el.requestFullscreen();
-    }
-}
-
-function switchWebFrameSource(mode) {
-    var iframe = document.getElementById('fv-web-preview-iframe');
-    var btnProxy = document.getElementById('btn-web-mode-proxy');
-    var btnDirect = document.getElementById('btn-web-mode-direct');
-    if (!iframe) return;
-
-    if (mode === 'direct') {
-        var directSrc = iframe.getAttribute('data-direct-src');
-        if (directSrc) iframe.src = directSrc;
-        if (btnDirect) { btnDirect.classList.add('btn-primary', 'active'); btnDirect.classList.remove('btn-secondary'); }
-        if (btnProxy) { btnProxy.classList.remove('btn-primary', 'active'); btnProxy.classList.add('btn-secondary'); }
-    } else {
-        var proxySrc = iframe.getAttribute('data-proxy-src');
-        if (proxySrc) iframe.src = proxySrc;
-        if (btnProxy) { btnProxy.classList.add('btn-primary', 'active'); btnProxy.classList.remove('btn-secondary'); }
-        if (btnDirect) { btnDirect.classList.remove('btn-primary', 'active'); btnDirect.classList.add('btn-secondary'); }
+function toggleWebWidthExpand() {
+    var expandBtn = document.getElementById('fv-expand-document');
+    if (expandBtn) {
+        expandBtn.click();
     }
 }
 

@@ -44,9 +44,20 @@
             documentPane.setAttribute('aria-labelledby', mobile.matches ? 'fv-tab-document' : 'fv-file-title');
             expand.setAttribute('aria-pressed', String(showToolsOnly));
             expand.textContent = showToolsOnly ? '↔ Робота поруч' : '⤢ Розгорнути';
-            expandDocument.setAttribute('aria-pressed', String(mobile.matches ? document.fullscreenElement === documentPane : showDocumentOnly));
             expandDocument.textContent = mobile.matches ? (document.fullscreenElement === documentPane ? '↙ Вийти' : '⛶ На весь екран') : (showDocumentOnly ? '↔ Поруч' : '⤢ Розгорнути');
             expandDocument.hidden = mobile.matches && !documentPane.requestFullscreen;
+            const webToggle = document.getElementById('btn-web-toggle-width');
+            if (webToggle) {
+                webToggle.setAttribute('aria-pressed', String(showDocumentOnly));
+                webToggle.textContent = showDocumentOnly ? '↔ Поруч' : '⤢ На всю ширину';
+                webToggle.title = showDocumentOnly ? 'Повернути бічну панель оцінювання поруч' : 'Розгорнути перегляд на всю ширину екрана';
+            }
+            const htmlToggle = document.getElementById('btn-html-toggle-width');
+            if (htmlToggle) {
+                htmlToggle.setAttribute('aria-pressed', String(showDocumentOnly));
+                htmlToggle.textContent = showDocumentOnly ? '↔ Поруч' : '⤢ На всю ширину';
+                htmlToggle.title = showDocumentOnly ? 'Повернути бічну панель оцінювання поруч' : 'Розгорнути перегляд на всю ширину екрана';
+            }
         }
         function setLayout(next) {
             if (!scroller.hidden) positions[current] = scroller.scrollTop;
