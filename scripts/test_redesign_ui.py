@@ -45,7 +45,7 @@ def main():
         from django.template import engines
         from django.utils import timezone
         from feed.middleware import set_has_admin
-        from feed.models import Assignment, AssignmentFile, ClassGroup, School, Student, Subject, Teacher, Submission, BellSchedule, TeacherLessonSchedule, AIRequestLog
+        from feed.models import Assignment, AssignmentFile, ClassGroup, School, Student, Subject, Teacher, Submission, SubmissionFile, BellSchedule, TeacherLessonSchedule, AIRequestLog
 
         call_command('migrate', verbosity=0, interactive=False)
         user = User.objects.create_superuser('redesign-test', password='local-browser-test-only')
@@ -87,6 +87,16 @@ def main():
             class_group=groups[0], student=students[0], last_name='Тестовий', first_name='Учень').pk,
             Submission.objects.create(assignment=portal_assignment, teacher=teacher,
             class_group=groups[1], last_name='Інший', first_name='Користувач').pk]
+        html_submission = Submission.objects.create(assignment=assignment, teacher=teacher,
+            class_group=groups[0], first_name='Synthetic', last_name='HTML')
+        existing_submissions.append(html_submission.pk)
+        for name, body in (
+            ('index.html', b'''<html><head><link rel="stylesheet" href="style.css"><script src="app.js"></script></head><body><h1 id="title">Synthetic</h1><button id="increment" onclick="document.querySelector('#count').textContent=1">Count</button><span id="count">0</span></body></html>'''),
+            ('style.css', b'#title {color:rgb(12,34,56)}'),
+            ('app.js', b'window.assetLoaded=true;try{parent.document.body;window.parentBlocked=false}catch(e){window.parentBlocked=true}')
+        ):
+            SubmissionFile.objects.create(submission=html_submission, original_name=name,
+                file=SimpleUploadedFile(name, body))
         AIRequestLog.objects.create(provider='gemini', model_name='test-model', action='evaluation',
                                     prompt_tokens=20, completion_tokens=5, total_tokens=25)
         template_count = 0
@@ -102,7 +112,7 @@ def main():
         threading.Thread(target=server.serve_forever, daemon=True).start()
         config = {'baseURL': f'http://127.0.0.1:{server.server_port}', 'version': (ROOT / 'VERSION').read_text().strip(), 'assignment': assignment.pk,
                   'classId': groups[0].pk, 'otherClassId': groups[1].pk, 'studentId': students[0].pk,
-                  'materialId': material.pk, 'moreMaterialIds': [item.pk for item in more_materials], 'artifacts': str(args.artifacts.resolve()),
+                  'htmlSubmission': html_submission.pk, 'materialId': material.pk, 'moreMaterialIds': [item.pk for item in more_materials], 'artifacts': str(args.artifacts.resolve()),
                   'playwright': args.playwright, 'chrome': args.chrome, 'templates': template_count}
         configuration = Path(temporary) / 'browser.json'
         configuration.write_text(json.dumps(config))
