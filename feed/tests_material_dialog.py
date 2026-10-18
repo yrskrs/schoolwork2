@@ -93,6 +93,8 @@ class MaterialDialogTests(TestCase):
         self.assertEqual(dialog.tag, 'dialog')
         self.assertFalse(dialog.xpath('ancestor::article'))
         self.assertEqual(dialog.xpath('.//*[@data-material-mode]/@data-material-mode'), ['document', 'text'])
+        for identifier in ['assign-modal-previous-file', 'assign-modal-next-file']:
+            self.assertEqual(dialog.get_element_by_id(identifier).get('type'), 'button')
         self.assertTrue(page.xpath('//*[@data-material-preview=$id and @aria-haspopup="dialog"]', id=str(self.material.pk)))
         self.assertFalse(page.xpath('//*[@id="fv-quick-ai" or @id="fv-grading-card"]'))
 

@@ -20,6 +20,24 @@ from feed.services.updates import (
 class SystemUpdatesUnitTests(TestCase):
     """Unit tests for version parsing, changelog parsing, and intermediate releases filtering."""
 
+    def test_historical_daemon_status_keeps_history_and_reports_running_app_version(self):
+        status = {'state': 'success', 'current_version': '4.4.5', 'logs': ['old deployment']}
+        with patch('feed.services.updates.get_current_local_version', return_value='9.9.0'), patch('urllib.request.urlopen') as request:
+            request.return_value.__enter__.return_value.read.return_value = json.dumps(status).encode()
+            result = get_update_status()
+        self.assertEqual(result['current_version'], '4.4.5')
+        self.assertEqual(result['installed_version'], '9.9.0')
+        self.assertEqual(result['logs'], status['logs'])
+
+    def test_historical_status_file_also_uses_running_app_version(self):
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as directory:
+            status_file = Path(directory) / 'status.json'
+            status_file.write_text(json.dumps({'state': 'success', 'current_version': '4.4.5'}))
+            with patch('feed.services.updates.STATUS_FILE', status_file), patch('urllib.request.urlopen', side_effect=OSError), patch('feed.services.updates.get_current_local_version', return_value='9.9.0'):
+                self.assertEqual(get_update_status()['installed_version'], '9.9.0')
+
     def test_published_version_and_release_metadata_match_site(self):
         from pathlib import Path
         from feed.changelog import SITE_VERSION

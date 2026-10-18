@@ -90,6 +90,21 @@ body .user-menu-link { font-size:14px; min-height:40px; color:var(--color-text-p
 body .simplified-site-toggle { display:flex; width:100%; justify-content:space-between; gap:12px; min-height:44px; margin:4px 0 10px; border-radius:8px; padding:9px; color:var(--color-text-primary); background:var(--color-bg-secondary); border:1px solid var(--color-border); }
 body .simplified-site-label { display:inline!important; font-size:13px; }
 .school-more-panel .changelog-version-tag { display:inline; }
+body .school-more-panel :is(.nav-btn-text,.nav-menu-label,.changelog-version-tag) { display:inline!important; color:var(--color-text-primary); white-space:normal; }
+body .school-more-panel .changelog-version-tag { margin-left:auto; padding:3px 5px; color:var(--color-primary-text); background:var(--color-primary-light); border-radius:4px; }
+body .school-more-panel :is(.nav-btn-guide,.nav-btn-changelog):hover { color:var(--color-text-primary); background:var(--color-bg-secondary); }
+body .student-appearance { display:flex; align-items:center; gap:6px; min-width:0; }
+body .student-appearance .appearance-theme-toggle { width:40px; min-width:40px; height:40px; justify-content:center; border:1px solid var(--color-border); background:var(--color-surface); }
+body .student-appearance [data-theme-label] { display:none; }
+body .student-appearance .simplified-site-toggle { width:auto; margin:0; min-height:40px; padding:6px 8px; gap:8px; }
+body .student-appearance .simplified-site-label { font-size:12px; white-space:normal; }
+body .student-appearance .font-scale-wrapper { position:relative; display:flex; align-items:center; }
+body .student-appearance #font-scale-dropdown { width:230px; max-width:calc(100vw - 24px); }
+body .report-filter-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,200px),1fr)); gap:12px; margin-bottom:12px; }
+body .report-filter-grid > div { min-width:0; }
+body .report-filter-explanation { margin:0 0 14px; padding:9px 12px; color:var(--color-text-secondary); background:var(--color-bg-secondary); border-radius:6px; font-size:12px; line-height:1.5; }
+body #report-filter-form :is(details,details > div,details > div > div) { min-width:0; }
+body .report-filter-actions { display:flex; flex-wrap:wrap; gap:8px; max-width:100%; }
 body .navbar-actions > .nav-schedule-pill { min-height:40px; padding:8px 10px; border:1px solid var(--color-border); background:var(--color-bg-secondary); color:var(--color-text-primary); border-radius:8px; }
 body .appearance-theme-toggle { display:flex; width:100%; gap:8px; align-items:center; min-height:40px; padding:9px; border:0; border-radius:6px; background:transparent; color:var(--color-text-primary); font:inherit; text-align:left; cursor:pointer; }
 body .appearance-theme-toggle:hover { background:var(--color-bg-secondary); }
@@ -345,6 +360,10 @@ html.sn-page-hidden body .ai-kid-panel[data-state] [class] { animation-play-stat
   body .student-portal-page .mobile-filter-bar { display:flex; flex-wrap:wrap; }
 }
 @media (max-width:720px) {
+  body .student-appearance { display:grid; grid-template-columns:40px minmax(0,1fr) 40px; width:100%; order:4; }
+  body .student-appearance .simplified-site-toggle { width:100%; justify-content:space-between; }
+  body .student-appearance .font-scale-dropdown { right:0!important; }
+  body .navbar-inner:has(.student-appearance) > .navbar-actions .nav-link-quiet { padding:6px 8px; }
   body .teacher-dashboard-page #dashboard-tabs,body .dashboard-filter-fields { grid-template-columns:repeat(2,minmax(0,1fr)); }
   body .dashboard-filter-date,body .dashboard-filter-search,body .dashboard-filter-submit { grid-column:1/-1; }
   body .assignment-detail-page { display:flex; flex-direction:column; }

@@ -45,7 +45,7 @@ def main():
         from django.template import engines
         from django.utils import timezone
         from feed.middleware import set_has_admin
-        from feed.models import Assignment, AssignmentFile, ClassGroup, School, Student, Subject, Teacher, Submission, BellSchedule, TeacherLessonSchedule
+        from feed.models import Assignment, AssignmentFile, ClassGroup, School, Student, Subject, Teacher, Submission, BellSchedule, TeacherLessonSchedule, AIRequestLog
 
         call_command('migrate', verbosity=0, interactive=False)
         user = User.objects.create_superuser('redesign-test', password='local-browser-test-only')
@@ -72,9 +72,23 @@ def main():
         material = AssignmentFile.objects.create(assignment=assignment,
             original_name='Довга назва навчального матеріалу для самостійного опрацювання.txt',
             file=SimpleUploadedFile('teacher-material.txt', 'Навчальний матеріал'.encode()))
+        more_materials = []
+        for index in (2, 3):
+            more_materials.append(AssignmentFile.objects.create(assignment=assignment,
+                original_name=f'Навчальний матеріал {index}.txt',
+                file=SimpleUploadedFile(f'teacher-material-{index}.txt', f'Матеріал номер {index}'.encode())))
         second = Assignment.objects.create(teacher=teacher, subject=subject, title='Завдання іншого класу',
             description='Друга вправа', status=Assignment.STATUS_PUBLISHED, published_at=timezone.now())
         second.classes.add(groups[1])
+        portal_assignment = Assignment.objects.create(teacher=teacher, subject=subject, title='Матеріали для пошуку робіт',
+            description='Перевірка пошуку', status=Assignment.STATUS_PUBLISHED, published_at=timezone.now())
+        portal_assignment.classes.add(*groups[:2])
+        existing_submissions = [Submission.objects.create(assignment=portal_assignment, teacher=teacher,
+            class_group=groups[0], student=students[0], last_name='Тестовий', first_name='Учень').pk,
+            Submission.objects.create(assignment=portal_assignment, teacher=teacher,
+            class_group=groups[1], last_name='Інший', first_name='Користувач').pk]
+        AIRequestLog.objects.create(provider='gemini', model_name='test-model', action='evaluation',
+                                    prompt_tokens=20, completion_tokens=5, total_tokens=25)
         template_count = 0
         for path in (ROOT / 'templates').rglob('*.html'):
             engines['django'].get_template(str(path.relative_to(ROOT / 'templates')))
@@ -86,15 +100,15 @@ def main():
 
         server = make_server('127.0.0.1', 0, StaticFilesHandler(get_wsgi_application()), handler_class=QuietHandler)
         threading.Thread(target=server.serve_forever, daemon=True).start()
-        config = {'baseURL': f'http://127.0.0.1:{server.server_port}', 'assignment': assignment.pk,
+        config = {'baseURL': f'http://127.0.0.1:{server.server_port}', 'version': (ROOT / 'VERSION').read_text().strip(), 'assignment': assignment.pk,
                   'classId': groups[0].pk, 'otherClassId': groups[1].pk, 'studentId': students[0].pk,
-                  'materialId': material.pk, 'artifacts': str(args.artifacts.resolve()),
+                  'materialId': material.pk, 'moreMaterialIds': [item.pk for item in more_materials], 'artifacts': str(args.artifacts.resolve()),
                   'playwright': args.playwright, 'chrome': args.chrome, 'templates': template_count}
         configuration = Path(temporary) / 'browser.json'
         configuration.write_text(json.dumps(config))
         try:
             subprocess.run([args.node, str(ROOT / 'scripts/test_redesign_ui.cjs'), str(configuration)], check=True)
-            saved = Submission.objects.get(primary_submission__isnull=True)
+            saved = Submission.objects.exclude(pk__in=existing_submissions).get(primary_submission__isnull=True)
             assert saved.student_id == students[0].pk
             assert saved.class_group_id == groups[0].pk
             assert saved.files.count() == 1

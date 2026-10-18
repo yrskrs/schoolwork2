@@ -32,7 +32,8 @@ const {chromium} = require(config.playwright);
       const measurement = await page.evaluate(() => {
         const root = document.documentElement;
         const overflowing = [...document.querySelectorAll('main h1, main .btn, main input:not([type="hidden"]), main select')]
-          .filter(el => el.getClientRects().length && !el.closest('dialog:not([open]), [style*="display:none"], [style*="display: none"]'))
+          .filter(el => el.getClientRects().length && getComputedStyle(el).visibility === 'visible' &&
+            !el.closest('dialog:not([open]), .modal-overlay:not(.active), [style*="display:none"], [style*="display: none"]'))
           .filter(el => {const r = el.getBoundingClientRect(); return r.width > 0 && (r.left < -2 || r.right > innerWidth + 2);})
           .map(el => ({id: el.id, className: el.className, text: el.textContent.trim().slice(0, 80),
                        left: el.getBoundingClientRect().left, right: el.getBoundingClientRect().right})).slice(0, 10);
@@ -85,7 +86,23 @@ const {chromium} = require(config.playwright);
     await page.waitForFunction(id => new URL(location.href).searchParams.get('class') === String(id), config.otherClassId);
     await page.waitForFunction(() => !document.querySelector('#feed-container')?.classList.contains('loading'));
     await page.locator('.school-more > summary').click();
-    assert(await page.locator('#theme-toggle-btn').evaluate(el => Boolean(el.closest('.school-more-panel'))));
+    for (const theme of ['light', 'dark']) {
+      await page.evaluate(theme => document.documentElement.dataset.theme = theme, theme);
+      const ratios = await page.locator('.school-more-panel .nav-btn-text, .school-more-panel .nav-menu-label, .school-more-panel .changelog-version-tag').evaluateAll(elements => {
+        function rgb(value) { return value.match(/[\d.]+/g).map(Number); }
+        function luminance(color) { return color.slice(0,3).map(v => {v/=255;return v<=.04045?v/12.92:((v+.055)/1.055)**2.4;}).reduce((sum,v,i)=>sum+v*[.2126,.7152,.0722][i],0); }
+        return elements.map(el => {
+          let ancestor=el, background;
+          while (ancestor) { background=rgb(getComputedStyle(ancestor).backgroundColor); if(background.length===3||background[3]!==0)break; ancestor=ancestor.parentElement; }
+          const a=luminance(rgb(getComputedStyle(el).color)), b=luminance(background);
+          return {text:el.textContent.trim(), ratio:(Math.max(a,b)+.05)/(Math.min(a,b)+.05), visible:el.getClientRects().length>0};
+        });
+      });
+      assert(ratios.every(item => item.visible && item.ratio >= 4.5), `Student menu contrast: ${JSON.stringify(ratios)}`);
+      await page.screenshot({path:path.join(config.artifacts, `student-menu-${theme}.png`)});
+      results.push({label:'student-menu-contrast', theme, ratios});
+    }
+    assert(await page.locator('#theme-toggle-btn').evaluate(el => Boolean(el.closest('.student-appearance'))));
     const previousTheme = await page.locator('html').getAttribute('data-theme');
     await page.locator('#theme-toggle-btn').click();
     assert.notEqual(await page.locator('html').getAttribute('data-theme'), previousTheme);
@@ -94,6 +111,26 @@ const {chromium} = require(config.playwright);
     await page.locator('#simplified-site-toggle').click();
     await page.keyboard.press('Escape');
     assert.equal(await page.locator('.school-more').getAttribute('open'), null);
+
+    await visit('/?class=all');
+    await page.fill('#navbar-search', 'Завдання іншого');
+    await page.press('#navbar-search', 'Enter');
+    await page.waitForFunction(() => new URL(location.href).searchParams.get('q') === 'Завдання іншого');
+    await page.waitForFunction(() => document.querySelector('#feed-header').textContent.includes('Завдання іншого'));
+    assert((await page.locator('article.assignment-card h2').allInnerTexts()).some(text => text.includes('Завдання іншого класу')), 'Global search finds the matching task');
+    await page.reload();
+    assert.equal(await page.locator('#navbar-search').inputValue(), 'Завдання іншого');
+    await page.fill('#navbar-search', 'іншого');
+    await page.press('#navbar-search', 'Enter');
+    await page.waitForFunction(() => document.querySelectorAll('article.assignment-card').length === 1);
+    assert((await page.locator('article.assignment-card h2').innerText()).includes('Завдання іншого класу'));
+    await visit(`/my-submissions/?class=${config.classId}`);
+    await page.fill('input[name="search"]', 'Тестовий Учень');
+    await page.locator('input[name="search"]').press('Enter');
+    await page.waitForURL('**/my-submissions/**search=**');
+    assert.equal(await page.locator('article.student-sub-card').count(), 1, 'My work search');
+    assert((await page.locator('article.student-sub-card').innerText()).includes('Тестовий'));
+    results.push({label:'global-and-my-work-search', ok:true});
 
     await visit(`/assignment/${config.assignment}/?class=${config.classId}`);
     await page.locator('.assignment-detail-sticky-tools a[href="#assignment-materials-section"]').click();
@@ -104,6 +141,25 @@ const {chromium} = require(config.playwright);
     assert(offsets.top >= offsets.bottom - 2, `Sticky toolbar hides section: ${JSON.stringify(offsets)}`);
     const href = await page.locator('#assignment-materials-section a[href*="download"]').first().getAttribute('href');
     assert((await context.request.get(href)).ok(), 'Teacher material download');
+    await page.locator(`[data-material-preview="${config.materialId}"]`).click();
+    await page.waitForFunction(() => document.querySelector('#assign-modal-content').textContent.includes('Навчальний матеріал'));
+    assert(await page.locator('#assign-modal-previous-file').isDisabled());
+    await page.locator('#assign-modal-next-file').click();
+    await page.waitForFunction(() => document.querySelector('#assign-modal-content').textContent.includes('Матеріал номер 2'));
+    await page.locator('#assign-modal-next-file').click();
+    await page.waitForFunction(() => document.querySelector('#assign-modal-content').textContent.includes('Матеріал номер 3'));
+    assert(await page.locator('#assign-modal-next-file').isDisabled());
+    await page.locator('#assign-modal-previous-file').click();
+    assert.equal(await page.locator('#assignment-file-modal').getAttribute('data-material-id'), String(config.moreMaterialIds[0]));
+    assert.equal(await page.locator('#assign-modal-file-position').innerText(), '2 / 3');
+    for (const width of [320,375,640,1366]) {
+      await page.setViewportSize({width,height:900});
+      const bounds = await page.locator('#assign-modal-file-nav').evaluate(el => ({left:el.getBoundingClientRect().left,right:el.getBoundingClientRect().right}));
+      assert(bounds.left>=0 && bounds.right<=width, 'File navigation fits the screen');
+    }
+    await page.keyboard.press('Escape');
+    assert.equal(await page.locator('#assignment-file-modal').getAttribute('open'), null);
+    results.push({label:'previous-next-file-without-closing',ok:true});
     await page.locator('.assignment-detail-sticky-tools a[href*="/submit/"]').click();
     await page.waitForURL('**/submit/**');
     await page.locator('#student-roster-select').waitFor({state: 'visible'});
@@ -143,8 +199,11 @@ const {chromium} = require(config.playwright);
     assert(await page.locator('#today-schedule-nav-btn').isVisible());
     assert(await page.locator('#today-schedule-nav-btn').evaluate(el => !el.closest('.user-menu-panel')));
     assert(await page.locator('#theme-toggle-btn').evaluate(el => Boolean(el.closest('.user-menu-panel'))));
+    await page.route('**/teacher/updates/api/status/', route => route.fulfill({json:{state:'success',job_id:'historical-test',step:5,progress:100,current_version:'4.0.0',installed_version:config.version,logs:[]}}));
     for (const [label, url] of [['teacher', '/teacher/'], ['editor', '/teacher/assignment/create/'],
-      ['settings', '/teacher/settings/'], ['gradebook', '/teacher/gradebook/']]) {
+      ['settings', '/teacher/settings/'], ['gradebook', '/teacher/gradebook/'],
+      ['reports', '/teacher/reports/'], ['chart', '/teacher/settings/?tab=ai&ai_section=statistics&stats_view=usage'],
+      ['updates', '/teacher/updates/'], ['submissions', '/teacher/submissions/'], ['students', '/teacher/students/']]) {
       // Native navigation links are authoritative for routes outside the dashboard.
       const names = {editor: 'Створити', gradebook: 'Журнал'};
       let target = url;
@@ -153,6 +212,12 @@ const {chromium} = require(config.playwright);
         if (await link.count()) target = await link.getAttribute('href');
       }
       await visit(target);
+      if (label === 'chart') assert.equal(await page.locator('#ai-usage-display').inputValue(), 'curves');
+      if (label === 'updates') {
+        await page.waitForFunction(version => document.querySelector('#lblCurrentVersion').textContent === 'v'+version, config.version);
+        assert.equal(await page.locator('#lblCurrentVersion').innerText(), 'v'+config.version);
+      }
+      if (label === 'reports') assert(await page.locator('#report-filter-explanation').evaluate(el => !el.closest('.report-filter-grid')));
       if (label === 'editor') {
         assert.equal(await page.locator('input[name="classes"]:checked').count(), 0, 'Fresh class selection');
         assert.equal(await page.locator('#assignment-ai-options').getAttribute('open'), null);
@@ -179,6 +244,12 @@ const {chromium} = require(config.playwright);
         assert(await menu.locator('.school-card-menu-panel').isVisible());
         await page.keyboard.press('Escape');
         assert.equal(await menu.getAttribute('open'), null);
+      }
+      if (label === 'chart') {
+        await page.selectOption('#ai-usage-display', 'bars');
+        assert.equal(new URL(page.url()).searchParams.get('usage_display'), 'bars');
+        await page.reload();
+        assert.equal(await page.locator('#ai-usage-display').inputValue(), 'bars');
       }
     }
     assert.deepEqual(errors, [], 'Browser JavaScript errors');

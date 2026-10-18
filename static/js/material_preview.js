@@ -12,6 +12,9 @@
         const content = document.getElementById('assign-modal-content');
         const spinner = document.getElementById('assign-modal-spinner');
         const closeButton = document.getElementById('assign-modal-close');
+        const previousFile = document.getElementById('assign-modal-previous-file');
+        const nextFile = document.getElementById('assign-modal-next-file');
+        const filePosition = document.getElementById('assign-modal-file-position');
         const files = new Map();
         const cache = new Map();
         const readingExtensions = new Set(['.docx','.doc','.odt','.xlsx','.xls','.ods','.pptx','.ppt','.odp']);
@@ -28,6 +31,14 @@
             picker.add(new Option(file.name, file.id));
         });
         picker.closest('label').hidden = files.size < 2;
+        const fileIds = Array.from(files.keys());
+        document.getElementById('assign-modal-file-nav').hidden = files.size < 2;
+        function moveFile(delta) {
+            const index = fileIds.indexOf(current.id) + delta;
+            if (index >= 0 && index < fileIds.length) choose(fileIds[index]);
+        }
+        previousFile.addEventListener('click', () => moveFile(-1));
+        nextFile.addEventListener('click', () => moveFile(1));
         function stop() {
             clearTimeout(timer);
             if (request) request.abort();
@@ -158,6 +169,10 @@
             current = files.get(String(id));
             if (!current) return;
             dialog.dataset.materialId = current.id; title.textContent = current.name; title.title = current.name; picker.value = current.id;
+            const index = fileIds.indexOf(current.id);
+            previousFile.disabled = index === 0;
+            nextFile.disabled = index === fileIds.length - 1;
+            filePosition.textContent = (index + 1) + ' / ' + fileIds.length;
             document.getElementById('assign-modal-newtab').href = current.url;
             document.getElementById('assign-modal-download').href = current.download;
             modes.hidden = !readingExtensions.has(current.extension.toLowerCase());

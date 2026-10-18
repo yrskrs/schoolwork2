@@ -326,6 +326,7 @@ async function pollUpdateStatus() {
   } finally { polling = false; }
 }
 function renderStatus(data) {
+  if (data.installed_version) text('lblCurrentVersion', `v${data.installed_version}`);
   if (launchPending || activeJobId && data.job_id !== activeJobId) return;
   if (data.state === 'idle') { if (!isUpdating) visible('updateProgressSection', false); return; }
   const previous = lastStatus;
@@ -355,7 +356,6 @@ function renderStatus(data) {
     visible('errorAlert', false);
     visible('successAlert', true);
     text('successAlert', data.rolled_back ? 'Попередню версію, базу даних і файли відновлено та перевірено.' : 'Усі п’ять етапів завершено. Встановлену версію та готовність системи перевірено.');
-    if (version) text('lblCurrentVersion', `v${version}`);
   } else if (data.state === 'error') {
     const message = [data.error, data.rollback_error ? `Помилка відкату: ${data.rollback_error}` : ''].filter(Boolean).join('\n');
     showError(message, data.rolled_back);
@@ -378,7 +378,6 @@ function showError(message, rolledBack = false) {
   visible('btnManualRollback', Boolean(lastStatus?.rollback) && !rolledBack);
   text('errorMessage', message || 'Невідома помилка');
   document.getElementById('updateDiagnostics').value = [message, '', ...(lastStatus?.logs || [])].join('\n');
-  if (rolledBack && lastStatus?.current_version) text('lblCurrentVersion', `v${lastStatus.current_version}`);
 }
 function updateStepper(step, name, progress, complete = false, running = true) {
   document.getElementById('progressBarFill').style.width = `${progress}%`;

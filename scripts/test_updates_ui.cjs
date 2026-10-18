@@ -30,7 +30,7 @@ module.exports = async function verify(root, template) {
     confirm: () => true, setInterval: () => 1, clearInterval() {}, Date, console,
   });
   vm.runInContext(source, context);
-  const success = {state: 'success', job_id: 'done', step: 5, progress: 100, current_version: '9.2.0', logs: ['first', 'second']};
+  const success = {state: 'success', job_id: 'done', step: 5, progress: 100, current_version: '9.2.0', installed_version: '9.2.0', logs: ['first', 'second']};
   context.renderStatus(success);
   assert.equal(element('updateProgressSection').open, false, 'Stored success must be collapsed');
   assert.equal(element('progressPercentage').textContent, '100%');
@@ -45,6 +45,11 @@ module.exports = async function verify(root, template) {
   element('updateProgressSection').open = true;
   context.renderStatus(success);
   assert.equal(element('updateProgressSection').open, true, 'Repeated status must preserve user expansion');
+  context.renderStatus({...success, current_version: '4.4.5', installed_version: '9.2.0'});
+  assert.equal(element('lblCurrentVersion').textContent, 'v9.2.0', 'Historical job must not overwrite the installed version');
+  context.renderStatus({state: 'idle', installed_version: '9.3.0'});
+  assert.equal(element('lblCurrentVersion').textContent, 'v9.3.0', 'Idle status must refresh the installed version');
+  context.renderStatus(success);
   const running = {state: 'running', job_id: 'new', step: 5, progress: 100, current_version: '9.2.0', logs: []};
   context.renderStatus(running);
   assert.equal(element('progressPercentage').textContent, '99%', 'Running must not claim completion');

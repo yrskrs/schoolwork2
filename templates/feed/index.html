@@ -319,9 +319,7 @@ document.addEventListener('DOMContentLoaded', function() {
             searchForm.addEventListener('submit', function(e) {
                 e.preventDefault();
                 clearTimeout(searchTimer);
-                _currentQuery = searchInput.value.trim();
-                _currentPage = 1;
-                loadFeed(false, false);
+                applyFilter(null, null, null, searchInput.value);
             });
         }
     }

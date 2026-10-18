@@ -16,6 +16,10 @@ from .models import AIRequestLog, School, Teacher
 
 @override_settings(TIME_ZONE='Europe/Kyiv')
 class AIUsageStatisticsTests(TestCase):
+    def test_usage_chart_defaults_to_curves(self):
+        response = self.client.get(reverse('teacher_settings'), {'tab': 'ai', 'ai_section': 'statistics'})
+        page = html.fromstring(response.content)
+        self.assertEqual(page.get_element_by_id('ai-usage-display').xpath('./option[@selected]/@value'), ['curves'])
     def setUp(self):
         self.now = datetime.datetime(2026, 10, 3, 12, tzinfo=ZoneInfo('Europe/Kyiv'))
         set_has_admin(True)

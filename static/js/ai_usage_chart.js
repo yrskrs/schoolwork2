@@ -9,6 +9,7 @@
         const plot = document.getElementById('ai-usage-plot'), totals = document.getElementById('ai-usage-totals');
         const info = document.getElementById('ai-usage-point-info'), legend = document.getElementById('ai-usage-legend');
         const filters = Array.from(root.querySelectorAll('[data-usage-filter]'));
+        const defaultValue = select => select.dataset.usageFilter === 'display' ? 'curves' : select.options[0].value;
         const format = new Intl.NumberFormat('uk-UA');
         const compact = new Intl.NumberFormat('uk-UA', {notation: 'compact', maximumFractionDigits: 1});
         const metrics = {requests: 'Запитів', total_tokens: 'Усі токени', prompt_tokens: 'Вхідні токени', completion_tokens: 'Вихідні токени'};
@@ -31,7 +32,7 @@
                 if (requested && requested.length <= 100 && !known && ['model', 'provider', 'action'].includes(select.dataset.usageFilter)) {
                     const option = document.createElement('option'); option.value = requested; option.textContent = requested; select.append(option);
                 }
-                select.value = Array.from(select.options).some(option => option.value === requested) ? requested : select.options[0].value;
+                select.value = Array.from(select.options).some(option => option.value === requested) ? requested : defaultValue(select);
             });
         }
         function element(tag, attrs, text) {
@@ -46,7 +47,7 @@
                 const url = new URL(location.href);
                 filters.forEach(select => {
                     const name = 'usage_' + select.dataset.usageFilter;
-                    if (select.value === select.options[0].value) url.searchParams.delete(name); else url.searchParams.set(name, select.value);
+                    if (select.value === defaultValue(select)) url.searchParams.delete(name); else url.searchParams.set(name, select.value);
                 });
                 history.replaceState(null, '', url);
             }

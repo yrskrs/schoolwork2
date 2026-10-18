@@ -40,7 +40,7 @@
 
     {% block extra_head %}{% endblock %}
     <link rel="stylesheet" href="{% static 'css/platform_layout.css' %}">
-    <link rel="stylesheet" href="{% static 'css/school_ui.css' %}?ui=20261018-r3">
+    <link rel="stylesheet" href="{% static 'css/school_ui.css' %}?ui=20261018-r4">
 </head>
 <body class="{% block body_class %}{% endblock %}" data-page-area="{% if request.path|slice:':9' == '/teacher/' %}teacher{% else %}student{% endif %}">
 <a class="skip-link" href="#main-content">Перейти до вмісту</a>
@@ -346,6 +346,9 @@
             </div>
             {% endif %}
         </div>
+        {% if not user.is_authenticated or not user.teacher_profile %}
+        {% include 'feed/components/student_appearance.html' %}
+        {% endif %}
     </div>
 </nav>
 
@@ -370,7 +373,7 @@
 
 <footer class="site-footer">
     Шкільні Завдання · Локальна шкільна мережа{% if user.is_superuser or is_superadmin_mode %} · <a href="{% url 'system_updates' %}" style="color:var(--color-primary);text-decoration:none;font-weight:700;">🚀 Оновлення системи</a>{% endif %}
-    <p id="simplified-site-help">Сайт пригальмовує? Увімкніть «Спрощений сайт» у меню: анімації, розмиття й декоративні тіні вимкнуться. Вибір зберігається в цьому браузері; завдання та всі функції залишаються доступними.</p>
+    <p id="simplified-site-help">Сайт пригальмовує? Увімкніть «Спрощений сайт» {% if user.is_authenticated and user.teacher_profile %}у меню{% else %}на верхній панелі{% endif %}: анімації, розмиття й декоративні тіні вимкнуться. Вибір зберігається в цьому браузері; завдання та всі функції залишаються доступними.</p>
 </footer>
 
 <div id="assignment-modal-overlay" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title">
@@ -387,12 +390,12 @@
     </div>
 </div>
 
-<script src="{% static 'js/main.js' %}?ui=20261018-r3"></script>
+<script src="{% static 'js/main.js' %}?ui=20261018-r4"></script>
 <script src="{% static 'js/teacher_tools.js' %}"></script>
 <script src="{% static 'js/responsive_tables.js' %}"></script>
 <script src="{% static 'js/ai_jobs.js' %}?ui=20261018"></script>
 <script src="{% static 'js/upload_progress.js' %}"></script>
-<script src="{% static 'js/school_ui.js' %}?ui=20261018-r3" defer></script>
+<script src="{% static 'js/school_ui.js' %}?ui=20261018-r4" defer></script>
 {% block extra_scripts %}{% endblock %}
 
 <script>

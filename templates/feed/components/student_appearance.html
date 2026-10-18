@@ -1,0 +1,37 @@
+<div class="student-appearance" role="group" aria-label="Вигляд і зручність">
+        {% include 'feed/components/theme_toggle.html' %}
+            <button id="simplified-site-toggle" class="simplified-site-toggle" type="button" role="switch"
+                    aria-checked="false" aria-describedby="simplified-site-help"
+                    title="Спрощений сайт: вимкнути анімації, розмиття та декоративні тіні для старих ноутбуків">
+                <span class="simplified-site-label">Спрощений сайт</span>
+                <span class="simplified-site-track" aria-hidden="true"></span>
+            </button>            <!-- 🔤 Масштабування шрифтів сайту (для учнів/гостей) -->
+            <div class="font-scale-wrapper" style="position:relative;display:inline-flex;align-items:center;">
+                <button type="button" id="font-scale-toggle-btn" class="theme-toggle" aria-label="Змінити розмір шрифту" title="Розмір тексту (безпечний діапазон: 85% - 125%)" onclick="toggleFontScaleMenu(event)">
+                    <span style="font-size:13px;font-weight:800;letter-spacing:-0.5px;">A<span style="font-size:10.5px;font-weight:700;">a</span></span>
+                </button>
+                <div id="font-scale-dropdown" class="font-scale-dropdown" style="display:none;position:absolute;top:calc(100% + 6px);right:0;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);box-shadow:0 10px 25px rgba(0,0,0,0.18);padding:8px 10px;min-width:210px;z-index:1050;">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+                        <span style="font-size:10.5px;font-weight:800;color:var(--color-text-muted);text-transform:uppercase;letter-spacing:0.04em;">Розмір тексту</span>
+                        <div style="display:flex;align-items:center;gap:4px;">
+                            <button type="button" data-font-scale-step="-5" onclick="stepFontScale(-5)" class="btn btn-sm btn-secondary font-scale-step-btn" style="font-size:11px;padding:1px 6px;line-height:1.2;" title="Зменшити">−</button>
+                            <span id="font-scale-active-badge-guest" class="font-scale-val-badge">100%</span>
+                            <button type="button" data-font-scale-step="5" onclick="stepFontScale(5)" class="btn btn-sm btn-secondary font-scale-step-btn" style="font-size:11px;padding:1px 6px;line-height:1.2;" title="Збільшити">+</button>
+                        </div>
+                    </div>
+                    <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:4px;margin-bottom:6px;">
+                        <button type="button" onclick="applyFontScale(85)" class="btn btn-sm font-scale-choice-btn" data-scale="85" title="85%" style="font-size:11px;padding:4px 2px;font-weight:700;">85%</button>
+                        <button type="button" onclick="applyFontScale(90)" class="btn btn-sm font-scale-choice-btn" data-scale="90" title="90%" style="font-size:11px;padding:4px 2px;font-weight:700;">90%</button>
+                        <button type="button" onclick="applyFontScale(100)" class="btn btn-sm font-scale-choice-btn" data-scale="100" title="100%" style="font-size:11px;padding:4px 2px;font-weight:700;">100%</button>
+                        <button type="button" onclick="applyFontScale(110)" class="btn btn-sm font-scale-choice-btn" data-scale="110" title="110%" style="font-size:11px;padding:4px 2px;font-weight:700;">110%</button>
+                        <button type="button" onclick="applyFontScale(120)" class="btn btn-sm font-scale-choice-btn" data-scale="120" title="120%" style="font-size:11px;padding:4px 2px;font-weight:700;">120%</button>
+                        <button type="button" onclick="applyFontScale(125)" class="btn btn-sm font-scale-choice-btn" data-scale="125" title="125%" style="font-size:11px;padding:4px 2px;font-weight:700;">125%</button>
+                    </div>
+                    <div style="display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--color-border);padding-top:6px;font-size:11px;">
+                        <span style="color:var(--color-text-muted);">Безпечний ліміт 85%–125%</span>
+                        <button type="button" onclick="applyFontScale(100)" style="background:none;border:none;color:var(--color-primary);cursor:pointer;font-weight:700;font-size:11px;padding:0;">Скинути (100%)</button>
+                    </div>
+                </div>
+            </div>
+
+</div>

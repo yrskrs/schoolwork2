@@ -6,7 +6,7 @@
 
 {% block extra_head %}
 <link rel="stylesheet" href="{% static 'css/assignment_detail.css' %}">
-<link rel="stylesheet" href="{% static 'css/material_preview.css' %}">
+<link rel="stylesheet" href="{% static 'css/material_preview.css' %}?ui=20261018-r4">
 <!-- Prism.js для підсвічування синтаксису коду -->
 <link href="{% static 'vendor/prism/prism-tomorrow.min.css' %}" rel="stylesheet" />
 {% endblock %}
@@ -36,7 +36,7 @@
 {% endblock %}
 
 {% block extra_scripts %}
-<script src="{% static 'js/material_preview.js' %}" defer></script>
+<script src="{% static 'js/material_preview.js' %}?ui=20261018-r4" defer></script>
 <!-- Prism.js для локального підсвічування коду -->
 <script src="{% static 'vendor/prism/prism.min.js' %}"></script>
 <script src="{% static 'vendor/prism/prism-python.min.js' %}"></script>

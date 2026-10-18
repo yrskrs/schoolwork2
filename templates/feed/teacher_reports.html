@@ -39,7 +39,7 @@
                     </div>
 
                     <!-- 1-й рядок: Клас, Завдання, Учень, Охоплення -->
-                    <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:12px;margin-bottom:12px;">
+                    <div class="report-filter-grid">
                         <!-- Клас -->
                         <div>
                             <label for="class_id" style="display:block;font-size:12px;font-weight:700;color:var(--color-text-secondary);margin-bottom:4px;">
@@ -75,12 +75,12 @@
 
                         <div>
                             <label for="pupil_scope" style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;">Учні:</label>
-                            <select name="pupil_scope" id="pupil_scope" class="form-input" style="width:100%;">
+                            <select name="pupil_scope" id="pupil_scope" aria-describedby="report-filter-explanation" class="form-input" style="width:100%;">
                                 <option value="all" {% if filters.pupil_scope == 'all' %}selected{% endif %}>Усі учні</option>
                                 <option value="outside" {% if filters.pupil_scope == 'outside' %}selected{% endif %}>Позакласні учні (поза моїми журналами)</option>
                                 <option value="roster" {% if filters.pupil_scope == 'roster' %}selected{% endif %}>Учні моїх журналів</option>
                             </select>
-                            <small>Позакласних визначаємо за списком журналу обраного класу. Клас відбираємо за здачею роботи; «Лише оцінені» змінює тільки відбір за оцінкою. Ті самі умови діють у PDF.</small>
+
                         </div>
 
                         <!-- Пошук учня -->
@@ -103,6 +103,7 @@
                         </div>
                     </div>
 
+                    <p class="report-filter-explanation" id="report-filter-explanation">Позакласних визначаємо за списком журналу обраного класу. Клас відбираємо за здачею роботи; «Лише оцінені» змінює тільки відбір за оцінкою. Ті самі умови діють у PDF.</p>
                     <!-- 2-й рядок: Дати (з пресетами для замін) -->
                     <div style="background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:12px 14px;margin-bottom:14px;">
                         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px;">
@@ -142,7 +143,7 @@
                             <summary style="font-size:13px;font-weight:750;color:var(--color-primary);user-select:none;margin-bottom:10px;">
                                 ⚙️ Додаткові реквізити для заміни уроків (ПІБ основного вчителя, примітка для журналу)
                             </summary>
-                            <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(240px, 1fr));gap:12px;margin-top:10px;background:rgba(99,102,241,0.03);border:1px solid rgba(99,102,241,0.2);border-radius:var(--radius-md);padding:12px;">
+                            <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(min(100%,240px), 1fr));gap:12px;margin-top:10px;background:rgba(99,102,241,0.03);border:1px solid rgba(99,102,241,0.2);border-radius:var(--radius-md);padding:12px;">
                                 <div>
                                     <label for="target_teacher" style="display:block;font-size:12px;font-weight:700;color:var(--color-text-secondary);margin-bottom:4px;">
                                         👩‍🏫 Основний вчитель (кого ви замінювали):
@@ -174,7 +175,7 @@
 
                     <!-- Кнопки дій форми -->
                     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
-                        <div style="display:flex;gap:8px;">
+                        <div class="report-filter-actions">
                             <button type="submit" class="btn btn-primary" style="font-weight:750;padding:8px 18px;display:inline-flex;align-items:center;gap:6px;">
                                 <span>🔎</span> <span>Показати результати</span>
                             </button>
@@ -185,7 +186,7 @@
 
                         <!-- Головні кнопки завантаження PDF -->
                         <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                            <button type="button" onclick="downloadReportPdf('grades_only')" class="btn btn-success" style="font-weight:800;padding:8px 16px;background:linear-gradient(135deg,#059669,#047857);border:none;box-shadow:0 3px 10px rgba(5,150,105,0.25);display:inline-flex;align-items:center;gap:6px;cursor:pointer;" title="Завантажити зведену таблицю оцінок з датами та класами для журналу">
+                            <button type="button" onclick="downloadReportPdf('grades_only')" class="btn btn-success" style="font-weight:800;padding:8px 16px;background:var(--action-success-bg);color:var(--action-text);border:none;box-shadow:none;display:inline-flex;align-items:center;gap:6px;cursor:pointer;" title="Завантажити зведену таблицю оцінок з датами та класами для журналу">
                                 <span>📥</span> <span>Завантажити PDF (Тільки оцінки)</span>
                             </button>
                         </div>

@@ -9,6 +9,9 @@ html.material-preview-open { overflow:hidden; }
 .material-dialog-actions { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
 .material-dialog .btn { min-height:36px; white-space:normal; }
 .material-dialog-controls { display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:10px 16px; background:var(--color-bg-secondary); border-bottom:1px solid var(--color-border); }
+.material-file-navigation { display:grid; grid-template-columns:minmax(0,1fr) auto minmax(0,1fr); align-items:center; gap:6px; max-width:100%; }
+.material-file-navigation .btn { min-width:0; white-space:normal; }
+.material-file-navigation > span { font-size:12px; white-space:nowrap; }
 .material-dialog-picker { display:flex; align-items:center; gap:8px; flex:1; min-width:180px; font-size:12px; font-weight:700; }
 .material-dialog-picker select { min-width:0; width:100%; flex:1; font-size:13px; padding:7px 9px; }
 .material-dialog-modes { display:flex; gap:6px; flex-wrap:wrap; }
@@ -55,6 +58,7 @@ html.material-preview-open { overflow:hidden; }
     #assign-modal-close { margin-left:auto; }
     .material-dialog .btn { min-height:34px; padding:5px 6px; }
     .material-dialog-picker { flex-basis:100%; }
+    .material-file-navigation { width:100%; }
     .material-dialog-picker > span { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }
     .material-dialog-modes { margin-right:auto; }
     .material-slide-toolbar { margin-left:0; }

@@ -8,6 +8,11 @@
         </div>
     </header>
     <div class="material-dialog-controls">
+        <div id="assign-modal-file-nav" class="material-file-navigation" role="group" aria-label="Перемикання між файлами" hidden>
+            <button type="button" id="assign-modal-previous-file" class="btn btn-secondary btn-sm" aria-label="Попередній файл">← Попередній</button>
+            <span id="assign-modal-file-position" aria-live="polite"></span>
+            <button type="button" id="assign-modal-next-file" class="btn btn-secondary btn-sm" aria-label="Наступний файл">Наступний →</button>
+        </div>
         <label class="material-dialog-picker" for="assign-modal-picker"><span>Матеріал</span>
             <select id="assign-modal-picker" class="form-input"></select>
         </label>
