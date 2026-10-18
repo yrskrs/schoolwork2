@@ -29,7 +29,9 @@ def file_response(request, path, content_type=None, filename=None, attachment=Fa
     response = None
     raw_range = request.headers.get('Range', '')
     if raw_range and request.method in ('GET', 'HEAD'):
-        match = re.fullmatch(r'bytes=(\d*)-(\d*)', raw_range.strip())
+        # Bound integer parsing as well as the range itself. An arbitrarily
+        # long number can otherwise raise ValueError and turn a download into 500.
+        match = re.fullmatch(r'bytes=([0-9]{0,20})-([0-9]{0,20})', raw_range.strip())
         if not match or not any(match.groups()):
             response = HttpResponse(status=416)
         else:
@@ -75,6 +77,9 @@ def public_media(request, path):
     target = (root / path).resolve()
     if not target.is_relative_to(root):
         raise Http404('Файл не знайдено')
+    # Authorize the actual file, including dot segments and symlink targets,
+    # rather than an alternative spelling supplied in the URL.
+    path = target.relative_to(root).as_posix()
     if path.startswith(('school_archives/', 'logs_archives/')) and not (request.user.is_authenticated and
             (request.user.is_superuser or hasattr(request.user, 'teacher_profile'))):
         raise Http404('Файл не знайдено')

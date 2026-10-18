@@ -10,12 +10,23 @@ __pycache__/
 *.pyd
 .Python
 *.sqlite3
+*.sqlite3-*
+*.sqlite
+*.db
+*.db-*
+*.sql
+# Django exports can contain student records even when Git ignores them.
+datadump*.json
 media/
 logs/
 .vscode/
 .idea/
 .env
 .env.local
+.aws/
+.ssh/
+.codex/
+.agents/
 .DS_Store
 Thumbs.db
 backups/

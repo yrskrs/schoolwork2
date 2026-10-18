@@ -48,7 +48,9 @@ class AssignmentArchiveTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response['Content-Type'], 'application/zip')
         payload = b''.join(response.streaming_content)
-        response.close()
+        # Django's test client closes the response when this iterator finishes.
+        # Closing it again emits request_finished twice and closes PostgreSQL's
+        # connection inside the enclosing TestCase transaction.
         with zipfile.ZipFile(io.BytesIO(payload)) as archive:
             return json.loads(archive.read('manifest.json')), payload
 
