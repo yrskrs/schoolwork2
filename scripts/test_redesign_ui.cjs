@@ -14,8 +14,8 @@ const {chromium} = require(config.playwright);
     page.on('pageerror', error => errors.push(error.message));
     page.on('response', response => { if (response.status() >= 400) badResponses.push(`${response.status()} ${response.url()}`); });
     await context.addInitScript(() => {
-      localStorage.setItem('sn-simplified-site', 'off');
-      localStorage.setItem('sn-theme', 'light');
+      if (!localStorage.getItem('sn-simplified-site')) localStorage.setItem('sn-simplified-site', 'off');
+      if (!localStorage.getItem('sn-theme')) localStorage.setItem('sn-theme', 'light');
     });
     async function visit(url) {
       const response = await page.goto(url);
@@ -34,15 +34,28 @@ const {chromium} = require(config.playwright);
         const overflowing = [...document.querySelectorAll('main h1, main .btn, main input:not([type="hidden"]), main select')]
           .filter(el => el.getClientRects().length && !el.closest('dialog:not([open]), [style*="display:none"], [style*="display: none"]'))
           .filter(el => {const r = el.getBoundingClientRect(); return r.width > 0 && (r.left < -2 || r.right > innerWidth + 2);})
-          .map(el => el.id || el.className).slice(0, 10);
+          .map(el => ({id: el.id, className: el.className, text: el.textContent.trim().slice(0, 80),
+                       left: el.getBoundingClientRect().left, right: el.getBoundingClientRect().right})).slice(0, 10);
         return {viewport: innerWidth, pageWidth: root.scrollWidth, overflowing,
                 dom: document.querySelectorAll('*').length};
       });
+      if (measurement.overflowing.length || measurement.pageWidth > width + 2)
+        await page.screenshot({path: path.join(config.artifacts, 'failure-layout.png'), fullPage: true});
       assert(measurement.pageWidth <= width + 2, `${label} ${theme} ${width}/${scale} page overflow: ${JSON.stringify(measurement)}`);
       assert.deepEqual(measurement.overflowing, [], `${label} ${width}/${scale} visible controls overflow`);
       results.push({label, theme, width, scale, ...measurement});
-      if ((width === 1366 && scale === 100) || (width === 375 && scale === 125))
+      if (['teacher', 'settings'].includes(label)) {
+        const gap = await page.evaluate(() => document.querySelector('.page-hero').getBoundingClientRect().top - document.querySelector('.navbar').getBoundingClientRect().bottom);
+        assert(gap >= 0 && gap <= (width === 1366 && scale === 100 ? 24 : 180), `${label} excessive top gap: ${gap}`);
+      }
+      if (label === 'teacher' && width <= 640) {
+        const height = await page.locator('.live-lesson-card').evaluate(el => el.getBoundingClientRect().height);
+        assert(height <= 320, `Lesson widget has excessive blank space: ${height}`);
+      }
+      if ((width === 1366 && scale === 100) || (width === 375 && scale === 125)) {
+        await page.evaluate(() => window.scrollTo({top: 0, behavior: 'instant'}));
         await page.screenshot({path: path.join(config.artifacts, `${label}-${width}-${theme}-${scale}.png`), fullPage: true});
+      }
     }
     const studentPages = [['home', `/?class=${config.classId}`],
       ['assignment', `/assignment/${config.assignment}/?class=${config.classId}`],
@@ -57,12 +70,25 @@ const {chromium} = require(config.playwright);
         for (const width of [320, 375, 640, 1024, 1366])
           for (const scale of [100, 125]) await layout(label, theme, width, scale);
     }
+    await page.setViewportSize({width: 1366, height: 900});
+    await visit('/');
+    await page.evaluate(() => applyFontScale(100));
+    const classBounds = await page.evaluate(() => {
+      const all = document.querySelector('#filter-class-all a').getBoundingClientRect();
+      const items = [...document.querySelectorAll('.sidebar-class-grid .class-grid-item')].map(el => el.getBoundingClientRect());
+      return {left: all.left, right: all.right, gridLeft: Math.min(...items.map(r => r.left)), gridRight: Math.max(...items.map(r => r.right))};
+    });
+    assert(Math.abs(classBounds.left - classBounds.gridLeft) <= 1 && Math.abs(classBounds.right - classBounds.gridRight) <= 1, `All classes alignment: ${JSON.stringify(classBounds)}`);
     await page.setViewportSize({width: 375, height: 900});
     await visit(`/?class=${config.classId}`);
     await page.selectOption('#school-class-select', String(config.otherClassId));
     await page.waitForFunction(id => new URL(location.href).searchParams.get('class') === String(id), config.otherClassId);
     await page.waitForFunction(() => !document.querySelector('#feed-container')?.classList.contains('loading'));
     await page.locator('.school-more > summary').click();
+    assert(await page.locator('#theme-toggle-btn').evaluate(el => Boolean(el.closest('.school-more-panel'))));
+    const previousTheme = await page.locator('html').getAttribute('data-theme');
+    await page.locator('#theme-toggle-btn').click();
+    assert.notEqual(await page.locator('html').getAttribute('data-theme'), previousTheme);
     await page.locator('#simplified-site-toggle').click();
     assert(await page.locator('html').evaluate(el => el.classList.contains('sn-lite')));
     await page.locator('#simplified-site-toggle').click();
@@ -114,6 +140,9 @@ const {chromium} = require(config.playwright);
     await page.locator('form button[type="submit"]').click();
     await page.waitForURL('**/teacher/**');
     assert(!page.url().includes('/login/'), 'Teacher login');
+    assert(await page.locator('#today-schedule-nav-btn').isVisible());
+    assert(await page.locator('#today-schedule-nav-btn').evaluate(el => !el.closest('.user-menu-panel')));
+    assert(await page.locator('#theme-toggle-btn').evaluate(el => Boolean(el.closest('.user-menu-panel'))));
     for (const [label, url] of [['teacher', '/teacher/'], ['editor', '/teacher/assignment/create/'],
       ['settings', '/teacher/settings/'], ['gradebook', '/teacher/gradebook/']]) {
       // Native navigation links are authoritative for routes outside the dashboard.
@@ -124,9 +153,26 @@ const {chromium} = require(config.playwright);
         if (await link.count()) target = await link.getAttribute('href');
       }
       await visit(target);
+      if (label === 'editor') {
+        assert.equal(await page.locator('input[name="classes"]:checked').count(), 0, 'Fresh class selection');
+        assert.equal(await page.locator('#assignment-ai-options').getAttribute('open'), null);
+        assert(await page.locator('#assignment-ai-options').evaluate(el => el.parentElement.classList.contains('assignment-editor-main') && el.nextElementSibling.id === 'assignment-custom-criteria'));
+      }
       for (const theme of ['light', 'dark'])
         for (const width of [320, 375, 640, 1024, 1366])
           for (const scale of [100, 125]) await layout(label, theme, width, scale);
+      if (label === 'editor') {
+        await page.locator(`input[name="classes"][value="${config.classId}"]`).check();
+        await page.locator('#schedule-targeting-block > summary').click();
+        await page.locator('#assignment-ai-options > summary').click();
+        await page.locator('#assignment-custom-criteria > summary').click();
+        for (const width of [320, 375, 640, 1024, 1366]) {
+          await layout('editor-expanded', 'dark', width, 125);
+          const sizes = await page.locator('.class-check-pill').evaluateAll(elements => elements.map(el => ({width: el.getBoundingClientRect().width, height: el.getBoundingClientRect().height})));
+          assert(Math.max(...sizes.map(r => r.width)) - Math.min(...sizes.map(r => r.width)) <= 1, 'Equal class card widths');
+          assert(Math.max(...sizes.map(r => r.height)) - Math.min(...sizes.map(r => r.height)) <= 1, 'Equal class card heights');
+        }
+      }
       if (label === 'teacher') {
         const menu = page.locator('.school-card-menu').first();
         await menu.locator('summary').click();

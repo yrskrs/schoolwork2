@@ -1,5 +1,5 @@
 /* One form, with content and its settings placed side by side. */
-.assignment-editor-layout { display: grid; grid-template-columns: minmax(0,1fr) var(--layout-sidebar-width, 280px); gap: var(--layout-gap, 20px); align-items: start; }
+.assignment-editor-layout { display: grid; grid-template-columns: minmax(0,1fr) minmax(280px,320px); gap: var(--layout-gap, 20px); align-items: start; }
 .assignment-editor-main, .assignment-editor-sidebar { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 .assignment-editor-main .form-card-body { padding: 22px; }
 .assignment-editor-sidebar .form-card-header, .assignment-editor-sidebar .form-card-body { padding: 16px; }
@@ -8,7 +8,10 @@
 .assignment-editor-sidebar .form-hint { font-size: 12px; line-height: 1.45; }
 .assignment-editor-sidebar .publish-radio-group { grid-template-columns: minmax(0,1fr) !important; gap: 8px !important; }
 .assignment-editor-sidebar .publish-option { padding: 10px 12px !important; }
-.assignment-editor-sidebar .class-checkbox-group { max-height: 230px; overflow: auto; padding: 4px; }
+.assignment-editor-sidebar .class-checkbox-group { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin-top:8px; padding:2px; }
+.assignment-editor-sidebar .class-check-pill { display:flex; justify-content:center; min-width:0; width:100%; min-height:40px; padding:8px 5px; border-radius:7px; }
+.assignment-editor-sidebar .class-check-pill input { flex-shrink:0; }
+.assignment-editor-sidebar .class-pill-text { min-width:0; overflow-wrap:anywhere; text-align:center; }
 .assignment-editor-sidebar .form-group > label > div { min-width: 0; }
 .assignment-editor-sidebar .form-group > label > input[type="checkbox"] { flex-shrink: 0; }
 .assignment-editor-disclosure > summary { padding: 16px 20px; color: var(--color-text-primary); font-size: 15px; font-weight: 700; cursor: pointer; }
@@ -29,12 +32,15 @@
     .assignment-editor-recipients { grid-row: 2; }
     .assignment-editor-materials { grid-row: 3; }
     .assignment-editor-publication { grid-row: 4; }
-    #assignment-custom-criteria { grid-row: 5; }
-    #assignment-ai-options { grid-row: 6; }
+    #assignment-ai-options { grid-row: 5; }
+    #assignment-custom-criteria { grid-row: 6; }
 }
 @media (max-width: 640px) {
     .assignment-editor-main .form-card-header, .assignment-editor-main .form-card-body { padding: 16px; }
-    .assignment-editor-actions { bottom: 6px; padding: 10px; }
+    .assignment-editor-actions { position:static; padding:10px; }
     .assignment-editor-action-buttons { width: 100%; }
     .assignment-editor-action-buttons .btn { flex: 1; justify-content: center; font-size: 13px; }
+}
+@media (max-width: 420px) {
+    .assignment-editor-sidebar .class-checkbox-group { grid-template-columns:repeat(2,minmax(0,1fr)); }
 }

@@ -1356,42 +1356,20 @@ def assignment_create(request):
         if chosen_subject_id:
             form.initial['subject'] = chosen_subject_id
 
-        # ── 2. Автоматичний вибір класів (Кому призначено) ────────────────────
-        chosen_class_ids = None
+        # Classes are selected afresh; an explicit link from a lesson can
+        # still provide its class. Previous assignments/session choices do not.
         if class_id and str(class_id).isdigit() and form.fields['classes'].queryset.filter(pk=class_id).exists():
-            chosen_class_ids = [int(class_id)]
-        else:
-            # Спробувати зберегти попередній вибір класів:
-            # а) з поточної сесії
-            session_classes = request.session.get('last_created_class_ids')
-            if session_classes and isinstance(session_classes, list):
-                valid_ids = list(form.fields['classes'].queryset.filter(pk__in=session_classes).values_list('pk', flat=True))
-                if valid_ids:
-                    chosen_class_ids = valid_ids
-
-            # б) з останнього створеного завдання вчителя
-            if not chosen_class_ids:
-                last_asgn = Assignment.objects.filter(teacher=teacher).order_by('-id').first()
-                if last_asgn:
-                    valid_ids = list(last_asgn.classes.values_list('id', flat=True))
-                    valid_ids = list(form.fields['classes'].queryset.filter(pk__in=valid_ids).values_list('pk', flat=True))
-                    if valid_ids:
-                        chosen_class_ids = valid_ids
-
-        if chosen_class_ids:
-            form.initial['classes'] = chosen_class_ids
+            form.initial['classes'] = [int(class_id)]
 
     if request.method == 'POST':
         form = AssignmentForm(teacher=teacher, data=request.POST, files=request.FILES)
         if form.is_valid():
             assignment = form.save_with_status(teacher=teacher)
 
-            # ── Зберігаємо вибір предмету та класів у сесію для автопідстановки наступного разу
+            # Remember the subject; classes are selected explicitly for each new task.
             if assignment.subject_id:
                 request.session['last_created_subject_id'] = assignment.subject_id
-            class_ids = list(assignment.classes.values_list('id', flat=True))
-            if class_ids:
-                request.session['last_created_class_ids'] = class_ids
+            request.session.pop('last_created_class_ids', None)
 
             # ── Зберігаємо дефолтні налаштування ШІ для завдання
             ai_preset_id = request.POST.get('default_ai_preset')
@@ -1449,7 +1427,7 @@ def assignment_create(request):
 
             # ── Зберігаємо прив'язку до розкладу уроків для класів
             teacher_lesson_schedules = TeacherLessonSchedule.objects.filter(teacher=teacher).select_related('bell_slot', 'class_group')
-            base_date = timezone.localtime(assignment.published_at or timezone.now()).date()
+            base_date = timezone.localtime(assignment.published_at or assignment.scheduled_at or timezone.now()).date()
             curr_dow = base_date.weekday() + 1
 
             for class_obj in assignment.classes.all():
@@ -1466,7 +1444,16 @@ def assignment_create(request):
                         day_num = int(parts[1])
                         slot_id = int(parts[2])
                 elif target_val == 'auto':
-                    cls_sch = teacher_lesson_schedules.filter(class_group=class_obj).first()
+                    from .lesson_schedule import next_lesson
+                    reference = assignment.published_at or assignment.scheduled_at or timezone.now()
+                    if target_date_val:
+                        try:
+                            from datetime import date, datetime, time
+                            reference = timezone.make_aware(datetime.combine(date.fromisoformat(target_date_val), time.min))
+                        except ValueError:
+                            pass
+                    cls_sch, computed_target_date = next_lesson(
+                        teacher_lesson_schedules.filter(class_group=class_obj), reference, assignment.subject_id)
                     if cls_sch:
                         day_num = cls_sch.day_of_week
                         slot_id = cls_sch.bell_slot_id
@@ -1480,7 +1467,7 @@ def assignment_create(request):
                         computed_target_date = datetime.datetime.strptime(target_date_val, '%Y-%m-%d').date()
                     except Exception:
                         pass
-                elif day_num:
+                elif day_num and computed_target_date is None:
                     import datetime
                     diff = (day_num - curr_dow) % 7
                     computed_target_date = base_date + datetime.timedelta(days=diff)
@@ -1590,12 +1577,10 @@ def assignment_edit(request, pk):
             # Зберігаємо оновлене завдання
             assignment = form.save_with_status(teacher=teacher)
 
-            # ── Зберігаємо вибір предмету та класів у сесію для автопідстановки наступного разу
+            # Remember the subject; classes are selected explicitly for each new task.
             if assignment.subject_id:
                 request.session['last_created_subject_id'] = assignment.subject_id
-            class_ids = list(assignment.classes.values_list('id', flat=True))
-            if class_ids:
-                request.session['last_created_class_ids'] = class_ids
+            request.session.pop('last_created_class_ids', None)
             from .utils import sanitize_html
             if assignment.description:
                 assignment.description = sanitize_html(assignment.description)
@@ -1663,7 +1648,7 @@ def assignment_edit(request, pk):
 
             # ── Оновлюємо прив'язку до розкладу уроків
             teacher_lesson_schedules_all = TeacherLessonSchedule.objects.filter(teacher=teacher).select_related('bell_slot', 'class_group')
-            base_date = timezone.localtime(assignment.published_at or timezone.now()).date()
+            base_date = timezone.localtime(assignment.published_at or assignment.scheduled_at or timezone.now()).date()
             curr_dow = base_date.weekday() + 1
 
             for class_obj in assignment.classes.all():
@@ -1680,7 +1665,16 @@ def assignment_edit(request, pk):
                         day_num = int(parts[1])
                         slot_id = int(parts[2])
                 elif target_val == 'auto':
-                    cls_sch = teacher_lesson_schedules_all.filter(class_group=class_obj).first()
+                    from .lesson_schedule import next_lesson
+                    reference = assignment.published_at or assignment.scheduled_at or timezone.now()
+                    if target_date_val:
+                        try:
+                            from datetime import date, datetime, time
+                            reference = timezone.make_aware(datetime.combine(date.fromisoformat(target_date_val), time.min))
+                        except ValueError:
+                            pass
+                    cls_sch, computed_target_date = next_lesson(
+                        teacher_lesson_schedules_all.filter(class_group=class_obj), reference, assignment.subject_id)
                     if cls_sch:
                         day_num = cls_sch.day_of_week
                         slot_id = cls_sch.bell_slot_id
@@ -1694,7 +1688,7 @@ def assignment_edit(request, pk):
                         computed_target_date = datetime.datetime.strptime(target_date_val, '%Y-%m-%d').date()
                     except Exception:
                         pass
-                elif day_num:
+                elif day_num and computed_target_date is None:
                     import datetime
                     diff = (day_num - curr_dow) % 7
                     computed_target_date = base_date + datetime.timedelta(days=diff)
@@ -8406,9 +8400,6 @@ def api_next_lesson_slot(request):
 
     now = timezone.localtime(timezone.now())
     today = now.date()
-    today_dow = today.weekday() + 1
-    now_min = now.time().hour * 60 + now.time().minute
-
     schedules = list(TeacherLessonSchedule.objects.filter(
         teacher=teacher,
         class_group_id=class_id
@@ -8428,51 +8419,25 @@ def api_next_lesson_slot(request):
             'info': 'Розклад для цього класу не налаштовано. Запропоновано наступний день.'
         })
 
-    # Шукаємо уроки сьогодні пізніше поточного часу
-    for s in schedules:
-        if s.day_of_week == today_dow:
-            s_min = s.bell_slot.start_time.hour * 60 + s.bell_slot.start_time.minute
-            if s_min > now_min:
-                return JsonResponse({
-                    'success': True,
-                    'has_schedule': True,
-                    'next_date': today.strftime('%Y-%m-%d'),
-                    'next_date_display': today.strftime('%d.%m.%Y'),
-                    'bell_slot_id': s.bell_slot.id,
-                    'lesson_number': s.bell_slot.lesson_number,
-                    'start_time': s.bell_slot.start_time.strftime('%H:%M'),
-                    'info': f"Сьогодні, {s.bell_slot.lesson_number}-й урок о {s.bell_slot.start_time.strftime('%H:%M')}"
-                })
-
-    # Шукаємо уроки в майбутні дні поточного тижня
-    for s in schedules:
-        if s.day_of_week > today_dow:
-            delta_days = s.day_of_week - today_dow
-            target_d = today + timedelta(days=delta_days)
-            return JsonResponse({
-                'success': True,
-                'has_schedule': True,
-                'next_date': target_d.strftime('%Y-%m-%d'),
-                'next_date_display': target_d.strftime('%d.%m.%Y'),
-                'bell_slot_id': s.bell_slot.id,
-                'lesson_number': s.bell_slot.lesson_number,
-                'start_time': s.bell_slot.start_time.strftime('%H:%M'),
-                'info': f"{s.get_day_of_week_display()}, {s.bell_slot.lesson_number}-й урок ({target_d.strftime('%d.%m')})"
-            })
-
-    # Якщо на цьому тижні немає — беремо найперший урок на наступному тижні
-    first_sch = schedules[0]
-    days_ahead = (7 - today_dow) + first_sch.day_of_week
-    next_week_d = today + timedelta(days=days_ahead)
+    from .lesson_schedule import next_lesson
+    subject_id = request.GET.get('subject_id')
+    subject_id = int(subject_id) if subject_id and subject_id.isdigit() else None
+    lesson, target_date = next_lesson(schedules, now, subject_id)
+    if not lesson:
+        return JsonResponse({'success': False, 'has_schedule': False,
+                             'error': 'Немає уроків цього предмета для обраного класу.'})
+    is_today = target_date == today
+    ongoing = is_today and lesson.bell_slot.start_time <= now.time() < lesson.bell_slot.end_time
+    prefix = 'Зараз' if ongoing else 'Сьогодні' if is_today else lesson.get_day_of_week_display()
     return JsonResponse({
         'success': True,
         'has_schedule': True,
-        'next_date': next_week_d.strftime('%Y-%m-%d'),
-        'next_date_display': next_week_d.strftime('%d.%m.%Y'),
-        'bell_slot_id': first_sch.bell_slot.id,
-        'lesson_number': first_sch.bell_slot.lesson_number,
-        'start_time': first_sch.bell_slot.start_time.strftime('%H:%M'),
-        'info': f"{first_sch.get_day_of_week_display()}, {first_sch.bell_slot.lesson_number}-й урок ({next_week_d.strftime('%d.%m')})"
+        'next_date': target_date.isoformat(),
+        'next_date_display': target_date.strftime('%d.%m.%Y'),
+        'bell_slot_id': lesson.bell_slot_id,
+        'lesson_number': lesson.bell_slot.lesson_number,
+        'start_time': lesson.bell_slot.start_time.strftime('%H:%M'),
+        'info': f"{prefix}, {lesson.bell_slot.lesson_number}-й урок ({target_date.strftime('%d.%m')})"
     })
 
 

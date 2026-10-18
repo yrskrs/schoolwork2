@@ -38,7 +38,7 @@
     <label class="form-label" style="font-weight:700;">
         🏫 Оберіть класи (або клас учня)
     </label>
-    <div class="class-checkbox-group" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;">
+    <div class="class-checkbox-group">
         {% for widget in form.classes %}
         <label class="class-check-pill" style="cursor:pointer;">
             {{ widget.tag }}
@@ -59,7 +59,7 @@
 <details id="schedule-targeting-block" class="assignment-schedule-details" {% if is_edit or form.errors %}open{% endif %}>
 <summary>📅 Прив’язка до розкладу</summary>
 <div class="assignment-schedule-body">
-<p class="form-hint">За потреби оберіть урок і дату для кожного класу.</p>
+<p class="form-hint">Автоматично обирається поточний або найближчий урок обраного предмета. За потреби змініть урок чи дату.</p>
 <div id="schedule-targets-grid" style="display:flex;flex-direction:column;gap:8px;">
         {% for class_obj in form.classes.field.queryset %}
         <div class="schedule-target-row" id="target-row-class-{{ class_obj.id }}" style="display:none;align-items:center;gap:10px;padding:8px 12px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:6px;flex-wrap:wrap;">

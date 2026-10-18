@@ -68,8 +68,14 @@ class AssignmentEditorLayoutTests(TestCase):
         self.assertFalse(form.xpath('.//form'))
         identifiers = Counter(form.xpath('.//*[@id]/@id'))
         self.assertFalse([key for key, count in identifiers.items() if count > 1])
-        for field in ['subject', 'classes', 'due_date', 'publish_choice', 'default_ai_preset', 'allow_student_ai_check', 'no_submission_required']:
+        for field in ['subject', 'classes', 'due_date', 'publish_choice', 'no_submission_required']:
             self.assertTrue(form.xpath('.//aside//*[@name=$name]', name=field), field)
+        ai = page.get_element_by_id('assignment-ai-options')
+        self.assertFalse(ai.xpath('ancestor::aside'))
+        self.assertNotIn('open', ai.attrib)
+        self.assertEqual(ai.getnext().get('id'), 'assignment-custom-criteria')
+        for field in ['default_ai_preset', 'allow_student_ai_check']:
+            self.assertTrue(ai.xpath('.//*[@name=$name]', name=field), field)
         for field in ['subject', 'title', 'description', 'files', 'custom_criteria']:
             self.assertTrue(form.xpath('.//*[@name=$name]', name=field), field)
         self.assertEqual(len(page.get_element_by_id('assignment-save-button').xpath('ancestor::form')), 1)
@@ -177,7 +183,7 @@ class AssignmentEditorLayoutTests(TestCase):
         self.assertEqual(len(card.xpath('.//dl/div')), 6)
         self.assertFalse(page.xpath('//table[contains(@class, "ai-model-usage-table")]'))
 
-    def test_assignment_create_preselects_previous_subject_and_classes(self):
+    def test_assignment_create_remembers_subject_but_requires_fresh_classes(self):
         # 1. Створюємо інший предмет і додаємо вчителю
         physics = Subject.objects.create(name='Фізика')
         self.teacher.subjects.add(physics)
@@ -199,9 +205,15 @@ class AssignmentEditorLayoutTests(TestCase):
         subject_select = page.get_element_by_id('id_subject')
         self.assertEqual(subject_select.xpath('./option[@selected]/@value'), [str(physics.pk)])
 
-        # Перевіряємо, що клас попереднього вибору (9-Б) автоматично відмічено чекбоксом
+        # Neither the saved assignment nor a legacy session may select classes.
+        session = self.client.session
+        session['last_created_class_ids'] = [self.classes[1].pk]
+        session.save()
+        page = self.page(reverse('assignment_create'))
         checked_classes = page.xpath('//input[@name="classes" and @checked]/@value')
-        self.assertEqual(checked_classes, [str(self.classes[1].pk)])
+        self.assertEqual(checked_classes, [])
+        explicit = self.page(reverse('assignment_create') + f'?class={self.classes[0].pk}')
+        self.assertEqual(explicit.xpath('//input[@name="classes" and @checked]/@value'), [str(self.classes[0].pk)])
 
     def test_teacher_ai_instructions_saved_edited_and_duplicated(self):
         secret_notes = "Для 9-А класу: лояльніше оцінювати бюлетень, головне зміст!"

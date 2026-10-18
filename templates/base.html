@@ -40,7 +40,7 @@
 
     {% block extra_head %}{% endblock %}
     <link rel="stylesheet" href="{% static 'css/platform_layout.css' %}">
-    <link rel="stylesheet" href="{% static 'css/school_ui.css' %}?ui=20261018-r2">
+    <link rel="stylesheet" href="{% static 'css/school_ui.css' %}?ui=20261018-r3">
 </head>
 <body class="{% block body_class %}{% endblock %}" data-page-area="{% if request.path|slice:':9' == '/teacher/' %}teacher{% else %}student{% endif %}">
 <a class="skip-link" href="#main-content">Перейти до вмісту</a>
@@ -95,6 +95,32 @@
             {% endif %}
 
             {% if user.is_authenticated and user.teacher_profile %}
+            <!-- 📅 Компактний статус-піл розкладу для вчителя -->
+            <button type="button"
+                    id="today-schedule-nav-btn"
+                    class="nav-schedule-pill {% if live_lesson_status and live_lesson_status.status_type == 'in_lesson' %}status-in-lesson{% elif live_lesson_status and live_lesson_status.status_type == 'in_break' %}status-in-break{% endif %}"
+                    onclick="openTodayScheduleModal()"
+                    title="{% if live_lesson_status and live_lesson_status.title %}{{ live_lesson_status.title }} — {{ live_lesson_status.time_info }}{% else %}Розклад уроків на сьогодні{% endif %}">
+                <span class="schedule-pill-icon">
+                    {% if live_lesson_status and live_lesson_status.status_type == 'in_lesson' %}
+                        <span class="live-dot-pulse green"></span>
+                    {% elif live_lesson_status and live_lesson_status.status_type == 'in_break' %}
+                        <span class="live-dot-pulse amber"></span>
+                    {% else %}
+                        📅
+                    {% endif %}
+                </span>
+                <span class="nav-btn-text" id="live-bell-text">
+                    {% if live_lesson_status and live_lesson_status.status_type == 'in_lesson' %}
+                        <span style="color:#10b981;">{{ live_lesson_status.badge_text }}</span>
+                    {% elif live_lesson_status and live_lesson_status.status_type == 'in_break' %}
+                        <span style="color:#f59e0b;">{{ live_lesson_status.badge_text }}</span>
+                    {% else %}
+                        Розклад
+                    {% endif %}
+                </span>
+                <div id="nav-schedule-progress-bar" class="schedule-pill-progress" style="width:{% if live_lesson_status and live_lesson_status.progress_percent %}{{ live_lesson_status.progress_percent }}{% else %}0{% endif %}%;display:{% if live_lesson_status and live_lesson_status.status_type in 'in_lesson in_break' %}block{% else %}none{% endif %};background:{% if live_lesson_status and live_lesson_status.status_type == 'in_break' %}#f59e0b{% else %}#10b981{% endif %};"></div>
+            </button>
             <!-- ➕ Створити нове завдання (компактна дія) -->
             {% if request.resolver_match.url_name != 'assignment_create' and request.resolver_match.url_name != 'assignment_edit' %}
             <a href="{% url 'assignment_create' %}" class="btn btn-primary btn-sm nav-btn-create" style="font-weight:700;display:inline-flex;align-items:center;gap:5px;padding:5px 11px;border-radius:var(--radius-md);text-decoration:none;" title="Створити нове навчальне завдання">
@@ -185,8 +211,6 @@
             </div>
             {% endif %}
 
-            <!-- 🌙 Швидкий перемикач теми (для всіх користувачів в 1 клік) -->
-            <button id="theme-toggle-btn" class="theme-toggle" type="button" aria-label="Перемикач теми" title="Змінити тему (Світла / Темна)">🌙</button>
 
             {% if user.is_authenticated and user.teacher_profile %}
             <!-- 👤 Меню профілю вчителя (з інтегрованими системними налаштуваннями) -->
@@ -224,32 +248,7 @@
 
                     <!-- Робочий простір -->
                     <div class="user-menu-section-label">Робочий простір</div>
-            <!-- 📅 Компактний статус-піл розкладу для вчителя -->
-            <button type="button"
-                    id="today-schedule-nav-btn"
-                    class="nav-schedule-pill {% if live_lesson_status and live_lesson_status.status_type == 'in_lesson' %}status-in-lesson{% elif live_lesson_status and live_lesson_status.status_type == 'in_break' %}status-in-break{% endif %}"
-                    onclick="openTodayScheduleModal()"
-                    title="{% if live_lesson_status and live_lesson_status.title %}{{ live_lesson_status.title }} — {{ live_lesson_status.time_info }}{% else %}Розклад уроків на сьогодні{% endif %}">
-                <span class="schedule-pill-icon">
-                    {% if live_lesson_status and live_lesson_status.status_type == 'in_lesson' %}
-                        <span class="live-dot-pulse green"></span>
-                    {% elif live_lesson_status and live_lesson_status.status_type == 'in_break' %}
-                        <span class="live-dot-pulse amber"></span>
-                    {% else %}
-                        📅
-                    {% endif %}
-                </span>
-                <span class="nav-btn-text" id="live-bell-text">
-                    {% if live_lesson_status and live_lesson_status.status_type == 'in_lesson' %}
-                        <span style="color:#10b981;">{{ live_lesson_status.badge_text }}</span>
-                    {% elif live_lesson_status and live_lesson_status.status_type == 'in_break' %}
-                        <span style="color:#f59e0b;">{{ live_lesson_status.badge_text }}</span>
-                    {% else %}
-                        Розклад
-                    {% endif %}
-                </span>
-                <div id="nav-schedule-progress-bar" class="schedule-pill-progress" style="width:{% if live_lesson_status and live_lesson_status.progress_percent %}{{ live_lesson_status.progress_percent }}{% else %}0{% endif %}%;display:{% if live_lesson_status and live_lesson_status.status_type in 'in_lesson in_break' %}block{% else %}none{% endif %};background:{% if live_lesson_status and live_lesson_status.status_type == 'in_break' %}#f59e0b{% else %}#10b981{% endif %};"></div>
-            </button>
+
 
 
                     <a href="{% url 'teacher_dashboard' %}" class="user-menu-link">
@@ -293,6 +292,7 @@
 
                     <!-- Вигляд та доступність -->
                     <div class="user-menu-section-label">Вигляд та система</div>
+                    {% include 'feed/components/theme_toggle.html' %}
             <button id="simplified-site-toggle" class="simplified-site-toggle" type="button" role="switch"
                     aria-checked="false" aria-describedby="simplified-site-help"
                     title="Спрощений сайт: вимкнути анімації, розмиття та декоративні тіні для старих ноутбуків">
@@ -387,12 +387,12 @@
     </div>
 </div>
 
-<script src="{% static 'js/main.js' %}?ui=20261018"></script>
+<script src="{% static 'js/main.js' %}?ui=20261018-r3"></script>
 <script src="{% static 'js/teacher_tools.js' %}"></script>
 <script src="{% static 'js/responsive_tables.js' %}"></script>
 <script src="{% static 'js/ai_jobs.js' %}?ui=20261018"></script>
 <script src="{% static 'js/upload_progress.js' %}"></script>
-<script src="{% static 'js/school_ui.js' %}?ui=20261018-r2" defer></script>
+<script src="{% static 'js/school_ui.js' %}?ui=20261018-r3" defer></script>
 {% block extra_scripts %}{% endblock %}
 
 <script>

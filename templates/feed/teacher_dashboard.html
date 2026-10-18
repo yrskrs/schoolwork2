@@ -4,7 +4,7 @@
 {% block title %}Панель вчителя — {{ teacher.full_name }} | Шкільні Завдання{% endblock %}
 
 {% block content %}
-<div class="page-wrapper">
+<div class="page-wrapper teacher-dashboard-page">
 
     <!-- ── Двоколонковий layout сайту ────────────────────────────────────── -->
     <div class="feed-layout">
@@ -89,9 +89,9 @@
                         </div>
                     </div>
 
-                    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                    <div class="dashboard-filter-fields">
                         <!-- 1. Клас -->
-                        <div style="display:flex;align-items:center;gap:4px;">
+                        <div class="dashboard-filter-field">
                             <label for="filter-class" style="font-size:12px;font-weight:700;color:var(--color-text-secondary);white-space:nowrap;margin:0;">🏫 Клас:</label>
                             <select name="class" id="filter-class" class="form-input" style="font-size:12px;padding:5px 8px;min-width:115px;" onchange="applyDashboardFilters()">
                                 <option value="all">Всі класи</option>
@@ -102,7 +102,7 @@
                         </div>
 
                         <!-- 2. Предмет / Тематика -->
-                        <div style="display:flex;align-items:center;gap:4px;">
+                        <div class="dashboard-filter-field">
                             <label for="filter-subject" style="font-size:12px;font-weight:700;color:var(--color-text-secondary);white-space:nowrap;margin:0;">📚 Предмет:</label>
                             <select name="subject" id="filter-subject" class="form-input" style="font-size:12px;padding:5px 8px;min-width:140px;" onchange="applyDashboardFilters()">
                                 <option value="all">Всі предмети</option>
@@ -113,7 +113,7 @@
                         </div>
 
                         <!-- 3. Дата (пресет + вибір конкретної дати) -->
-                        <div style="display:flex;align-items:center;gap:4px;">
+                        <div class="dashboard-filter-field dashboard-filter-date">
                             <label for="filter-date-preset" style="font-size:12px;font-weight:700;color:var(--color-text-secondary);white-space:nowrap;margin:0;">📅 Дата:</label>
                             <select name="date_preset" id="filter-date-preset" class="form-input" style="font-size:12px;padding:5px 8px;min-width:125px;" onchange="onDatePresetChange()">
                                 <option value="" {% if not selected_date_preset and not selected_date %}selected{% endif %}>Всі дати</option>
@@ -128,8 +128,8 @@
                         </div>
 
                         <!-- 4. Пошук за темою або назвою -->
-                        <div style="display:flex;align-items:center;position:relative;flex:1;min-width:180px;">
-                            <input type="text" name="q" id="filter-q" class="form-input" placeholder="Тема, заголовок, опис..." value="{{ search_query }}"
+                        <div class="dashboard-filter-search">
+                            <input type="text" name="q" id="filter-q" class="form-input" aria-label="Пошук завдань за темою, заголовком або описом" placeholder="Тема, заголовок, опис..." value="{{ search_query }}"
                                    style="width:100%;font-size:12px;padding:5px 26px 5px 8px;"
                                    onkeydown="if(event.key==='Enter'){event.preventDefault();applyDashboardFilters();}">
                             {% if search_query %}
@@ -138,7 +138,7 @@
                         </div>
 
                         <!-- Кнопка пошуку -->
-                        <button type="button" class="btn btn-primary btn-sm" onclick="applyDashboardFilters()" style="padding:5px 12px;font-size:12px;font-weight:750;">
+                        <button type="button" class="btn btn-primary btn-sm dashboard-filter-submit" onclick="applyDashboardFilters()" style="padding:5px 12px;font-size:12px;font-weight:750;">
                             Знайти
                         </button>
                     </div>

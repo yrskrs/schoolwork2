@@ -45,17 +45,20 @@ def main():
         from django.template import engines
         from django.utils import timezone
         from feed.middleware import set_has_admin
-        from feed.models import Assignment, AssignmentFile, ClassGroup, School, Student, Subject, Teacher, Submission
+        from feed.models import Assignment, AssignmentFile, ClassGroup, School, Student, Subject, Teacher, Submission, BellSchedule, TeacherLessonSchedule
 
         call_command('migrate', verbosity=0, interactive=False)
         user = User.objects.create_superuser('redesign-test', password='local-browser-test-only')
         teacher = Teacher.objects.create(user=user, full_name='Тестовий учитель')
         School.objects.create(name='Школа для перевірки дизайну', admin=user)
         set_has_admin(True)
-        groups = [ClassGroup.objects.create(name=name) for name in ('6-А', '9-Б')]
+        groups = [ClassGroup.objects.create(name=name) for name in ('5А', '6А', '7А', '8А', '9А', '9Б', '10А', '10-В', '11А')]
         subject = Subject.objects.create(name='Інформатика')
         teacher.classes.add(*groups)
         teacher.subjects.add(subject)
+        from datetime import time
+        slot = BellSchedule.objects.create(lesson_number=1, start_time=time(8, 30), end_time=time(9, 15))
+        TeacherLessonSchedule.objects.create(teacher=teacher, class_group=groups[0], subject=subject, bell_slot=slot, day_of_week=1)
         students = [Student.objects.create(class_group=group, last_name='Тестовий', first_name='Учень')
                     for group in groups]
         Student.objects.create(class_group=groups[0], last_name='Тестова', first_name='Співавторка')

@@ -4,7 +4,7 @@
 {% block title %}{% if is_edit %}Редагування завдання{% else %}Створення нового завдання{% endif %} — Шкільні Завдання{% endblock %}
 
 {% block extra_head %}
-<link rel="stylesheet" href="{% static 'css/assignment_editor.css' %}">
+<link rel="stylesheet" href="{% static 'css/assignment_editor.css' %}?ui=20261018-r3">
 {% endblock %}
 
 {% block content %}
@@ -26,6 +26,10 @@
                     <div class="form-card-header"><h2 class="form-card-title" id="assignment-materials-title">📎 Матеріали та посилання</h2></div>
                     <div class="form-card-body">{% include 'feed/components/assignment_editor/materials.html' %}</div>
                 </section>
+                <details class="form-card assignment-editor-disclosure" id="assignment-ai-options" {% if form.errors %}open{% endif %}>
+                    <summary>🤖 Параметри ШІ <span>Шаблон, ГР і дозволи</span></summary>
+                    <div class="form-card-body">{% include 'feed/components/assignment_editor/ai_options.html' %}</div>
+                </details>
                 <details class="form-card assignment-editor-disclosure" id="assignment-custom-criteria" {% if form.errors or form.custom_criteria.value or form.teacher_ai_instructions.value %}open{% endif %}>
                     <summary>📝 Власні критерії оцінювання <span>За потреби</span></summary>
                     <div class="form-card-body">{% include 'feed/components/assignment_editor/criteria.html' %}</div>
@@ -40,10 +44,7 @@
                     <div class="form-card-header"><h2 class="form-card-title" id="assignment-publication-title">🚀 Публікація та терміни</h2></div>
                     <div class="form-card-body">{% include 'feed/components/assignment_editor/publication.html' %}</div>
                 </section>
-                <details class="form-card assignment-editor-disclosure" id="assignment-ai-options" {% if form.errors %}open{% endif %}>
-                    <summary>🤖 Параметри ШІ <span>Шаблон, ГР і дозволи</span></summary>
-                    <div class="form-card-body">{% include 'feed/components/assignment_editor/ai_options.html' %}</div>
-                </details>
+
             </aside>
         </div>
         <div class="assignment-editor-actions">

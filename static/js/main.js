@@ -36,7 +36,10 @@ window.mountDeferredDialog = function (id) {
         // Оновлюємо іконку кнопки
         const btn = document.getElementById('theme-toggle-btn');
         if (btn) {
-            btn.textContent = theme === 'dark' ? '☀️' : '🌙';
+            const icon = btn.querySelector('[data-theme-icon]');
+            const label = btn.querySelector('[data-theme-label]');
+            if (icon) icon.textContent = theme === 'dark' ? '☀️' : '🌙';
+            if (label) label.textContent = theme === 'dark' ? 'Увімкнути світлу тему' : 'Увімкнути темну тему';
             btn.setAttribute('aria-label', theme === 'dark' ? 'Перейти до світлої теми' : 'Перейти до темної теми');
         }
     }
