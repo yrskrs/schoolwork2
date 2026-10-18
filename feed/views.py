@@ -3855,6 +3855,10 @@ def view_file(request, submission_id):
 
     sync_params = request.GET.copy()
     sync_params['review_sync'] = '1'
+    web_proxy_url = None
+    if submission.link:
+        web_proxy_url = reverse('view_submission_web_proxy', args=[submission.id])
+
     prefetch_submission = next_submission or next_submission_fallback or next_assignment_first_sub
     context = {
         'submission': submission,
@@ -3869,6 +3873,7 @@ def view_file(request, submission_id):
         'total_items_count': total_items_count,
         'has_submission_link': bool(submission.link),
         'html_raw_url': html_raw_url,
+        'web_proxy_url': web_proxy_url,
         'all_image_files': all_image_files,
         'active_file': active_file,
         'file_name': file_name,
@@ -4111,6 +4116,192 @@ def view_submission_raw_file(request, submission_id, sub_path=None):
         raise
     except Exception as e:
         return HttpResponse(f'Помилка завантаження: {str(e)}', status=500)
+
+
+@teacher_required
+@xframe_options_sameorigin
+def view_submission_web_proxy(request, submission_id):
+    """
+    Захищений проксі-перегляд зовнішніх вебсайтів (наприклад compx.ua, rozetka тощо),
+    які забороняють вбудовування через заголовок X-Frame-Options або CSP frame-ancestors.
+    Забезпечує пряме завантаження та комфортний перегляд сайту безпосередньо у вікні перевірки.
+    """
+    submission = get_object_or_404(Submission, id=submission_id)
+    teacher = request.user.teacher_profile
+
+    if not (request.user.is_superuser or (submission.teacher == teacher) or (submission.assignment and submission.assignment.teacher == teacher)):
+        return HttpResponse('Немає доступу', status=403)
+
+    raw_url = (request.GET.get('url') or submission.link or '').strip()
+    if not raw_url:
+        return HttpResponse('Посилання відсутнє у зданій роботі', status=400)
+
+    # Нормалізація протоколу
+    if not raw_url.startswith(('http://', 'https://', '//')):
+        if raw_url.startswith(('localhost', '127.0.0.1', '192.168.', '10.', '172.')):
+            raw_url = 'http://' + raw_url
+        else:
+            raw_url = 'https://' + raw_url
+    elif raw_url.startswith('//'):
+        raw_url = 'https:' + raw_url
+
+    # Безпечне кодування для кириличних та специфічних URL
+    from urllib.parse import urlsplit, urlunsplit, quote
+    import urllib.request
+    import ssl
+    import gzip
+    import zlib
+    import re
+
+    try:
+        parts = urlsplit(raw_url)
+        hostname = parts.hostname
+        if hostname:
+            try:
+                hostname = hostname.encode('idna').decode('ascii')
+            except Exception:
+                pass
+            netloc = hostname
+            if parts.port:
+                netloc = f"{hostname}:{parts.port}"
+            if parts.username or parts.password:
+                auth = parts.username or ''
+                if parts.password:
+                    auth += f":{parts.password}"
+                netloc = f"{auth}@{netloc}"
+        else:
+            netloc = parts.netloc
+
+        path = quote(parts.path, safe='/@:')
+        query = quote(parts.query, safe='=&?/:')
+        safe_url = urlunsplit((parts.scheme, netloc, path, query, parts.fragment))
+    except Exception:
+        safe_url = raw_url
+
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+        'Accept-Language': 'uk-UA,uk;q=0.9,en-US;q=0.8,en;q=0.7',
+        'Accept-Encoding': 'gzip, deflate',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache',
+    }
+
+    req = urllib.request.Request(safe_url, headers=headers)
+    ctx = ssl.create_default_context()
+
+    try:
+        try:
+            resp = urllib.request.urlopen(req, context=ctx, timeout=12)
+        except ssl.SSLError:
+            ctx_unverified = ssl._create_unverified_context()
+            resp = urllib.request.urlopen(req, context=ctx_unverified, timeout=12)
+    except urllib.error.HTTPError as e:
+        error_html = f"""<!DOCTYPE html>
+<html lang="uk">
+<head><meta charset="utf-8"><title>Статус відповіді сайту: HTTP {e.code}</title>
+<style>
+body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f8fafc; color: #1e293b; display: flex; align-items: center; justify-content: center; min-height: 80vh; margin: 0; padding: 20px; }}
+.card {{ background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 4px 20px rgba(0,0,0,0.06); max-width: 580px; width: 100%; padding: 32px; text-align: center; }}
+.icon {{ font-size: 42px; margin-bottom: 12px; }}
+h2 {{ margin: 0 0 10px; font-size: 20px; color: #0f172a; }}
+p {{ margin: 0 0 16px; font-size: 14px; color: #64748b; line-height: 1.5; }}
+.code {{ background: #f1f5f9; padding: 6px 12px; border-radius: 6px; font-size: 13px; font-family: monospace; word-break: break-all; color: #0f172a; display: block; margin: 12px 0; }}
+.btn {{ display: inline-flex; align-items: center; gap: 6px; padding: 10px 18px; border-radius: 8px; font-size: 14px; font-weight: 600; text-decoration: none; cursor: pointer; transition: all 0.15s; }}
+.btn-primary {{ background: #2563eb; color: #ffffff; border: none; }}
+.btn-primary:hover {{ background: #1d4ed8; }}
+.btn-secondary {{ background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; margin-right: 8px; }}
+</style></head>
+<body>
+<div class="card">
+    <div class="icon">⚠️</div>
+    <h2>Зовнішній сервер повернув HTTP {e.code}</h2>
+    <span class="code">{raw_url}</span>
+    <p>Сайт відповів статусом {e.code} ({e.reason}). Ви можете оновити запит або перейти на сайт напряму в новій вкладці.</p>
+    <div style="margin-top: 24px;">
+        <a href="" onclick="window.location.reload(); return false;" class="btn btn-secondary">🔄 Оновити</a>
+        <a href="{raw_url}" target="_blank" rel="noopener noreferrer" class="btn btn-primary">↗ Відкрити у новій вкладці</a>
+    </div>
+</div></body></html>"""
+        response = HttpResponse(error_html, status=200, content_type='text/html; charset=utf-8')
+        response['X-Frame-Options'] = 'SAMEORIGIN'
+        return response
+    except Exception as e:
+        error_html = f"""<!DOCTYPE html>
+<html lang="uk">
+<head><meta charset="utf-8"><title>Не вдалося завантажити сайт</title>
+<style>
+body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f8fafc; color: #1e293b; display: flex; align-items: center; justify-content: center; min-height: 80vh; margin: 0; padding: 20px; }}
+.card {{ background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 4px 20px rgba(0,0,0,0.06); max-width: 580px; width: 100%; padding: 32px; text-align: center; }}
+.icon {{ font-size: 42px; margin-bottom: 12px; }}
+h2 {{ margin: 0 0 10px; font-size: 20px; color: #0f172a; }}
+p {{ margin: 0 0 16px; font-size: 14px; color: #64748b; line-height: 1.5; }}
+.code {{ background: #f1f5f9; padding: 6px 12px; border-radius: 6px; font-size: 13px; font-family: monospace; word-break: break-all; color: #0f172a; display: block; margin: 12px 0; }}
+.btn {{ display: inline-flex; align-items: center; gap: 6px; padding: 10px 18px; border-radius: 8px; font-size: 14px; font-weight: 600; text-decoration: none; cursor: pointer; transition: all 0.15s; }}
+.btn-primary {{ background: #2563eb; color: #ffffff; border: none; }}
+.btn-primary:hover {{ background: #1d4ed8; }}
+.btn-secondary {{ background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; margin-right: 8px; }}
+</style></head>
+<body>
+<div class="card">
+    <div class="icon">🔌</div>
+    <h2>Не вдалося підключитися до сайту</h2>
+    <span class="code">{raw_url}</span>
+    <p>Виникла помилка підключення ({str(e)}). Перевірте зв'язок або відкрийте сайт в окремій вкладці.</p>
+    <div style="margin-top: 24px;">
+        <a href="" onclick="window.location.reload(); return false;" class="btn btn-secondary">🔄 Спробувати знову</a>
+        <a href="{raw_url}" target="_blank" rel="noopener noreferrer" class="btn btn-primary">↗ Відкрити у новій вкладці</a>
+    </div>
+</div></body></html>"""
+        response = HttpResponse(error_html, status=200, content_type='text/html; charset=utf-8')
+        response['X-Frame-Options'] = 'SAMEORIGIN'
+        return response
+
+    final_url = resp.geturl()
+    content_type = resp.headers.get('content-type', 'text/html')
+    raw_body = resp.read()
+
+    # Декомпресія при потребі
+    content_encoding = (resp.headers.get('content-encoding') or '').lower()
+    if 'gzip' in content_encoding:
+        try:
+            raw_body = gzip.decompress(raw_body)
+        except Exception:
+            pass
+    elif 'deflate' in content_encoding:
+        try:
+            raw_body = zlib.decompress(raw_body)
+        except Exception:
+            pass
+
+    if 'text/html' in content_type:
+        encoding = resp.headers.get_content_charset() or 'utf-8'
+        try:
+            html = raw_body.decode(encoding, errors='replace')
+        except Exception:
+            html = raw_body.decode('utf-8', errors='replace')
+
+        # Очищення від мета-тегів блокування вбудовування
+        html = re.sub(r'<meta[^>]*http-equiv\s*=\s*[\'"]?X-Frame-Options[\'"]?[^>]*>', '', html, flags=re.I)
+        html = re.sub(r'<meta[^>]*http-equiv\s*=\s*[\'"]?Content-Security-Policy[\'"]?[^>]*>', '', html, flags=re.I)
+
+        # Додавання base href для коректного завантаження відносних зображень/стилів та відкриття посилань у новій вкладці
+        base_tag = f'<base href="{final_url}" target="_blank">'
+        anti_bust_script = '<script>try{Object.defineProperty(window,"top",{get:function(){return window;}});Object.defineProperty(window,"parent",{get:function(){return window;}});}catch(e){}</script>'
+        injection = base_tag + anti_bust_script
+
+        if '<head>' in html.lower():
+            html = re.sub(r'(<head[^>]*>)', r'\1' + injection, html, count=1, flags=re.I)
+        else:
+            html = injection + html
+
+        response = HttpResponse(html, content_type='text/html; charset=utf-8')
+        response['X-Frame-Options'] = 'SAMEORIGIN'
+        return response
+    else:
+        response = HttpResponse(raw_body, content_type=content_type)
+        response['X-Frame-Options'] = 'SAMEORIGIN'
+        return response
 
 
 @teacher_required

@@ -182,3 +182,62 @@ class WebAndHtmlViewerTests(TestCase):
         self.assertIn('inline', resp_inline.headers.get('Content-Disposition', ''))
         body = b''.join(resp_inline.streaming_content).decode('utf-8')
         self.assertEqual(body, html_code)
+
+    def test_web_proxy_serves_html_and_injects_base_tag(self):
+        from unittest.mock import MagicMock, patch
+        import io
+
+        sub = Submission.objects.create(
+            assignment=self.assignment,
+            teacher=self.teacher,
+            class_group=self.group,
+            first_name='Михайло',
+            last_name='Грушевський',
+            link='https://compx.ua/noutbuki/'
+        )
+
+        mock_html = '<!DOCTYPE html><html><head><title>CompX</title></head><body><h1>Ноутбуки</h1></body></html>'.encode('utf-8')
+        mock_response = MagicMock()
+        mock_response.read.return_value = mock_html
+        mock_response.geturl.return_value = 'https://compx.ua/ua/noutbuki/'
+        mock_headers = MagicMock()
+        mock_headers.get.side_effect = lambda k, d=None: {
+            'content-type': 'text/html; charset=utf-8',
+            'content-encoding': '',
+            'x-frame-options': 'SAMEORIGIN'
+        }.get(k.lower(), d)
+        mock_headers.get_content_charset.return_value = 'utf-8'
+        mock_response.headers = mock_headers
+
+        proxy_url = reverse('view_submission_web_proxy', args=[sub.id])
+        with patch('urllib.request.urlopen', return_value=mock_response):
+            resp = self.client.get(proxy_url)
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn('text/html', resp.headers.get('Content-Type', ''))
+        body = resp.content.decode('utf-8')
+        self.assertIn('<base href="https://compx.ua/ua/noutbuki/" target="_blank">', body)
+        self.assertIn('Object.defineProperty(window,"top"', body)
+        self.assertIn('Ноутбуки', body)
+
+    def test_submission_viewer_includes_proxy_source_and_toggle(self):
+        sub = Submission.objects.create(
+            assignment=self.assignment,
+            teacher=self.teacher,
+            class_group=self.group,
+            first_name='Іван',
+            last_name='Франко',
+            link='https://compx.ua/'
+        )
+
+        url = reverse('view_file', args=[sub.id])
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 200)
+        self.assertIsNotNone(resp.context.get('web_proxy_url'))
+
+        content = resp.content.decode('utf-8')
+        self.assertIn('btn-web-mode-proxy', content)
+        self.assertIn('btn-web-mode-direct', content)
+        self.assertIn('switchWebFrameSource', content)
+        self.assertIn(resp.context['web_proxy_url'], content)
+
