@@ -65,6 +65,7 @@ urlpatterns = [
     path('teacher/submission/<int:submission_id>/preview/assets/<str:asset_name>/', views.review_preview_asset, name='review_preview_asset'),
     path('teacher/submission/<int:submission_id>/duplicates/', views.review_duplicates, name='review_duplicates'),
     path('teacher/submission/<int:submission_id>/file/', views.view_submission_raw_file, name='view_submission_raw_file'),
+    path('teacher/submission/<int:submission_id>/file/<path:sub_path>', views.view_submission_raw_file, name='view_submission_raw_file_asset'),
     path('teacher/comment/delete/<int:comment_id>/', views.delete_comment, name='delete_comment'),
 
     # ── Оцінювання та коментарі (AJAX) ───────────────────────────────────────

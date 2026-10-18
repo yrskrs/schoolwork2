@@ -2735,7 +2735,9 @@ class Submission(models.Model):
             return 'powerpoint'
         elif ext in {'.zip', '.rar', '.7z', '.tar', '.gz', '.tgz'}:
             return 'archive'
-        elif ext in {'.py', '.pyw', '.ipynb', '.js', '.mjs', '.ts', '.tsx', '.jsx', '.html', '.htm', '.css', '.scss', '.cpp', '.c', '.h', '.hpp', '.cs', '.java', '.kt', '.sh', '.bash', '.json', '.sql', '.pas', '.php', '.rb', '.go', '.rs', '.swift', '.lua', '.yaml', '.yml', '.toml', '.ini', '.env', '.gradle'}:
+        elif ext in {'.html', '.htm'}:
+            return 'html'
+        elif ext in {'.py', '.pyw', '.ipynb', '.js', '.mjs', '.ts', '.tsx', '.jsx', '.css', '.scss', '.cpp', '.c', '.h', '.hpp', '.cs', '.java', '.kt', '.sh', '.bash', '.json', '.sql', '.pas', '.php', '.rb', '.go', '.rs', '.swift', '.lua', '.yaml', '.yml', '.toml', '.ini', '.env', '.gradle'}:
             return 'code'
         elif ext in {'.txt', '.text', '.log', '.md', '.markdown', '.rst', '.csv', '.tsv', '.xml', '.tex', '.properties'}:
             return 'text'
@@ -2747,7 +2749,7 @@ class Submission(models.Model):
             'image': '🖼️', 'pdf': '📄', 'video': '🎬', 'audio': '🎵',
             'word': '📝', 'excel': '📊', 'powerpoint': '📑',
             'archive': '🗜️', 'code': '💻', 'scratch': '🐱', 'microbit': '📟',
-            'text': '📃', 'file': '📎',
+            'text': '📃', 'html': '🌐', 'file': '📎',
         }
         return icons.get(self.get_file_type(), '📎')
 
@@ -2925,7 +2927,9 @@ class SubmissionFile(models.Model):
             return 'powerpoint'
         elif ext in {'.zip', '.rar', '.7z', '.tar', '.gz', '.tgz'}:
             return 'archive'
-        elif ext in {'.py', '.pyw', '.ipynb', '.js', '.mjs', '.ts', '.tsx', '.jsx', '.html', '.htm', '.css', '.scss', '.cpp', '.c', '.h', '.hpp', '.cs', '.java', '.kt', '.sh', '.bash', '.json', '.sql', '.pas', '.php', '.rb', '.go', '.rs', '.swift', '.lua', '.yaml', '.yml', '.toml', '.ini', '.env', '.gradle'}:
+        elif ext in {'.html', '.htm'}:
+            return 'html'
+        elif ext in {'.py', '.pyw', '.ipynb', '.js', '.mjs', '.ts', '.tsx', '.jsx', '.css', '.scss', '.cpp', '.c', '.h', '.hpp', '.cs', '.java', '.kt', '.sh', '.bash', '.json', '.sql', '.pas', '.php', '.rb', '.go', '.rs', '.swift', '.lua', '.yaml', '.yml', '.toml', '.ini', '.env', '.gradle'}:
             return 'code'
         elif ext in {'.txt', '.text', '.log', '.md', '.markdown', '.rst', '.csv', '.tsv', '.xml', '.tex', '.properties'}:
             return 'text'
@@ -2936,7 +2940,7 @@ class SubmissionFile(models.Model):
             'image': '🖼️', 'pdf': '📄', 'video': '🎬', 'audio': '🎵',
             'word': '📝', 'excel': '📊', 'powerpoint': '📑',
             'archive': '🗜️', 'code': '💻', 'scratch': '🐱', 'microbit': '📟',
-            'text': '📃', 'access_db': '🗄️', 'file': '📎',
+            'text': '📃', 'access_db': '🗄️', 'html': '🌐', 'file': '📎',
         }
         return icons.get(self.get_file_type(), '📎')
 

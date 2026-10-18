@@ -61,15 +61,16 @@
                         <button class="btn btn-secondary btn-sm" disabled style="opacity:0.35;" title="{% if is_filtered %}Всі роботи у вибраному фільтрі перевірено{% else %}Це остання робота в системі{% endif %}">Наступна »</button>
                         {% endif %}
 
-<div class="fv-flow-actions">                        {% if submission.link %}
-                        <a href="{{ submission.link }}" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm" style="margin-left:4px;" title="Відкрити посилання учня у новій вкладці">
-                            🔗 Лінк ↗
-                        </a>
-                        {% elif active_file %}
-                        <a href="{% url 'view_submission_raw_file' submission.id %}{% if active_file_id %}?file_id={{ active_file_id }}{% endif %}" download class="btn btn-secondary btn-sm" style="margin-left:4px;" title="Завантажити активний файл">
+<div class="fv-flow-actions">                        {% if active_file %}
+                        <a href="{% url 'view_submission_raw_file' submission.id %}{% if active_file_id and active_file_id != 'link' %}?file_id={{ active_file_id }}{% endif %}" download class="btn btn-secondary btn-sm" style="margin-left:4px;" title="Завантажити активний файл">
                             ⬇️ Завантажити
                         </a>
-                        {% else %}<button type="button" class="btn btn-secondary btn-sm" disabled>⬇️ Немає файлу</button>{% endif %}
+                        {% endif %}
+                        {% if submission.link %}
+                        <a href="{{ submission.link }}" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm" style="margin-left:4px;" title="Відкрити посилання учня у новій вкладці">
+                            🔗 Посилання ↗
+                        </a>
+                        {% elif not active_file %}<button type="button" class="btn btn-secondary btn-sm" disabled>⬇️ Немає файлу</button>{% endif %}
 
 </div></nav>
     <div class="fv-identity-row">                    <!-- Навігація назад та назва поточного файлу -->

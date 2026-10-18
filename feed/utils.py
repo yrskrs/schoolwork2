@@ -1246,6 +1246,11 @@ def parse_embed_url(url: str) -> dict:
         }
 
     clean_url = url.strip()
+    if not clean_url.startswith(('http://', 'https://', '//')):
+        if clean_url.startswith(('localhost', '127.0.0.1', '192.168.', '10.', '172.')):
+            clean_url = 'http://' + clean_url
+        else:
+            clean_url = 'https://' + clean_url
 
     # 1. YouTube
     yt_regex = (
@@ -1293,9 +1298,37 @@ def parse_embed_url(url: str) -> dict:
             'video_id': video_id
         }
 
-    # 3. Google Drive
-    if 'drive.google.com' in clean_url and '/file/d/' in clean_url:
-        gdrive_match = re.search(r'/file/d/([a-zA-Z0-9_-]+)', clean_url)
+    # 3. Scratch онлайн проєкт
+    scratch_match = re.search(r'scratch\.mit\.edu/projects/(\d+)', clean_url)
+    if scratch_match:
+        scratch_id = scratch_match.group(1)
+        return {
+            'is_embeddable': True,
+            'embed_type': 'scratch',
+            'embed_url': f"https://scratch.mit.edu/projects/{scratch_id}/embed",
+            'original_url': clean_url,
+            'platform': 'Scratch',
+            'icon': '🐱',
+            'video_id': scratch_id
+        }
+
+    # 4. CodePen
+    codepen_match = re.search(r'codepen\.io/([^/]+)/pen/([^/?#]+)', clean_url)
+    if codepen_match:
+        cp_user, cp_pen = codepen_match.group(1), codepen_match.group(2)
+        return {
+            'is_embeddable': True,
+            'embed_type': 'codepen',
+            'embed_url': f"https://codepen.io/{cp_user}/embed/{cp_pen}",
+            'original_url': clean_url,
+            'platform': 'CodePen',
+            'icon': '💻',
+            'video_id': cp_pen
+        }
+
+    # 5. Google Drive
+    if 'drive.google.com' in clean_url:
+        gdrive_match = re.search(r'/file/d/([a-zA-Z0-9_-]+)', clean_url) or re.search(r'[?&]id=([a-zA-Z0-9_-]+)', clean_url)
         if gdrive_match:
             gdrive_id = gdrive_match.group(1)
             return {
@@ -1308,7 +1341,7 @@ def parse_embed_url(url: str) -> dict:
                 'video_id': gdrive_id
             }
 
-    # 4. Google Docs / Sheets / Slides
+    # 6. Google Docs / Sheets / Slides
     if 'docs.google.com' in clean_url:
         doc_preview = re.sub(r'/(edit|view|copy|export).*$', '/preview', clean_url)
         if not doc_preview.endswith('/preview'):
@@ -1329,8 +1362,8 @@ def parse_embed_url(url: str) -> dict:
         'embed_type': 'generic',
         'embed_url': clean_url,
         'original_url': clean_url,
-        'platform': 'Веб-посилання',
-        'icon': '🔗',
+        'platform': 'Веб-сайт',
+        'icon': '🌐',
         'video_id': None
     }
 

@@ -300,6 +300,59 @@
                         <div class="fv-text-paper" id="fv-text-display">{{ content }}</div>
                     </div>
 
+                    <!-- HTML САЙТ (Автоматичний перегляд у браузері + кнопка перегляду коду) -->
+                    {% elif file_type == 'html' %}
+                    <div class="fv-html-site-container" style="display:flex;flex-direction:column;min-height:75vh;height:100%;flex:1;">
+                        <!-- Панель керування HTML-сайтом -->
+                        <div class="fv-html-toolbar" style="display:flex;justify-content:space-between;align-items:center;padding:10px 16px;background:var(--color-surface);border-bottom:1.5px solid var(--color-border);flex-wrap:wrap;gap:10px;z-index:5;">
+                            <!-- Перемикач режимів: Сайт vs Код -->
+                            <div style="display:flex;align-items:center;gap:6px;">
+                                <button type="button" id="btn-html-view-preview" class="btn btn-sm btn-primary active" onclick="switchHtmlViewMode('preview')" title="Інтерактивний перегляд веб-сторінки у браузері" style="font-weight:700;display:inline-flex;align-items:center;gap:6px;">
+                                    🌐 Перегляд сайту
+                                </button>
+                                <button type="button" id="btn-html-view-code" class="btn btn-sm btn-secondary" onclick="switchHtmlViewMode('code')" title="Переглянути вихідний HTML-код сторінки" style="font-weight:700;display:inline-flex;align-items:center;gap:6px;">
+                                    💻 Вихідний код
+                                </button>
+                            </div>
+
+                            <!-- Додаткові дії -->
+                            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                                <div id="html-code-actions" style="display:none;align-items:center;gap:6px;">
+                                    <button type="button" class="btn btn-secondary btn-sm" onclick="changeCodeFontSize(-1)" title="Зменшити розмір шрифту">A-</button>
+                                    <button type="button" class="btn btn-secondary btn-sm" onclick="changeCodeFontSize(1)" title="Збільшити розмір шрифту">A+</button>
+                                    <button type="button" class="btn btn-secondary btn-sm" onclick="copyViewerText(this)">📋 Скопіювати код</button>
+                                </div>
+                                <div id="html-preview-actions" style="display:inline-flex;align-items:center;gap:6px;">
+                                    <button type="button" class="btn btn-secondary btn-sm" onclick="reloadHtmlFrame()" title="Перезавантажити сайт у вікні">🔄 Оновити</button>
+                                    <button type="button" class="btn btn-secondary btn-sm" onclick="toggleHtmlPreviewFullscreen()" title="Розгорнути сайт на весь екран">⛶ На весь екран</button>
+                                </div>
+                                <a href="{{ html_raw_url|default:'' }}" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm" style="font-weight:700;" title="Відкрити HTML сайт у новій окремій вкладці браузера">
+                                    ↗ Нова вкладка
+                                </a>
+                                <a href="{% url 'view_submission_raw_file' submission.id %}{% if active_file_id and active_file_id != 'link' %}?file_id={{ active_file_id }}{% endif %}" download class="btn btn-secondary btn-sm" title="Завантажити вихідний файл на комп'ютер">
+                                    ⬇️ Завантажити
+                                </a>
+                            </div>
+                        </div>
+
+                        <!-- 1. Інтерактивний рендеринг сайту (активний за замовчуванням) -->
+                        <div id="fv-html-preview-panel" style="flex:1;display:flex;flex-direction:column;min-height:550px;height:calc(100vh - 250px);background:#ffffff;">
+                            <iframe id="fv-html-sandbox-frame"
+                                    src="{{ html_raw_url }}"
+                                    title="HTML сайт: {{ file_name }}"
+                                    sandbox="allow-scripts allow-forms allow-same-origin allow-modals allow-downloads"
+                                    allowfullscreen
+                                    style="width:100%;height:100%;flex:1;border:none;background:#ffffff;display:block;"></iframe>
+                        </div>
+
+                        <!-- 2. Вихідний код (прихований за замовчуванням) -->
+                        <div id="fv-html-code-panel" style="display:none;padding:16px;">
+                            <div style="background:#1e1e2e;border-radius:var(--radius-md);overflow:hidden;border:1px solid rgba(255,255,255,0.1);box-shadow:0 4px 20px rgba(0,0,0,0.2);">
+                                <pre style="margin:0;padding:24px;font-family:'JetBrains Mono','Fira Code',Consolas,monospace;font-size:14px;line-height:1.65;color:#f8fafc;overflow-x:auto;white-space:pre-wrap;word-break:break-word;" id="fv-code-pre"><code class="language-html">{{ content }}</code></pre>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- ВИХІДНИЙ КОД -->
                     {% elif file_type == 'code' %}
                     <div style="padding:20px;">
@@ -446,49 +499,80 @@
                     </div>
 
 
-                    <!-- ПОСИЛАННЯ / EMBED ПЛЕЄРИ (YouTube, Vimeo, Google Drive/Docs) -->
+                    <!-- ПОСИЛАННЯ / ВЕБ-САЙТИ / EMBED ПЛЕЄРИ -->
                     {% elif file_type == 'link' %}
-                    <div style="min-height:75vh;display:flex;flex-direction:column;">
-                        {% if embed_info and embed_info.embed_type == 'youtube' %}
-                        <div style="background:#0f172a;padding:24px;display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;">
-                            <div style="position:relative;padding-bottom:56.25%;width:100%;max-width:960px;height:0;border-radius:12px;overflow:hidden;box-shadow:0 10px 40px rgba(0,0,0,0.6);">
-                                <iframe src="{{ embed_info.embed_url }}"
-                                        title="YouTube player"
-                                        style="position:absolute;top:0;left:0;width:100%;height:100%;border:none;"
-                                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                                        referrerpolicy="strict-origin-when-cross-origin"
-                                        allowfullscreen></iframe>
+                    <div class="fv-web-preview-container" style="display:flex;flex-direction:column;min-height:75vh;height:100%;flex:1;background:var(--color-surface);border-radius:var(--radius-md);overflow:hidden;">
+                        <!-- Браузерна панель інструментів для веб-посилань -->
+                        <div class="fv-web-toolbar" style="display:flex;justify-content:space-between;align-items:center;padding:10px 16px;background:var(--color-bg-secondary);border-bottom:1.5px solid var(--color-border);flex-wrap:wrap;gap:10px;z-index:5;">
+                            <!-- Адресний блок -->
+                            <div style="display:flex;align-items:center;gap:8px;max-width:calc(100% - 320px);min-width:220px;overflow:hidden;">
+                                <span style="font-size:14px;display:inline-flex;align-items:center;">{{ embed_info.icon|default:'🌐' }}</span>
+                                <span style="font-size:12.5px;font-weight:700;color:var(--color-text-secondary);white-space:nowrap;">
+                                    {{ embed_info.platform|default:'Веб-сайт' }}:
+                                </span>
+                                <a href="{{ embed_info.original_url|default:submission.link }}" target="_blank" rel="noopener noreferrer" style="font-size:12.5px;font-weight:600;color:var(--color-primary);text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ embed_info.original_url|default:submission.link }}">
+                                    {{ embed_info.original_url|default:submission.link }}
+                                </a>
                             </div>
-                            <div style="margin-top:16px;">
-                                <a href="{{ embed_info.original_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm" style="font-weight:700;">
-                                    ▶ Відкрити це відео безпосередньо на YouTube ↗
+
+                            <!-- Кнопки швидких дій -->
+                            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                                <button type="button" class="btn btn-secondary btn-sm" onclick="reloadWebPreviewFrame()" title="Перезавантажити сайт у вікні">
+                                    🔄 Оновити
+                                </button>
+                                <button type="button" class="btn btn-secondary btn-sm" onclick="toggleWebPreviewFullscreen()" title="Розгорнути перегляд на весь екран">
+                                    ⛶ На весь екран
+                                </button>
+                                <a href="{{ embed_info.original_url|default:submission.link }}" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-sm" style="font-weight:700;display:inline-flex;align-items:center;gap:5px;" title="Відкрити це посилання в окремій вкладці браузера">
+                                    ↗ Відкрити у новій вкладці
                                 </a>
                             </div>
                         </div>
 
-                        {% elif embed_info and embed_info.embed_type == 'vimeo' %}
-                        <div style="background:#0f172a;padding:24px;display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;">
-                            <div style="position:relative;padding-bottom:56.25%;width:100%;max-width:960px;height:0;border-radius:12px;overflow:hidden;">
-                                <iframe src="{{ embed_info.embed_url }}"
-                                        title="Vimeo player"
-                                        style="position:absolute;top:0;left:0;width:100%;height:100%;border:none;"
-                                        allowfullscreen></iframe>
-                            </div>
-                        </div>
-                        {% elif embed_info and embed_info.embed_url %}
-                        <div style="flex:1;height:85vh;">
-                            <iframe src="{{ embed_info.embed_url }}" width="100%" height="100%" style="border:none;" allowfullscreen></iframe>
-                        </div>
-                        {% else %}
-                        <div style="flex:1;height:85vh;">
-                            <iframe src="{{ submission.link }}" width="100%" height="100%" style="border:none;">
-                                <div style="padding:40px;text-align:center;">
-                                    <p>Сайт захищено від вбудовування у фрейм.</p>
-                                    <a href="{{ submission.link }}" target="_blank" class="btn btn-primary">Відкрити оригінал ↗</a>
+                        <!-- Відображення контенту (Відеоплеєр, Scratch або Повний Iframe сайту) -->
+                        <div id="fv-web-frame-wrapper" style="flex:1;display:flex;flex-direction:column;min-height:550px;height:calc(100vh - 250px);position:relative;background:#ffffff;">
+                            {% if embed_info and embed_info.embed_type == 'youtube' %}
+                            <div style="background:#0f172a;padding:24px;display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;height:100%;">
+                                <div style="position:relative;padding-bottom:56.25%;width:100%;max-width:960px;height:0;border-radius:12px;overflow:hidden;box-shadow:0 10px 40px rgba(0,0,0,0.6);">
+                                    <iframe src="{{ embed_info.embed_url }}"
+                                            title="YouTube player"
+                                            style="position:absolute;top:0;left:0;width:100%;height:100%;border:none;"
+                                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                                            referrerpolicy="strict-origin-when-cross-origin"
+                                            allowfullscreen></iframe>
                                 </div>
-                            </iframe>
+                            </div>
+
+                            {% elif embed_info and embed_info.embed_type == 'vimeo' %}
+                            <div style="background:#0f172a;padding:24px;display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;height:100%;">
+                                <div style="position:relative;padding-bottom:56.25%;width:100%;max-width:960px;height:0;border-radius:12px;overflow:hidden;">
+                                    <iframe src="{{ embed_info.embed_url }}"
+                                            title="Vimeo player"
+                                            style="position:absolute;top:0;left:0;width:100%;height:100%;border:none;"
+                                            allowfullscreen></iframe>
+                                </div>
+                            </div>
+
+                            {% else %}
+                            <iframe id="fv-web-preview-iframe"
+                                    class="fv-web-preview-frame"
+                                    src="{{ embed_info.embed_url|default:submission.link }}"
+                                    title="{{ embed_info.platform|default:'Веб-сайт' }}: {{ submission.link }}"
+                                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                                    referrerpolicy="no-referrer-when-downgrade"
+                                    sandbox="allow-scripts allow-forms allow-same-origin allow-popups allow-modals allow-downloads"
+                                    allowfullscreen
+                                    style="width:100%!important;height:100%!important;min-height:550px;flex:1;border:none;display:block;background:#ffffff;"></iframe>
+                            {% endif %}
                         </div>
-                        {% endif %}
+
+                        <!-- Інформаційний рядок-підказка на випадок блокування вбудовування сторонніми серверами -->
+                        <div style="padding:6px 14px;background:var(--color-bg-secondary);border-top:1px solid var(--color-border);font-size:11.5px;color:var(--color-text-muted);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;">
+                            <span>💡 Якщо зовнішній сайт обмежує вбудовування через політику безпеки сервера (X-Frame-Options/CSP), скористайтеся кнопкою «↗ Відкрити у новій вкладці».</span>
+                            <a href="{{ embed_info.original_url|default:submission.link }}" target="_blank" rel="noopener noreferrer" style="color:var(--color-primary);font-weight:700;text-decoration:underline;">
+                                Відкрити напряму ↗
+                            </a>
+                        </div>
                     </div>
 
                     <!-- SCRATCH 3 ПРОЄКТ (.sb3) -->
@@ -818,6 +902,65 @@ function copyViewerText(btn) {
         btn.textContent = '✓ Скопійовано!';
         setTimeout(function() { btn.textContent = old; }, 2000);
     });
+}
+
+function switchHtmlViewMode(mode) {
+    var previewPanel = document.getElementById('fv-html-preview-panel');
+    var codePanel = document.getElementById('fv-html-code-panel');
+    var btnPreview = document.getElementById('btn-html-view-preview');
+    var btnCode = document.getElementById('btn-html-view-code');
+    var previewActions = document.getElementById('html-preview-actions');
+    var codeActions = document.getElementById('html-code-actions');
+
+    if (mode === 'code') {
+        if (previewPanel) previewPanel.style.display = 'none';
+        if (codePanel) codePanel.style.display = 'block';
+        if (btnPreview) { btnPreview.classList.remove('btn-primary', 'active'); btnPreview.classList.add('btn-secondary'); }
+        if (btnCode) { btnCode.classList.remove('btn-secondary'); btnCode.classList.add('btn-primary', 'active'); }
+        if (previewActions) previewActions.style.display = 'none';
+        if (codeActions) codeActions.style.display = 'inline-flex';
+    } else {
+        if (previewPanel) previewPanel.style.display = 'flex';
+        if (codePanel) codePanel.style.display = 'none';
+        if (btnPreview) { btnPreview.classList.remove('btn-secondary'); btnPreview.classList.add('btn-primary', 'active'); }
+        if (btnCode) { btnCode.classList.remove('btn-primary', 'active'); btnCode.classList.add('btn-secondary'); }
+        if (previewActions) previewActions.style.display = 'inline-flex';
+        if (codeActions) codeActions.style.display = 'none';
+    }
+}
+
+function reloadHtmlFrame() {
+    var frame = document.getElementById('fv-html-sandbox-frame');
+    if (frame) {
+        frame.src = frame.src;
+    }
+}
+
+function toggleHtmlPreviewFullscreen() {
+    var el = document.getElementById('fv-html-preview-panel') || document.getElementById('fv-document-card');
+    if (!el) return;
+    if (document.fullscreenElement) {
+        document.exitFullscreen();
+    } else if (el.requestFullscreen) {
+        el.requestFullscreen();
+    }
+}
+
+function reloadWebPreviewFrame() {
+    var frame = document.getElementById('fv-web-preview-iframe');
+    if (frame) {
+        frame.src = frame.src;
+    }
+}
+
+function toggleWebPreviewFullscreen() {
+    var el = document.getElementById('fv-web-frame-wrapper') || document.getElementById('fv-document-card');
+    if (!el) return;
+    if (document.fullscreenElement) {
+        document.exitFullscreen();
+    } else if (el.requestFullscreen) {
+        el.requestFullscreen();
+    }
 }
 
 // Alt + T opens the same task panel as its tab.

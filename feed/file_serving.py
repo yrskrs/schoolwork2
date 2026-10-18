@@ -11,7 +11,7 @@ from django.utils.http import content_disposition_header
 from .permissions import require_assignment_access
 
 
-def file_response(request, path, content_type=None, filename=None, attachment=False):
+def file_response(request, path, content_type=None, filename=None, attachment=False, inline=False):
     if not os.path.isfile(path):
         raise Http404('Файл не знайдено')
     filename = filename or os.path.basename(path)
@@ -19,8 +19,12 @@ def file_response(request, path, content_type=None, filename=None, attachment=Fa
     active = content_type.split(';', 1)[0] in {
         'text/html', 'application/xhtml+xml', 'image/svg+xml', 'application/xml', 'text/xml'
     }
-    # Download active formats by default; educational HTML remains available as a file.
-    attachment = attachment or active
+    # Download active formats by default; educational HTML/SVG can be viewed inline when explicitly requested
+    is_inline = inline or (request is not None and getattr(request, 'GET', {}).get('inline') == '1')
+    if is_inline:
+        attachment = False
+    else:
+        attachment = attachment or active
     size = os.path.getsize(path)
     response = None
     raw_range = request.headers.get('Range', '')

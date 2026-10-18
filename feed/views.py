@@ -3590,7 +3590,9 @@ def view_file(request, submission_id):
     selected_file_obj = None
     file_id_param = request.GET.get('file_id')
 
-    if file_id_param and submission_files:
+    is_link_selected = (file_id_param == 'link' and submission.link)
+
+    if file_id_param and file_id_param != 'link' and submission_files:
         try:
             fid = int(file_id_param)
             for sf in submission_files:
@@ -3600,14 +3602,24 @@ def view_file(request, submission_id):
         except (ValueError, TypeError):
             pass
 
-    if not selected_file_obj and submission_files:
+    if not is_link_selected and not selected_file_obj and submission_files:
         selected_file_obj = submission_files[0]
+    elif not selected_file_obj and not is_link_selected and submission.link:
+        is_link_selected = True
 
     # Визначаємо порядковий номер, попередній та наступний файли
+    total_items_count = len(submission_files) + (1 if submission.link else 0)
     active_file_num = 1
     prev_file_id = None
     next_file_id = None
-    if selected_file_obj and submission_files:
+
+    if is_link_selected:
+        active_file_id = 'link'
+        active_file_num = total_items_count
+        if submission_files:
+            prev_file_id = submission_files[-1].id
+    elif selected_file_obj and submission_files:
+        active_file_id = selected_file_obj.id
         try:
             cur_idx = [sf.id for sf in submission_files].index(selected_file_obj.id)
             active_file_num = cur_idx + 1
@@ -3615,8 +3627,12 @@ def view_file(request, submission_id):
                 prev_file_id = submission_files[cur_idx - 1].id
             if cur_idx < len(submission_files) - 1:
                 next_file_id = submission_files[cur_idx + 1].id
+            elif submission.link:
+                next_file_id = 'link'
         except ValueError:
             pass
+    else:
+        active_file_id = 'link' if submission.link else None
 
     all_image_files = [sf for sf in submission_files if sf.get_file_type() == 'image']
 
@@ -3624,6 +3640,7 @@ def view_file(request, submission_id):
     file_type = 'unknown'
     content = None
     html_content = None
+    html_raw_url = None
     archive_content = None
     error_message = None
     file_ext = ''
@@ -3631,7 +3648,13 @@ def view_file(request, submission_id):
 
     active_file = None
     preview_pending = False
-    if selected_file_obj:
+    if is_link_selected:
+        file_name = submission.link
+        file_type = 'link'
+        embed_info = parse_embed_url(submission.link)
+        active_file = None
+        selected_file_obj = None
+    elif selected_file_obj:
         active_file = selected_file_obj.file
         file_name = selected_file_obj.original_name or os.path.basename(selected_file_obj.file.name)
         file_ext = selected_file_obj.get_extension()
@@ -3671,7 +3694,38 @@ def view_file(request, submission_id):
             file_ext not in (archive_files + office_preview + access_files + image_files + video_files + audio_files + scratch_files + microbit_files + ['.pdf']) and is_text_file(file_path)
         )
 
-        if is_text:
+        if file_ext in ['.html', '.htm']:
+            file_type = 'html'
+            html_raw_url = reverse('view_submission_raw_file', args=[submission.id]) + '?inline=1'
+            if selected_file_obj:
+                html_raw_url += f'&file_id={selected_file_obj.id}'
+
+            encodings = ['utf-8-sig', 'utf-8', 'cp1251', 'windows-1251', 'cp866', 'iso-8859-5', 'latin-1']
+            read_success = False
+            for enc in encodings:
+                try:
+                    with open(file_path, 'r', encoding=enc) as f:
+                        content = f.read(1024 * 1024)
+                        read_success = True
+                        break
+                except (UnicodeDecodeError, UnicodeError):
+                    continue
+                except Exception as e:
+                    content = f"Помилка при читанні файлу: {str(e)}"
+                    read_success = True
+                    break
+
+            if not read_success:
+                try:
+                    with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
+                        content = f.read(1024 * 1024)
+                except Exception as e:
+                    content = f"Помилка відкриття файлу: {str(e)}"
+
+            if content and len(content) >= 1024 * 1024:
+                content += "\n\n[Показано початок файлу. Завантажте файл для повного перегляду.]"
+
+        elif is_text:
             file_type = 'code' if file_ext and file_ext not in ['.txt', '.text', '.log'] else 'text'
             encodings = ['utf-8-sig', 'utf-8', 'cp1251', 'windows-1251', 'cp866', 'iso-8859-5', 'latin-1']
             read_success = False
@@ -3807,11 +3861,14 @@ def view_file(request, submission_id):
         'group_members': group_members,
         'submission_files': submission_files,
         'selected_file_obj': selected_file_obj,
-        'active_file_id': selected_file_obj.id if selected_file_obj else None,
+        'active_file_id': active_file_id,
         'active_file_num': active_file_num,
         'prev_file_id': prev_file_id,
         'next_file_id': next_file_id,
         'total_files_count': len(submission_files),
+        'total_items_count': total_items_count,
+        'has_submission_link': bool(submission.link),
+        'html_raw_url': html_raw_url,
         'all_image_files': all_image_files,
         'active_file': active_file,
         'file_name': file_name,
@@ -3947,7 +4004,7 @@ def review_duplicates(request, submission_id):
 
 @teacher_required
 @xframe_options_exempt
-def view_submission_raw_file(request, submission_id):
+def view_submission_raw_file(request, submission_id, sub_path=None):
     """Служить сирий файл здачі учня безпосередньо у браузері."""
     submission = get_object_or_404(Submission, id=submission_id)
     teacher = request.user.teacher_profile
@@ -3956,31 +4013,57 @@ def view_submission_raw_file(request, submission_id):
         return HttpResponse('Немає доступу', status=403)
 
     target_file = None
-    file_id = request.GET.get('file_id')
-    if file_id:
-        try:
-            sf = submission.files.filter(id=int(file_id)).first()
-            if sf and sf.file:
-                target_file = sf.file
-        except (ValueError, TypeError):
-            pass
+    file_path = None
 
-    if not target_file:
-        first_sf = submission.files.first()
-        if first_sf and first_sf.file:
-            target_file = first_sf.file
-        elif submission.file:
-            target_file = submission.file
+    if sub_path:
+        sf = submission.files.filter(Q(original_name=sub_path) | Q(original_name__endswith=f"/{sub_path}") | Q(file__endswith=sub_path)).first()
+        if sf and sf.file and hasattr(sf.file, 'path') and os.path.exists(sf.file.path):
+            target_file = sf.file
+            file_path = sf.file.path
+        else:
+            first_sf = submission.files.first()
+            base_ref = first_sf.file if (first_sf and first_sf.file) else submission.file
+            if base_ref and hasattr(base_ref, 'path') and os.path.exists(base_ref.path):
+                base_dir = os.path.dirname(os.path.abspath(base_ref.path))
+                candidate = os.path.abspath(os.path.join(base_dir, sub_path))
+                if candidate.startswith(base_dir) and os.path.isfile(candidate):
+                    file_path = candidate
 
-    if not target_file:
+    if not target_file and not file_path:
+        file_id = request.GET.get('file_id')
+        if file_id and file_id != 'link':
+            try:
+                sf = submission.files.filter(id=int(file_id)).first()
+                if sf and sf.file:
+                    target_file = sf.file
+            except (ValueError, TypeError):
+                pass
+
+        if not target_file:
+            first_sf = submission.files.first()
+            if first_sf and first_sf.file:
+                target_file = first_sf.file
+            elif submission.file:
+                target_file = submission.file
+
+        if target_file and hasattr(target_file, 'path'):
+            file_path = target_file.path
+
+    if not file_path or not os.path.exists(file_path):
         return HttpResponse('Файл не знайдено', status=404)
 
     try:
         import mimetypes
-        path = target_file.path
+        path = file_path
         ext = os.path.splitext(path)[1].lower()
         if ext == '.pdf':
             mime_type = 'application/pdf'
+        elif ext in ['.html', '.htm']:
+            mime_type = 'text/html; charset=utf-8'
+        elif ext == '.css':
+            mime_type = 'text/css; charset=utf-8'
+        elif ext in ['.js', '.mjs']:
+            mime_type = 'application/javascript; charset=utf-8'
         elif ext in ['.jpg', '.jpeg']:
             mime_type = 'image/jpeg'
         elif ext == '.png':
@@ -4022,7 +4105,8 @@ def view_submission_raw_file(request, submission_id):
                 else:
                     mime_type = 'application/octet-stream'
 
-        return file_response(request, path, content_type=mime_type)
+        is_inline_request = (request.GET.get('inline') == '1') or (sub_path is not None)
+        return file_response(request, path, content_type=mime_type, inline=is_inline_request)
     except Http404:
         raise
     except Exception as e:
