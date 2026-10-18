@@ -144,7 +144,8 @@ class WebAndHtmlViewerTests(TestCase):
 
         # Перевірка контексту
         self.assertEqual(resp.context['file_type'], 'html')
-        self.assertIn('inline=1', resp.context['html_raw_url'])
+        from django.urls import resolve
+        self.assertEqual(resolve(resp.context['html_raw_url']).url_name, 'submission_html_asset')
 
         # Перевірка наявності елементів на сторінці
         content = resp.content.decode('utf-8')
@@ -209,6 +210,40 @@ class WebAndHtmlViewerTests(TestCase):
         page = self.client.get(reverse('view_file', args=[sub.pk]))
         self.assertContains(page, 'sandbox="allow-scripts"')
         self.assertNotContains(page, 'sandbox="allow-scripts allow-forms allow-same-origin')
+
+    def test_html_asset_grant_is_limited_expiring_and_cookie_independent(self):
+        from django.core import signing
+        from django.test import Client
+        from unittest.mock import patch
+        sub = Submission.objects.create(assignment=self.assignment, teacher=self.teacher,
+            class_group=self.group, first_name='Synthetic', last_name='Assets')
+        html = SubmissionFile.objects.create(submission=sub, original_name='index.html',
+            file=SimpleUploadedFile('index.html', b'<link rel="stylesheet" href="style.css">'))
+        css = SubmissionFile.objects.create(submission=sub, original_name='style.css',
+            file=SimpleUploadedFile('style.css', b'h1 {color:red}'))
+        page = self.client.get(reverse('view_file', args=[sub.pk]))
+        html_url = page.context['html_raw_url']
+        anonymous = Client()
+        response = anonymous.get(html_url)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('sandbox allow-scripts', response['Content-Security-Policy'])
+        b''.join(response.streaming_content)
+        asset_url = html_url.rsplit('/', 1)[0] + '/style.css'
+        response = anonymous.get(asset_url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(b''.join(response.streaming_content), b'h1 {color:red}')
+        self.assertEqual(response['Referrer-Policy'], 'no-referrer')
+        self.assertEqual(anonymous.post(asset_url).status_code, 405)
+        self.assertEqual(anonymous.get(asset_url.rsplit('/', 1)[0] + '/missing.css').status_code, 404)
+        with patch('django.core.signing.time.time', return_value=__import__('time').time() + 1801):
+            self.assertEqual(anonymous.get(asset_url).status_code, 404)
+        token = signing.dumps({'submission': sub.pk, 'teacher': self.teacher.pk}, salt='submission-html-preview')
+        other = Submission.objects.create(assignment=self.assignment, teacher=self.teacher,
+            class_group=self.group, first_name='Synthetic', last_name='Other')
+        self.assertEqual(anonymous.get(reverse('submission_html_asset', args=[other.pk, token, 'style.css'])).status_code, 404)
+        self.user.is_active = False
+        self.user.save(update_fields=['is_active'])
+        self.assertEqual(anonymous.get(asset_url).status_code, 404)
 
     def test_raw_assets_cannot_escape_into_sibling_directory_or_return_wrong_file(self):
         sub = Submission.objects.create(assignment=self.assignment, teacher=self.teacher,

@@ -3697,9 +3697,10 @@ def view_file(request, submission_id):
 
         if file_ext in ['.html', '.htm']:
             file_type = 'html'
-            html_raw_url = reverse('view_submission_raw_file', args=[submission.id]) + '?inline=1'
-            if selected_file_obj:
-                html_raw_url += f'&file_id={selected_file_obj.id}'
+            from django.core import signing
+            token = signing.dumps({'submission': submission.pk, 'teacher': teacher.pk}, salt='submission-html-preview')
+            asset_name = selected_file_obj.original_name if selected_file_obj else os.path.basename(active_file.name)
+            html_raw_url = reverse('submission_html_asset', args=[submission.pk, token, asset_name])
 
             encodings = ['utf-8-sig', 'utf-8', 'cp1251', 'windows-1251', 'cp866', 'iso-8859-5', 'latin-1']
             read_success = False
@@ -4018,6 +4019,33 @@ def view_submission_raw_file(request, submission_id, sub_path=None):
     if not (request.user.is_superuser or (submission.teacher == teacher) or (submission.assignment and submission.assignment.teacher == teacher)):
         return HttpResponse('Немає доступу', status=403)
 
+    return _submission_raw_response(request, submission, sub_path)
+
+
+def submission_html_asset(request, submission_id, token, sub_path):
+    """Read-only, short-lived access for an opaque HTML sandbox without cookies."""
+    from django.core import signing
+    if request.method not in ('GET', 'HEAD'):
+        return HttpResponse(status=405)
+    try:
+        grant = signing.loads(token, salt='submission-html-preview', max_age=1800)
+    except signing.BadSignature:
+        raise Http404('Посилання перегляду недійсне або застаріле') from None
+    if grant.get('submission') != submission_id:
+        raise Http404('Файл не знайдено')
+    teacher = get_object_or_404(Teacher.objects.select_related('user'), pk=grant.get('teacher'), user__is_active=True)
+    submission = get_object_or_404(Submission, pk=submission_id)
+    if not (teacher.user.is_superuser or submission.teacher_id == teacher.pk or
+            (submission.assignment and submission.assignment.teacher_id == teacher.pk)):
+        raise Http404('Файл не знайдено')
+    # Only attached files, never other works sharing the same storage directory.
+    response = _submission_raw_response(request, submission, sub_path, allow_directory=False)
+    response['Cache-Control'] = 'private, no-store'
+    response['Referrer-Policy'] = 'no-referrer'
+    return response
+
+
+def _submission_raw_response(request, submission, sub_path=None, allow_directory=True):
     target_file = None
     file_path = None
 
@@ -4026,7 +4054,7 @@ def view_submission_raw_file(request, submission_id, sub_path=None):
         if sf and sf.file and hasattr(sf.file, 'path') and os.path.exists(sf.file.path):
             target_file = sf.file
             file_path = sf.file.path
-        else:
+        elif allow_directory:
             first_sf = submission.files.first()
             base_ref = first_sf.file if (first_sf and first_sf.file) else submission.file
             if base_ref and hasattr(base_ref, 'path') and os.path.exists(base_ref.path):
