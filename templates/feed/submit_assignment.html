@@ -40,10 +40,6 @@
             </section>
             <aside class="submission-sidebar" aria-labelledby="submission-help-title">
         <footer class="submission-send-bar">
-            <div class="submission-send-check">
-                <span>Перед надсиланням перевірте клас:</span>
-                <strong data-submission-class aria-live="polite">{{ selected_submission_class_name }}</strong>
-            </div>
             <button type="submit" id="submission-send-button" class="btn btn-primary">📤 Надіслати виконану роботу</button>
             <div data-upload-progress-slot class="submission-progress-slot"></div>
         </footer>
@@ -456,6 +452,33 @@ let debounceTimer = null;
     if (selectedVal) classSelect.value = selectedVal;
 })();
 
+function positionDropdownSafely(dropdownEl, referenceEl) {
+    if (!dropdownEl || !referenceEl) return;
+    const rect = referenceEl.getBoundingClientRect();
+    const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+    const spaceBelow = viewportHeight - rect.bottom - 12;
+    const spaceAbove = rect.top - 12;
+    const idealHeight = 240;
+
+    if (spaceBelow < 170 && spaceAbove > spaceBelow) {
+        // Відкриваємо вгору
+        dropdownEl.style.top = 'auto';
+        dropdownEl.style.bottom = '100%';
+        dropdownEl.style.marginTop = '0';
+        dropdownEl.style.marginBottom = '4px';
+        dropdownEl.style.maxHeight = Math.max(120, Math.min(idealHeight, spaceAbove)) + 'px';
+    } else {
+        // Відкриваємо вниз
+        dropdownEl.style.top = '100%';
+        dropdownEl.style.bottom = 'auto';
+        dropdownEl.style.marginTop = '4px';
+        dropdownEl.style.marginBottom = '0';
+        dropdownEl.style.maxHeight = Math.max(120, Math.min(idealHeight, spaceBelow)) + 'px';
+    }
+    dropdownEl.style.overflowY = 'auto';
+    dropdownEl.style.overscrollBehavior = 'contain';
+}
+
 function fetchStudentSuggestions() {
     if (!nameInput || !autoDropdown) return;
     const query = nameInput.value.trim();
@@ -477,6 +500,7 @@ function fetchStudentSuggestions() {
                     item.addEventListener('click',()=>selectStudentName(st.full_name,st.id));autoDropdown.appendChild(item);
                 });
                 autoDropdown.style.display = 'block';
+                positionDropdownSafely(autoDropdown, nameInput);
             } else {
                 autoDropdown.style.display = 'none';
             }
@@ -500,14 +524,138 @@ function selectStudentName(fullName, id) {
 
 // ── Швидкий вибір учня з ростеру класу (імпортованого з журналу) ───────────
 const rosterSelect = document.getElementById('student-roster-select');
+const rosterCustomDropdown = document.getElementById('student-roster-custom-dropdown');
+const rosterOptionsList = document.getElementById('student-roster-options-list');
+const rosterSearchInput = document.getElementById('student-roster-search');
 const manualWrapper = document.getElementById('student-manual-input-wrapper');
 const toggleModeBtn = document.getElementById('btn-toggle-student-mode');
 let isManualStudentMode = false;
 let isStableClassRoster = false;
 let cachedRosterStudents = [];
 
+function populateCustomRosterDropdown(students) {
+    if (!rosterOptionsList) return;
+    rosterOptionsList.replaceChildren();
+
+    const defItem = document.createElement('div');
+    defItem.className = 'autocomplete-item';
+    defItem.style.cssText = 'padding:7px 10px;cursor:pointer;font-size:13px;border-radius:4px;color:var(--color-text-secondary);';
+    defItem.textContent = '— Оберіть своє ім\'я зі списку класу —';
+    defItem.addEventListener('click', function() {
+        if (rosterSelect) {
+            rosterSelect.value = '';
+            onRosterStudentSelected('');
+        }
+        closeRosterCustomDropdown();
+    });
+    rosterOptionsList.appendChild(defItem);
+
+    students.forEach(function(st) {
+        const item = document.createElement('div');
+        item.className = 'autocomplete-item roster-option-row';
+        item.dataset.id = String(st.id || '');
+        item.dataset.name = st.full_name;
+        item.style.cssText = 'padding:7px 10px;cursor:pointer;font-size:13px;border-radius:4px;color:var(--color-text-primary);display:flex;align-items:center;justify-content:space-between;';
+        item.textContent = st.full_name;
+        item.addEventListener('mouseenter', function() { item.style.background = 'var(--color-bg-secondary)'; });
+        item.addEventListener('mouseleave', function() { item.style.background = 'transparent'; });
+        item.addEventListener('click', function() {
+            if (rosterSelect) {
+                rosterSelect.value = String(st.id || '');
+                onRosterStudentSelected(String(st.id || ''));
+            }
+            closeRosterCustomDropdown();
+        });
+        rosterOptionsList.appendChild(item);
+    });
+
+    const manItem = document.createElement('div');
+    manItem.className = 'autocomplete-item';
+    manItem.style.cssText = 'padding:7px 10px;cursor:pointer;font-size:13px;border-radius:4px;color:var(--color-primary);font-weight:700;border-top:1px dashed var(--color-border);margin-top:4px;';
+    manItem.textContent = '✏️ Ввести власноруч / Немає в списку';
+    manItem.addEventListener('click', function() {
+        if (rosterSelect) {
+            rosterSelect.value = '__manual__';
+            onRosterStudentSelected('__manual__');
+        }
+        closeRosterCustomDropdown();
+    });
+    rosterOptionsList.appendChild(manItem);
+}
+
+function openRosterCustomDropdown() {
+    if (!rosterCustomDropdown || !rosterSelect) return;
+    rosterCustomDropdown.style.display = 'block';
+    positionDropdownSafely(rosterCustomDropdown, rosterSelect);
+    if (rosterSearchInput) {
+        rosterSearchInput.value = '';
+        filterRosterCustomOptions('');
+        setTimeout(function() { rosterSearchInput.focus(); }, 50);
+    }
+}
+
+function closeRosterCustomDropdown() {
+    if (rosterCustomDropdown) {
+        rosterCustomDropdown.style.display = 'none';
+    }
+}
+
+function filterRosterCustomOptions(query) {
+    if (!rosterOptionsList) return;
+    const q = (query || '').toLowerCase().trim();
+    const rows = rosterOptionsList.querySelectorAll('.roster-option-row');
+    rows.forEach(function(row) {
+        const name = (row.dataset.name || '').toLowerCase();
+        row.style.display = (!q || name.indexOf(q) !== -1) ? 'flex' : 'none';
+    });
+}
+
+if (rosterSearchInput) {
+    rosterSearchInput.addEventListener('input', function() {
+        filterRosterCustomOptions(this.value);
+    });
+    rosterSearchInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            closeRosterCustomDropdown();
+            if (rosterSelect) rosterSelect.focus();
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            const firstVis = rosterOptionsList.querySelector('.roster-option-row:not([style*="display: none"])');
+            if (firstVis) firstVis.click();
+        }
+    });
+}
+
+if (rosterSelect) {
+    rosterSelect.addEventListener('mousedown', function(e) {
+        if (cachedRosterStudents && cachedRosterStudents.length > 0) {
+            e.preventDefault();
+            if (rosterCustomDropdown && rosterCustomDropdown.style.display === 'block') {
+                closeRosterCustomDropdown();
+            } else {
+                openRosterCustomDropdown();
+            }
+        }
+    });
+    rosterSelect.addEventListener('keydown', function(e) {
+        if ((e.key === ' ' || e.key === 'ArrowDown' || e.key === 'Enter') && cachedRosterStudents && cachedRosterStudents.length > 0) {
+            e.preventDefault();
+            openRosterCustomDropdown();
+        }
+    });
+}
+
+document.addEventListener('click', function(e) {
+    if (rosterCustomDropdown && rosterCustomDropdown.style.display === 'block') {
+        if (!rosterCustomDropdown.contains(e.target) && e.target !== rosterSelect) {
+            closeRosterCustomDropdown();
+        }
+    }
+});
+
 function loadClassRoster(classId) {
     isStableClassRoster = false;
+    closeRosterCustomDropdown();
     if (!classId) {
         cachedRosterStudents = [];
         if (rosterSelect) rosterSelect.style.display = 'none';
@@ -534,6 +682,8 @@ function loadClassRoster(classId) {
                     if(option.selected)matchedVal=st.full_name;rosterSelect.add(option);
                 });
                 rosterSelect.add(new Option('✏️ Ввести власноруч / Немає в списку','__manual__'));
+                populateCustomRosterDropdown(students);
+
                 if (currentVal && !matchedVal) {
                     isManualStudentMode = true;
                 }
@@ -570,6 +720,7 @@ function loadClassRoster(classId) {
 }
 
 function onRosterStudentSelected(val) {
+    closeRosterCustomDropdown();
     if (val === '__manual__') {
         toggleStudentInputMode(true);
         return;
@@ -928,7 +1079,7 @@ window.addCoauthorField = function() {
                        'style="font-size:12px;padding:6px 10px;height:38px;width:100%;" ' +
                        'oninput="handleCoauthorInput(this, ' + rowId + ')" onfocus="handleCoauthorFocus(this)">' +
                 '<div class="coauthor-autocomplete-dropdown" ' +
-                     'style="display:none;position:absolute;top:100%;left:0;right:0;z-index:60;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);box-shadow:0 8px 24px rgba(0,0,0,0.15);max-height:160px;overflow-y:auto;margin-top:2px;"></div>' +
+                     'style="display:none;position:absolute;left:0;right:0;z-index:90;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);box-shadow:0 8px 24px rgba(0,0,0,0.15);max-height:min(38vh, 230px);overflow-y:auto;overscroll-behavior:contain;margin-top:2px;"></div>' +
             '</div>' +
         '</div>';
 
@@ -1083,6 +1234,7 @@ function fetchCoauthorSuggestions(inputEl) {
                         dropdown.appendChild(item);
                     });
                     dropdown.style.display = 'block';
+                    positionDropdownSafely(dropdown, inputEl);
                 } else {
                     dropdown.style.display = 'none';
                 }

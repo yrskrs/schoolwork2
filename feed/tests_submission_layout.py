@@ -34,7 +34,7 @@ class StudentSubmissionLayoutTests(TestCase):
         return html.fromstring(response.content)
 
     def assert_class_summary(self, page, expected):
-        self.assertEqual(page.xpath('//*[@data-submission-class]/text()'), [expected, expected])
+        self.assertEqual(page.xpath('//*[@data-submission-class]/text()'), [expected])
 
     def data(self, **overrides):
         return {

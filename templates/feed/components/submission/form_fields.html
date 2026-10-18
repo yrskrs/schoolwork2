@@ -36,11 +36,21 @@
                 ✏️ Ввести вручну
             </button>
         </div>
-        <div style="position:relative;">
+        <div style="position:relative;" id="student-roster-picker-wrapper">
             <!-- Швидкий вибір зі списку класу (імпортованого з журналу) -->
             <select aria-label="Прізвище та ім’я зі списку класу" aria-describedby="full-name-client-error" id="student-roster-select" class="form-input form-select" style="display:none;" onchange="onRosterStudentSelected(this.value)">
                 <option value="">— Оберіть своє ім'я зі списку класу —</option>
             </select>
+
+            <!-- Безпечний випадаючий список зі скролом та швидким пошуком (захист від вилізання за межі екрану) -->
+            <div id="student-roster-custom-dropdown" style="display:none;position:absolute;left:0;right:0;z-index:100;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);box-shadow:0 8px 24px rgba(0,0,0,0.18);overflow:hidden;">
+                <div style="padding:6px 8px;border-bottom:1px solid var(--color-border);display:flex;gap:6px;align-items:center;background:var(--color-bg-secondary);">
+                    <span style="font-size:12px;">🔍</span>
+                    <input type="text" id="student-roster-search" placeholder="Швидкий пошук учня..." autocomplete="off" style="width:100%;border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:5px 8px;font-size:12px;background:var(--color-surface);color:var(--color-text-primary);">
+                </div>
+                <div id="student-roster-options-list" style="max-height:min(38vh, 230px);overflow-y:auto;overscroll-behavior:contain;padding:4px 0;">
+                </div>
+            </div>
 
             <!-- Ручне введення або автокомпліт -->
             <div id="student-manual-input-wrapper">
@@ -48,7 +58,7 @@
                 <label style="display:flex;gap:6px;align-items:center;margin-top:5px;font-size:12px;">{{ form.other_student }} {{ form.other_student.label }}</label>
                 <div style="font-size:11px;color:var(--color-text-muted);margin-top:3px;">Якщо вас немає у списку, введіть своє ім’я. Учитель зможе підтвердити його в журналі.</div>
                 <div id="student-autocomplete-dropdown"
-                     style="display:none;position:absolute;top:100%;left:0;right:0;z-index:50;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);box-shadow:0 8px 24px rgba(0,0,0,0.15);max-height:180px;overflow-y:auto;margin-top:2px;">
+                     style="display:none;position:absolute;left:0;right:0;z-index:90;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);box-shadow:0 8px 24px rgba(0,0,0,0.15);max-height:min(38vh, 230px);overflow-y:auto;overscroll-behavior:contain;margin-top:2px;">
                 </div>
             </div>
         </div>

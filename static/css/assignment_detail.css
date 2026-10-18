@@ -1,10 +1,50 @@
 .assignment-detail-page { max-width: 1200px; padding-bottom: 22px; }
 .assignment-detail-layout { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 20px; align-items: start; }
 .assignment-detail-main { min-width: 0; }
-.assignment-detail-overview { padding: 18px 20px; margin-bottom: 16px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); }
-.assignment-detail-tags { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
+.assignment-detail-overview { padding: 16px 20px; margin-bottom: 16px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); }
+.assignment-detail-tags { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px 14px; margin-bottom: 12px; }
+.assignment-detail-badges-group { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.assignment-detail-overview .subject-tag {
+    font-size: 13.5px !important;
+    font-weight: 750 !important;
+    padding: 5px 14px !important;
+    border-radius: var(--radius-full);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+.assignment-detail-overview .class-prominent-badge {
+    font-size: 13.5px !important;
+    font-weight: 750 !important;
+    padding: 5px 14px !important;
+    border-radius: var(--radius-full);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--color-primary-light);
+    color: var(--color-primary-text);
+    border: 1.5px solid rgba(var(--color-primary-rgb, 79, 70, 229), 0.35);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    letter-spacing: 0.01em;
+}
+.assignment-due-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px;
+    border-radius: var(--radius-full);
+    font-size: 12.5px;
+    font-weight: 700;
+    color: var(--color-text-secondary);
+    background: var(--color-bg-secondary);
+    border: 1px solid var(--color-border);
+}
+.assignment-due-badge strong { color: var(--color-text-primary); }
+.assignment-due-badge-open { color: var(--color-text-muted); }
 .assignment-detail-overview h1 { margin: 0 0 10px; font-size: 25px; line-height: 1.35; color: var(--color-text-primary); overflow-wrap: anywhere; }
-.assignment-detail-overview-meta { display: flex; flex-wrap: wrap; gap: 6px 18px; color: var(--color-text-secondary); font-size: 13px; }
+.assignment-detail-overview-meta { display: flex; flex-wrap: wrap; gap: 6px 18px; color: var(--color-text-secondary); font-size: 13px; align-items: center; }
+.assignment-detail-overview-meta .meta-item { display: inline-flex; align-items: center; gap: 6px; }
 .assignment-detail-overview-meta strong { color: var(--color-text-primary); }
 .assignment-detail-status { margin: 14px 0 0; padding: 10px 12px; background: var(--color-bg-secondary); border-radius: var(--radius-sm); color: var(--color-text-primary); font-size: 14px; line-height: 1.6; }
 .assignment-detail-jumps { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
