@@ -5,6 +5,7 @@
 
 {% block extra_head %}
 <link href="{% static 'css/ai_request_metadata.css' %}" rel="stylesheet">
+<link href="{% static 'css/python_runner.css' %}" rel="stylesheet">
 <!-- Prism.js для локального підсвічування коду -->
 <link href="{% static 'vendor/prism/prism-tomorrow.min.css' %}" rel="stylesheet" />
 <style>
@@ -356,6 +357,9 @@
                     <!-- ВИХІДНИЙ КОД -->
                     {% elif file_type == 'code' %}
                     <div style="padding:20px;">
+                        {% if file_ext == '.py' or file_ext == '.pyw' %}
+                        {% include 'feed/components/viewer_python_runner.html' %}
+                        {% endif %}
                         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;padding:10px 16px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);">
                             <span style="font-size:13px;font-weight:700;color:var(--color-primary);">💻 Програмний код ({{ file_ext }})</span>
                             <div style="display:flex;gap:6px;align-items:center;">
@@ -709,6 +713,7 @@
 <script src="{% static 'js/ai_request_metadata.js' %}"></script>
 <script src="{% static 'js/review_workspace.js' %}" defer></script>
 <script src="{% static 'js/review_loading.js' %}" defer></script>
+<script src="{% static 'js/python_runner.js' %}" defer></script>
 <script src="{% static 'js/material_preview.js' %}?ui=20261018-r4" defer></script>
 <!-- Prism.js для підсвічування коду -->
 <script src="{% static 'vendor/prism/prism.min.js' %}"></script>

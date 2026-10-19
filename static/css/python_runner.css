@@ -1,0 +1,24 @@
+.python-runner { margin: 0 0 16px; border: 1px solid var(--color-border); border-radius: var(--radius-md); overflow: hidden; background: var(--color-surface); }
+.python-runner [hidden] { display: none !important; }
+.python-runner .btn:disabled { opacity: .5; cursor: default; }
+.python-runner-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; padding: 12px; }
+.python-runner-toolbar [role="status"] { color: var(--color-text-secondary); font-size: 13px; flex: 1; min-width: 150px; }
+.python-runner-tabs { display: flex; gap: 4px; padding: 0 12px; border-bottom: 1px solid var(--color-border); }
+.python-runner-tabs button { background: transparent; color: var(--color-text-primary); border: 0; border-bottom: 3px solid transparent; padding: 10px 14px; cursor: pointer; font: inherit; }
+.python-runner-tabs button[aria-selected="true"] { border-bottom-color: var(--color-primary); color: var(--color-primary); font-weight: 700; }
+.python-terminal { background: #101827; color: #e2e8f0; margin: 0; padding: 16px; min-height: 150px; max-height: 380px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: 13px/1.55 Consolas, monospace; }
+.python-input-form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px; }
+.python-input-form label { font-size: 12px; width: 100%; margin: 0; }
+.python-input-form input { flex: 1; min-width: 140px; padding: 8px 10px; color: var(--color-text-primary); background: var(--color-bg-secondary); border: 1px solid var(--color-border); border-radius: 6px; }
+.python-desktop-hint, .python-desktop-scroll p { font-size: 13px; padding: 10px 12px; margin: 0; }
+.python-desktop-scroll { background: #101827; overflow: auto; min-height: 140px; position: relative; }
+.python-desktop-keyboard { position: absolute; width: 1px; height: 1px; opacity: 0; padding: 0; border: 0; pointer-events: none; }
+.python-desktop-scroll img { display: block; width: 100%; height: auto; aspect-ratio: 4 / 3; object-fit: contain; cursor: default; touch-action: none; }
+.python-desktop-scroll img:focus-visible { outline: 3px solid var(--color-primary); outline-offset: -3px; }
+.python-desktop-scroll:focus-within img { outline: 2px solid var(--color-primary); outline-offset: -2px; }
+.python-runner-error { color: var(--color-danger, #dc2626); padding: 12px; margin: 0; }
+@media (max-width: 600px) {
+    .python-runner-toolbar .btn { flex: 1 1 40%; white-space: nowrap; }
+    .python-runner-toolbar [role="status"] { flex-basis: 100%; min-width: 0; }
+    .python-input-form input { flex-basis: 100%; }
+}

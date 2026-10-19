@@ -1,12 +1,13 @@
 name: ${COMPOSE_PROJECT_NAME:-schoolwork2}
 services:
   app:
-    image: ${SCHOOLWORK_IMAGE:-schoolwork2-app:4.5.6}
+    image: ${SCHOOLWORK_IMAGE:-schoolwork2-app:4.5.7}
     build:
       context: .
       dockerfile: Dockerfile
       args:
         VCS_REF: ${VCS_REF:-local}
+        APP_VERSION: '4.5.7'
     container_name: schoolnet_app
     restart: unless-stopped
     depends_on:
@@ -17,6 +18,11 @@ services:
     environment:
       AI_JOBS_EAGER: 'False'
       AI_CACHE_DIR: '/var/cache/schoolnet/ai'
+      CODE_RUNNER_URL: 'http://code_runner:8002'
+      CODE_RUNNER_TOKEN: '${CODE_RUNNER_TOKEN:-${SECRET_KEY}}'
+    networks:
+      default: {}
+      runner_control: {}
     ports:
       - "${APP_PORT:-8000}:8000"
     volumes:
@@ -31,7 +37,7 @@ services:
       start_period: 45s
 
   ai_worker:
-    image: ${SCHOOLWORK_IMAGE:-schoolwork2-app:4.5.6}
+    image: ${SCHOOLWORK_IMAGE:-schoolwork2-app:4.5.7}
     container_name: schoolnet_ai_worker
     restart: unless-stopped
     command: ["python", "manage.py", "process_ai_jobs"]
@@ -55,6 +61,33 @@ services:
       timeout: 5s
       retries: 3
       start_period: 20s
+
+  code_runner:
+    image: ${CODE_RUNNER_IMAGE:-schoolwork2-python-runner:4.5.7}
+    build:
+      context: .
+      dockerfile: runner/Dockerfile
+      args:
+        VCS_REF: ${VCS_REF:-local}
+        APP_VERSION: '4.5.7'
+    restart: unless-stopped
+    environment:
+      CODE_RUNNER_TOKEN: '${CODE_RUNNER_TOKEN:-${SECRET_KEY}}'
+      CODE_RUNNER_IMAGE: '${CODE_RUNNER_IMAGE:-schoolwork2-python-runner:4.5.7}'
+      CODE_RUNNER_NAMESPACE: '${COMPOSE_PROJECT_NAME:-schoolwork2}'
+      CODE_RUNNER_MAX_SESSIONS: '${CODE_RUNNER_MAX_SESSIONS:-4}'
+      CODE_RUNNER_RUN_SECONDS: '${CODE_RUNNER_RUN_SECONDS:-180}'
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      runner_control: {}
+    expose:
+      - '8002'
+    healthcheck:
+      test: ['CMD', '/usr/bin/python3', '-c', "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8002/healthz', timeout=3)"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
 
   postgres:
     image: postgres:16
@@ -98,3 +131,8 @@ volumes:
   app_media:
   app_logs:
   app_cache:
+
+networks:
+  default: {}
+  runner_control:
+    internal: true

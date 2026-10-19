@@ -137,6 +137,8 @@ AI_JOB_TIMEOUT = int(os.environ.get('AI_JOB_TIMEOUT', '600'))
 
 # Reversible viewer optimization; no database migrations or worker changes.
 REVIEW_ASYNC = os.environ.get('SCHOOLNET_REVIEW_ASYNC', 'True') == 'True'
+CODE_RUNNER_URL = os.environ.get('CODE_RUNNER_URL', '')
+CODE_RUNNER_TOKEN = os.environ.get('CODE_RUNNER_TOKEN') or SECRET_KEY
 REVIEW_PREVIEW_DIR = os.environ.get('REVIEW_PREVIEW_DIR',
     str(Path(os.environ.get('AI_CACHE_DIR', '/tmp/schoolnet-ai-cache')).parent / 'schoolnet-review-previews'))
 

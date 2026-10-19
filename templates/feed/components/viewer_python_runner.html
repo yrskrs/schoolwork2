@@ -1,0 +1,36 @@
+<section id="python-runner" class="python-runner" aria-label="Виконання Python"
+         data-url="{% url 'python_run' submission.id %}" data-file-id="{{ active_file_id|default:'' }}">
+    {% csrf_token %}
+    <div class="python-runner-toolbar">
+        <button type="button" class="btn btn-primary btn-sm" data-python-play>▶ Запустити Python</button>
+        <button type="button" class="btn btn-secondary btn-sm" data-python-stop disabled>■ Зупинити</button>
+        <span data-python-status role="status" aria-live="polite">Термінал і графічне вікно у браузері</span>
+    </div>
+    <div data-python-result hidden>
+        <div class="python-runner-tabs" role="tablist" aria-label="Результат виконання">
+            <button type="button" id="python-tab-terminal" role="tab" aria-selected="true" aria-controls="python-terminal-panel" data-python-tab="terminal">Термінал</button>
+            <button type="button" id="python-tab-desktop" role="tab" aria-selected="false" aria-controls="python-desktop-panel" tabindex="-1" data-python-tab="desktop">Графічне вікно</button>
+        </div>
+        <div id="python-terminal-panel" role="tabpanel" aria-labelledby="python-tab-terminal" data-python-panel="terminal">
+            <pre class="python-terminal" data-python-output tabindex="0" aria-label="Вивід програми"></pre>
+            <form class="python-input-form" data-python-form>
+                <label for="python-stdin">Ввід для input()</label>
+                <input id="python-stdin" type="text" autocomplete="off" maxlength="4000" placeholder="Введіть відповідь і натисніть Enter" disabled>
+                <button type="submit" class="btn btn-primary btn-sm" disabled>Надіслати ↵</button>
+                <button type="button" class="btn btn-secondary btn-sm" data-python-interrupt disabled title="Перервати програму">Ctrl+C</button>
+                <button type="button" class="btn btn-secondary btn-sm" data-python-eof disabled title="Завершити введення">EOF</button>
+            </form>
+        </div>
+        <div id="python-desktop-panel" role="tabpanel" aria-labelledby="python-tab-desktop" data-python-panel="desktop" hidden>
+            <p class="python-desktop-hint">Tkinter, turtle, pygame та інші віконні програми. Натисніть на зображення, щоб керувати мишею та клавіатурою.</p>
+            <div class="python-desktop-scroll">
+                <textarea data-python-keyboard class="python-desktop-keyboard" tabindex="-1"
+                          aria-label="Клавіатура графічної програми" autocomplete="off" autocapitalize="off" spellcheck="false"></textarea>
+                <img data-python-screen width="1024" height="768" draggable="false" tabindex="0"
+                     alt="Графічний робочий стіл запущеної програми" hidden>
+                <p data-python-screen-wait>Графічне вікно з’явиться після підготовки середовища.</p>
+            </div>
+        </div>
+        <p class="python-runner-error" data-python-error role="alert" hidden></p>
+    </div>
+</section>

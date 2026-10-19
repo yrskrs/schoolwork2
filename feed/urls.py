@@ -5,6 +5,7 @@ from . import views, outside_students
 from . import journal_api
 from . import school_api_v2
 from . import views_updates
+from . import python_runner
 from school_sync import django_backend as roster_views
 
 urlpatterns = [
@@ -61,6 +62,7 @@ urlpatterns = [
     path('teacher/assignment/<int:pk>/submissions/', views.assignment_submissions, name='assignment_submissions'),
     path('teacher/submissions/', views.all_submissions_dashboard, name='all_submissions_dashboard'),
     path('teacher/view-file/<int:submission_id>/', views.view_file, name='view_file'),
+    path('teacher/submission/<int:submission_id>/python/', python_runner.python_run, name='python_run'),
     path('teacher/submission/<int:submission_id>/preview/', views.review_document_preview, name='review_document_preview'),
     path('teacher/submission/<int:submission_id>/preview/assets/<str:asset_name>/', views.review_preview_asset, name='review_preview_asset'),
     path('teacher/submission/<int:submission_id>/duplicates/', views.review_duplicates, name='review_duplicates'),
