@@ -147,7 +147,8 @@ class AISettingsNavigationTests(TestCase):
 
     def test_platform_updates_include_current_and_previous_changes(self):
         _, page = self.page({'tab': 'ai'})
-        changelog = page.get_element_by_id('changelog-pane-teacher').text_content()
+        response = self.client.get(reverse('ui_dialog', args=['changelog']))
+        changelog = html.fromstring(response.content.decode(response.charset)).get_element_by_id('changelog-pane-teacher').text_content()
         self.assertEqual(CHANGELOG_DATA[0]['version'], SITE_VERSION)
         self.assertEqual(sum(release['is_latest'] for release in CHANGELOG_DATA), 1)
         self.assertIn('Компактні налаштування ШІ у п’яти вкладках', changelog)

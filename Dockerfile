@@ -22,14 +22,13 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
 # Копіюємо requirements-docker.txt та requirements.txt
-COPY requirements.txt requirements-docker.txt /app/
+COPY requirements.txt requirements-docker.txt requirements-docker.lock /app/
 
 # Встановлюємо залежності
 # (pyqt6 ми залишаємо в оригінальному файлі, але для докера краще б його виключити,
 # якщо він не компілюється. python:3.12-slim може не мати qt-залежностей. 
 # Ми встановлюємо всі пакети)
-RUN pip install --upgrade pip
-RUN pip install -r requirements-docker.txt
+RUN pip install --no-cache-dir -r requirements-docker.lock && pip check
 
 # Копіюємо решту коду
 COPY . /app/
@@ -37,12 +36,15 @@ COPY . /app/
 # Створюємо директорії для медіа та статики
 RUN mkdir -p /app/media /app/staticfiles /app/logs
 RUN chmod -R 755 /app/media /app/staticfiles /app/logs
+ARG VCS_REF=local
+ARG APP_VERSION=4.5.10
+ARG SOURCE_DIGEST=unknown
+RUN python -c 'import json,os,pathlib; pathlib.Path("/app/build-info.json").write_text(json.dumps({"revision":os.environ.get("VCS_REF","local"),"source_digest":os.environ.get("SOURCE_DIGEST","unknown")}))'
 
 # Команда запуску через gunicorn з автоматичною міграцією БД та збором статики
 CMD ["sh", "-c", "python manage.py migrate && python manage.py collectstatic --noinput && gunicorn --config /app/gunicorn.conf.py schoolnet.wsgi:application"]
 
-ARG VCS_REF=local
-ARG APP_VERSION=4.5.8
 LABEL org.opencontainers.image.version=$APP_VERSION \
       org.opencontainers.image.revision=$VCS_REF \
+      org.schoolnet.source-digest=$SOURCE_DIGEST \
       org.opencontainers.image.source="https://github.com/yrskrs/schoolwork2"

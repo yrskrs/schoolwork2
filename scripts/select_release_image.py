@@ -22,7 +22,11 @@ previous=values[0] if values else ''
 if '@' in previous:raise SystemExit('A digest-pinned image cannot be replaced by a local build; configure a buildable image tag first.')
 name=previous or default
 if ':' in name.rsplit('/',1)[-1]:name=name.rsplit(':',1)[0]
-image=name+':'+version
+if project == 'schoolwork2':
+ from source_fingerprint import source_fingerprint
+ image=name+':'+version+'-'+source_fingerprint()[:12]
+else:
+ image=name+':'+version
 replacement=key+'='+image
 updated=re.sub(r'(?m)^'+key+r'=.*$',replacement,text) if matches else text.rstrip('\n')+'\n'+replacement+'\n'
 if updated!=text:

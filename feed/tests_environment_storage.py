@@ -154,6 +154,8 @@ class EnvironmentStorageTests(TestCase):
         self.assertContains(response, 'Матеріали вчителів')
         self.assertContains(response, 'Файли учнів')
         self.assertContains(response, 'Усього даних на диску')
+        self.assertContains(response, 'guide-template')
+        response = self.client.get(reverse('ui_dialog', args=['guide']))
         page = html.fromstring(response.content)
         dialog = page.get_element_by_id('guide-modal')
         # Every topic belongs inside the scrollable accordion, never above the header.

@@ -1,0 +1,34 @@
+name: PostgreSQL and browser regression checks
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Build the exact source under test
+        run: |
+          docker build --build-arg "VCS_REF=$GITHUB_SHA" --build-arg "APP_VERSION=$(cat VERSION)" --build-arg "SOURCE_DIGEST=$(python3 scripts/source_fingerprint.py)" -t schoolnet-ci:tested .
+      - name: PostgreSQL, migration and maintenance checks
+        run: |
+          docker run --rm --network host -e DATABASE_URL=postgresql://postgres@127.0.0.1:5432/postgres -e SCHOOLNET_TEST_POSTGRES=1 schoolnet-ci:tested python manage.py test feed school_sync --settings=schoolnet.test_settings --noinput
+          docker run --rm --network none schoolnet-ci:tested python manage.py makemigrations --check --dry-run --settings=schoolnet.test_settings
+          docker run --rm --network none schoolnet-ci:tested python -m unittest scripts.test_backup_tools scripts.test_maintenance_lock scripts.test_update_helpers scripts.test_updater_jobs scripts.test_updater_service scripts.test_integration_aliases
+      - name: Real browser and exact attachment bytes
+        run: |
+          docker build -f docker/Dockerfile.qa --build-arg APP_IMAGE=schoolnet-ci:tested -t schoolnet-ci:browser .
+          docker run --rm --network none --shm-size=512m schoolnet-ci:browser

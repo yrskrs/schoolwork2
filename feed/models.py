@@ -436,13 +436,8 @@ class TeacherCloudStorage(models.Model):
         return bool(self.nextcloud_enabled and self.nextcloud_url and self.nextcloud_username and self.nextcloud_password)
 
     def has_google_drive(self):
-        return bool(self.google_drive_enabled and (
-            self.google_access_token or
-            self.google_refresh_token or
-            (self.google_user_email and self.google_password) or
-            self.google_folder_link or
-            self.google_api_key
-        ))
+        # Public links need no account. This flag means configured, not verified.
+        return bool(self.google_drive_enabled)
 
     def has_any_connected(self):
         return self.has_nextcloud() or self.has_google_drive()
@@ -1893,6 +1888,10 @@ class AssignmentFile(models.Model):
         help_text='Позначка для ШІ, що саме у цьому файлі міститься умова/текст завдання'
     )
     uploaded_at = models.DateTimeField('Завантажено', auto_now_add=True)
+    content_sha256 = models.CharField(max_length=64, blank=True, default='', db_default='')
+    verified_size = models.PositiveBigIntegerField(null=True, blank=True)
+    verified_at = models.DateTimeField(null=True, blank=True)
+    source_provider = models.CharField(max_length=16, blank=True, default='', db_default='')
 
     class Meta:
         verbose_name = 'Файл завдання'
@@ -1906,7 +1905,20 @@ class AssignmentFile(models.Model):
         """Зберігає оригінальну назву файлу."""
         if self.file and not self.original_name:
             self.original_name = self.file.name.split('/')[-1]
+        new_content = bool(self.file and not self.file._committed)
+        if new_content:
+            from .cloud_files import fingerprint
+            self.verified_size, self.content_sha256 = fingerprint(self.file)
+            self.verified_at = timezone.now()
         super().save(*args, **kwargs)
+        if new_content:
+            from .cloud_files import CloudStorageError, fingerprint
+            with self.file.open('rb') as stored:
+                actual = fingerprint(stored)
+            if actual != (self.verified_size, self.content_sha256):
+                self.file.delete(save=False)
+                super().delete()
+                raise CloudStorageError('Файл змінився під час збереження. Прикріпіть його повторно.', 'integrity', 422)
 
     def get_extension(self):
         """Повертає розширення файлу в нижньому регістрі."""
@@ -4548,4 +4560,5 @@ class AICriteriaPreset(models.Model):
 
 
 from .job_models import AIJob, StudentAICheckReservation  # noqa: E402, F401
+from .cloud_models import CloudImport  # noqa: E402, F401
 from .roster_models import RosterReplica, RosterState  # noqa: E402, F401

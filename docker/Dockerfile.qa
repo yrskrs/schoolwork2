@@ -1,0 +1,7 @@
+ARG APP_IMAGE=schoolnet-ci:tested
+FROM ${APP_IMAGE}
+RUN apt-get update && apt-get install -y --no-install-recommends chromium \
+    && rm -rf /var/lib/apt/lists/* \
+    && pip install --no-cache-dir websockets==15.0.1
+ENV CHROME_BINARY=/usr/bin/chromium
+CMD ["python", "scripts/test_cloud_import_ui.py"]

@@ -98,4 +98,13 @@ def healthz_view(request):
             cursor.fetchone()
     except Exception:
         return JsonResponse({'status': 'error', 'error': 'Database unavailable'}, status=503)
-    return JsonResponse({'status': 'ok', 'version': get_current_local_version()})
+    result = {'status': 'ok', 'version': get_current_local_version()}
+    try:
+        import json
+        from django.conf import settings
+        from pathlib import Path
+        info = json.loads((Path(settings.BASE_DIR) / 'build-info.json').read_text())
+        result.update({key: str(info[key])[:120] for key in ('revision', 'source_digest') if key in info})
+    except (OSError, ValueError, TypeError):
+        pass
+    return JsonResponse(result)

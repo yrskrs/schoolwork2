@@ -1323,7 +1323,11 @@ def teacher_live_status(request):
 
 
 
+from .cloud_imports import material_transaction
+
+
 @teacher_required
+@material_transaction
 def assignment_create(request):
     """Створення нового завдання."""
     teacher = request.user.teacher_profile
@@ -1398,6 +1402,9 @@ def assignment_create(request):
                     original_name=f.name,
                     is_task_source_for_ai=is_task,
                 )
+
+            from .cloud_imports import attach
+            attach(form.cloud_jobs, assignment, teacher, ai_task_file)
 
             # Фоновий розігрів попереднього перегляду для прикріплених файлів
             prewarm_assignment_files_preview(assignment)
@@ -1545,6 +1552,7 @@ def assignment_create(request):
 
 
 @teacher_required
+@material_transaction
 def assignment_edit(request, pk):
     """Редагування існуючого завдання."""
     teacher = request.user.teacher_profile
@@ -1616,6 +1624,17 @@ def assignment_edit(request, pk):
                 except (ValueError, IndexError):
                     pass
 
+            if ai_task_file.startswith('cloud:'):
+                from .models import CloudImport
+                import uuid as _uuid
+                try:
+                    previous_import = CloudImport.objects.filter(pk=_uuid.UUID(ai_task_file[6:]), teacher=teacher,
+                        status='attached', assignment_file__assignment=assignment).first()
+                    if previous_import:
+                        AssignmentFile.objects.filter(pk=previous_import.assignment_file_id).update(is_task_source_for_ai=True)
+                except ValueError:
+                    pass
+
             # Додаємо нові файли
             for f in request.FILES.getlist('files'):
                 is_task = bool(ai_task_file and (ai_task_file == f"new:{f.name}" or ai_task_file == f.name))
@@ -1625,6 +1644,9 @@ def assignment_edit(request, pk):
                     original_name=f.name,
                     is_task_source_for_ai=is_task,
                 )
+
+            from .cloud_imports import attach
+            attach(form.cloud_jobs, assignment, teacher, ai_task_file)
 
             # Фоновий розігрів попереднього перегляду для нових файлів
             prewarm_assignment_files_preview(assignment)

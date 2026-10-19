@@ -3,6 +3,10 @@
 """
 
 from unittest.mock import patch, MagicMock
+import io
+import json
+import hashlib
+from feed.cloud_files import DownloadedFile
 from django.test import TestCase, Client
 from django.contrib.auth.models import User
 from django.urls import reverse
@@ -216,11 +220,12 @@ class CloudStorageViewsTest(TestCase):
         storage.nextcloud_password = 'pass'
         storage.save()
 
-        mock_dl.return_value = (b'%PDF-1.4 test content', 'application/pdf', 'Урок 1.pdf')
+        body = b'%PDF-1.4 test content'
+        mock_dl.return_value = DownloadedFile(io.BytesIO(body), 'Урок 1.pdf', 'application/pdf', len(body), hashlib.sha256(body).hexdigest())
 
         resp = self.client.get(reverse('teacher_cloud_download') + '?drive=nextcloud&path=Урок 1.pdf')
         self.assertEqual(resp.status_code, 200)
-        self.assertEqual(resp.content, b'%PDF-1.4 test content')
+        self.assertEqual(b''.join(resp.streaming_content), b'%PDF-1.4 test content')
         self.assertEqual(resp['Content-Type'], 'application/pdf')
         import urllib.parse
         self.assertIn('Урок 1.pdf', urllib.parse.unquote(resp['Content-Disposition']))
@@ -251,20 +256,20 @@ class CloudStorageViewsTest(TestCase):
         self.assertIn('cloud-picker-modal', content)
 
     @patch('feed.cloud_storage.GoogleDriveClient.test_connection')
-    def test_save_google_direct_login_and_disconnect(self, mock_test):
+    def test_save_google_public_links_and_disconnect(self, mock_test):
         """Збереження облікових даних Google за логіном та паролем, а потім від'єднання."""
         mock_test.return_value = (True, "OK")
         resp = self.client.post(reverse('teacher_cloud_save_google'), {
             'cloud_action': 'save',
             'email': 'teacher@school.org',
-            'password': 'secretpassword',
+            'public_links': '1',
         }, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
 
         self.assertEqual(resp.status_code, 200)
         storage = self.teacher.get_cloud_storage()
         self.assertTrue(storage.has_google_drive())
         self.assertEqual(storage.google_user_email, 'teacher@school.org')
-        self.assertEqual(storage.google_password, 'secretpassword')
+        self.assertEqual(storage.google_password, '')
 
         # Від'єднання
         resp2 = self.client.post(reverse('teacher_cloud_save_google'), {
@@ -345,7 +350,8 @@ class CloudStorageViewsTest(TestCase):
         self.assertFalse(file_item['is_dir'])
         self.assertEqual(file_item['size'], 667)
 
-    def test_google_drive_linked_folder_is_directory(self):
+    @patch('feed.cloud_storage.fetch_embedded_google_folder', return_value={'items': [], 'folder_name': 'Test', 'is_restricted': False})
+    def test_google_drive_linked_folder_is_directory(self, mock_public):
         """Перевірка того, що спільна/прив'язана папка Google Drive відображається як папка (is_dir: True), а не файл."""
         client = GoogleDriveClient(
             email='teacher@gmail.com',
@@ -364,24 +370,25 @@ class CloudStorageViewsTest(TestCase):
         sub_res = client.list_directory('1I1RtmeKwgZ80GZnWkgSOCRTKTVFTzwKn')
         self.assertEqual(sub_res['current_folder_id'], '1I1RtmeKwgZ80GZnWkgSOCRTKTVFTzwKn')
         self.assertEqual(len(sub_res['breadcrumbs']), 2)
-        self.assertEqual(sub_res['breadcrumbs'][0]['name'], '🔺 Google Drive')
+        self.assertIn('Google Drive', sub_res['breadcrumbs'][0]['name'])
         self.assertEqual(sub_res['breadcrumbs'][0]['id'], 'root')
-        self.assertIn('📁', sub_res['breadcrumbs'][1]['name'])
+        self.assertTrue(sub_res['breadcrumbs'][1]['name'])
         self.assertIn('drive.google.com', sub_res['folder_link'])
 
-    @patch('urllib.request.urlopen')
+    @patch('feed.cloud_storage.GoogleDriveClient._open')
     def test_google_drive_api_key_test_connection(self, mock_urlopen):
         """Перевірка тестування підключення за допомогою Google Drive API Key."""
         mock_resp = MagicMock()
         mock_resp.status = 200
         mock_resp.__enter__.return_value = mock_resp
+        mock_resp.read.return_value = json.dumps({'id':'SyntheticFolder12345','name':'Materials','mimeType':'application/vnd.google-apps.folder'}).encode()
         mock_resp.__exit__.return_value = False
         mock_urlopen.return_value = mock_resp
 
-        client = GoogleDriveClient(api_key='AIzaSyFakeKeyTest12345')
+        client = GoogleDriveClient(api_key='synthetic-test-key', folder_link='https://drive.google.com/drive/folders/SyntheticFolder12345')
         ok, msg = client.test_connection()
         self.assertTrue(ok)
-        self.assertIn('Google Drive API Key дійсний', msg)
+        self.assertIn('папки', msg)
 
     def test_drive_html_parser_and_embedded_view(self):
         """Перевірка парсингу файлів, Google Docs та підпапок із HTML embeddedfolderview."""

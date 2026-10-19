@@ -1,0 +1,805 @@
+<!-- ── Інтерактивна інструкція користувача (Довідка по розділах сайту) ── -->
+<div id="guide-modal"
+     class="guide-modal-backdrop"
+     style="display:none;position:fixed;inset:0;width:100%;height:100%;background:rgba(15,23,42,0.65);z-index:99999;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(5px);box-sizing:border-box;"
+     role="dialog"
+     aria-labelledby="guide-modal-title"
+     aria-modal="true">
+
+    <div class="custom-modal-content guide-modal-dialog"
+         style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);width:100%;max-width:780px;box-shadow:0 25px 60px rgba(0,0,0,0.3);overflow:hidden;height:85vh;max-height:90vh;display:flex;flex-direction:column;animation:rescheduleModalIn 0.22s cubic-bezier(0.16, 1, 0.3, 1);">
+
+        <!-- 1. Шапка модального вікна -->
+        <div style="padding:14px 20px;background:var(--color-bg-secondary);border-bottom:1px solid var(--color-border);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-shrink:0;">
+            <div style="display:flex;align-items:center;gap:10px;">
+                <span style="font-size:24px;line-height:1;">📖</span>
+                <div>
+                    <h2 id="guide-modal-title" style="margin:0;font-size:16px;font-weight:800;color:var(--color-text-primary);display:flex;align-items:center;gap:8px;">
+                        <span>Як користуватися сайтом</span>
+                        <span style="background:rgba(99,102,241,0.12);color:var(--color-primary);font-size:11px;padding:2px 8px;border-radius:12px;font-weight:800;letter-spacing:0.02em;">
+                            Довідка
+                        </span>
+                    </h2>
+                    <div style="font-size:11.5px;color:var(--color-text-muted);margin-top:2px;">
+                        {% if user.is_authenticated and user.teacher_profile %}
+                        Посібник для викладачів та учнів платформи
+                        {% else %}
+                        Інструкція для учнів: як виконувати та здавати завдання
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            <button type="button"
+                    onclick="closeGuideModal()"
+                    style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--color-text-muted);padding:4px 8px;line-height:1;border-radius:6px;transition:all 0.15s ease;"
+                    aria-label="Закрити вікно інструкції"
+                    class="guide-close-btn">
+                ✕
+            </button>
+        </div>
+
+        {% if user.is_authenticated and user.teacher_profile %}
+        <!-- 2. Вкладки для вчителя (Розділення: Для вчителів / Для учнів) -->
+        <div style="display:flex;background:var(--color-surface);border-bottom:1px solid var(--color-border);padding:6px 18px;gap:8px;flex-shrink:0;">
+            <button type="button"
+                    id="guide-tab-btn-teacher"
+                    onclick="switchGuideTab('teacher')"
+                    class="btn btn-sm btn-primary"
+                    style="font-size:12px;font-weight:700;padding:5px 14px;border-radius:var(--radius-sm);display:inline-flex;align-items:center;gap:6px;">
+                <span>👨‍🏫</span> <span>Для вчителів</span>
+            </button>
+            <button type="button"
+                    id="guide-tab-btn-student"
+                    onclick="switchGuideTab('student')"
+                    class="btn btn-sm btn-secondary"
+                    style="font-size:12px;font-weight:700;padding:5px 14px;border-radius:var(--radius-sm);display:inline-flex;align-items:center;gap:6px;">
+                <span>🎓</span> <span>Для учнів (як бачать учні)</span>
+            </button>
+        </div>
+        {% else %}
+        <!-- Інформаційний банер для учнів -->
+        <div style="background:rgba(99,102,241,0.06);border-bottom:1px solid var(--color-border);padding:8px 18px;font-size:12px;color:var(--color-text-secondary);display:flex;align-items:center;gap:6px;flex-shrink:0;">
+            <span>🎓</span> <span>Інструкція для учнів: підказки щодо завдань, файлів, коментарів та перевірки робіт.</span>
+        </div>
+        {% endif %}
+
+        <!-- 3. Панель швидкого пошуку та поточного статусу -->
+        <div style="padding:10px 18px;background:var(--color-surface);border-bottom:1px solid var(--color-border);display:flex;flex-direction:column;gap:8px;flex-shrink:0;">
+            <div style="display:flex;align-items:center;gap:8px;width:100%;flex-wrap:wrap;">
+                <div style="position:relative;display:flex;align-items:center;flex:1;min-width:220px;">
+                    <span style="position:absolute;left:12px;color:var(--color-text-muted);font-size:14px;pointer-events:none;">🔍</span>
+                    <input type="search"
+                           id="guide-search-input"
+                           oninput="filterGuideTopics(this.value)"
+                           placeholder="Швидкий пошук у довідці..."
+                           style="width:100%;padding:8px 12px 8px 34px;font-size:12.5px;border:1px solid var(--color-border);border-radius:var(--radius-md);background:var(--color-bg-secondary);color:var(--color-text-primary);box-sizing:border-box;outline:none;transition:border-color 0.15s ease;"
+                           aria-label="Пошук по інструкції">
+                </div>
+                <div style="display:flex;gap:4px;flex-shrink:0;">
+                    <button type="button"
+                            onclick="expandAllGuideCategories()"
+                            class="btn btn-secondary btn-sm"
+                            style="font-size:11px;padding:5px 9px;font-weight:700;display:inline-flex;align-items:center;gap:3px;"
+                            title="Розгорнути всі розділи інструкції">
+                        <span>▾</span> <span>Розгорнути всі</span>
+                    </button>
+                    <button type="button"
+                            onclick="collapseAllGuideCategories()"
+                            class="btn btn-secondary btn-sm"
+                            style="font-size:11px;padding:5px 9px;font-weight:700;display:inline-flex;align-items:center;gap:3px;"
+                            title="Згорнути всі розділи інструкції">
+                        <span>▴</span> <span>Згорнути всі</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Індикатор авторозпізнавання поточної сторінки -->
+            <div id="guide-current-context-banner" style="display:none;font-size:12px;color:var(--color-primary);background:rgba(99,102,241,0.08);padding:6px 12px;border-radius:var(--radius-sm);border:1px solid rgba(99,102,241,0.2);align-items:center;justify-content:space-between;gap:8px;">
+                <div style="display:flex;align-items:center;gap:6px;">
+                    <span class="guide-pulsing-dot"></span>
+                    <span>Розділ для вашої поточної сторінки відкрито автоматично нижче:</span>
+                </div>
+                <strong id="guide-current-page-label" style="font-size:11.5px;color:var(--color-text-primary);"></strong>
+            </div>
+        </div>
+
+        <!-- 4. Тіло списку категорій інструкції (Акордеон) -->
+        <div id="guide-accordion-container" style="flex:1 1 auto;min-height:0;overflow-y:auto;padding:16px 18px;display:flex;flex-direction:column;gap:12px;scrollbar-width:thin;">
+
+            {% if user.is_authenticated and user.teacher_profile %}
+            <!-- ═══════════════════════════════════════════════════════
+                 РОЗДІЛ ДЛЯ ВЧИТЕЛІВ (НЕ ВІДОБРАЖАЄТЬСЯ УЧНЯМ)
+                 ═══════════════════════════════════════════════════════ -->
+            <div id="guide-pane-teacher" style="display:flex;flex-direction:column;gap:12px;">
+                {% include 'feed/components/guide_performance.html' with guide_category='teacher_performance' %}
+
+                <!-- Вчитель 1: СТВОРЕННЯ ЗАВДАНЬ ТА КРИТЕРІЇ ШІ -->
+                <div class="guide-card" id="guide-category-teacher-dashboard" data-category="teacher_dashboard" data-keywords="вчитель створення завдання критерії оцінювання ші генерація дедлайн дублювання класи усна робота без здачі файл умова">
+                    <button type="button" class="guide-card-header" onclick="toggleGuideCategory('teacher_dashboard')" aria-expanded="false">
+                        <div class="guide-header-title">
+                            <span class="guide-cat-icon">📋</span>
+                            <div class="guide-header-text">
+                                <strong>Кабінет вчителя та створення завдань</strong>
+                                <span class="guide-cat-sub">Публікація уроків, ШІ-генерація критеріїв, дублювання, дедлайни та усні завдання</span>
+                            </div>
+                        </div>
+                        <div class="guide-header-meta">
+                            <span class="guide-active-page-badge" id="badge-guide-teacher-dashboard" style="display:none;">📍 Ви зараз на цій сторінці</span>
+                            <span class="guide-chevron">▾</span>
+                        </div>
+                    </button>
+                    <div class="guide-card-body" id="body-guide-teacher-dashboard" style="display:none;">
+                        <div class="guide-content-inner">
+<p>Основні розділи кабінету завжди розташовано у бічній панелі в блоці «Робота». На телефоні їх відкриває меню «Розділи кабінету вчителя». Розклад відкривається з верхньої панелі, а тема вчителя змінюється в меню профілю. Для учнів налаштування вигляду розташовані на верхній панелі.</p>
+<div class="guide-step"><span class="guide-step-num">1</span><div><strong>Створіть завдання.</strong><p>Натисніть «➕ Завдання» у верхній панелі. Зліва заповніть тему, вказівки й матеріали. У «🏫 Кому призначено» оберіть класи заново; попередній предмет підставляється автоматично. Тут же можна ввімкнути індивідуальне завдання.</p></div></div>
+<div class="guide-step"><span class="guide-step-num">2</span><div><strong>Додайте матеріали та критерії.</strong><p>Файли можна додавати з різних папок. За потреби позначте файл з умовою для ШІ. Параметри ШІ початково згорнуті в основній колонці перед власними критеріями. Автоматична прив’язка до розкладу враховує також урок, який зараз триває; за потреби виберіть урок і дату вручну. Усі ці поля зберігаються разом із завданням. У параметрах ШІ можна обрати спільний шаблон, а в «Окремі критерії для класів» — інший шаблон та ГР для конкретного класу. Власна розбаловка роботи має пріоритет.</p></div></div>
+<div class="guide-step"><span class="guide-step-num">3</span><div><strong>Оберіть публікацію.</strong><p>У правому блоці «Публікація та терміни» задайте дедлайн, публікацію зараз, чернетку чи відкладений час. Для усної роботи можна ввімкнути «Без здачі». Кнопка збереження розташована наприкінці форми; на великому екрані вона залишається доступною під час прокручування.</p></div></div>
+<div class="guide-step"><span class="guide-step-num">4</span><div><strong>Знайдіть потрібне завдання.</strong><p>Вкладки «Опубліковані», «Чернетки», «Заплановані» й «Архів» показують кількість завдань. Клас, предмет, дата та пошук розташовані біля списку.</p></div></div>
+<div class="guide-step"><span class="guide-step-num">5</span><div><strong>Додаткові дії.</strong><p>Імпорт і експорт ZIP та календар перенесень розміщено в блоці «Додаткові дії». На телефоні блок «Додаткові дії» потрібно розгорнути.</p></div></div>
+</div>
+                    </div>
+                </div>
+
+                <!-- Вчитель 2: ЦЕНТР НАЛАШТУВАНЬ ТА ЗАКЛАД -->
+                <div class="guide-card" id="guide-category-teacher-settings" data-category="teacher_settings" data-keywords="налаштування профіль заклад освіта школа семестри чверті розклад дзвінків дзвінки зміни пароль аватар супер-адміністратор гр нуш розмір бд диск пам'ять файли матеріали кеш">
+                    <button type="button" class="guide-card-header" onclick="toggleGuideCategory('teacher_settings')" aria-expanded="false">
+                        <div class="guide-header-title">
+                            <span class="guide-cat-icon">⚙️</span>
+                            <div class="guide-header-text">
+                                <strong>Центр налаштувань: Профіль, Заклад та Розклад</strong>
+                                <span class="guide-cat-sub">Особисті дані, заклад, дзвінки, навчальні періоди та обсяг даних на диску</span>
+                            </div>
+                        </div>
+                        <div class="guide-header-meta">
+                            <span class="guide-active-page-badge" id="badge-guide-teacher-settings" style="display:none;">📍 Ви зараз на цій сторінці</span>
+                            <span class="guide-chevron">▾</span>
+                        </div>
+                    </button>
+                    <div class="guide-card-body" id="body-guide-teacher-settings" style="display:none;">
+                        <div class="guide-content-inner">
+<p>Центр має чотири вкладки: «Профіль», «Середовище та заклад», «Модуль ШІ» та «API та журнал». На телефоні користуйтеся компактними вкладками. Кнопка «Довідка налаштувань» відкриває тему активної вкладки.</p>
+<div class="guide-step"><span class="guide-step-num">1</span><div><strong>Профіль.</strong><p>Тут змінюються особисті дані, аватар, пароль, предмети й класи вчителя.</p></div></div>
+<div class="guide-step"><span class="guide-step-num">2</span><div><strong>Середовище та заклад.</strong><p>Тут доступні шкільні дані, користувачі, час дзвінків і навчальні періоди. Системні зміни адміністратора доступні у відповідному режимі.</p></div></div>
+<div class="guide-step"><span class="guide-step-num">3</span><div><strong>Стан шкільного середовища та пам’ять.</strong><p>Розмір БД підтримує PostgreSQL і SQLite. «Матеріали вчителів» включають прикріплені файли завдань і документи критеріїв; «Файли учнів» — усі здачі та повторні спроби. Спільний файл групової роботи рахується один раз. «Інші медіафайли» включають аватари, архіви й файли без запису в БД. Окремо видно кеш переглядів і журнали сервера.</p><p>«Усього даних на диску» — сума БД, усіх медіафайлів, кешу й журналів усього закладу. Це не зайнятість усього сервера: Docker-образи, системні файли, службові WAL PostgreSQL і зовнішні резервні копії сюди не входять. Показники кешуються на 60 секунд; час вимірювання видно під картками. Якщо частина сховища недоступна, показано попередження й мінімальний відомий обсяг із позначкою ≥.</p></div></div>
+<div class="guide-step"><span class="guide-step-num">4</span><div><strong>Додаткові дії та резервні копії.</strong><p>Довідка, журнал дій, завантаження резервної копії БД та перемикач режиму адміністратора зібрані в блоці «Додаткові дії». На телефоні цей блок згорнутий. Завантаження БД не замінює повного знімка БД і медіафайлів перед оновленням.</p></div></div>
+<div class="guide-step"><span class="guide-step-num">5</span><div><strong>Збереження.</strong><p>Збережіть зміни кнопкою відповідної форми. Переходи до робочих розділів доступні у верхній навігації та мобільному меню кабінету. Адміністратор має окрему сторінку «Оновлення системи».</p></div></div>
+</div>
+                    </div>
+                </div>
+
+                <!-- Вчитель 3: НАЛАШТУВАННЯ ШІ ТА ПАКЕТНА ПЕРЕВІРКА -->
+                <div class="guide-card" id="guide-category-teacher-ai-settings" data-category="teacher_ai_settings" data-keywords="ші налаштування gemini api ключ openai deepseek groq тестування тест з'єднання модель температура пакетна перевірка черга failover">
+                    <button type="button" class="guide-card-header" onclick="toggleGuideCategory('teacher_ai_settings')" aria-expanded="false">
+                        <div class="guide-header-title">
+                            <span class="guide-cat-icon">🤖</span>
+                            <div class="guide-header-text">
+                                <strong>Модуль ШІ: Налаштування API, моделі та пакетна перевірка</strong>
+                                <span class="guide-cat-sub">Підключення провайдерів, критерії, черга моделей, статистика та помилки</span>
+                            </div>
+                        </div>
+                        <div class="guide-header-meta">
+                            <span class="guide-active-page-badge" id="badge-guide-teacher-ai-settings" style="display:none;">📍 Ви зараз на цій сторінці</span>
+                            <span class="guide-chevron">▾</span>
+                        </div>
+                    </button>
+                    <div class="guide-card-body" id="body-guide-teacher-ai-settings" style="display:none;">
+                        <div class="guide-content-inner">
+<p>Модуль ШІ має п’ять вкладок: «Підключення», «Критерії», «Моделі», «Статистика» й «Помилки».</p>
+<div class="guide-step"><span class="guide-step-num">1</span><div><strong>Підключення та провайдери.</strong><p>Підтримуються Google Gemini, OpenAI, Groq, DeepSeek, OpenRouter, Cloudflare Workers AI (`@cf/...`) та сумісні сервери. Можна налаштувати кілька підключень одного постачальника. «Тест» перевіряє зв'язок безпосередньо біля кнопки.</p></div></div>
+<div class="guide-step"><span class="guide-step-num">2</span><div><strong>Черга моделей, fallback та каталог.</strong><p>У «Моделях» налаштуйте чергу пріоритетів перевірки. Система контролює одночасні запити (Concurrency Check), переходить до наступної моделі при збоях, активує тимчасову паузу (Cooldown) після помилок 429/503 та запам'ятовує обмеження ліміту контексту 413. Великий каталог моделей із квотами за замовчуванням охайно згорнутий під формою.</p></div></div>
+<div class="guide-step"><span class="guide-step-num">3</span><div><strong>Графік використання.</strong><p>У «Статистиці → Графік» початково показані криві. Оберіть період від 24 годин до всього часу й вигляд: стовпчики, лінії або криві. Кольори й легенда позначають окремі моделі. На графіку можна перемикати запити або токени, фільтрувати модель, провайдера, тип запиту й успіх чи помилку. Натисніть стовпчик або точку для точного значення; з клавіатури використовуйте Tab і стрілки.</p></div></div>
+<div class="guide-step"><span class="guide-step-num">4</span><div><strong>Показники моделей.</strong><p>У «Статистиці → Моделі» використайте пошук і сторінки. Розгорніть показники потрібної моделі: RPM за останню хвилину та пік, RPD за сьогодні й середнє, кількість запитів, успішність, токени й останній запит. Картки враховують обраний період; фільтри графіка діють окремо. Час — за часовим поясом школи.</p></div></div>
+<div class="guide-step"><span class="guide-step-num">5</span><div><strong>Критерії та вказівки для ШІ.</strong><p>У «Критеріях» налаштовуються шаблони оцінювання й ГР. У редакторі завдання можна перевизначити критерії для окремих класів та додати приватні вказівки для ШІ. Ці налаштування зберігаються під час дублювання й ZIP-експорту/імпорту завдань; учні не бачать приватних вказівок.</p></div></div>
+<div class="guide-step"><span class="guide-step-num">6</span><div><strong>Помилки й пакетна перевірка.</strong><p>Причини невдалих запитів, позначення прочитаних помилок і звіти аналізу доступні у «Помилках». Для групової перевірки відкрийте «ШІ-перевірка» у меню «Робота»: основні фільтри й запуск біля черги, пауза між запитами та оновлення списку — у «Додаткових діях».</p></div></div>
+<div class="guide-tip-box info">Перегляд і фільтрація графіка використовують журнал запитів та не запускають нових перевірок ШІ.</div>
+</div>
+                    </div>
+                </div>
+
+                <div class="guide-card" id="guide-category-teacher-api-settings" data-category="teacher_api_settings" data-keywords="api журнал ключ адреса ip порт синхронізація учні списки оцінки інтеграція">
+                    <button type="button" class="guide-card-header" onclick="toggleGuideCategory('teacher_api_settings')" aria-expanded="false">
+                        <div class="guide-header-title"><span class="guide-cat-icon">🌐</span><div class="guide-header-text"><strong>API та журнал: підключення і синхронізація</strong><span class="guide-cat-sub">Ключ API, адреса сайту, локальні списки та остаточні оцінки</span></div></div>
+                        <div class="guide-header-meta"><span class="guide-active-page-badge" id="badge-guide-teacher-api-settings" style="display:none;">📍 Ви зараз на цій сторінці</span><span class="guide-chevron">▾</span></div>
+                    </button>
+                    <div class="guide-card-body" id="body-guide-teacher-api-settings" style="display:none;"><div class="guide-content-inner">
+                        <div class="guide-step"><span class="guide-step-num">1</span><div><strong>Створіть підключення.</strong><p>У «API та журнал» натисніть «Створити ключ API». Скопіюйте адресу цього сайту й ключ у відповідні поля «Підключити тести / завдання» у журналі. Готовий код підключення доступний для попередніх версій журналу. Після зміни IP оновіть адресу в журналі; ключ залишається чинним.</p></div></div>
+                        <div class="guide-step"><span class="guide-step-num">2</span><div><strong>Перевірте списки.</strong><p>Журнал передає копію класу й учнів у власну БД SchoolNet. Схожі імена та скорочення ПІБ підтверджує вчитель. Учні обирають власне ім’я та співавторів за іменами; служби використовують приховані ID. Локальні списки, здача й перевірка працюють під час недоступності журналу.</p></div></div>
+                        <div class="guide-step"><span class="guide-step-num">3</span><div><strong>Передавайте остаточні оцінки.</strong><p>Один ключ дозволяє синхронізацію учнів і отримання остаточних оцінок. Журнал отримує оцінки лише за кнопкою. Цілі бали 1–12 імпортуються без зміни шкали; інші оцінки потребують ручного рішення. Результати без підтвердженої відповідності залишаються в позакласному списку журналу.</p></div></div>
+                        <div class="guide-step"><span class="guide-step-num">4</span><div><strong>Переглядайте окремих учнів.</strong><p>У «Учні та класи» натисніть «Окремі учні та їхні роботи». Пошук і фільтр класу проведення допоможуть знайти дітей, яких ви навчали під час замін. Їхні роботи зберігаються без нового навчального класу; повторні ручні здачі з того самого браузера мають сталий запис. Тезки не об’єднуються автоматично.</p></div></div>
+                        <div class="guide-step"><span class="guide-step-num">4</span><div><strong>Керуйте доступом.</strong><p>У таблиці ключів видно дозволи, кількість запитів і останнє використання. Непотрібний ключ можна деактивувати або видалити. Власник керує своїми ключами; адміністратор бачить усі ключі закладу.</p></div></div>
+                    </div></div>
+                </div>
+
+                {% if user.is_superuser %}
+                <div class="guide-card" id="guide-category-teacher-updates" data-category="teacher_updates" data-keywords="оновлення github версія перезбірка відкат резервна копія docker журнал термінал">
+                    <button type="button" class="guide-card-header" onclick="toggleGuideCategory('teacher_updates')" aria-expanded="false">
+                        <div class="guide-header-title"><span class="guide-cat-icon">🔄</span><div class="guide-header-text"><strong>Оновлення системи: версія, перезбірка та відкат</strong><span class="guide-cat-sub">Зміни випусків, п’ять етапів і діагностика операції</span></div></div>
+                        <div class="guide-header-meta"><span class="guide-active-page-badge" id="badge-guide-teacher-updates" style="display:none;">📍 Ви зараз на цій сторінці</span><span class="guide-chevron">▾</span></div>
+                    </button>
+                    <div class="guide-card-body" id="body-guide-teacher-updates" style="display:none;"><div class="guide-content-inner">
+                        <p>«Оновлення системи» доступне адміністратору. Для запуску операцій потрібна налаштована служба Docker <code>updater</code>.</p>
+                        <div class="guide-step"><span class="guide-step-num">1</span><div><strong>Перевірте версію та зміни.</strong><p>Сторінка показує встановлену версію й опис. «Перевірити наявність оновлень» отримує дані GitHub і показує зміни всіх проміжних випусків. Мережевий збій відображається окремою помилкою перевірки.</p></div></div>
+                        <div class="guide-step"><span class="guide-step-num">2</span><div><strong>Оновіть або перезберіть.</strong><p>Оновлення завантажує нову версію. «⚡ Перезібрати поточну версію» використовує чинний код; checkout має бути чистим і відповідати встановленій версії. Операція проходить п’ять етапів: код, збірка, перевірена копія БД і файлів, міграції/запуск, перевірка БД та образу. 100% і всі п’ять зелених галочок означають перевірений успіх.</p></div></div>
+                        <div class="guide-step"><span class="guide-step-num">3</span><div><strong>Перегляньте результат.</strong><p>Живий термінал показує виконання команд. Завершений успішний результат згорнутий; розгорніть заголовок, щоб переглянути етапи й журнал. Статус зберігається після перезавантаження сторінки; журнал можна скопіювати.</p></div></div>
+                        <div class="guide-step"><span class="guide-step-num">4</span><div><strong>Відкат після збою.</strong><p>Після помилки під час застосування оновлювач відновлює попередні образ, БД, файли й ревізію коду. Помилка відкату повідомляється окремо. Ручний відкат скасовує зміни даних після знімка; запускайте його одразу після невдалого оновлення.</p></div></div>
+                    </div></div>
+                </div>
+                {% endif %}
+
+                <!-- Вчитель 4: ПЕРЕВІРКА РОБІТ ТА FILE VIEWER -->
+                <div class="guide-card" id="guide-category-teacher-fileviewer" data-category="teacher_fileviewer" data-keywords="перевірка робіт file viewer оцінювання бали гр нуш коментарі відгук зауваження zip детекція ші плагіат доопрацювання звіт розгорнути згорнути">
+                    <button type="button" class="guide-card-header" onclick="toggleGuideCategory('teacher_fileviewer')" aria-expanded="false">
+                        <div class="guide-header-title">
+                            <span class="guide-cat-icon">👁️</span>
+                            <div class="guide-header-text">
+                                <strong>Перевірка робіт в інтерактивному File Viewer</strong>
+                                <span class="guide-cat-sub">Перегляд файлів учнів у браузері, виставлення балів за ГР НУШ, детекція ШІ та відгуки</span>
+                            </div>
+                        </div>
+                        <div class="guide-header-meta">
+                            <span class="guide-active-page-badge" id="badge-guide-teacher-fileviewer" style="display:none;">📍 Ви зараз на цій сторінці</span>
+                            <span class="guide-chevron">▾</span>
+                        </div>
+                    </button>
+                    <div class="guide-card-body" id="body-guide-teacher-fileviewer" style="display:none;">
+                        <div class="guide-content-inner">
+                                    <p>Прапорці ГР у «Групи результатів і глибоке мислення» визначають наступний запит. Переглядач відновлює останній успішний вибір учителя; «Повернути ГР завдання» застосовує критерії цього класу. Якщо модель не перевірила обрану ГР, вона показується без бала з причиною.</p>
+                                    <p>Temperature — мінливість відповіді, а не суворість оцінювання. Дозвіл ШІ задається в редакторі завдання. Позначка «Походження роботи не встановлено» не доводить самостійності; попросіть учня пояснити кроки чи показати чернетку. Детальний розбір критеріїв залишається в рекомендаціях учителю; учень бачить пояснення бала та поради.</p>
+
+                            <div class="guide-step">
+                                <span class="guide-step-num">1</span>
+                                <div>
+                                    <strong>Перегляд робіт без скачування на комп'ютер:</strong>
+                                    <p>HTML-роботи виконують локальні скрипти, CSS та зображення в ізольованому фреймі. Доступ до ресурсів конкретної роботи діє 30 хвилин; після завершення строку оновіть переглядач. Фрейм не має доступу до сторінки вчителя, cookies, форм, зовнішніх ресурсів чи мережевих API. Серверні застосунки й зовнішні бібліотеки з CDN у такому перегляді не запускаються.</p>
+                                    <p>File Viewer підтримує відображення будь-яких навчальних форматів прямо у браузері: фотографії зошитів, документи Word (<code>.docx</code>), таблиці Excel, презентації, PDF, код із підсвіткою синтаксису. Навігація «Попередня / Наступна» й завантаження стоять у закріпленій верхній панелі. Alt + ← / → перемикає роботи. Робота учня й інструменти перевірки показуються поруч. У вкладці «Умова й матеріали» відкрито повну інструкцію та файли вчителя, у «ШІ-перевірка» — критерії й рекомендації. «Розгорнути» біля інструментів дає їм усю ширину. «Згорнути» залишає вузьку смугу вкладок і збільшує роботу учня; так само працює «Розгорнути» біля роботи. «Поруч» повертає дві області. На вузькому екрані кнопку біля роботи можна використати для повного екрана. Матеріали відкриваються по центру з вибором файла, документа або текстового вигляду; презентації мають перемикання слайдів. На телефоні вкладка «Робота учня» відкриває файл, інші вкладки — потрібний інструмент.</p>
+                                </div>
+                            </div>
+
+                            <div class="guide-step">
+                                <span class="guide-step-num">2</span>
+                                <div>
+                                    <strong>Оцінювання за групами результатів (ГР НУШ):</strong>
+                                    <p>Оцінка й збереження завжди доступні у верхній панелі. Введіть бал 1–12 або відкрийте «Бали» для швидкого вибору та індивідуальних оцінок учасників. «Зберегти й далі» переходить лише після успішного збереження; Enter або Ctrl+Enter зберігає оцінку. У верхній панелі одразу видно ознаки ШІ, повний збіг файлів і групову роботу; натисніть позначку для подробиць. «Не перевірено» означає відсутність результату перевірки, а не відсутність ознак ШІ. Коментар учню пишіть у вкладці «Відгук» — кількість відгуків видно на її кнопці. Під час перемикання вкладок файл і незбережені поля залишаються на місці.</p>
+                                </div>
+                            </div>
+
+                            <div class="guide-step">
+                                <span class="guide-step-num">3</span>
+                                <div>
+                                    <strong>Повна інформація про детекцію ШІ, плагіат та спільні роботи:</strong>
+                                    <p>Позначки ШІ — це припущення моделі, а не доведений факт чи точний відсоток авторства. Збіг файлів показує однаковий вміст, але сам по собі не доводить плагіат. Перевірте обставини, особливо для спільної роботи.</p><p>У «Рекомендаціях ШІ» є пояснення бала, результати за критеріями з посиланням на елементи роботи та конкретні кроки покращення. Правильний зміст в іншому форматі зараховується частково; неперевірені елементи позначаються окремо. Остаточну оцінку зберігає вчитель.</p><p>ШІ читає текст і візуальні сторінки офісних документів та PDF, формули й діаграми Excel, усі слайди презентацій. Scratch і micro:bit аналізуються без запуску; в Access доступна структура даних, але не перевіряється виконання макросів чи вигляд форм. Технічна недоступність не є помилкою учня.</p>
+                                    <p>👥 <strong>Ігнорування плагіату для спільних проектів:</strong> Якщо учні виконували роботу разом у групі чи парі, але проігнорували блок зазначення співавторів, вчитель може прямо у вікні перевірки поставити прапорець <code>👥 Ігнорувати плагіат (спільна робота)</code>. Система та ШІ оцінять проект по суті без штрафу за плагіат, а статус автоматично синхронізується з роботами інших учасників.</p>
+                                    <p>📝 <strong>Автоматичне зіставлення «питання-відповідь»:</strong> Якщо учень здав лише відповіді без переписування самих запитань (наприклад: <code>1. ...</code>, <code>2. ...</code>), ШІ-модуль автоматично виявляє запитання в умові або матеріалах вчителя та підставляє під них знайдені відповіді учня. ШІ заборонено заявляти «жодної відповіді не дано», якщо учень відповів на 1–2 запитання, а у коментарях учень отримує рекомендацію щодо структури «питання-відповідь».</p>
+                                    <p>📂 <strong>Згортання та групування текстового звіту ШІ:</strong> Текстовий звіт перевірки у бічній панелі структуровано за логічними розділами: <em>«Загальний висновок»</em>, <em>«Чому така оцінка»</em>, <em>«Сильні сторони»</em>, <em>«Зауваження та неточності»</em>, <em>«Рекомендація»</em>. Усі розділи за замовчуванням охайно згорнуті, щоб не захаращувати екран. Кнопки <strong>«📂 Розгорнути всі»</strong> та <strong>«📁 Згорнути всі»</strong> дозволяють перемикати весь звіт в один клік.</p>
+                                </div>
+                            </div>
+
+                            <div class="guide-step">
+                                <span class="guide-step-num">4</span>
+                                <div>
+                                    <strong>Статус «Потребує доопрацювання»:</strong>
+                                    <p>Якщо учень надіслав не той файл або завдання виконано неповністю, оберіть статус <em>«Потребує доопрацювання»</em> та залиште коментар. Робота повернеться учневі на доопрацювання, а після повторної здачі система автоматично оновить чергу.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Вчитель 5: ВСІ ЗДАНІ РОБОТИ ТА ЗАВАНТАЖЕННЯ ZIP -->
+                <div class="guide-card" id="guide-category-teacher-submissions" data-category="teacher_submissions" data-keywords="всі здані роботи список здач черга перевірки фільтри статус не перевірено zip завантажити архівом архів спроби повторні">
+                    <button type="button" class="guide-card-header" onclick="toggleGuideCategory('teacher_submissions')" aria-expanded="false">
+                        <div class="guide-header-title">
+                            <span class="guide-cat-icon">📥</span>
+                            <div class="guide-header-text">
+                                <strong>Таблиця всіх здач робіт та завантаження ZIP</strong>
+                                <span class="guide-cat-sub">Фільтрація черги перевірки, пакетне завантаження файлів класу та історія спроб</span>
+                            </div>
+                        </div>
+                        <div class="guide-header-meta">
+                            <span class="guide-active-page-badge" id="badge-guide-teacher-submissions" style="display:none;">📍 Ви зараз на цій сторінці</span>
+                            <span class="guide-chevron">▾</span>
+                        </div>
+                    </button>
+                    <div class="guide-card-body" id="body-guide-teacher-submissions" style="display:none;">
+                        <div class="guide-content-inner">
+<p>Розділ «Здані роботи» містить пошук, класи, завдання й фільтри стану перевірки. Кількість робіт видно у фільтрах, без повторних великих карток.</p>
+<div class="guide-step"><span class="guide-step-num">1</span><div><strong>Знайдіть роботу.</strong><p>Оберіть клас, завдання або статус і скористайтеся пошуком. Перевірка та виставлення оцінок доступні біля відповідної роботи.</p></div></div>
+<div class="guide-step"><span class="guide-step-num">2</span><div><strong>Додаткові інструменти.</strong><p>Експорт оцінок CSV та інструкція розміщені праворуч. У здачах окремого завдання тут також є ZIP робіт, форма для учнів, редагування завдання та перевірка його розуміння ШІ.</p></div></div>
+<div class="guide-step"><span class="guide-step-num">3</span><div><strong>Вузький екран.</strong><p>Коли таблиці не вистачає ширини, записи розташовано один під одним із підписами полів. Кнопки й поля перевірки залишаються доступними.</p></div></div>
+</div>
+                    </div>
+                </div>
+
+                <!-- Вчитель 6: ЕЛЕКТРОННИЙ ЖУРНАЛ ОЦІНОК -->
+                <div class="guide-card" id="guide-category-teacher-gradebook" data-category="teacher_gradebook" data-keywords="журнал оцінок електронний журнал відомість успішність експорт csv excel звітність матриця успішності оцінки класи">
+                    <button type="button" class="guide-card-header" onclick="toggleGuideCategory('teacher_gradebook')" aria-expanded="false">
+                        <div class="guide-header-title">
+                            <span class="guide-cat-icon">📊</span>
+                            <div class="guide-header-text">
+                                <strong>Електронний журнал оцінок (Gradebook) та експорт</strong>
+                                <span class="guide-cat-sub">Зведена відомість класу, фільтрація за предметами та експорт у CSV / Excel</span>
+                            </div>
+                        </div>
+                        <div class="guide-header-meta">
+                            <span class="guide-active-page-badge" id="badge-guide-teacher-gradebook" style="display:none;">📍 Ви зараз на цій сторінці</span>
+                            <span class="guide-chevron">▾</span>
+                        </div>
+                    </button>
+                    <div class="guide-card-body" id="body-guide-teacher-gradebook" style="display:none;">
+                        <div class="guide-content-inner">
+<p>Оберіть клас і потрібні дати у «Журналі». Оцінки залишаються інформацією для вчителя.</p>
+<div class="guide-step"><span class="guide-step-num">1</span><div><strong>Перегляд оцінок.</strong><p>Виберіть журнал за датами або список робіт. Натискання на оцінку відкриває відповідну роботу; «Д» означає доопрацювання.</p></div></div>
+<div class="guide-step"><span class="guide-step-num">2</span><div><strong>Експорт і звіти.</strong><p>Усі виставлені оцінки, CSV, звіти й учні обраного класу доступні в правій панелі «Додаткові дії».</p></div></div>
+<div class="guide-step"><span class="guide-step-num">3</span><div><strong>Якщо дат багато.</strong><p>Коли таблиці бракує ширини, дані кожного учня розміщуються вертикально, а оцінки підписані датою й завданням. Прокручувати по горизонталі не потрібно.</p></div></div>
+</div>
+                    </div>
+                </div>
+
+                <!-- Вчитель 7: УЧНІ, КЛАСИ ТА РОЗУМНИЙ ПОШУК -->
+                <div class="guide-card" id="guide-category-teacher-classes" data-category="teacher_classes" data-keywords="класи учні список розклад проведених уроків уроки таблиця імпорт експорт csv пошук відмінки сортування паралелей дзвінки сьогодні">
+                    <button type="button" class="guide-card-header" onclick="toggleGuideCategory('teacher_classes')" aria-expanded="false">
+                        <div class="guide-header-title">
+                            <span class="guide-cat-icon">👥</span>
+                            <div class="guide-header-text">
+                                <strong>Керування класами, учнями, розкладом та темами уроків</strong>
+                                <span class="guide-cat-sub">Список учнів, тижневий розклад із підсвічуванням «Сьогодні», облік проведених уроків та CSV</span>
+                            </div>
+                        </div>
+                        <div class="guide-header-meta">
+                            <span class="guide-active-page-badge" id="badge-guide-teacher-classes" style="display:none;">📍 Ви зараз на цій сторінці</span>
+                            <span class="guide-chevron">▾</span>
+                        </div>
+                    </button>
+                    <div class="guide-card-body" id="body-guide-teacher-classes" style="display:none;">
+                        <div class="guide-content-inner">
+                            <p>Розділ об'єднує керування класною базою, тижневий розклад та реєстр вичитаних тем уроків.</p>
+
+                            <div class="guide-step">
+                                <span class="guide-step-num">1</span>
+                                <div>
+                                    <strong>Список учнів та класів (вкладка <code>?tab=students</code>):</strong>
+                                    <p>Оберіть потрібний клас або знайдіть учня через розумний пошук (система розпізнає відмінки українських імен, пошук без апострофа та форми на зразок «Сашко / Олександр»). Доступне редагування ПІБ, зміна класу з автоперенесенням робіт і журналу, а також кнопка <em>«🔀 Об'єднати дублікати»</em> для злиття повторних профілів.</p>
+                                </div>
+                            </div>
+
+                            <div class="guide-step">
+                                <span class="guide-step-num">2</span>
+                                <div>
+                                    <strong>Проведені теми уроків (вкладка <code>?tab=lessons</code>):</strong>
+                                    <p>Зведена таблиця всіх проведених занять із датами, днями тижня, статусами (активні чи в архіві), класами та кількістю зданих робіт. Дозволяє звіряти фактично вичитані години з календарним планом та швидко створювати нові уроки.</p>
+                                </div>
+                            </div>
+
+                            <div class="guide-step">
+                                <span class="guide-step-num">3</span>
+                                <div>
+                                    <strong>Мій тижневий розклад уроків (вкладка <code>?tab=schedule</code>):</strong>
+                                    <p>Інтерактивна сітка занять учителя з автопідсвічуванням поточної колонки <strong>«СЬОГОДНІ»</strong> та живим бейджем поточного уроку чи перерви зі зворотним відліком часу. Доступні швидке редагування розкладу, налаштування дзвінків, версія для друку на папері або в PDF (<code>Ctrl+P</code>) та лічильник проведених уроків.</p>
+                                </div>
+                            </div>
+
+                            <div class="guide-step">
+                                <span class="guide-step-num">4</span>
+                                <div>
+                                    <strong>Імпорт та експорт списків:</strong>
+                                    <p>У бічному блоці дій розташовані імпорт учнів з файлів Excel/Word або тексту списком, а також вивантаження повної бази у форматі CSV.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Вчитель 8: ПЕРЕНЕСЕННЯ УРОКІВ ТА КАЛЕНДАР -->
+                <div class="guide-card" id="guide-category-teacher-reschedule" data-category="teacher_reschedule" data-keywords="перенесення уроків заміна розклад тривога повітряна тривога 30-денний календар проведених уроків лічильник дзвінки відлік">
+                    <button type="button" class="guide-card-header" onclick="toggleGuideCategory('teacher_reschedule')" aria-expanded="false">
+                        <div class="guide-header-title">
+                            <span class="guide-cat-icon">🔄</span>
+                            <div class="guide-header-text">
+                                <strong>Перенесення уроків, заміни та інтерактивний календар</strong>
+                                <span class="guide-cat-sub">Швидке перенесення уроку кнопкою ⚡, 30-денний календар замін та лічильник проведених занять</span>
+                            </div>
+                        </div>
+                        <div class="guide-header-meta">
+                            <span class="guide-active-page-badge" id="badge-guide-teacher-reschedule" style="display:none;">📍 Ви зараз на цій сторінці</span>
+                            <span class="guide-chevron">▾</span>
+                        </div>
+                    </button>
+                    <div class="guide-card-body" id="body-guide-teacher-reschedule" style="display:none;">
+                        <div class="guide-content-inner">
+                            <div class="guide-step">
+                                <span class="guide-step-num">1</span>
+                                <div>
+                                    <strong>Модальне вікно перенесення уроку:</strong>
+                                    <p>У меню дій будь-якого завдання оберіть <em>«Перенести урок»</em>. Натисніть кнопку <code>⚡ Підставити наступний урок за розкладом</code> — система автоматично знайде найближчий день за вашим постійним розкладом і заповнить дату та номер уроку.</p>
+                                </div>
+                            </div>
+
+                            <div class="guide-step">
+                                <span class="guide-step-num">2</span>
+                                <div>
+                                    <strong>Причини перенесення та дедлайн:</strong>
+                                    <p>Оберіть причину перенесення (повітряна тривога, зміна розкладу, хвороба чи свято). Увімкніть чекбокс <em>«Також перенести термін здачі (дедлайн) на нову дату»</em>, щоб учні отримали додатковий час на виконання.</p>
+                                </div>
+                            </div>
+
+                            <div class="guide-step">
+                                <span class="guide-step-num">3</span>
+                                <div>
+                                    <strong>30-денний календар перенесених уроків:</strong>
+                                    <p>У розділі <code>/teacher/rescheduled-calendar/</code> доступна інтерактивна сітка на 30 днів, де видно всі перенесені уроки, заміни та коригування навчального плану.</p>
+                                </div>
+                            </div>
+
+                            <div class="guide-step">
+                                <span class="guide-step-num">4</span>
+                                <div>
+                                    <strong>Лічильник фактично проведених уроків:</strong>
+                                    <p>Модальне вікно лічильника уроків автоматично рахує вичитані заняття за семестр з можливістю точного ручного коригування для шкільної звітності.</p>
+                                </div>
+                            </div>
+
+                            <div class="guide-step">
+                                <span class="guide-step-num">5</span>
+                                <div>
+                                    <strong>Віджет живого уроку та розклад на сьогодні:</strong>
+                                    <p>Компактний статус-піл у верхній панелі інформує про поточний урок або перерву, хвилини до дзвінка та смугу прогресу поточного заняття.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Вчитель 9: ЖУРНАЛ АУДИТУ ТА РЕЗЕРВНЕ КОПІЮВАННЯ -->
+                <div class="guide-card" id="guide-category-teacher-activity" data-category="teacher_activity" data-keywords="журнал дій активність аудит логи безпека резервна копія бд backup збереження даних postgres postgresql docker backup.sh restore.sh update.sh">
+                    <button type="button" class="guide-card-header" onclick="toggleGuideCategory('teacher_activity')" aria-expanded="false">
+                        <div class="guide-header-title">
+                            <span class="guide-cat-icon">🛡️</span>
+                            <div class="guide-header-text">
+                                <strong>Журнал дій (Activity Log) та резервні копії БД</strong>
+                                <span class="guide-cat-sub">Історія всіх операцій, аудит безпеки, дамп PostgreSQL та скрипти відновлення</span>
+                            </div>
+                        </div>
+                        <div class="guide-header-meta">
+                            <span class="guide-active-page-badge" id="badge-guide-teacher-activity" style="display:none;">📍 Ви зараз на цій сторінці</span>
+                            <span class="guide-chevron">▾</span>
+                        </div>
+                    </button>
+                    <div class="guide-card-body" id="body-guide-teacher-activity" style="display:none;">
+                        <div class="guide-content-inner">
+                            <div class="guide-step">
+                                <span class="guide-step-num">1</span>
+                                <div>
+                                    <strong>Журнал дій (Activity Log):</strong>
+                                    <p>На сторінці <code>/teacher/activity/</code> фіксується кожна дія викладачів: створення завдань, публікація оцінок, редагування розкладу чи зміна паролів. Це гарантує прозорість та легкий аудит подій.</p>
+                                </div>
+                            </div>
+
+                            <div class="guide-step">
+                                <span class="guide-step-num">2</span>
+                                <div>
+                                    <strong>Архівування та завантаження логів:</strong>
+                                    <p>Ви можете вивантажувати старі системні логи в архівні файли для збереження дискового простору та тривалого аудиту за потреби.</p>
+                                </div>
+                            </div>
+
+                            <div class="guide-step">
+                                <span class="guide-step-num">3</span>
+                                <div>
+                                    <strong>Резервне копіювання БД та серверні скрипти:</strong>
+                                    <p>У веб-інтерфейсі кнопка <em>«💾 Резервна копія БД»</em> миттєво генерує і завантажує актуальний дамп бази даних.</p>
+                                    <p>Для надійного обслуговування сервера та захисту даних розгорнуто консольні скрипти:</p>
+                                    <ul style="margin:6px 0 0 18px;padding:0;font-size:12.5px;color:var(--color-text-secondary);line-height:1.5;">
+                                        <li><code>scripts/backup.sh</code> — створює повний архів бази PostgreSQL та прикріплених файлів <code>media/</code> у форматі <code>tar.gz</code> із підрахунком контрольної суми SHA-256 та розв'язанням посилань.</li>
+                                        <li><code>scripts/restore.sh --verify-only &lt;архів&gt;</code> — перевіряє цілісність бекапу без зупинки системи, або відновлює дані до PostgreSQL у Docker/локальному середовищі.</li>
+                                        <li><code>scripts/update.sh</code> — безпечне оновлення проекту з GitHub з обов'язковим попереднім створенням бекапу перед міграціями.</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Вчитель 10: ЕКСПОРТ ТА ІМПОРТ ЗАВДАНЬ У ZIP -->
+                <div class="guide-card" id="guide-category-teacher-zip-import-export" data-category="teacher_zip_import_export" data-keywords="експорт імпорт zip флешка архів завдань перенесення уроків колеги обмін матеріалами">
+                    <button type="button" class="guide-card-header" onclick="toggleGuideCategory('teacher_zip_import_export')" aria-expanded="false">
+                        <div class="guide-header-title">
+                            <span class="guide-cat-icon">📦</span>
+                            <div class="guide-header-text">
+                                <strong>Експорт та імпорт завдань на флешку (ZIP-пакети)</strong>
+                                <span class="guide-cat-sub">Перенесення готових уроків між комп'ютерами та обмін завданнями з колегами</span>
+                            </div>
+                        </div>
+                        <div class="guide-header-meta">
+                            <span class="guide-active-page-badge" id="badge-guide-teacher-zip-import-export" style="display:none;">📍 Ви зараз на цій сторінці</span>
+                            <span class="guide-chevron">▾</span>
+                        </div>
+                    </button>
+                    <div class="guide-card-body" id="body-guide-teacher-zip-import-export" style="display:none;">
+                        <div class="guide-content-inner">
+<p>Обмін завданнями ZIP доступний у «Моїх завданнях» у правому блоці «Додаткові дії».</p>
+<div class="guide-step"><span class="guide-step-num">1</span><div><strong>Експорт.</strong><p>Натисніть «Експорт завдань (ZIP)». Вкажіть дату або період, позначте дні тижня (наприклад, вівторок), за потреби виберіть номер уроку й натисніть «Показати». Позначте окремі завдання, цілий день або «Обрати всі знайдені», потім «Завантажити ZIP». Завдання з кількома класами потрапляє в архів один раз, з усіма прив’язками.</p></div></div>
+<div class="guide-step"><span class="guide-step-num">2</span><div><strong>Імпорт.</strong><p>Натисніть «Імпорт завдань (ZIP)», оберіть архів і натисніть «Імпортувати завдання». Відновлюються файли, класи, дати, номери уроків, статуси, відкладена публікація та критерії оцінювання. Імпорт створює копії у вашому профілі; повторний імпорт створить ще один набір копій. На телефоні спершу розгорніть «Додаткові дії».</p></div></div>
+</div>
+                    </div>
+                </div>
+
+                <!-- Вчитель 11: ЗВІТИ ТА ЕКСПОРТ У PDF -->
+                <div class="guide-card" id="guide-category-teacher-reports" data-category="teacher_reports" data-keywords="звіти експорт pdf відомість успішності оцінки журнал замін батькам фільтр клас учень дата">
+                    <button type="button" class="guide-card-header" onclick="toggleGuideCategory('teacher_reports')" aria-expanded="false">
+                        <div class="guide-header-title">
+                            <span class="guide-cat-icon">📑</span>
+                            <div class="guide-header-text">
+                                <strong>Звіти оцінювання, відомості успішності та експорт у PDF</strong>
+                                <span class="guide-cat-sub">Формування відомостей для журналу замін, детальних звітів робіт та експорт у PDF/CSV</span>
+                            </div>
+                        </div>
+                        <div class="guide-header-meta">
+                            <span class="guide-active-page-badge" id="badge-guide-teacher-reports" style="display:none;">📍 Ви зараз на цій сторінці</span>
+                            <span class="guide-chevron">▾</span>
+                        </div>
+                    </button>
+                    <div class="guide-card-body" id="body-guide-teacher-reports" style="display:none;">
+                        <div class="guide-content-inner">
+<p>У «Звітах та заміні» задайте клас, учня, завдання, дати й параметри відомості.</p>
+<div class="guide-step"><span class="guide-step-num">1</span><div><strong>Оберіть дані.</strong><p>Основні фільтри розташовано над результатами. Для заміни уроків за потреби розгорніть додаткові реквізити.</p></div></div>
+<div class="guide-step"><span class="guide-step-num">2</span><div><strong>Основний PDF.</strong><p>Кнопка завантаження PDF оцінок розташована біля форми вибірки.</p></div></div>
+<div class="guide-step"><span class="guide-step-num">3</span><div><strong>Інші формати.</strong><p>Детальний PDF з роботами, експорт CSV та довідка перенесені праворуч у «Додаткові дії».</p></div></div>
+</div>
+                    </div>
+                </div>
+
+            </div>
+            {% endif %}
+
+            <!-- ═══════════════════════════════════════════════════════
+                 РОЗДІЛ ДЛЯ УЧНІВ (ДОСТУПНИЙ ВСІМ УЧНЯМ ТА ВЧИТЕЛЯМ)
+                 ═══════════════════════════════════════════════════════ -->
+            <div id="guide-pane-student" style="{% if user.is_authenticated and user.teacher_profile %}display:none;{% else %}display:flex;{% endif %}flex-direction:column;gap:12px;">
+                {% include 'feed/components/guide_performance.html' with guide_category='performance' %}
+
+                <!-- Учень 1: ГОЛОВНА СТОРІНКА -->
+                <div class="guide-card" id="guide-category-index" data-category="index" data-keywords="головна календар розклад завдання пошук фільтр клас предмет вчитель сьогодні спрощений сайт розмір тексту шрифт">
+                    <button type="button" class="guide-card-header" onclick="toggleGuideCategory('index')" aria-expanded="false">
+                        <div class="guide-header-title">
+                            <span class="guide-cat-icon">🏠</span>
+                            <div class="guide-header-text">
+                                <strong>Головна стрічка (Календар, розклад та пошук завдань)</strong>
+                                <span class="guide-cat-sub">Перегляд уроків за датами, вибір класу, пошук завдань та налаштування вигляду</span>
+                            </div>
+                        </div>
+                        <div class="guide-header-meta">
+                            <span class="guide-active-page-badge" id="badge-guide-index" style="display:none;">📍 Ви зараз на цій сторінці</span>
+                            <span class="guide-chevron">▾</span>
+                        </div>
+                    </button>
+                    <div class="guide-card-body" id="body-guide-index" style="display:none;">
+                        <div class="guide-content-inner">
+                            <p>Головна сторінка починається зі стрічки завдань. Для перегляду потрібних уроків оберіть свій клас.</p>
+                            <div class="guide-step"><span class="guide-step-num">1</span><div><strong>Оберіть клас.</strong><p>На великому екрані класи розташовані ліворуч, а на телефоні — у списку «Обери свій клас» над стрічкою. Клас зберігається при переході до завдання й здачі роботи.</p></div></div>
+                            <div class="guide-step"><span class="guide-step-num">2</span><div><strong>Дата й предмет.</strong><p>У блоці «Предмет і календар» можна розгорнути «Календар завдань» та обрати дату, а також відфільтрувати предмет. Пошук за темою доступний у верхній панелі.</p></div></div>
+                            <div class="guide-step"><span class="guide-step-num">3</span><div><strong>Відкрийте завдання.</strong><p>Натисніть заголовок картки або «Відкрити завдання». Тема, клас і термін допомагають обрати потрібний урок. «Без здачі» означає, що надсилати роботу через сайт не потрібно.</p></div></div>
+                            <div class="guide-step"><span class="guide-step-num">4</span><div><strong>Здані роботи.</strong><p>У верхній панелі є «Мої роботи». Там можна знайти свої здачі за прізвищем чи ім’ям та класом.</p></div></div>
+                            <div class="guide-step"><span class="guide-step-num">5</span><div><strong>Швидкість і розмір тексту («Aa» та Спрощений сайт).</strong><p>У шапці сайту кнопка <strong>«Aa»</strong> дозволяє безпечно регулювати розмір шрифту (85%–125%). При слабкому інтернеті або на повільному телефоні увімкніть <strong>⚡ «Спрощений сайт»</strong> (у верхньому меню або картці продуктивності вище), щоб вимкнути важкі ефекти.</p></div></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Учень 2: СТОРІНКА ЗАВДАННЯ -->
+                <div class="guide-card" id="guide-category-assignment-detail" data-category="assignment_detail" data-keywords="завдання умова опис матеріали презентація pdf критерії оцінювання бали гр шкала">
+                    <button type="button" class="guide-card-header" onclick="toggleGuideCategory('assignment_detail')" aria-expanded="false">
+                        <div class="guide-header-title">
+                            <span class="guide-cat-icon">📖</span>
+                            <div class="guide-header-text">
+                                <strong>Сторінка завдання (Умови, матеріали та критерії)</strong>
+                                <span class="guide-cat-sub">Перегляд вказівок вчителя, завантаження файлів та критерії оцінювання</span>
+                            </div>
+                        </div>
+                        <div class="guide-header-meta">
+                            <span class="guide-active-page-badge" id="badge-guide-assignment-detail" style="display:none;">📍 Ви зараз на цій сторінці</span>
+                            <span class="guide-chevron">▾</span>
+                        </div>
+                    </button>
+                    <div class="guide-card-body" id="body-guide-assignment-detail" style="display:none;">
+<p>У вікні перегляду матеріалу кнопки «Попередній» і «Наступний» перемикають файли без закриття документа.</p>
+                        <div class="guide-content-inner">
+<p>Спочатку звір тему й клас, а потім прочитай вказівки вчителя.</p>
+<div class="guide-step"><span class="guide-step-num">1</span><div><strong>Що потрібно зробити.</strong><p>Основна інструкція розташована одразу під темою. Виконуй саме вказівки вчителя; якщо вони містяться у файлі, сторінка спрямує до матеріалів.</p></div></div>
+<div class="guide-step"><span class="guide-step-num">2</span><div><strong>Матеріали.</strong><p>Нижче згруповані файли, посилання та відео. «Переглянути» показує матеріал у великому вікні по центру екрана. У полі «Матеріал» вибери інший файл. Для документа або презентації доступні «Перегляд документа» і «Текстовий вигляд»; слайди перемикаються кнопками або за номером. Закрий вікно кнопкою ✕ чи Escape — повернешся до списку без стрибка сторінки. Файл також можна завантажити або відкрити в новій вкладці.</p></div></div>
+<div class="guide-step"><span class="guide-step-num">3</span><div><strong>Допомога.</strong><p>Кнопка «💡 Допомога» відкриває цю інструкцію. У бічному блоці «Твій маршрут» є критерії; пояснення ШІ доступне лише з дозволу вчителя.</p></div></div>
+<div class="guide-step"><span class="guide-step-num">4</span><div><strong>Здача.</strong><p>Натисни «Здати роботу». Кнопка закріплена зверху поруч із навігацією завдання й залишається видимою під час прокручування. Для завдань без здачі виконай вказівки вчителя; архівні завдання більше не приймають робіт.</p></div></div>
+</div>
+                    </div>
+                </div>
+
+                <!-- Учень 3: ЗДАЧА РОБОТИ ТА ЗАВАНТАЖЕННЯ ФАЙЛІВ -->
+                <div class="guide-card" id="guide-category-submit-assignment" data-category="submit_assignment" data-keywords="здача здати робота файли завантажити фото зошит word excel word документ відкритий заблокований коментар висновок співавтори">
+                    <button type="button" class="guide-card-header" onclick="toggleGuideCategory('submit_assignment')" aria-expanded="false">
+                        <div class="guide-header-title">
+                            <span class="guide-cat-icon">📤</span>
+                            <div class="guide-header-text">
+                                <strong>Здача роботи (Завантаження файлів, коментар, співавтори)</strong>
+                                <span class="guide-cat-sub">Як прикріплювати файли, правила відкритих документів, висновки та співавтори</span>
+                            </div>
+                        </div>
+                        <div class="guide-header-meta">
+                            <span class="guide-active-page-badge" id="badge-guide-submit-assignment" style="display:none;">📍 Ви зараз на цій сторінці</span>
+                            <span class="guide-chevron">▾</span>
+                        </div>
+                    </button>
+                    <div class="guide-card-body" id="body-guide-submit-assignment" style="display:none;">
+                        <div class="guide-content-inner">
+<p>Перед надсиланням звір тему уроку й обраний клас — вони показані на сторінці та біля кнопки надсилання.</p>
+<div class="guide-step"><span class="guide-step-num">1</span><div><strong>Клас та ім’я.</strong><p>Оберіть свій клас і власне ім’я зі списку. Якщо вас немає у списку, скористайтеся ручним введенням. Для індивідуального завдання дані можуть бути підставлені вчителем.</p></div></div>
+<div class="guide-step"><span class="guide-step-num">2</span><div><strong>Файли та відповідь.</strong><p>Прикріпіть виконану роботу; можна додавати файли з різних папок і видаляти зайві до надсилання. За потреби напишіть відповідь або коментар.</p></div></div>
+<div class="guide-step"><span class="guide-step-num">3</span><div><strong>Додаткові можливості.</strong><p>Критерії й додавання співавторів доступні в розгорнутому блоці «Допомога та групова робота». Нижче можна розгорнути «Умова й матеріали вчителя». На телефоні ці блоки розташовані після полів і кнопки надсилання.</p></div></div>
+<div class="guide-step"><span class="guide-step-num">4</span><div><strong>Надсилання.</strong><p>Натисніть «Надіслати виконану роботу» над блоком допомоги й дочекайтеся підтвердження. Для перевірки наявності здачі відкрийте «Мої роботи». Реєстрація та код доступу для цього не потрібні.</p></div></div>
+</div>
+                    </div>
+                </div>
+
+                <!-- Учень 4: РЕЗУЛЬТАТ ЗДАЧІ ТА ПЕРЕВІРКА ШІ -->
+                <div class="guide-card" id="guide-category-submit-success" data-category="submit_success" data-keywords="результат здача успішно самоперевірка ші картки оцінка зауваження слабкі сторони що доробити плагіат копія дублікат робот">
+                    <button type="button" class="guide-card-header" onclick="toggleGuideCategory('submit_success')" aria-expanded="false">
+                        <div class="guide-header-title">
+                            <span class="guide-cat-icon">✨</span>
+                            <div class="guide-header-text">
+                                <strong>Результат здачі та самоперевірка ШІ (4 картки відгуку)</strong>
+                                <span class="guide-cat-sub">Пояснення попередньої оцінки, 4 картки рекомендацій, робот-помічник та перевірка на дублікати</span>
+                            </div>
+                        </div>
+                        <div class="guide-header-meta">
+                            <span class="guide-active-page-badge" id="badge-guide-submit-success" style="display:none;">📍 Ви зараз на цій сторінці</span>
+                            <span class="guide-chevron">▾</span>
+                        </div>
+                    </button>
+                    <div class="guide-card-body" id="body-guide-submit-success" style="display:none;">
+                        <div class="guide-content-inner">
+                            <p>Одразу після натискання «Здати роботу» відкривається екран підтвердження успішного надсилання.</p>
+
+                            <div class="guide-step">
+                                <span class="guide-step-num">1</span>
+                                <div>
+                                    <strong>🤖 Одна самоперевірка через ШІ та орієнтовний рівень:</strong>
+                                    <p>Натисніть кнопку <em>«Перевірити роботу через ШІ»</em>. ШІ проаналізує прикріплені файли за критеріями вчителя та визначить орієнтовний рівень знань НУШ: <strong>🏆 Високий (10–12 балів)</strong>, <strong>📘 Достатній (7–9 балів)</strong>, <strong>📙 Середній (4–6 балів)</strong> або <strong>📕 Початковий (1–3 бали)</strong>. Це попередня оцінка-орієнтир; остаточні числові бали виставляє вчитель у своєму приватному журналі. На одне завдання надається одна успішна спроба. Якщо стався збій зв'язку або помилка читання, спроба не списується — з'являється анімований плачучий робот із кнопкою безпечного повтору.</p>
+                                </div>
+                            </div>
+
+                            <div class="guide-step">
+                                <span class="guide-step-num">2</span>
+                                <div>
+                                    <strong>💡 4 структуровані картки рекомендацій та згортання робота:</strong>
+                                    <p>Результат самоперевірки подається у вигляді 4 наочних карток:</p>
+                                    <ul style="margin:6px 0 0 18px;padding:0;font-size:12.5px;color:var(--color-text-secondary);line-height:1.5;">
+                                        <li>🌟 <strong>Похвала та сильні сторони:</strong> що виконано бездоганно.</li>
+                                        <li>🎯 <strong>Обґрунтування оцінки:</strong> чому визначено саме такий рівень за умовами завдання.</li>
+                                        <li>💡 <strong>Зауваження та слабкі місця:</strong> конкретні неточності чи прогалини в рішенні.</li>
+                                        <li>🚀 <strong>Як покращити роботу:</strong> поради для доопрацювання перед фінальною оцінкою вчителя.</li>
+                                    </ul>
+                                    <p style="margin-top:6px;">Після завершення аналізу інтерактивний робот автоматично згортається у компактний вигляд, щоб не перекривати текст карток.</p>
+                                </div>
+                            </div>
+
+                            <div class="guide-step">
+                                <span class="guide-step-num">3</span>
+                                <div>
+                                    <strong>🛡️ Перевірка на дублікати, вихідні файли та спільні проекти:</strong>
+                                    <p>Система захищає від випадкової здачі порожнього файлу вчителя замість розв'язаного завдання (попередження <code>🚫 Здано вихідний файл завдання</code>). Якщо роботу здано вперше або у співавторстві — система це враховує і не позначає як плагіат.</p>
+                                </div>
+                            </div>
+
+                            <div class="guide-step">
+                                <span class="guide-step-num">4</span>
+                                <div>
+                                    <strong>Інформування про використання ШІ:</strong>
+                                    <p>Якщо перевірка зафіксувала ознаки сторонньої генерації, ви побачите коментар відповідно до політики вчителя для цього завдання. Пам'ятайте: це ознаки, а не вирок — відсотки учневі не показуються, а вирішальне слово завжди за вчителем.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Учень 5: МОЇ ЗДАНІ РОБОТИ (ПОРТАЛ УЧНЯ) -->
+                <div class="guide-card" id="guide-category-my-submissions" data-category="my_submissions" data-keywords="мої роботи мої здані статус очікує перевірено доопрацювати спроби історія">
+                    <button type="button" class="guide-card-header" onclick="toggleGuideCategory('my_submissions')" aria-expanded="false">
+                        <div class="guide-header-title">
+                            <span class="guide-cat-icon">📥</span>
+                            <div class="guide-header-text">
+                                <strong>Портал «Мої роботи» (Кабінет учня)</strong>
+                                <span class="guide-cat-sub">Перегляд усіх зданих завдань, статусів перевірки та спроб здачі</span>
+                            </div>
+                        </div>
+                        <div class="guide-header-meta">
+                            <span class="guide-active-page-badge" id="badge-guide-my-submissions" style="display:none;">📍 Ви зараз на цій сторінці</span>
+                            <span class="guide-chevron">▾</span>
+                        </div>
+                    </button>
+                    <div class="guide-card-body" id="body-guide-my-submissions" style="display:none;">
+                        <div class="guide-content-inner">
+<p>Кнопка «Мої роботи» у верхній панелі відкриває список зданих робіт. Числові оцінки вчителя учням не показуються.</p>
+<div class="guide-step"><span class="guide-step-num">1</span><div><strong>Знайдіть свої роботи.</strong><p>Введіть прізвище чи ім’я у пошук та оберіть клас праворуч. На телефоні фільтр доступний у меню та кнопках класів.</p></div></div>
+<div class="guide-step"><span class="guide-step-num">2</span><div><strong>Перегляньте статус.</strong><p>Біля кожної роботи видно «Очікує перевірки», «Перевірено» або «Доопрацювати». Підсумкових карток кількості робіт немає; орієнтуйтеся на список своїх здач.</p></div></div>
+<div class="guide-step"><span class="guide-step-num">3</span><div><strong>Коментарі та повторні здачі.</strong><p>Читайте поради вчителя біля роботи. Якщо надсилали її повторно, актуальна спроба показана в списку, а попередні версії можна розгорнути.</p></div></div>
+</div>
+                    </div>
+                </div>
+
+                <!-- Учень 6: ДЕТАЛІ ЗДАНОЇ РОБОТИ ТА КОМЕНТАРІ ВЧИТЕЛЯ -->
+                <div class="guide-card" id="guide-category-submission-detail" data-category="submission_detail" data-keywords="деталі здачі перевірена робота статус вчитель коментар відгук перездати картки ші">
+                    <button type="button" class="guide-card-header" onclick="toggleGuideCategory('submission_detail')" aria-expanded="false">
+                        <div class="guide-header-title">
+                            <span class="guide-cat-icon">🔍</span>
+                            <div class="guide-header-text">
+                                <strong>Деталі зданої роботи (Статус, фідбек та картки ШІ)</strong>
+                                <span class="guide-cat-sub">Статус перевірки вчителем, коментарі, прикріплені файли та 4 картки самоперевірки</span>
+                            </div>
+                        </div>
+                        <div class="guide-header-meta">
+                            <span class="guide-active-page-badge" id="badge-guide-submission-detail" style="display:none;">📍 Ви зараз на цій сторінці</span>
+                            <span class="guide-chevron">▾</span>
+                        </div>
+                    </button>
+                    <div class="guide-card-body" id="body-guide-submission-detail" style="display:none;">
+                        <div class="guide-content-inner">
+                            <p>На сторінці конкретної здачі ви бачите повну інформацію про перевірку вашої роботи.</p>
+
+                            <div class="guide-step">
+                                <span class="guide-step-num">1</span>
+                                <div>
+                                    <strong>Статус перевірки вчителем та конфіденційність оцінок:</strong>
+                                    <p>У лівій панелі відображається статус вашої роботи: <em>«Очікує перевірки»</em>, <em>«✅ Перевірено вчителем»</em> або <em>«Повернуто на доопрацювання»</em>. Зверніть увагу: числові бали вчителя зберігаються приватно в електронному журналі оцінок викладача й учням не відображаються — учень бачить якісний коментар, статус та зауваження.</p>
+                                </div>
+                            </div>
+
+                            <div class="guide-step">
+                                <span class="guide-step-num">2</span>
+                                <div>
+                                    <strong>Коментарі та зауваження вчителя:</strong>
+                                    <p>У блоці <em>«Відгуки та зауваження вчителя»</em> відображаються персональні коментарі вчителя до вашої роботи з порадами, що саме виконано бездоганно, а де допущено неточності.</p>
+                                </div>
+                            </div>
+
+                            <div class="guide-step">
+                                <span class="guide-step-num">3</span>
+                                <div>
+                                    <strong>Повторна здача роботи (якщо повернуто на доопрацювання):</strong>
+                                    <p>Якщо вчитель призначив доопрацювання, на сторінці буде активне посилання на форму здачі нової спроби: ви зможете завантажити виправлений файл та вказати, що саме було змінено.</p>
+                                </div>
+                            </div>
+
+                            <div class="guide-step">
+                                <span class="guide-step-num">4</span>
+                                <div>
+                                    <strong>Збережені картки ШІ-самоперевірки:</strong>
+                                    <p>Якщо ви проходили попередню самоперевірку перед здачею, на сторінці зберігаються та відображаються 4 картки (сильні сторони, обґрунтування, зауваження та поради як покращити), а також відмітка щодо дотримання академічної доброчесності.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Повідомлення при відсутності результатів пошуку -->
+            <div id="guide-no-results" style="display:none;padding:32px 16px;text-align:center;color:var(--color-text-muted);">
+                <div style="font-size:32px;margin-bottom:8px;">🔍</div>
+                <div style="font-size:14px;font-weight:700;color:var(--color-text-primary);">За вашим запитом нічого не знайдено</div>
+                <div style="font-size:12px;margin-top:4px;">Спробуйте інші ключові слова або очистіть рядок пошуку.</div>
+            </div>
+
+        </div>
+
+        <!-- 5. Підвал модального вікна -->
+        <div style="padding:10px 20px;background:var(--color-bg-secondary);border-top:1px solid var(--color-border);display:flex;align-items:center;justify-content:space-between;font-size:11.5px;color:var(--color-text-muted);flex-shrink:0;">
+            <div style="display:flex;align-items:center;gap:6px;">
+                <span>💡</span> <span>Завжди доступно у верхньому барі сайту</span>
+            </div>
+            <button type="button"
+                    onclick="closeGuideModal()"
+                    class="btn btn-secondary btn-sm"
+                    style="font-size:11.5px;padding:4px 14px;font-weight:700;">
+                Зрозуміло
+            </button>
+        </div>
+
+    </div>
+</div>

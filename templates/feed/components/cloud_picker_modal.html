@@ -1,14 +1,19 @@
+{% load static %}
 <!-- Модальне вікно вибору файлів із хмарного сховища (Nextcloud / Google Drive) -->
-<div id="cloud-picker-modal" class="cloud-picker-backdrop" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(15,23,42,0.65);backdrop-filter:blur(4px);z-index:9999;align-items:center;justify-content:center;padding:16px;">
+<div id="cloud-picker-modal" role="dialog" aria-modal="true" aria-label="Файли хмарного диска" tabindex="-1"
+ data-drive="{% if cloud_storage.has_nextcloud %}nextcloud{% else %}google{% endif %}"
+ data-owner="{{ request.user.teacher_profile.pk }}"
+ data-browse-url="{% url 'teacher_cloud_browse' %}" data-resolve-url="{% url 'teacher_cloud_resolve' %}"
+ data-imports-url="{% url 'teacher_cloud_imports' %}" class="cloud-picker-backdrop" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(15,23,42,0.65);backdrop-filter:blur(4px);z-index:9999;align-items:center;justify-content:center;padding:16px;">
     <div class="cloud-picker-dialog" style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);width:100%;max-width:860px;height:78vh;min-height:520px;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 20px 40px rgba(0,0,0,0.3);overflow:hidden;">
-
+        <div class="cloud-picker-content">
         <!-- ══ ШАПКА МОДАЛЬНОГО ВІКНА ══ -->
         <div style="padding:16px 20px;border-bottom:1px solid var(--color-border);display:flex;justify-content:space-between;align-items:center;background:var(--color-bg-secondary);flex-wrap:wrap;gap:10px;flex-shrink:0;">
             <div style="display:flex;align-items:center;gap:12px;">
                 <span style="font-size:24px;">☁️</span>
                 <div>
                     <h3 style="margin:0;font-size:16px;font-weight:700;color:var(--color-text-primary);">Файли з хмарного сховища</h3>
-                    <div style="font-size:12px;color:var(--color-text-muted);">Оберіть файли завдань для прикріплення до уроку</div>
+                    <div class="cloud-picker-subtitle" style="font-size:12px;color:var(--color-text-muted);">Оберіть файли завдань для прикріплення до уроку</div>
                 </div>
             </div>
 
@@ -26,12 +31,17 @@
                     </button>
                     {% endif %}
                 </div>
-                <button type="button" onclick="closeCloudPickerModal()" style="background:none;border:none;font-size:20px;color:var(--color-text-muted);cursor:pointer;padding:4px 8px;border-radius:var(--radius-md);" title="Закрити (Esc)">✕</button>
+                <button type="button" onclick="closeCloudPickerModal()" aria-label="Закрити" style="background:none;border:none;font-size:20px;color:var(--color-text-muted);cursor:pointer;padding:4px 8px;border-radius:var(--radius-md);" title="Закрити (Esc)">✕</button>
             </div>
         </div>
 
         <!-- ══ ПАНЕЛЬ НАВІГАЦІЇ ТА ПОШУКУ ══ -->
         <div style="padding:12px 20px;background:var(--color-surface);border-bottom:1px solid var(--color-border);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;flex-shrink:0;">
+            <div class="cloud-font-controls" role="group" aria-label="Розмір тексту">
+                <button type="button" id="cloud-font-smaller" class="btn btn-secondary btn-sm" onclick="changeCloudFont(-10)" aria-label="Зменшити текст">A−</button>
+                <span id="cloud-font-value" aria-live="polite">100%</span>
+                <button type="button" id="cloud-font-larger" class="btn btn-secondary btn-sm" onclick="changeCloudFont(10)" aria-label="Збільшити текст">A+</button>
+            </div>
             <!-- Хлібні крихти шляху -->
             <div id="cloud-breadcrumbs" style="display:flex;align-items:center;gap:6px;font-size:13px;flex:1;min-width:200px;overflow-x:auto;white-space:nowrap;padding-bottom:2px;">
                 <span class="text-muted">Завантаження...</span>
@@ -72,7 +82,7 @@
                 <input type="text" id="google-direct-link-input" placeholder="Вставте посилання на файл (Google Docs, Таблиця, PDF, фото, файл Drive)..."
                        onkeydown="if(event.key==='Enter'){event.preventDefault();addGoogleDirectLink();}"
                        style="flex:1;padding:6px 10px;font-size:12px;border:1px solid var(--color-border);border-radius:var(--radius-md);background:var(--color-surface);color:var(--color-text-primary);">
-                <button type="button" class="btn btn-primary btn-sm" onclick="addGoogleDirectLink()" style="font-size:12px;white-space:nowrap;font-weight:700;display:inline-flex;align-items:center;gap:4px;">
+                <button type="button" class="btn btn-primary btn-sm" id="google-direct-add" onclick="addGoogleDirectLink()" style="font-size:12px;white-space:nowrap;font-weight:700;display:inline-flex;align-items:center;gap:4px;">
                     <span>➕</span> <span>Додати</span>
                 </button>
             </div>
@@ -96,19 +106,8 @@
                         <div style="font-size:14.5px;font-weight:700;color:var(--color-warning-dark,#b45309);margin-bottom:6px;">
                             Папка має статус «Обмежений доступ» у Google Drive
                         </div>
-                        <p style="margin:0 0 10px 0;line-height:1.5;color:var(--color-text-secondary);">
-                            Google Drive блокує зовнішній доступ до файлів цієї папки, оскільки для неї увімкнено приватний доступ лише для вашого акаунту.
-                            Щоб SchoolNet міг <strong>автоматично бачити всі вкладені папки та файли</strong>:
-                        </p>
-                        <ol style="margin:0 0 12px 18px;padding:0;line-height:1.6;font-size:12.5px;">
-                            <li>Натисніть <a id="cloud-restricted-open-btn" href="#" target="_blank" rel="noopener" class="btn btn-secondary btn-sm" style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;font-size:11.5px;font-weight:700;margin:0 2px;vertical-align:middle;text-decoration:none;"><span>🌐 Відкрити папку в Google Drive ↗</span></a></li>
-                            <li>У вікні Google Drive натисніть правою кнопкою миші на назву папки ➔ <strong>Поділитися (Share)</strong>.</li>
-                            <li>У розділі «Загальний доступ» замініть <strong>«Обмежений доступ»</strong> на <strong>«Усі, хто має посилання» (Може переглядати)</strong> та збережіть.</li>
-                            <li>Поверніться сюди та натисніть <button type="button" class="btn btn-primary btn-sm" onclick="reloadCurrentCloudFolder()" style="padding:2px 8px;font-size:11.5px;font-weight:700;margin-left:2px;">🔄 Оновити список</button> — усі папки та файли миттєво з'являться!</li>
-                        </ol>
-                        <div style="font-size:12px;color:var(--color-text-muted);border-top:1px dashed var(--color-border);padding-top:8px;">
-                            💡 <em>Ви також можете додати потрібні документи індивідуально за прямим посиланням у рядку вгорі («Додати файл або документ»).</em>
-                        </div>
+                        <p>Для приватних матеріалів підключіть Google OAuth у налаштуваннях. Публічні матеріали можна додавати за посиланням із дозволом на читання.</p>
+                        <a id="cloud-restricted-open-btn" href="https://drive.google.com/" target="_blank" rel="noopener" class="btn btn-secondary btn-sm">Відкрити Google Drive</a>
                     </div>
                 </div>
             </div>
@@ -137,13 +136,22 @@
             </table>
         </div>
 
+        </div>
+        <div id="cloud-transfer-panel" hidden role="status" aria-live="polite" style="padding:10px 20px;border-top:1px solid var(--color-border);background:var(--color-surface);">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:6px;">
+                <span id="cloud-transfer-label">Підготовка імпорту…</span>
+                <button type="button" class="btn btn-secondary btn-sm" id="cloud-cancel-import" onclick="cancelCloudImport()">Зупинити імпорт</button>
+            </div>
+            <progress id="cloud-transfer-bar" max="100" value="0" style="display:block;width:100%;height:14px;accent-color:var(--color-primary);"></progress>
+            <div id="cloud-transfer-detail" style="font-size:12px;margin-top:5px;color:var(--color-text-muted);"></div>
+        </div>
         <!-- ══ ПІДВАЛ З КНОПКАМИ ДІЇ ══ -->
         <div style="padding:14px 20px;border-top:1px solid var(--color-border);background:var(--color-bg-secondary);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;flex-shrink:0;">
             <div style="display:flex;align-items:center;gap:10px;">
                 <span id="cloud-selection-counter" style="font-size:13px;font-weight:600;color:var(--color-text-primary);">
                     Обрано: <strong>0</strong> файлів
                 </span>
-                <span id="cloud-download-progress" style="display:none;font-size:12px;color:var(--color-primary);font-weight:600;">
+                <span id="cloud-download-progress" aria-live="polite" style="display:none;font-size:12px;color:var(--color-primary);font-weight:600;">
                     ⏳ Завантаження...
                 </span>
             </div>
@@ -191,579 +199,39 @@
 }
 </style>
 
-<script>
-(function() {
-    var activeDrive = "{% if cloud_storage.has_nextcloud %}nextcloud{% elif cloud_storage.has_google_drive %}google{% else %}nextcloud{% endif %}";
-    var currentPath = "";
-    var currentFolderId = "root";
-    var loadedItems = [];
-    var selectedItems = new Map(); // key -> item object
-    var isDownloading = false;
 
-    window.openCloudPickerModal = function() {
-        var modal = document.getElementById('cloud-picker-modal');
-        if (!modal) return;
-        modal.style.display = 'flex';
-        document.body.style.overflow = 'hidden';
-        selectedItems.clear();
-        updateSelectionUI();
-        loadCloudFolder(activeDrive, currentPath, currentFolderId);
-    };
+<script src="{% static 'js/cloud_picker.js' %}?v=20261019-r2" defer></script>
 
-    window.closeCloudPickerModal = function() {
-        if (isDownloading) return;
-        var modal = document.getElementById('cloud-picker-modal');
-        if (modal) modal.style.display = 'none';
-        document.body.style.overflow = '';
-    };
-
-    // Закриття по Esc або кліку поза вікном
-    document.addEventListener('keydown', function(e) {
-        if (e.key === 'Escape') {
-            closeCloudPickerModal();
-        }
-    });
-
-    var modalEl = document.getElementById('cloud-picker-modal');
-    if (modalEl) {
-        modalEl.addEventListener('click', function(e) {
-            if (e.target === modalEl) {
-                closeCloudPickerModal();
-            }
-        });
-    }
-
-    window.switchCloudDrive = function(drive) {
-        if (activeDrive === drive) return;
-        activeDrive = drive;
-        currentPath = "";
-        currentFolderId = "root";
-        selectedItems.clear();
-        updateSelectionUI();
-
-        // Оновлюємо вигляд кнопок вкладок
-        document.querySelectorAll('.cloud-tab-btn').forEach(function(btn) {
-            if (btn.dataset.drive === drive) {
-                btn.classList.add('active');
-                btn.style.background = 'var(--color-primary)';
-                btn.style.color = '#fff';
-            } else {
-                btn.classList.remove('active');
-                btn.style.background = 'transparent';
-                btn.style.color = 'var(--color-text-muted)';
-            }
-        });
-
-        var linkBar = document.getElementById('google-quick-link-bar');
-        var folderBar = document.getElementById('google-folder-info-bar');
-        if (linkBar) linkBar.style.display = (drive === 'google') ? 'flex' : 'none';
-        if (folderBar && drive !== 'google') folderBar.style.display = 'none';
-
-        loadCloudFolder(activeDrive, "", "root");
-    };
-
-    function saveCustomGoogleFiles(folderId, items) {
-        try {
-            var customOnly = items.filter(function(i) { return i.is_custom_link; });
-            localStorage.setItem('schoolnet_gd_files_' + (folderId || 'root'), JSON.stringify(customOnly));
-        } catch(e) {}
-    }
-
-    function loadCustomGoogleFiles(folderId) {
-        try {
-            var raw = localStorage.getItem('schoolnet_gd_files_' + (folderId || 'root'));
-            if (raw) return JSON.parse(raw);
-        } catch(e) {}
-        return [];
-    }
-
-    window.removeCustomGoogleFile = function(itemId, folderId) {
-        loadedItems = loadedItems.filter(function(i) { return i.id !== itemId; });
-        var itemKey = 'google:' + itemId;
-        selectedItems.delete(itemKey);
-        saveCustomGoogleFiles(folderId, loadedItems);
-        updateSelectionUI();
-        renderFilesTable(loadedItems);
-    };
-
-    window.addGoogleDirectLink = function() {
-        var inp = document.getElementById('google-direct-link-input');
-        if (!inp) return;
-        var raw = inp.value.trim();
-        if (!raw) return;
-
-        var displayName = "Файл Google Drive";
-        var icon = "📄";
-        if (raw.indexOf('/document/') !== -1) {
-            displayName = "Google Документ.docx";
-            icon = "📘";
-        } else if (raw.indexOf('/spreadsheets/') !== -1) {
-            displayName = "Google Таблиця.xlsx";
-            icon = "📊";
-        } else if (raw.indexOf('/presentation/') !== -1) {
-            displayName = "Google Презентація.pptx";
-            icon = "📽️";
-        } else if (raw.toLowerCase().indexOf('.pdf') !== -1 || raw.indexOf('/pdf') !== -1) {
-            displayName = "Документ Google Drive.pdf";
-            icon = "📕";
-        } else {
-            var m = raw.match(/\/file\/d\/([^\/\?]+)/);
-            if (m) displayName = "Файл Drive (" + m[1].substr(0, 8) + "...)";
-        }
-
-        var item = {
-            id: raw,
-            name: displayName,
-            is_dir: false,
-            is_custom_link: true,
-            size: 0,
-            size_display: 'За посиланням',
-            modified: 'Щойно',
-            icon: icon
-        };
-
-        var itemKey = 'google:' + raw;
-        selectedItems.set(itemKey, item);
-        updateSelectionUI();
-        inp.value = '';
-
-        // Додаємо до списку і зберігаємо для цієї папки
-        loadedItems.unshift(item);
-        saveCustomGoogleFiles(currentFolderId, loadedItems);
-        renderFilesTable(loadedItems);
-    };
-
-    window.reloadCurrentCloudFolder = function() {
-        loadCloudFolder(activeDrive, currentPath, currentFolderId);
-    };
-
-    function loadCloudFolder(drive, path, folderId) {
-        var spinner = document.getElementById('cloud-loading-spinner');
-        var errorBox = document.getElementById('cloud-error-box');
-        var emptyBox = document.getElementById('cloud-empty-box');
-        var table = document.getElementById('cloud-files-table');
-        var searchInput = document.getElementById('cloud-search-input');
-        var linkBar = document.getElementById('google-quick-link-bar');
-        var folderBar = document.getElementById('google-folder-info-bar');
-        var restrictedNotice = document.getElementById('cloud-restricted-notice');
-
-        if (searchInput) searchInput.value = '';
-        if (spinner) spinner.style.display = 'flex';
-        if (errorBox) errorBox.style.display = 'none';
-        if (emptyBox) emptyBox.style.display = 'none';
-        if (restrictedNotice) restrictedNotice.style.display = 'none';
-
-        // Не видаляємо таблицю з розмітки, щоб уникнути стрибків вікна (blinking)
-        if (table) {
-            table.style.opacity = '0.35';
-            table.style.pointerEvents = 'none';
-        }
-
-        var url = "{% url 'teacher_cloud_browse' %}?drive=" + encodeURIComponent(drive);
-        if (drive === 'nextcloud') {
-            url += "&path=" + encodeURIComponent(path || '');
-        } else {
-            url += "&folder_id=" + encodeURIComponent(folderId || 'root');
-        }
-
-        fetch(url, {
-            headers: {
-                'X-Requested-With': 'XMLHttpRequest'
-            }
-        })
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-            if (spinner) spinner.style.display = 'none';
-            if (table) {
-                table.style.opacity = '1';
-                table.style.pointerEvents = 'auto';
-            }
-
-            if (!data.success) {
-                if (table) table.style.display = 'none';
-                if (errorBox) {
-                    errorBox.style.display = 'block';
-                    errorBox.innerHTML = '<strong>Помилка хмари:</strong> ' + (data.error || 'Не вдалося завантажити вміст');
-                }
-                return;
-            }
-
-            currentPath = data.current_path || '';
-            currentFolderId = data.current_folder_id || 'root';
-            loadedItems = data.items || [];
-
-            // Для Google Drive: налаштовуємо панель швидкого додавання та банер папки
-            if (drive === 'google') {
-                if (linkBar) linkBar.style.display = 'flex';
-                if (folderBar) {
-                    var fUrl = data.folder_link || (data.linked_folder_id ? ('https://drive.google.com/drive/folders/' + data.linked_folder_id) : '');
-                    if (fUrl && currentFolderId !== 'root') {
-                        folderBar.style.display = 'flex';
-                        var titleLabel = document.getElementById('google-folder-title-label');
-                        if (titleLabel) titleLabel.textContent = (data.email ? data.email + ' — ' : '') + 'Папка матеріалів';
-                        var extBtn = document.getElementById('google-folder-external-btn');
-                        if (extBtn) extBtn.href = fUrl;
-                    } else {
-                        folderBar.style.display = 'none';
-                    }
-                }
-
-                // Якщо Google Drive повідомляє про обмежений доступ
-                if (data.is_restricted && currentFolderId !== 'root') {
-                    if (restrictedNotice) {
-                        restrictedNotice.style.display = 'block';
-                        var rBtn = document.getElementById('cloud-restricted-open-btn');
-                        var rUrl = data.folder_link || (data.linked_folder_id ? ('https://drive.google.com/drive/folders/' + data.linked_folder_id) : '');
-                        if (rBtn && rUrl) rBtn.href = rUrl;
-                    }
-                }
-
-                // Довантажуємо збережені користувачем посилання для цієї папки
-                var stored = loadCustomGoogleFiles(currentFolderId);
-                if (stored && stored.length > 0) {
-                    stored.forEach(function(st) {
-                        if (!loadedItems.some(function(i) { return i.id === st.id; })) {
-                            loadedItems.push(st);
-                        }
-                    });
-                }
-            } else {
-                if (linkBar) linkBar.style.display = 'none';
-                if (folderBar) folderBar.style.display = 'none';
-                if (restrictedNotice) restrictedNotice.style.display = 'none';
-            }
-
-            renderBreadcrumbs(data.breadcrumbs || []);
-            renderFilesTable(loadedItems);
-
-            var container = document.getElementById('cloud-files-container');
-            if (container) container.scrollTop = 0;
-        })
-        .catch(function(err) {
-            if (spinner) spinner.style.display = 'none';
-            if (table) {
-                table.style.opacity = '1';
-                table.style.pointerEvents = 'auto';
-                table.style.display = 'none';
-            }
-            if (errorBox) {
-                errorBox.style.display = 'block';
-                errorBox.innerHTML = '<strong>Помилка мережі:</strong> ' + err.message;
-            }
-        });
-    }
-
-    function renderBreadcrumbs(crumbs) {
-        var container = document.getElementById('cloud-breadcrumbs');
-        if (!container) return;
-        container.innerHTML = '';
-
-        crumbs.forEach(function(c, idx) {
-            if (idx > 0) {
-                var sep = document.createElement('span');
-                sep.textContent = ' / ';
-                sep.style.color = 'var(--color-text-muted)';
-                container.appendChild(sep);
-            }
-
-            var link = document.createElement('span');
-            link.className = 'cloud-breadcrumb-link';
-            link.textContent = c.name;
-            if (idx === crumbs.length - 1) {
-                link.style.fontWeight = '700';
-                link.style.color = 'var(--color-text-primary)';
-                link.style.cursor = 'default';
-            } else {
-                link.onclick = function() {
-                    if (activeDrive === 'nextcloud') {
-                        loadCloudFolder('nextcloud', c.path, null);
-                    } else {
-                        loadCloudFolder('google', null, c.id);
-                    }
-                };
-            }
-            container.appendChild(link);
-        });
-    }
-
-    function renderFilesTable(items) {
-        var table = document.getElementById('cloud-files-table');
-        var tbody = document.getElementById('cloud-files-tbody');
-        var emptyBox = document.getElementById('cloud-empty-box');
-        if (!table || !tbody) return;
-
-        tbody.innerHTML = '';
-
-        if (!items || items.length === 0) {
-            table.style.display = 'none';
-            var restrictedNotice = document.getElementById('cloud-restricted-notice');
-            var isRestrictedVisible = (restrictedNotice && restrictedNotice.style.display === 'block');
-            if (emptyBox && !isRestrictedVisible) {
-                emptyBox.style.display = 'block';
-                var emptyTitle = document.getElementById('cloud-empty-title');
-                var emptyDesc = document.getElementById('cloud-empty-desc');
-                if (activeDrive === 'google') {
-                    if (emptyTitle) emptyTitle.textContent = (currentFolderId === 'root' ? 'Google Drive підключено' : 'Папка Google Drive готова');
-                    if (emptyDesc) emptyDesc.innerHTML = 'Вставте посилання на файл чи Google Docs/Sheets/PDF у рядок вище, або натисніть <strong>🌐 Відкрити папку в Google Drive</strong>.';
-                } else {
-                    if (emptyTitle) emptyTitle.textContent = 'У цій папці немає файлів';
-                    if (emptyDesc) emptyDesc.textContent = 'Спробуйте піднятися вище або відкрити іншу папку';
-                }
-            } else if (emptyBox && isRestrictedVisible) {
-                emptyBox.style.display = 'none';
-            }
-            return;
-        }
-
-        if (emptyBox) emptyBox.style.display = 'none';
-        table.style.display = 'table';
-
-        items.forEach(function(item) {
-            var tr = document.createElement('tr');
-            tr.className = 'cloud-file-row';
-            var itemKey = activeDrive + ':' + (item.path || item.id);
-            var isSelected = selectedItems.has(itemKey);
-            if (isSelected) tr.classList.add('is-selected');
-
-            // 1. Чекбокс або папка
-            var tdCb = document.createElement('td');
-            tdCb.style.cssText = 'text-align:center;padding:8px 6px;';
-            if (!item.is_dir) {
-                var cb = document.createElement('input');
-                cb.type = 'checkbox';
-                cb.checked = isSelected;
-                cb.onchange = function(e) {
-                    e.stopPropagation();
-                    toggleItemSelection(item, cb.checked, tr);
-                };
-                tdCb.appendChild(cb);
-            }
-            tr.appendChild(tdCb);
-
-            // 2. Назва з іконкою
-            var tdName = document.createElement('td');
-            tdName.style.cssText = 'padding:8px 6px;font-weight:600;display:flex;align-items:center;gap:8px;';
-            var iconSpan = document.createElement('span');
-            iconSpan.textContent = item.icon || (item.is_dir ? '📁' : '📄');
-            iconSpan.style.fontSize = '16px';
-            var nameSpan = document.createElement('span');
-            nameSpan.textContent = item.name;
-            nameSpan.style.cssText = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:420px;';
-            if (item.is_dir) {
-                nameSpan.style.color = 'var(--color-primary)';
-                nameSpan.style.cursor = 'pointer';
-            }
-            tdName.appendChild(iconSpan);
-            tdName.appendChild(nameSpan);
-            tr.appendChild(tdName);
-
-            // 3. Розмір
-            var tdSize = document.createElement('td');
-            tdSize.style.cssText = 'padding:8px 6px;text-align:right;color:var(--color-text-muted);font-size:12px;white-space:nowrap;';
-            tdSize.textContent = item.is_dir ? 'Папка' : (item.size_display || '');
-            tr.appendChild(tdSize);
-
-            // 4. Дата модифікації
-            var tdDate = document.createElement('td');
-            tdDate.style.cssText = 'padding:8px 6px;text-align:right;color:var(--color-text-muted);font-size:11.5px;white-space:nowrap;';
-            tdDate.textContent = formatDate(item.modified);
-            tr.appendChild(tdDate);
-
-            // 5. Кнопка видалення для збережених користувацьких посилань
-            var tdAction = document.createElement('td');
-            tdAction.style.cssText = 'padding:8px 4px;text-align:center;';
-            if (item.is_custom_link) {
-                var delBtn = document.createElement('button');
-                delBtn.type = 'button';
-                delBtn.textContent = '✕';
-                delBtn.title = 'Видалити це збережене посилання';
-                delBtn.style.cssText = 'background:none;border:none;color:var(--color-danger);font-weight:bold;cursor:pointer;padding:2px 6px;border-radius:4px;';
-                delBtn.onclick = function(e) {
-                    e.stopPropagation();
-                    removeCustomGoogleFile(item.id, currentFolderId);
-                };
-                tdAction.appendChild(delBtn);
-            }
-            tr.appendChild(tdAction);
-
-            // Клік по рядку
-            tr.onclick = function() {
-                if (item.is_dir) {
-                    if (activeDrive === 'nextcloud') {
-                        loadCloudFolder('nextcloud', item.path, null);
-                    } else {
-                        loadCloudFolder('google', null, item.id);
-                    }
-                } else {
-                    var newChecked = !selectedItems.has(itemKey);
-                    var cbEl = tdCb.querySelector('input[type="checkbox"]');
-                    if (cbEl) cbEl.checked = newChecked;
-                    toggleItemSelection(item, newChecked, tr);
-                }
-            };
-
-            tbody.appendChild(tr);
-        });
-
-        updateSelectAllCheckbox();
-    }
-
-    function formatDate(dateStr) {
-        if (!dateStr) return '';
-        try {
-            var d = new Date(dateStr);
-            if (isNaN(d.getTime())) return dateStr;
-            return d.toLocaleDateString('uk-UA', { day: '2-digit', month: '2-digit', year: 'numeric' });
-        } catch(e) {
-            return dateStr;
-        }
-    }
-
-    function toggleItemSelection(item, isChecked, tr) {
-        var itemKey = activeDrive + ':' + (item.path || item.id);
-        if (isChecked) {
-            selectedItems.set(itemKey, item);
-            if (tr) tr.classList.add('is-selected');
-        } else {
-            selectedItems.delete(itemKey);
-            if (tr) tr.classList.remove('is-selected');
-        }
-        updateSelectionUI();
-        updateSelectAllCheckbox();
-    }
-
-    window.toggleSelectAllCloudFiles = function(checked) {
-        var visibleFiles = loadedItems.filter(function(i) { return !i.is_dir; });
-        visibleFiles.forEach(function(item) {
-            var itemKey = activeDrive + ':' + (item.path || item.id);
-            if (checked) {
-                selectedItems.set(itemKey, item);
-            } else {
-                selectedItems.delete(itemKey);
-            }
-        });
-        // Оновлюємо чекбокси у таблиці
-        document.querySelectorAll('#cloud-files-tbody tr').forEach(function(tr, idx) {
-            var item = loadedItems[idx];
-            if (item && !item.is_dir) {
-                var cb = tr.querySelector('input[type="checkbox"]');
-                if (cb) cb.checked = checked;
-                if (checked) tr.classList.add('is-selected');
-                else tr.classList.remove('is-selected');
-            }
-        });
-        updateSelectionUI();
-    };
-
-    function updateSelectAllCheckbox() {
-        var selectAllCb = document.getElementById('cloud-select-all-cb');
-        if (!selectAllCb) return;
-        var visibleFiles = loadedItems.filter(function(i) { return !i.is_dir; });
-        if (visibleFiles.length === 0) {
-            selectAllCb.checked = false;
-            selectAllCb.disabled = true;
-            return;
-        }
-        selectAllCb.disabled = false;
-        var allSelected = visibleFiles.every(function(item) {
-            var itemKey = activeDrive + ':' + (item.path || item.id);
-            return selectedItems.has(itemKey);
-        });
-        selectAllCb.checked = allSelected;
-    }
-
-    function updateSelectionUI() {
-        var count = selectedItems.size;
-        var counter = document.getElementById('cloud-selection-counter');
-        var btn = document.getElementById('btn-attach-cloud-files');
-
-        if (counter) {
-            var countWord = count === 1 ? '1 файл' : (count < 5 ? count + ' файли' : count + ' файлів');
-            counter.innerHTML = 'Обрано: <strong>' + countWord + '</strong>';
-        }
-
-        if (btn) {
-            btn.disabled = (count === 0 || isDownloading);
-        }
-    }
-
-    window.filterCloudFilesList = function() {
-        var query = (document.getElementById('cloud-search-input').value || '').toLowerCase().trim();
-        if (!query) {
-            renderFilesTable(loadedItems);
-            return;
-        }
-        var filtered = loadedItems.filter(function(i) {
-            return i.name.toLowerCase().includes(query);
-        });
-        renderFilesTable(filtered);
-    };
-
-    window.attachSelectedCloudFiles = async function() {
-        if (selectedItems.size === 0 || isDownloading) return;
-        isDownloading = true;
-
-        var btn = document.getElementById('btn-attach-cloud-files');
-        var progress = document.getElementById('cloud-download-progress');
-        if (btn) btn.disabled = true;
-        if (progress) {
-            progress.style.display = 'inline-block';
-            progress.textContent = '⏳ Підготовка до завантаження...';
-        }
-
-        var itemsList = Array.from(selectedItems.values());
-        var total = itemsList.length;
-        var downloadedFiles = [];
-        var failedCount = 0;
-
-        for (var idx = 0; idx < total; idx++) {
-            var item = itemsList[idx];
-            if (progress) {
-                progress.textContent = '⏳ Завантаження (' + (idx + 1) + '/' + total + '): ' + item.name;
-            }
-
-            var url = "{% url 'teacher_cloud_download' %}?drive=" + encodeURIComponent(activeDrive);
-            if (activeDrive === 'nextcloud') {
-                url += "&path=" + encodeURIComponent(item.path);
-            } else {
-                url += "&file_id=" + encodeURIComponent(item.id);
-            }
-
-            try {
-                var resp = await fetch(url);
-                if (!resp.ok) {
-                    throw new Error('HTTP ' + resp.status);
-                }
-                var blob = await resp.blob();
-                var fileObj = new File([blob], item.name, {
-                    type: blob.type || 'application/octet-stream',
-                    lastModified: Date.now()
-                });
-                downloadedFiles.push(fileObj);
-            } catch (err) {
-                console.error('Помилка завантаження файлу з хмари:', item.name, err);
-                failedCount++;
-            }
-        }
-
-        if (downloadedFiles.length > 0) {
-            // Додаємо файли до існуючого сховища завдань через addFilesToStore!
-            var addFn = window.addFilesToStore || (typeof addFilesToStore === 'function' ? addFilesToStore : null);
-            if (typeof addFn === 'function') {
-                addFn(downloadedFiles);
-            } else {
-                console.warn('Функція addFilesToStore не знайдена!');
-            }
-        }
-
-        if (failedCount > 0) {
-            alert('Увага: ' + failedCount + ' файл(ів) не вдалося завантажити із хмарного диску.');
-        }
-
-        isDownloading = false;
-        if (progress) progress.style.display = 'none';
-        closeCloudPickerModal();
-    };
-
-})();
-</script>
+<style>
+#cloud-picker-modal { font-size:var(--cloud-font-size,16px); }
+#cloud-transfer-panel { flex-shrink:0; }
+.cloud-picker-dialog { font-size:var(--cloud-font-size,16px); line-height:1.45; min-height:0 !important; height:min(90dvh,1000px) !important; max-height:calc(100dvh - 24px) !important; max-width:1000px !important; }
+.cloud-picker-content { flex:1; min-height:0; overflow-y:auto; display:flex; flex-direction:column; }
+#cloud-picker-modal :is(div,span,p,table,tr,th,td,label,input,button,a) { font-size:inherit !important; }
+#cloud-picker-modal h3 { font-size:1.125em !important; }
+.cloud-font-controls { display:flex; align-items:center; gap:6px; }
+#cloud-files-container { min-height:160px !important; flex-shrink:0 !important; }
+.cloud-tab-btn:not(.active) { background:transparent !important; color:var(--color-text-muted) !important; }
+.cloud-picker-dialog button { overflow-wrap:normal; }
+.cloud-picker-dialog input { min-width:0; }
+#cloud-files-table { table-layout:fixed; }
+#cloud-files-table td { padding:10px 6px; vertical-align:middle; }
+#cloud-files-table td:nth-child(3) { text-align:right; overflow-wrap:anywhere; }
+#cloud-files-table td::before { font-size:.875em !important; }
+#cloud-picker-tabs { flex-wrap:wrap; }
+@media(max-width:600px) {
+ .cloud-picker-backdrop { padding:8px !important; }
+ .cloud-picker-subtitle { display:none; }
+ .cloud-picker-dialog { height:calc(100dvh - 16px) !important; }
+ #cloud-files-container { padding:8px !important; }
+ #google-quick-link-bar > div { min-width:0 !important; width:100%; }
+ #google-direct-link-input { min-width:0; }
+ #cloud-files-table th:nth-child(4), #cloud-files-table td:nth-child(4) { display:none; }
+ #cloud-files-table td, #cloud-files-table th { padding:6px 3px !important; }
+ .cloud-picker-dialog > div:last-child { padding:10px !important; gap:8px !important; }
+ .cloud-picker-dialog > div:last-child > div { flex-wrap:wrap; max-width:100%; }
+ .cloud-picker-dialog > div:last-child > div:last-child { width:100%; flex-direction:column; align-items:stretch !important; }
+ .cloud-picker-dialog > div:last-child button { width:100%; }
+ #btn-attach-cloud-files { flex:none; min-width:0; white-space:normal; justify-content:center; }
+}
+</style>

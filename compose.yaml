@@ -1,13 +1,14 @@
 name: ${COMPOSE_PROJECT_NAME:-schoolwork2}
 services:
   app:
-    image: ${SCHOOLWORK_IMAGE:-schoolwork2-app:4.5.8}
+    image: ${SCHOOLWORK_IMAGE:-schoolwork2-app:4.5.10}
     build:
       context: .
       dockerfile: Dockerfile
       args:
         VCS_REF: ${VCS_REF:-local}
-        APP_VERSION: '4.5.8'
+        SOURCE_DIGEST: ${SOURCE_DIGEST:-unknown}
+        APP_VERSION: '4.5.10'
     container_name: schoolnet_app
     restart: unless-stopped
     depends_on:
@@ -18,6 +19,7 @@ services:
     environment:
       AI_JOBS_EAGER: 'False'
       AI_CACHE_DIR: '/var/cache/schoolnet/ai'
+      CLOUD_IMPORT_ROOT: '/var/cache/schoolnet/cloud-imports'
       CODE_RUNNER_URL: 'http://code_runner:8002'
       CODE_RUNNER_TOKEN: '${CODE_RUNNER_TOKEN:-${SECRET_KEY}}'
     extra_hosts:
@@ -39,7 +41,7 @@ services:
       start_period: 45s
 
   ai_worker:
-    image: ${SCHOOLWORK_IMAGE:-schoolwork2-app:4.5.8}
+    image: ${SCHOOLWORK_IMAGE:-schoolwork2-app:4.5.10}
     container_name: schoolnet_ai_worker
     restart: unless-stopped
     command: ["python", "manage.py", "process_ai_jobs"]
@@ -48,6 +50,7 @@ services:
     environment:
       AI_JOBS_EAGER: 'False'
       AI_CACHE_DIR: '/var/cache/schoolnet/ai'
+      CLOUD_IMPORT_ROOT: '/var/cache/schoolnet/cloud-imports'
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
@@ -60,7 +63,7 @@ services:
       - app_logs:/app/logs
       - app_cache:/var/cache/schoolnet
     healthcheck:
-      test: ["CMD", "python", "-c", "import os,time; assert time.time()-os.path.getmtime('/tmp/schoolnet-ai-worker-heartbeat') < 60"]
+      test: ["CMD", "python", "-c", "import os,time; assert all(time.time()-os.path.getmtime(p)<60 for p in ['/tmp/schoolnet-ai-worker-heartbeat','/tmp/schoolnet-cloud-worker-heartbeat'])"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -129,6 +132,11 @@ services:
       - .:/workspace
     expose:
       - "8001"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/healthz',timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
 volumes:
   postgres_data:

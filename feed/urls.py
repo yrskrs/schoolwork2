@@ -7,9 +7,11 @@ from . import school_api_v2
 from . import views_updates
 from . import python_runner
 from . import views_cloud
+from .views_dialogs import ui_dialog
 from school_sync import django_backend as roster_views
 
 urlpatterns = [
+    path('ui/dialog/<str:kind>/', ui_dialog, name='ui_dialog'),
     path('healthz/', views_updates.healthz_view, name='healthz'),
     path('teacher/updates/', views_updates.system_updates_view, name='system_updates'),
     path('teacher/updates/api/check/', views_updates.updates_check_api_view, name='updates_check_api'),
@@ -169,4 +171,7 @@ urlpatterns = [
     path('teacher/cloud/save-google/', views_cloud.teacher_cloud_save_google, name='teacher_cloud_save_google'),
     path('teacher/cloud/browse/', views_cloud.teacher_cloud_browse, name='teacher_cloud_browse'),
     path('teacher/cloud/download/', views_cloud.teacher_cloud_download, name='teacher_cloud_download'),
+    path('teacher/cloud/resolve/', views_cloud.teacher_cloud_resolve, name='teacher_cloud_resolve'),
+    path('teacher/cloud/imports/', views_cloud.teacher_cloud_imports, name='teacher_cloud_imports'),
+    path('teacher/cloud/imports/<uuid:job_id>/cancel/', views_cloud.teacher_cloud_import_cancel, name='teacher_cloud_import_cancel'),
 ]

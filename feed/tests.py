@@ -3183,6 +3183,8 @@ class FirstRunSetupTests(TestCase):
         # Наявність кнопки оновлень та версії
         self.assertContains(resp_student, 'id="site-changelog-btn"')
         self.assertContains(resp_student, 'changelog-version-tag')
+        self.assertContains(resp_student, 'changelog-template')
+        resp_student = self.client.get(reverse('ui_dialog', args=['changelog']))
         self.assertContains(resp_student, 'id="changelog-modal"')
         # Учень бачить учнівські оновлення
         self.assertContains(resp_student, 'Виконання завдань на вибір та захист від зниження балу')
@@ -3199,6 +3201,8 @@ class FirstRunSetupTests(TestCase):
 
         resp_teacher = self.client.get(reverse('index'))
         self.assertEqual(resp_teacher.status_code, 200)
+        # The lazy fragment keeps the same role separation.
+        resp_teacher = self.client.get(reverse('ui_dialog', args=['changelog']))
         # Вчитель має вкладки для вчителів та для учнів
         self.assertContains(resp_teacher, 'id="tab-btn-teacher"')
         self.assertContains(resp_teacher, 'id="tab-btn-student"')
@@ -3875,6 +3879,8 @@ class AssignmentFileAIAndCoauthorTests(TestCase):
         self.assertEqual(student_resp.status_code, 200)
         self.assertContains(student_resp, 'id="site-guide-btn"')
         self.assertContains(student_resp, 'nav-btn-guide')
+        self.assertContains(student_resp, 'guide-template')
+        student_resp = self.client.get(reverse('ui_dialog', args=['guide']))
         self.assertContains(student_resp, 'id="guide-modal"')
         # Учень має доступ ТІЛЬКИ до учнівського блоку інструкції
         self.assertContains(student_resp, 'id="guide-pane-student"')
@@ -3908,6 +3914,8 @@ class AssignmentFileAIAndCoauthorTests(TestCase):
         submit_page_resp = self.client.get(reverse('submit_assignment', args=[asg.pk]))
         self.assertEqual(submit_page_resp.status_code, 200)
         self.assertContains(submit_page_resp, 'id="site-guide-btn"')
+        self.assertContains(submit_page_resp, 'guide-template')
+        submit_page_resp = self.client.get(reverse('ui_dialog', args=['guide']))
         self.assertContains(submit_page_resp, 'id="guide-modal"')
         self.assertContains(submit_page_resp, 'id="guide-pane-student"')
         self.assertNotContains(submit_page_resp, 'id="guide-pane-teacher"')
@@ -3921,6 +3929,8 @@ class AssignmentFileAIAndCoauthorTests(TestCase):
         # Але в меню профілю є виклик openGuideModal()
         self.assertContains(teacher_resp, 'openGuideModal()')
         self.assertContains(teacher_resp, 'Інструкція сайту')
+        self.assertContains(teacher_resp, 'guide-template')
+        teacher_resp = self.client.get(reverse('ui_dialog', args=['guide']))
         self.assertContains(teacher_resp, 'id="guide-modal"')
         # Вчитель має доступ до 10 вчительських блоків, перемикача вкладок та учнівського блоку
         self.assertContains(teacher_resp, 'id="guide-pane-teacher"')

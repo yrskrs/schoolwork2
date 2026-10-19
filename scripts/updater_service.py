@@ -357,7 +357,7 @@ def execute_update_job(target_ref='origin/main', target_ver=None, releases_list=
         append_log(f'Крок 2/5: Збираємо версію {version}, коміт {commit[:12]}…')
         image = f'{PROJECT}-candidate:{commit[:12]}-{CURRENT_STATE["job_id"][:8]}'
         run_command(['docker', 'build', '--progress=plain', '--build-arg', f'VCS_REF={commit}',
-                     '--build-arg', f'APP_VERSION={version}', '-t', image, str(worktree)], deployment.env, 1200)
+                     '--build-arg', f'APP_VERSION={version}', '--build-arg', 'SOURCE_DIGEST=' + capture([sys.executable, str(worktree / 'scripts/source_fingerprint.py')]), '-t', image, str(worktree)], deployment.env, 1200)
         if PROJECT != 'schooltest5':
             append_log('Перевіряємо імпорт і конфігурацію кандидата без робочої БД…')
             settings = 'config.test_settings' if PROJECT == 'schooljournal' else 'schoolnet.test_settings'

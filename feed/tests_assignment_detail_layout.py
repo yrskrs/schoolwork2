@@ -32,7 +32,7 @@ class AssignmentDetailLayoutTests(TestCase):
 
     def page(self, response):
         self.assertEqual(response.status_code, 200)
-        return html.fromstring(response.content)
+        return html.fromstring(response.content.decode(response.charset))
 
     def assert_submit_links(self, page, expected):
         base_url = reverse('submit_assignment', args=[self.assignment.pk])
@@ -135,7 +135,8 @@ class AssignmentDetailLayoutTests(TestCase):
         self.assertEqual(button.get('aria-controls'), 'guide-modal')
         self.assertIn("openGuideModal('assignment_detail')", button.get('onclick'))
         self.assertEqual(button.get('href'), '#assignment-help-card')
-        guide = page.get_element_by_id('body-guide-assignment-detail').text_content()
+        guide_page = self.page(self.client.get(reverse('ui_dialog', args=['guide'])))
+        guide = guide_page.get_element_by_id('body-guide-assignment-detail').text_content()
         self.assertIn('Основна інструкція розташована одразу під темою', guide)
         self.assertNotIn('компактно згорнуті', guide)
 

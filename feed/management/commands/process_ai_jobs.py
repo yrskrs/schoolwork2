@@ -21,16 +21,20 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         child = None
         stopping = False
+        cloud_stop = threading.Event()
 
         def stop(signum, frame):
             nonlocal stopping
             stopping = True
+            cloud_stop.set()
             if child and child.poll() is None:
                 child.terminate()
 
         signal.signal(signal.SIGTERM, stop)
         signal.signal(signal.SIGINT, stop)
         if not options['once']:
+            from feed.cloud_imports import start_worker as start_cloud_worker
+            start_cloud_worker(cloud_stop)
             from school_sync.django_backend import start_worker
             start_worker()
             def heartbeat():

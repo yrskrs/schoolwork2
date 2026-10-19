@@ -1,10 +1,31 @@
-// Keep large help/history DOM trees inert until the user opens them.
-window.mountDeferredDialog = function (id) {
-    const template = document.getElementById(id);
-    if (template && template.content) {
-        document.body.appendChild(template.content.cloneNode(true));
-        template.remove();
-    }
+// Fetch large help/history only when requested, preserving role-specific content.
+const deferredDialogLoads = new Map();
+window.mountDeferredDialog = async function (id) {
+    if (!document.getElementById(id)) return true;
+    if (deferredDialogLoads.has(id)) return deferredDialogLoads.get(id);
+    const loading = (async () => {
+        const template = document.getElementById(id);
+        try {
+            if (template.dataset.src) {
+                const response = await fetch(template.dataset.src, {headers:{'X-Requested-With':'XMLHttpRequest'}});
+                if (!response.ok || response.redirected) throw new Error('dialog unavailable');
+                template.innerHTML = await response.text();
+            }
+            document.body.appendChild(template.content.cloneNode(true));
+            template.remove();
+            return true;
+        } catch (_) {
+            const notice = document.createElement('div');
+            notice.className = 'alert alert-error'; notice.setAttribute('role','alert');
+            notice.style.cssText = 'position:fixed;bottom:16px;right:16px;z-index:10000;max-width:90vw;';
+            notice.textContent = 'Не вдалося завантажити вікно. Перевірте з’єднання та повторіть спробу.';
+            document.body.append(notice);setTimeout(() => notice.remove(), 6000);
+            deferredDialogLoads.delete(id);
+            return false;
+        }
+    })();
+    deferredDialogLoads.set(id, loading);
+    return loading;
 };
 
 /**

@@ -1,0 +1,10 @@
+{% extends 'base.html' %}
+{% block title %}Перевірка прикріплених файлів{% endblock %}
+{% block content %}
+<div class="page-wrapper"><div class="card" style="padding:24px;max-width:720px;margin:auto;">
+    <h1>Не вдалося прикріпити файли</h1>
+    <p role="alert">{{ import_error }}</p>
+    <p>Поверніться до форми та додайте файл повторно.</p>
+    <button type="button" class="btn btn-primary" onclick="history.back()">Повернутися до завдання</button>
+</div></div>
+{% endblock %}

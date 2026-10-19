@@ -15,15 +15,53 @@ import json
 import base64
 import socket
 import struct
-import imaplib
+import http.client
+import http.cookiejar
+import time
 import urllib.request
 import urllib.parse
 import urllib.error
 import xml.etree.ElementTree as ET
-from datetime import datetime, timezone as dt_timezone
 from html.parser import HTMLParser
 from django.conf import settings
 from django.utils import timezone
+from .cloud_files import (CloudStorageError, provider_error, response_filename,
+                          stream_response, clean_filename)
+
+
+def _google_host(url):
+    parsed = urllib.parse.urlsplit(url)
+    host = parsed.hostname or ''
+    return parsed.scheme == 'https' and not parsed.username and not parsed.password and any(
+        host == domain or host.endswith('.' + domain)
+        for domain in ('google.com', 'googleapis.com', 'googleusercontent.com'))
+
+
+class GoogleRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if not _google_host(newurl):
+            raise CloudStorageError('Диск перенаправив запит на непідтримувану адресу.', 'invalid', 400)
+        redirected = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if redirected and urllib.parse.urlsplit(req.full_url).hostname != urllib.parse.urlsplit(newurl).hostname:
+            redirected.remove_header('Authorization')
+        return redirected
+
+
+class GoogleDownloadFormParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.action, self.fields, self.active = '', {}, False
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        if tag == 'form' and attrs.get('id') == 'download-form' and attrs.get('method', 'get').lower() == 'get':
+            self.action, self.active = attrs.get('action', ''), True
+        elif self.active and tag == 'input' and attrs.get('type') == 'hidden' and attrs.get('name'):
+            self.fields[attrs['name']] = attrs.get('value', '')
+
+    def handle_endtag(self, tag):
+        if tag == 'form':
+            self.active = False
 
 
 def get_local_xml_tag(tag):
@@ -84,6 +122,10 @@ def extract_google_drive_id(text):
     if not text:
         return None
     text = str(text).strip()
+    if urllib.parse.urlsplit(text).scheme:
+        parsed = urllib.parse.urlsplit(text)
+        if parsed.scheme != 'https' or parsed.hostname not in ('drive.google.com', 'docs.google.com', 'drive.usercontent.google.com') or parsed.username or parsed.password:
+            return None
     patterns = [
         r'/file/d/([a-zA-Z0-9_-]+)',
         r'/document/d/([a-zA-Z0-9_-]+)',
@@ -158,16 +200,43 @@ class NextcloudClient:
             return url.rstrip('/')
 
         # За замовчуванням Nextcloud WebDAV v2
-        username_encoded = urllib.parse.quote(self.username)
+        username_encoded = urllib.parse.quote(self.username, safe='')
         return f"{url}/remote.php/dav/files/{username_encoded}"
 
     def _get_ssl_context(self):
         """Повертає SSL-контекст з підтримкою самопідписаних сертифікатів для локальних серверів."""
         ctx = ssl.create_default_context()
-        if self.ignore_ssl or 'localhost' in self.raw_url or '127.0.0.1' in self.raw_url:
+        ca_file = getattr(settings, 'CLOUD_NEXTCLOUD_CA_FILE', '')
+        if ca_file:
+            ctx.load_verify_locations(cafile=ca_file)
+        if self.ignore_ssl:
             ctx.check_hostname = False
             ctx.verify_mode = ssl.CERT_NONE
         return ctx
+
+    def _open(self, request):
+        """Preserve the original TLS hostname when connecting through a gateway."""
+        context = self._get_ssl_context()
+        original_host = urllib.parse.urlsplit(self.webdav_url).hostname
+        actual_host = urllib.parse.urlsplit(request.full_url).hostname
+        if request.full_url.startswith('https://') and actual_host != original_host:
+            class RoutedHTTPSConnection(http.client.HTTPSConnection):
+                def connect(connection):
+                    connection.sock = connection._create_connection(
+                        (connection.host, connection.port), connection.timeout, connection.source_address)
+                    connection.sock = connection._context.wrap_socket(connection.sock, server_hostname=original_host)
+            class RoutedHTTPSHandler(urllib.request.HTTPSHandler):
+                def https_open(handler, req):
+                    return handler.do_open(RoutedHTTPSConnection, req, context=context)
+            return urllib.request.build_opener(urllib.request.ProxyHandler({}), RoutedHTTPSHandler()).open(request, timeout=self.timeout)
+        return urllib.request.urlopen(request, timeout=self.timeout, context=context)
+
+    @staticmethod
+    def _clean_path(rel_path):
+        path = (rel_path or '').strip().strip('/')
+        if any(part in ('.', '..') for part in urllib.parse.unquote(path).split('/')) or '\\' in path or '\x00' in path:
+            raise CloudStorageError('Некоректний шлях до файла Nextcloud.', 'invalid', 400)
+        return path
 
     def _make_auth_header(self):
         """Створює заголовок HTTP Basic Auth."""
@@ -238,7 +307,7 @@ class NextcloudClient:
 
         try:
             req = urllib.request.Request(actual_url, headers=actual_headers, method='PROPFIND')
-            with urllib.request.urlopen(req, timeout=self.timeout, context=self._get_ssl_context()) as resp:
+            with self._open(req) as resp:
                 if resp.status in (200, 207):
                     return True, "З'єднання успішне! Доступ до файлів Nextcloud підтверджено. 🟢"
                 return False, f"Сервер повернув код відповіді: {resp.status}"
@@ -253,7 +322,7 @@ class NextcloudClient:
                 try:
                     leg_actual, leg_headers = self._resolve_url_and_headers(legacy_url, headers)
                     leg_req = urllib.request.Request(leg_actual, headers=leg_headers, method='PROPFIND')
-                    with urllib.request.urlopen(leg_req, timeout=self.timeout, context=self._get_ssl_context()) as leg_resp:
+                    with self._open(leg_req) as leg_resp:
                         if leg_resp.status in (200, 207):
                             self.webdav_url = f"{self.raw_url}/remote.php/webdav"
                             return True, "З'єднання успішне (через legacy WebDAV)! 🟢"
@@ -282,7 +351,7 @@ class NextcloudClient:
             'current_path': rel_path
         }
         """
-        clean_rel = rel_path.strip().strip('/')
+        clean_rel = self._clean_path(rel_path)
         if clean_rel:
             encoded_segments = [urllib.parse.quote(s) for s in clean_rel.split('/')]
             req_url = f"{self.webdav_url}/{'/'.join(encoded_segments)}/"
@@ -308,7 +377,7 @@ class NextcloudClient:
         actual_url, actual_headers = self._resolve_url_and_headers(req_url, headers)
 
         req = urllib.request.Request(actual_url, data=xml_body, headers=actual_headers, method='PROPFIND')
-        with urllib.request.urlopen(req, timeout=self.timeout, context=self._get_ssl_context()) as resp:
+        with self._open(req) as resp:
             data = resp.read()
 
         root = ET.fromstring(data)
@@ -409,28 +478,25 @@ class NextcloudClient:
             'current_path': clean_rel,
         }
 
-    def download_file(self, rel_path):
-        """
-        Завантажує файл із Nextcloud.
-        Повертає: (file_bytes, content_type, filename)
-        """
-        clean_rel = rel_path.strip().strip('/')
-        encoded_segments = [urllib.parse.quote(s) for s in clean_rel.split('/')]
-        req_url = f"{self.webdav_url}/{'/'.join(encoded_segments)}"
-
-        headers = {
-            'Authorization': self._make_auth_header(),
-            'User-Agent': 'SchoolNet-Cloud-Sync/1.0',
-        }
-        actual_url, actual_headers = self._resolve_url_and_headers(req_url, headers)
-
-        req = urllib.request.Request(actual_url, headers=actual_headers, method='GET')
-        with urllib.request.urlopen(req, timeout=self.timeout, context=self._get_ssl_context()) as resp:
-            content = resp.read()
-            content_type = resp.headers.get('Content-Type', 'application/octet-stream')
-
-        filename = clean_rel.split('/')[-1]
-        return content, content_type, filename
+    def download_file(self, rel_path, progress=None, destination=None):
+        clean_rel = self._clean_path(rel_path)
+        if not clean_rel:
+            raise CloudStorageError('Оберіть файл Nextcloud.', 'invalid', 400)
+        encoded = '/'.join(urllib.parse.quote(segment, safe='') for segment in clean_rel.split('/'))
+        url, headers = self._resolve_url_and_headers(
+            f'{self.webdav_url}/{encoded}', {'Authorization': self._make_auth_header(),
+                                             'User-Agent': 'SchoolNet-Cloud-Sync/1.0'})
+        try:
+            with self._open(urllib.request.Request(url, headers=headers)) as response:
+                checksum = response.headers.get('OC-Checksum', '')
+                algorithm, _, digest = checksum.partition(':')
+                return stream_response(response, filename=clean_rel.split('/')[-1],
+                    checksum=digest, algorithm=algorithm.lower(), progress=progress,
+                    destination=destination, source_id=clean_rel, authoritative_name=True)
+        except CloudStorageError:
+            raise
+        except Exception as error:
+            raise provider_error(error) from error
 
 
 class DriveHTMLParser(HTMLParser):
@@ -474,6 +540,10 @@ class DriveHTMLParser(HTMLParser):
         if not href or not text or text in ('Sign in', 'Allow cookies', 'Learn more', 'Sign in to your Google Account'):
             return
 
+        href = urllib.parse.urljoin('https://drive.google.com/', href)
+        if not extract_google_drive_id(href):
+            return
+
         # 1. Звичайний файл Drive: https://drive.google.com/file/d/{id}/view
         m_file = re.search(r'drive\.google\.com/file/d/([-\w]{25,})', href)
         if m_file:
@@ -485,7 +555,7 @@ class DriveHTMLParser(HTMLParser):
                     'name': text,
                     'is_dir': False,
                     'mime_type': 'application/octet-stream',
-                    'file_url': f"https://drive.google.com/file/d/{fid}/view"
+                    'file_url': href
                 })
             return
 
@@ -497,7 +567,7 @@ class DriveHTMLParser(HTMLParser):
                 self.seen_ids.add(fid)
                 ext = '.docx' if doc_type == 'document' else ('.xlsx' if doc_type == 'spreadsheets' else '.pptx')
                 name = text if text.endswith(ext) else f"{text}{ext}"
-                mime = f"application/vnd.google-apps.{doc_type}"
+                mime = "application/vnd.google-apps." + {"document":"document", "spreadsheets":"spreadsheet", "presentation":"presentation"}[doc_type]
                 self.items.append({
                     'id': fid,
                     'name': name,
@@ -518,7 +588,7 @@ class DriveHTMLParser(HTMLParser):
                     'name': text,
                     'is_dir': True,
                     'mime_type': 'application/vnd.google-apps.folder',
-                    'folder_url': f"https://drive.google.com/drive/folders/{cid}"
+                    'folder_url': href
                 })
             return
 
@@ -543,23 +613,25 @@ def fetch_embedded_google_folder(folder_id, timeout=10):
     try:
         req = urllib.request.Request(url, headers=headers)
         with urllib.request.urlopen(req, timeout=timeout) as resp:
-            html_text = resp.read().decode('utf-8', errors='ignore')
-    except urllib.error.HTTPError as e:
-        if e.code in (401, 403):
-            return {'is_restricted': True, 'items': [], 'folder_name': ''}
-        return {'is_restricted': False, 'items': [], 'folder_name': '', 'error': str(e)}
-    except Exception as e:
-        return {'is_restricted': False, 'items': [], 'folder_name': '', 'error': str(e)}
+            raw_html = resp.read(4 * 1024 * 1024 + 1)
+            if len(raw_html) > 4 * 1024 * 1024:
+                raise CloudStorageError('Публічний список завеликий. Підключіть Google OAuth.', 'too_large', 422)
+            html_text = raw_html.decode('utf-8', errors='replace')
+    except CloudStorageError:
+        raise
+    except Exception as error:
+        raise provider_error(error) from error
 
-    # Перевірка на статус «Обмежений доступ» або редирект на вхід Google
-    if "ServiceLogin" in html_text or "Sign in to your Google Account" in html_text or "Allow Google Drive access" in html_text:
-        return {'is_restricted': True, 'items': [], 'folder_name': ''}
+    if any(marker in html_text for marker in ('ServiceLogin', 'Sign in to your Google Account', 'Allow Google Drive access')):
+        raise CloudStorageError('Папка приватна. Для доступу увійдіть через Google OAuth.', 'permission', 403)
 
     parser = DriveHTMLParser(clean_id)
     try:
         parser.feed(html_text)
-    except Exception:
-        pass
+    except Exception as error:
+        raise CloudStorageError('Не вдалося прочитати публічний список Google Drive. Спробуйте OAuth.', 'format', 502) from error
+    if not parser.title and not parser.items:
+        raise CloudStorageError('Google повернув невідомий формат списку. Спробуйте OAuth.', 'format', 502)
 
     folder_name = parser.title.replace('- Google Drive', '').strip() if parser.title else ''
     return {
@@ -573,7 +645,7 @@ class GoogleDriveClient:
     """
     Клієнт для взаємодії з Google Drive.
     Підтримує:
-    - Прямий вхід за обліковим записом Google (Email та пароль / Google App Password)
+    - OAuth для приватних файлів та публічні посилання без пароля Gmail
     - OAuth2 авторизацію через Google Identity
     - Автоматичне оновлення токенів (Refresh Token)
     - Додавання файлів за посиланням на Google Docs / Drive
@@ -635,11 +707,13 @@ class GoogleDriveClient:
             headers={'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'SchoolNet-Cloud-Sync/1.0'},
             method='POST'
         )
-        with urllib.request.urlopen(req, timeout=self.timeout) as resp:
-            data = json.loads(resp.read().decode('utf-8'))
+        with self._open(req) as resp:
+            data = json.loads(resp.read(2 * 1024 * 1024).decode('utf-8'))
 
         access_token = data.get('access_token', '')
         refresh_token = data.get('refresh_token', '')
+        if not access_token:
+            raise CloudStorageError('Google не підтвердив доступ. Повторіть OAuth-вхід.', 'authorization', 401)
         expires_in = data.get('expires_in', 3600)
 
         email = ''
@@ -649,8 +723,8 @@ class GoogleDriveClient:
                     self.OAUTH_USERINFO_URL,
                     headers={'Authorization': f'Bearer {access_token}', 'User-Agent': 'SchoolNet-Cloud-Sync/1.0'}
                 )
-                with urllib.request.urlopen(uireq, timeout=self.timeout) as uiresp:
-                    uidata = json.loads(uiresp.read().decode('utf-8'))
+                with self._open(uireq) as uiresp:
+                    uidata = json.loads(uiresp.read(2 * 1024 * 1024).decode('utf-8'))
                     email = uidata.get('email', '')
             except Exception:
                 pass
@@ -687,10 +761,12 @@ class GoogleDriveClient:
                 headers={'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'SchoolNet-Cloud-Sync/1.0'},
                 method='POST'
             )
-            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
-                data = json.loads(resp.read().decode('utf-8'))
+            with self._open(req) as resp:
+                data = json.loads(resp.read(2 * 1024 * 1024).decode('utf-8'))
 
             self.access_token = data.get('access_token', '')
+            if not self.access_token:
+                raise CloudStorageError('Поновіть авторизацію Google Drive.', 'authorization', 401)
             expires_in = data.get('expires_in', 3600)
             from datetime import timedelta
             self.token_expiry = timezone.now() + timedelta(seconds=expires_in)
@@ -700,345 +776,265 @@ class GoogleDriveClient:
 
         return self.access_token
 
-    @staticmethod
-    def _verify_google_credentials(email, password, timeout=8):
-        """
-        Перевіряє валідність входу в Google акаунт за логіном (Email) та паролем / App Password.
-        Використовує офіційний IMAP SSL сервіс Google (imap.gmail.com:993).
-        """
-        email = (email or '').strip()
-        password = (password or '').strip()
-        if not email or not password:
-            return False, "Вкажіть Google Email (логін) та пароль."
+    def _open(self, request):
+        if not hasattr(self, '_opener'):
+            self._opener = urllib.request.build_opener(
+                GoogleRedirectHandler(), urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+        return self._opener.open(request, timeout=self.timeout)
 
-        try:
-            mail = imaplib.IMAP4_SSL('imap.gmail.com', timeout=timeout)
-            mail.login(email, password)
-            mail.logout()
-            return True, f"Авторизація успішна! Обліковий запис Google підтверджено ({email}). 🟢"
-        except imaplib.IMAP4.error as e:
-            err = str(e)
-            if 'Application-specific password required' in err or 'APPLICATIONPASSWORD' in err:
-                return False, (
-                    "Для вашого Google акаунту увімкнено 2-етапну перевірку (2FA). "
-                    "Будь ласка, введіть «Пароль додатку Google» замість звичайного пароля "
-                    "(Google Акаунт → Безпека → 2-етапна перевірка → Паролі додатків)."
-                )
-            if 'AUTHENTICATIONFAILED' in err or 'Username and password not accepted' in err:
-                return False, (
-                    "Помилка входу: невірний логін або пароль Google. "
-                    "Якщо увімкнено двофакторну автентифікацію, створіть «Пароль додатку» в налаштуваннях Google."
-                )
-            return False, f"Помилка авторизації Google: {err}"
-        except (socket.timeout, TimeoutError):
-            return True, f"Облікові дані для {email} збережено (перевірка в режимі офлайн). 🟢"
-        except Exception as e:
-            err_str = str(e)
-            if 'Name or service not known' in err_str or 'Temporary failure' in err_str or 'Network is unreachable' in err_str:
-                return True, f"Облікові дані для {email} збережено. 🟢"
-            return False, f"Не вдалося перевірити Google акаунт: {err_str}"
+    def _api_json(self, endpoint, save_callback=None, extra_headers=None):
+        for attempt in range(3):
+            token = self.ensure_valid_token(save_callback=save_callback) if (self.access_token or self.refresh_token) else ''
+            separator = '&' if '?' in endpoint else '?'
+            url = self.DRIVE_API_BASE + endpoint
+            if self.api_key and not token:
+                url += separator + urllib.parse.urlencode({'key': self.api_key})
+            headers = {'User-Agent': 'SchoolNet-Cloud-Sync/2.0'}
+            headers.update(extra_headers or {})
+            if token:
+                headers['Authorization'] = 'Bearer ' + token
+            try:
+                with self._open(urllib.request.Request(url, headers=headers)) as response:
+                    return json.loads(response.read(2 * 1024 * 1024))
+            except urllib.error.HTTPError as error:
+                if error.code == 401 and self.refresh_token and attempt == 0:
+                    self.access_token = ''
+                    continue
+                if error.code in (429, 500, 502, 503, 504) and attempt < 2:
+                    time.sleep(.25 * (2 ** attempt))
+                    continue
+                raise provider_error(error) from error
+            except CloudStorageError:
+                raise
+            except Exception as error:
+                raise provider_error(error) from error
+        raise CloudStorageError('Не вдалося прочитати Google Drive.')
+
+    @staticmethod
+    def _reference(value):
+        fid = extract_google_drive_id(value)
+        if not fid:
+            raise CloudStorageError('Вставте коректне посилання на файл Google Drive або Google Документ.', 'invalid', 400)
+        parsed = urllib.parse.urlsplit(str(value))
+        params = urllib.parse.parse_qs(parsed.query)
+        resource_key = params.get('resourcekey', [''])[0]
+        if resource_key and not re.fullmatch(r'[A-Za-z0-9_-]{1,200}', resource_key):
+            raise CloudStorageError('Некоректний ключ посилання Google Drive.', 'invalid', 400)
+        native = next((kind for kind in ('document', 'spreadsheets', 'presentation')
+                       if re.search(r'/' + kind + r'/d/', parsed.path)), '')
+        return fid, resource_key, native
+
+    EXPORTS = {
+        'application/vnd.google-apps.document': ('document', 'docx', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'),
+        'application/vnd.google-apps.spreadsheet': ('spreadsheets', 'xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'),
+        'application/vnd.google-apps.presentation': ('presentation', 'pptx', 'application/vnd.openxmlformats-officedocument.presentationml.presentation'),
+    }
 
     def test_connection(self, save_callback=None):
-        """
-        Перевіряє валідність підключення до Google Drive.
-        Підтримує:
-        1. Вхід за логіном (Email) та паролем / App Password.
-        2. OAuth 2.0 токени.
-        3. Посилання на папку або спільний Google Drive.
-        """
-        # 1. Якщо збережено токени OAuth
-        if self.access_token or self.refresh_token:
-            try:
-                token = self.ensure_valid_token(save_callback=save_callback)
-                if token:
-                    req_url = f"{self.DRIVE_API_BASE}/about?fields=user"
-                    req = urllib.request.Request(
-                        req_url,
-                        headers={'Authorization': f'Bearer {token}', 'User-Agent': 'SchoolNet-Cloud-Sync/1.0'}
-                    )
-                    with urllib.request.urlopen(req, timeout=self.timeout) as resp:
-                        data = json.loads(resp.read().decode('utf-8'))
-                        user = data.get('user', {})
-                        email = user.get('emailAddress', '')
-                        name = user.get('displayName', '')
-                        label = f"{name} ({email})" if name and email else (email or name or "Google Акаунт")
-                        return True, f"З'єднання успішне! Доступ до Google Drive підтверджено: {label} 🟢"
-            except urllib.error.HTTPError as e:
-                if e.code == 401:
-                    return False, "Помилка 401: Токен доступу застарів або недійсний. Спробуйте оновити авторизацію."
-                return False, f"Помилка Google API {e.code}: {e.reason}"
-            except Exception as e:
-                if not (self.email and self.password):
-                    return False, f"Не вдалося з'єднатися з Google Drive: {str(e)}"
+        try:
+            if self.access_token or self.refresh_token:
+                self._api_json('/about?fields=user', save_callback)
+                if self.folder_link:
+                    folder_id, _, _ = self._reference(self.folder_link)
+                    metadata = self._metadata(self.folder_link, save_callback)
+                    if metadata.get('mimeType') != 'application/vnd.google-apps.folder':
+                        return False, 'Посилання має вести на папку Google Drive.'
+                return True, 'Доступ до Google Drive через OAuth підтверджено.'
+            if self.folder_link:
+                folder_id, _, _ = self._reference(self.folder_link)
+                if self.api_key:
+                    metadata = self._api_json('/files/' + folder_id + '?fields=id,name,mimeType', save_callback)
+                    if metadata.get('mimeType') != 'application/vnd.google-apps.folder':
+                        return False, 'Посилання має вести на папку Google Drive.'
+                else:
+                    fetch_embedded_google_folder(folder_id, self.timeout)
+                return True, 'Читання публічної папки Google Drive підтверджено.'
+            return False, 'Для приватних файлів увійдіть через Google OAuth. Для публічних матеріалів вкажіть посилання на папку. Email і пароль Gmail не надають доступу до Drive.'
+        except CloudStorageError as error:
+            return False, str(error)
+        except Exception as error:
+            return False, str(provider_error(error))
 
-        # 2. Якщо вказано Google API Key
-        if self.api_key:
-            try:
-                test_url = f"{self.DRIVE_API_BASE}/files?pageSize=1&key={urllib.parse.quote(self.api_key)}"
-                req = urllib.request.Request(test_url, headers={'User-Agent': 'SchoolNet-Cloud-Sync/1.0'})
-                with urllib.request.urlopen(req, timeout=self.timeout) as resp:
-                    if resp.status == 200:
-                        return True, "З'єднання успішне! Google Drive API Key дійсний. 🟢"
-            except urllib.error.HTTPError as e:
-                return False, f"Помилка Google API Key ({e.code}): {e.reason}"
-            except Exception as e:
-                return False, f"Помилка перевірки API Key: {str(e)}"
+    def list_directory(self, folder_id='root', save_callback=None):
+        folder_id = (folder_id or 'root').strip()
+        linked_id = extract_google_drive_id(self.folder_link) if self.folder_link else None
+        if folder_id != 'root' and not re.fullmatch(r'[A-Za-z0-9_-]{1,200}', folder_id):
+            raise CloudStorageError('Некоректна папка Google Drive.', 'invalid', 400)
+        use_api = bool(self.access_token or self.refresh_token or self.api_key)
+        search_folder = linked_id if folder_id == 'root' and linked_id and use_api else folder_id
+        crumbs = [{'name': 'Google Drive', 'id': 'root'}]
+        if search_folder != 'root':
+            crumbs.append({'name': 'Папка матеріалів', 'id': search_folder})
+        result = {'items': [], 'breadcrumbs': crumbs, 'current_folder_id': search_folder,
+                  'linked_folder_id': linked_id, 'folder_link': self.folder_link,
+                  'direct_link_enabled': True, 'mode': 'api' if use_api else 'public'}
+        if use_api and (self.access_token or self.refresh_token or search_folder != 'root'):
+            page_token, seen = '', set()
+            for page in range(100):
+                params = {'q': f"'{search_folder}' in parents and trashed = false",
+                          'fields': 'nextPageToken,files(id,name,mimeType,size,modifiedTime,resourceKey,md5Checksum,sha256Checksum)',
+                          'pageSize': 100, 'orderBy': 'folder,name',
+                          'supportsAllDrives': 'true', 'includeItemsFromAllDrives': 'true'}
+                if page_token:
+                    params['pageToken'] = page_token
+                data = self._api_json('/files?' + urllib.parse.urlencode(params), save_callback)
+                for entry in data.get('files', []):
+                    mime, name = entry.get('mimeType', ''), entry.get('name', 'file')
+                    native = self.EXPORTS.get(mime)
+                    if native and not name.lower().endswith('.' + native[1]):
+                        name += '.' + native[1]
+                    is_dir = mime == 'application/vnd.google-apps.folder'
+                    size = int(entry.get('size') or 0)
+                    size_known = entry.get('size') is not None
+                    source = 'https://drive.google.com/file/d/' + entry['id'] + '/view'
+                    if native:
+                        source = 'https://docs.google.com/' + native[0] + '/d/' + entry['id'] + '/edit'
+                    if entry.get('resourceKey'):
+                        source += '?resourcekey=' + urllib.parse.quote(entry['resourceKey'], safe='')
+                    result['items'].append({'id': entry['id'], 'name': name, 'is_dir': is_dir,
+                        'size': size, 'size_known': size_known, 'exported': bool(native),
+                        'size_display': '' if is_dir else ((format_bytes(size) + (' у Drive' if native else '')) if size_known else ('Після експорту' if native else 'Розмір недоступний')),
+                        'modified': entry.get('modifiedTime', ''), 'mime_type': mime,
+                        'file_url': source, 'icon': get_file_icon(name, is_dir)})
+                next_token = data.get('nextPageToken', '')
+                if not next_token:
+                    return result
+                if next_token in seen:
+                    raise CloudStorageError('Google Drive повторив сторінку списку. Оновіть папку.', 'pagination', 502)
+                seen.add(next_token)
+                page_token = next_token
+            raise CloudStorageError('Папка завелика для одного перегляду. Відкрийте підпапку.', 'too_many', 422)
+        if folder_id == 'root':
+            if linked_id:
+                result['items'] = [{'id': linked_id, 'name': 'Прив’язана папка Google Drive',
+                    'is_dir': True, 'size': 0, 'size_display': '', 'modified': '', 'icon': '📁'}]
+            return result
+        public = fetch_embedded_google_folder(folder_id, self.timeout)
+        for item in public['items']:
+            native = item['mime_type'] in self.EXPORTS
+            item.update(size=0, size_known=False, exported=native,
+                        size_display='' if item['is_dir'] else ('Після експорту' if native else 'Уточнення…'),
+                        modified='', icon=get_file_icon(item['name'], item['is_dir']))
+        result['items'] = public['items']
+        result['warning'] = 'Публічний перегляд. Для стабільного повного списку та приватних файлів підключіть Google OAuth.'
+        return result
 
-        # 3. Якщо вказано логін (Email) та пароль
-        if self.email and self.password:
-            return self._verify_google_credentials(self.email, self.password)
-
-        # 4. Якщо вказано посилання на папку або диск
-        if self.folder_link:
-            fid = extract_google_drive_id(self.folder_link)
-            if fid:
-                return True, f"Google Drive папку налаштовано ({fid[:8]}...). 🟢"
-            return False, "Некоректне посилання на папку Google Drive."
-
-        return False, "Вкажіть Google Email (логін) та пароль, Google Drive API Key або посилання на папку."
-
-    def list_directory(self, folder_id="root", save_callback=None):
-        """
-        Отримує список файлів та підпапок у вказаній папці Google Drive.
-        Якщо доступний токен OAuth або API Key, запитує Google Drive API v3.
-        Якщо вхід здійснено за прив'язкою папки / Email, забезпечує відкриття папки,
-        хлібні крихти, додавання файлів за посиланням та прямий перехід у Google Drive.
-        """
-        clean_folder = folder_id.strip() if folder_id else "root"
-        linked_fid = extract_google_drive_id(self.folder_link) if self.folder_link else None
-
-        token = None
-        if self.access_token or self.refresh_token:
-            token = self.ensure_valid_token(save_callback=save_callback)
-
-        api_key = self.api_key or os.environ.get('GOOGLE_DRIVE_API_KEY', '') or getattr(settings, 'GOOGLE_DRIVE_API_KEY', '')
-
-        # Якщо є авторизований доступ (OAuth або API Key), пробуємо отримати файли з Drive API v3
-        if token or api_key:
-            try:
-                search_folder = clean_folder
-                if clean_folder == 'root' and linked_fid:
-                    search_folder = linked_fid
-
-                query = f"'{search_folder}' in parents and trashed = false"
-                params = {
-                    'q': query,
-                    'fields': 'files(id, name, mimeType, size, modifiedTime, iconLink)',
-                    'pageSize': 100,
-                    'orderBy': 'folder,name',
-                    'supportsAllDrives': 'true',
-                    'includeItemsFromAllDrives': 'true',
-                }
-                if not token and api_key:
-                    params['key'] = api_key
-
-                req_url = f"{self.DRIVE_API_BASE}/files?{urllib.parse.urlencode(params)}"
-                headers = {'User-Agent': 'SchoolNet-Cloud-Sync/1.0'}
-                if token:
-                    headers['Authorization'] = f'Bearer {token}'
-
-                req = urllib.request.Request(req_url, headers=headers)
-                with urllib.request.urlopen(req, timeout=self.timeout) as resp:
-                    data = json.loads(resp.read().decode('utf-8'))
-
-                files_list = data.get('files', [])
-                items = []
-
-                for f in files_list:
-                    f_id = f.get('id', '')
-                    f_name = f.get('name', 'Без назви')
-                    mime = f.get('mimeType', '')
-                    is_dir = (mime == 'application/vnd.google-apps.folder')
-                    size = int(f.get('size', 0)) if f.get('size') else 0
-                    modified = f.get('modifiedTime', '')
-
-                    if mime == 'application/vnd.google-apps.document' and not f_name.endswith('.docx'):
-                        f_name_display = f"{f_name}.docx"
-                    elif mime == 'application/vnd.google-apps.spreadsheet' and not f_name.endswith('.xlsx'):
-                        f_name_display = f"{f_name}.xlsx"
-                    elif mime == 'application/vnd.google-apps.presentation' and not f_name.endswith('.pptx'):
-                        f_name_display = f"{f_name}.pptx"
-                    else:
-                        f_name_display = f_name
-
-                    items.append({
-                        'id': f_id,
-                        'name': f_name_display,
-                        'is_dir': is_dir,
-                        'size': size,
-                        'size_display': '' if is_dir else (format_bytes(size) if size > 0 else 'Google Doc'),
-                        'modified': modified,
-                        'mime_type': mime,
-                        'icon': get_file_icon(f_name_display, is_dir=is_dir),
-                    })
-
-                breadcrumbs = [{'name': '🔺 Google Drive', 'id': 'root'}]
-                if search_folder != 'root':
-                    folder_title = f"📁 Папка матеріалів ({self.email or 'Матеріали'})" if search_folder == linked_fid else 'Папка'
-                    breadcrumbs.append({'name': folder_title, 'id': search_folder})
-
-                return {
-                    'items': items,
-                    'breadcrumbs': breadcrumbs,
-                    'current_folder_id': search_folder,
-                    'linked_folder_id': linked_fid,
-                    'folder_link': self.folder_link,
-                    'direct_link_enabled': True,
-                    'email': self.email,
-                }
-            except Exception:
-                pass
-
-        # Якщо токен або API ключ відсутні (або папка приватна), працюємо в режимі прив'язаної папки та швидких посилань
-        items = []
-        is_restricted = False
-
-        if clean_folder == 'root':
-            breadcrumbs = [{'name': f"🔺 Google Drive ({self.email or 'Підключено'})", 'id': 'root'}]
-            if linked_fid:
-                items.append({
-                    'id': linked_fid,
-                    'name': f"📁 Прив'язана папка Google Drive ({self.email or 'Матеріали'})",
-                    'is_dir': True,
-                    'size': 0,
-                    'size_display': 'Папка Drive',
-                    'modified': '',
-                    'mime_type': 'application/vnd.google-apps.folder',
-                    'icon': '📁',
-                    'folder_url': self.folder_link,
-                })
+    def _public_response(self, source):
+        fid, resource_key, native = self._reference(source)
+        if native:
+            export = next(value for value in self.EXPORTS.values() if value[0] == native)
+            url = f'https://docs.google.com/{native}/d/{fid}/export?' + urllib.parse.urlencode({'format': export[1]})
+            fallback = f'Google_{fid[:8]}.{export[1]}'
         else:
-            folder_title = f"📁 Папка матеріалів ({self.email or 'Матеріали'})" if (linked_fid and clean_folder == linked_fid) else 'Папка матеріалів'
-            breadcrumbs = [
-                {'name': '🔺 Google Drive', 'id': 'root'},
-                {'name': folder_title, 'id': clean_folder}
-            ]
+            params = {'export': 'download', 'id': fid}
+            if resource_key:
+                params['resourcekey'] = resource_key
+            url = 'https://drive.google.com/uc?' + urllib.parse.urlencode(params)
+            fallback = 'Drive_' + fid[:8]
+        try:
+            response = self._open(urllib.request.Request(url, headers={'User-Agent': 'SchoolNet-Cloud-Sync/2.0'}))
+            content_type = response.headers.get('Content-Type', '').lower()
+            disposition = response.headers.get('Content-Disposition', '').lower()
+            if 'text/html' in content_type and 'attachment' not in disposition:
+                html_text = response.read(512 * 1024).decode('utf-8', errors='replace')
+                response.close()
+                form = GoogleDownloadFormParser()
+                form.feed(html_text)
+                action = urllib.parse.urljoin(url, form.action)
+                if native or not form.action or not _google_host(action) or form.fields.get('id') != fid:
+                    raise CloudStorageError('Файл недоступний за публічним посиланням. Перевірте доступ або увійдіть через Google OAuth.', 'permission', 403)
+                # Keep the exact source ID/resource key across Google's download confirmation.
+                params = dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(action).query))
+                params.update(form.fields)
+                if resource_key:
+                    params['resourcekey'] = resource_key
+                action = urllib.parse.urlunsplit((*urllib.parse.urlsplit(action)[:3], urllib.parse.urlencode(params), ''))
+                response = self._open(urllib.request.Request(action, headers={'User-Agent': 'SchoolNet-Cloud-Sync/2.0'}))
+            return response, fallback, bool(native), fid
+        except CloudStorageError:
+            raise
+        except Exception as error:
+            raise provider_error(error) from error
 
-            # Спробуємо автоматично прочитати файли та підпапки з веб-інтерфейсу Google Drive
-            emb_res = fetch_embedded_google_folder(clean_folder)
-            if emb_res.get('items'):
-                for it in emb_res['items']:
-                    is_folder = it.get('is_dir', False)
-                    mime = it.get('mime_type', '')
-                    size_disp = 'Папка Drive' if is_folder else ('Google Doc' if 'google-apps' in mime else 'Файл Drive')
-                    items.append({
-                        'id': it['id'],
-                        'name': it['name'],
-                        'is_dir': is_folder,
-                        'size': 0,
-                        'size_display': size_disp,
-                        'modified': '',
-                        'mime_type': mime,
-                        'icon': get_file_icon(it['name'], is_dir=is_folder),
-                        'file_url': it.get('file_url', ''),
-                        'folder_url': it.get('folder_url', ''),
-                    })
-            elif emb_res.get('is_restricted'):
-                is_restricted = True
+    def _metadata(self, source, save_callback=None):
+        fid, resource_key, _ = self._reference(source)
+        params = {'fields': 'id,name,mimeType,size,md5Checksum,sha256Checksum,capabilities(canDownload),shortcutDetails,version', 'supportsAllDrives': 'true'}
+        headers = {'X-Goog-Drive-Resource-Keys': fid + '/' + resource_key} if resource_key else None
+        metadata = self._api_json('/files/' + fid + '?' + urllib.parse.urlencode(params), save_callback, headers)
+        if metadata.get('id') != fid:
+            raise CloudStorageError('Google Drive повернув інший файл. Імпорт зупинено.', 'identity', 422)
+        if metadata.get('mimeType') == 'application/vnd.google-apps.shortcut':
+            raise CloudStorageError('Це ярлик Google Drive. Вставте посилання на сам файл.', 'shortcut', 422)
+        if metadata.get('capabilities', {}).get('canDownload') is False:
+            raise CloudStorageError('Власник заборонив завантажувати цей файл.', 'permission', 403)
+        return metadata
 
-        return {
-            'items': items,
-            'breadcrumbs': breadcrumbs,
-            'current_folder_id': clean_folder,
-            'linked_folder_id': linked_fid,
-            'folder_link': self.folder_link,
-            'direct_link_enabled': True,
-            'is_restricted': is_restricted,
-            'email': self.email,
-        }
+    def resolve_file(self, source, save_callback=None):
+        if self.access_token or self.refresh_token or self.api_key:
+            metadata = self._metadata(source, save_callback)
+            mime = metadata.get('mimeType', '')
+            if mime == 'application/vnd.google-apps.folder':
+                raise CloudStorageError('Це папка. Відкрийте її та оберіть файли.', 'folder', 400)
+            name = metadata.get('name', 'file')
+            export = self.EXPORTS.get(mime)
+            if export and not name.lower().endswith('.' + export[1]):
+                name += '.' + export[1]
+            return {'id': metadata['id'], 'name': clean_filename(name), 'is_dir': False,
+                    'mime_type': mime, 'size': int(metadata.get('size') or 0),
+                    'size_known': metadata.get('size') is not None,
+                    'size_display': (format_bytes(int(metadata['size'])) + (' у Drive' if export else '')) if metadata.get('size') is not None else ('Після експорту' if export else 'Розмір недоступний'),
+                    'file_url': source, 'exported': bool(export), 'icon': get_file_icon(name)}
+        response, fallback, exported, fid = self._public_response(source)
+        with response:
+            name = response_filename(response.headers, fallback)
+            mime = response.headers.get('Content-Type', 'application/octet-stream').split(';')[0]
+            if 'text/html' in mime and 'attachment' not in response.headers.get('Content-Disposition', '').lower():
+                raise CloudStorageError('Замість файла повернулася сторінка Google. Перевірте доступ.', 'permission', 403)
+            if not exported and name == fallback:
+                raise CloudStorageError('Google не повідомив назву файла. Підключіть OAuth або вставте пряме посилання на Google Документ.', 'metadata', 422)
+            return {'id': fid, 'name': name, 'is_dir': False, 'mime_type': mime,
+                    'size': int(response.headers.get('Content-Length') or 0), 'file_url': source,
+                    'size_known': response.headers.get('Content-Length') is not None,
+                    'size_display': format_bytes(int(response.headers['Content-Length'])) if response.headers.get('Content-Length') is not None else 'Розмір недоступний',
+                    'export_size_known': exported and response.headers.get('Content-Length') is not None,
+                    'exported': exported, 'icon': get_file_icon(name)}
 
-    def download_file(self, file_id_or_url, save_callback=None):
-        """
-        Завантажує файл із Google Drive.
-        file_id_or_url: ідентифікатор файлу або повний URL (Google Drive, Docs, Sheets, Slides).
-        Якщо доступний токен OAuth, використовує Google Drive v3 REST API.
-        Якщо токена немає (підключення за Email/паролем), завантажує напряму через
-        Google Export / Direct Download ендпоінти.
-        Повертає: (file_bytes, content_type, filename)
-        """
-        clean_id = extract_google_drive_id(file_id_or_url) or str(file_id_or_url).strip()
-        if not clean_id:
-            raise ValueError("Недійсний ідентифікатор або посилання на файл Google Drive.")
-
-        # 1. Якщо доступний OAuth токен
-        if self.access_token or self.refresh_token:
-            token = self.ensure_valid_token(save_callback=save_callback)
+    def download_file(self, source, save_callback=None, progress=None, destination=None):
+        if self.access_token or self.refresh_token or self.api_key:
+            metadata = self._metadata(source, save_callback)
+            mime, fid = metadata.get('mimeType', ''), metadata['id']
+            name = clean_filename(metadata.get('name', 'file'))
+            export = self.EXPORTS.get(mime)
+            if mime == 'application/vnd.google-apps.folder' or (mime.startswith('application/vnd.google-apps.') and not export):
+                raise CloudStorageError('Цей тип Google файла не підтримує завантаження. Оберіть інший файл.', 'unsupported', 422)
+            if export:
+                endpoint = f'/files/{fid}/export?' + urllib.parse.urlencode({'mimeType': export[2]})
+                if not name.lower().endswith('.' + export[1]):
+                    name += '.' + export[1]
+            else:
+                endpoint = f'/files/{fid}?' + urllib.parse.urlencode({'alt':'media', 'supportsAllDrives':'true'})
+            token = self.ensure_valid_token(save_callback)
+            url = self.DRIVE_API_BASE + endpoint
+            if not token and self.api_key:
+                url += '&' + urllib.parse.urlencode({'key': self.api_key})
+            headers = {'User-Agent': 'SchoolNet-Cloud-Sync/2.0'}
             if token:
-                try:
-                    meta_url = f"{self.DRIVE_API_BASE}/files/{clean_id}?fields=id,name,mimeType,size"
-                    m_req = urllib.request.Request(
-                        meta_url,
-                        headers={'Authorization': f'Bearer {token}', 'User-Agent': 'SchoolNet-Cloud-Sync/1.0'}
-                    )
-                    with urllib.request.urlopen(m_req, timeout=self.timeout) as m_resp:
-                        meta = json.loads(m_resp.read().decode('utf-8'))
-
-                    mime = meta.get('mimeType', '')
-                    name = meta.get('name', 'file')
-
-                    if mime == 'application/vnd.google-apps.document':
-                        export_mime = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-                        dl_url = f"{self.DRIVE_API_BASE}/files/{clean_id}/export?mimeType={urllib.parse.quote(export_mime)}"
-                        if not name.endswith('.docx'):
-                            name += '.docx'
-                    elif mime == 'application/vnd.google-apps.spreadsheet':
-                        export_mime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-                        dl_url = f"{self.DRIVE_API_BASE}/files/{clean_id}/export?mimeType={urllib.parse.quote(export_mime)}"
-                        if not name.endswith('.xlsx'):
-                            name += '.xlsx'
-                    elif mime == 'application/vnd.google-apps.presentation':
-                        export_mime = 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
-                        dl_url = f"{self.DRIVE_API_BASE}/files/{clean_id}/export?mimeType={urllib.parse.quote(export_mime)}"
-                        if not name.endswith('.pptx'):
-                            name += '.pptx'
-                    else:
-                        dl_url = f"{self.DRIVE_API_BASE}/files/{clean_id}?alt=media"
-
-                    dl_req = urllib.request.Request(
-                        dl_url,
-                        headers={'Authorization': f'Bearer {token}', 'User-Agent': 'SchoolNet-Cloud-Sync/1.0'}
-                    )
-                    with urllib.request.urlopen(dl_req, timeout=self.timeout) as dl_resp:
-                        content = dl_resp.read()
-                        content_type = dl_resp.headers.get('Content-Type', 'application/octet-stream')
-
-                    return content, content_type, name
-                except urllib.error.HTTPError:
-                    pass
-
-        # 2. Пряме завантаження (для публічних/спільних документів або при вході за логіном/паролем)
-        candidate_urls = [
-            (f"https://docs.google.com/document/d/{clean_id}/export?format=docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", f"document_{clean_id[:8]}.docx"),
-            (f"https://docs.google.com/spreadsheets/d/{clean_id}/export?format=xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", f"sheet_{clean_id[:8]}.xlsx"),
-            (f"https://docs.google.com/presentation/d/{clean_id}/export?format=pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation", f"presentation_{clean_id[:8]}.pptx"),
-            (f"https://drive.google.com/uc?export=download&id={clean_id}", "application/octet-stream", f"google_drive_file_{clean_id[:8]}"),
-        ]
-
-        last_error = None
-        for test_url, default_mime, default_name in candidate_urls:
+                headers['Authorization'] = 'Bearer ' + token
+            _, resource_key, _ = self._reference(source)
+            if resource_key:
+                headers['X-Goog-Drive-Resource-Keys'] = fid + '/' + resource_key
             try:
-                headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) SchoolNet-Sync/1.0'}
-                req = urllib.request.Request(test_url, headers=headers)
-                with urllib.request.urlopen(req, timeout=self.timeout) as resp:
-                    if resp.status == 200:
-                        content = resp.read()
-                        ct = resp.headers.get('Content-Type', default_mime)
-                        # Якщо Google повернув сторінку HTML авторизації замість бінарного файлу
-                        if 'text/html' in ct and b'<html' in content[:100].lower():
-                            continue
-
-                        cd = resp.headers.get('Content-Disposition', '')
-                        filename = default_name
-                        if 'filename=' in cd:
-                            m = re.search(r'filename\*?=(?:UTF-8\'\')?["\']?([^"\';]+)["\']?', cd)
-                            if m:
-                                filename = urllib.parse.unquote(m.group(1).strip())
-
-                        return content, ct, filename
-            except Exception as e:
-                last_error = e
-                continue
-
-        if last_error:
-            raise ValueError(f"Не вдалося завантажити файл із Google Drive ({clean_id}). Переконайтеся, що доступ до файлу відкрито для перегляду за посиланням.")
-        raise ValueError(f"Не вдалося завантажити файл з Google Drive ({clean_id}).")
+                with self._open(urllib.request.Request(url, headers=headers)) as response:
+                    return stream_response(response, filename=name,
+                        expected_size=int(metadata['size']) if not export and 'size' in metadata else None,
+                        checksum=(metadata.get('sha256Checksum') or metadata.get('md5Checksum', '')) if not export else '',
+                        algorithm='sha256' if metadata.get('sha256Checksum') else 'md5',
+                        progress=progress, destination=destination, exported=bool(export), source_id=fid, authoritative_name=True)
+            except CloudStorageError:
+                raise
+            except Exception as error:
+                raise provider_error(error) from error
+        response, fallback, exported, fid = self._public_response(source)
+        with response:
+            return stream_response(response, filename=fallback, progress=progress,
+                                   destination=destination, exported=exported, source_id=fid)

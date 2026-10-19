@@ -138,6 +138,10 @@ AI_JOB_TIMEOUT = int(os.environ.get('AI_JOB_TIMEOUT', '600'))
 # Reversible viewer optimization; no database migrations or worker changes.
 REVIEW_ASYNC = os.environ.get('SCHOOLNET_REVIEW_ASYNC', 'True') == 'True'
 CODE_RUNNER_URL = os.environ.get('CODE_RUNNER_URL', '')
+CLOUD_IMPORT_ROOT = Path(os.environ.get('CLOUD_IMPORT_ROOT', str(Path(os.environ.get('AI_CACHE_DIR', '/tmp/schoolnet-ai-cache')).parent / 'schoolnet-cloud-imports')))
+CLOUD_IMPORT_MAX_BYTES = int(os.environ.get('CLOUD_IMPORT_MAX_BYTES', str(1024**3)))
+CLOUD_IMPORT_TIMEOUT = int(os.environ.get('CLOUD_IMPORT_TIMEOUT', '300'))
+CLOUD_NEXTCLOUD_CA_FILE = os.environ.get('CLOUD_NEXTCLOUD_CA_FILE', '')
 CODE_RUNNER_TOKEN = os.environ.get('CODE_RUNNER_TOKEN') or SECRET_KEY
 REVIEW_PREVIEW_DIR = os.environ.get('REVIEW_PREVIEW_DIR',
     str(Path(os.environ.get('AI_CACHE_DIR', '/tmp/schoolnet-ai-cache')).parent / 'schoolnet-review-previews'))

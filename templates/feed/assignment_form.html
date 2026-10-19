@@ -4,6 +4,7 @@
 {% block title %}{% if is_edit %}Редагування завдання{% else %}Створення нового завдання{% endif %} — Шкільні Завдання{% endblock %}
 
 {% block extra_head %}
+<script src="{% static 'js/cloud_materials.js' %}?v=20261019-r2" defer></script>
 <link rel="stylesheet" href="{% static 'css/assignment_editor.css' %}?ui=20261018-r3">
 {% endblock %}
 
@@ -15,6 +16,9 @@
     </div>
     <form method="POST" enctype="multipart/form-data" novalidate id="assignment-form" autocomplete="off">
         {% csrf_token %}
+        {{ form.cloud_imports }}
+        {{ form.cloud_import_descriptors|json_script:"cloud-materials-initial" }}
+        {% if form.cloud_imports.errors %}<div class="alert alert-error" role="alert">{{ form.cloud_imports.errors }}</div>{% endif %}
 
         <div class="assignment-editor-layout">
             <div class="assignment-editor-main">

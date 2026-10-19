@@ -351,6 +351,8 @@ class AssignmentForm(forms.ModelForm):
         - посилання (link_url)
     """
 
+    cloud_imports = forms.JSONField(required=False, initial=list, widget=forms.HiddenInput)
+
     # Поле для вибору типу публікації (замінює поле status напряму)
     PUBLISH_CHOICE_NOW = 'now'
     PUBLISH_CHOICE_SCHEDULED = 'scheduled'
@@ -485,6 +487,8 @@ class AssignmentForm(forms.ModelForm):
     def __init__(self, teacher=None, *args, **kwargs):
         """Ініціалізація: відображає класи та предмети даного вчителя (або всі, якщо не вказані)."""
         super().__init__(*args, **kwargs)
+        self.teacher = teacher
+        self.cloud_jobs = []
 
         if teacher:
             if teacher.subjects.exists():
@@ -537,13 +541,19 @@ class AssignmentForm(forms.ModelForm):
     def clean(self):
         """Валідація: перевіряємо наявність хоча б одного вмісту."""
         cleaned_data = super().clean()
+        from .cloud_files import CloudStorageError
+        from .cloud_imports import prepare
+        try:
+            self.cloud_jobs = prepare(cleaned_data.get('cloud_imports') or [], self.teacher, self.instance)
+        except CloudStorageError as error:
+            self.add_error('cloud_imports', str(error))
         description = cleaned_data.get('description', '').strip()
         link_url = cleaned_data.get('link_url', '').strip()
         files_uploaded = cleaned_data.get('files', [])
 
         # Перевіряємо що є хоча б щось
         has_existing_files = bool(self.instance and self.instance.pk and self.instance.files.exists())
-        if not description and not link_url and not files_uploaded and not has_existing_files:
+        if not description and not link_url and not files_uploaded and not has_existing_files and not self.cloud_jobs:
             raise ValidationError(
                 'Додайте хоча б одне з: опис завдання, посилання або файл.'
             )
@@ -588,6 +598,10 @@ class AssignmentForm(forms.ModelForm):
                 overrides[str(class_group.pk)] = {'preset_id': preset.pk, 'grs': grs if preset.evaluation_type != 'traditional' else []}
         cleaned_data['class_ai_overrides'] = overrides
         return cleaned_data
+
+    def cloud_import_descriptors(self):
+        from .cloud_imports import describe
+        return [describe(job) for job in self.cloud_jobs]
 
     def save_with_status(self, teacher, commit=True):
         """Зберігає завдання з правильним статусом на основі publish_choice."""

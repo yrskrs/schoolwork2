@@ -23,6 +23,7 @@ bash "$SCRIPT_DIR/backup.sh"
 if [ -n "$BRANCH" ]; then git merge --ff-only "origin/$BRANCH"; fi
 python3 "$SCRIPT_DIR/select_release_image.py" schoolwork2
 export VCS_REF="$(git rev-parse HEAD 2>/dev/null || printf local)"
+export SOURCE_DIGEST="$(python3 "$SCRIPT_DIR/source_fingerprint.py")"
 APP_ID=$(docker compose ps -q app)
 if [ -n "$APP_ID" ]; then
     IMAGE_ID=$(docker inspect --format '{{.Image}}' "$APP_ID")
@@ -39,6 +40,7 @@ fi
 python3 "$SCRIPT_DIR/configure_integration_network.py"
 docker compose exec -T app python manage.py check
 docker compose exec -T app python manage.py migrate --check
+python3 "$SCRIPT_DIR/verify_release.py"
 printf 'Оновлення завершене: вебсервіс і ШІ-воркер здорові.\n'
 }
 update_main "$@"

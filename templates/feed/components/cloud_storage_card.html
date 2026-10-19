@@ -20,7 +20,7 @@
                         </div>
                         <div>
                             {% if cloud_storage.has_nextcloud %}
-                            <span class="status-badge status-published" style="font-size:11px;padding:3px 8px;">🟢 Підключено</span>
+                            <span class="status-badge status-published" style="font-size:11px;padding:3px 8px;">Налаштовано</span>
                             {% else %}
                             <span class="status-badge" style="font-size:11px;padding:3px 8px;background:var(--color-surface);color:var(--color-text-muted);border:1px solid var(--color-border);">⚪ Не підключено</span>
                             {% endif %}
@@ -66,7 +66,7 @@
                                 <label class="form-label required" style="font-size:12.5px;">Пароль або App Password (токен)</label>
                                 <input type="password" name="password" id="nc-input-password" class="form-input" style="font-size:13px;"
                                        placeholder="Пароль або токен застосунку"
-                                       value="{{ cloud_storage.nextcloud_password|default:'' }}" required>
+                                       autocomplete="new-password">
                                 <p class="form-hint" style="font-size:11px;margin-top:3px;">
                                     Рекомендується створити «Токен застосунку» в Nextcloud: Налаштування → Безпека.
                                 </p>
@@ -127,7 +127,7 @@
                         </div>
                         <div>
                             {% if cloud_storage.has_google_drive %}
-                            <span class="status-badge status-published" style="font-size:11px;padding:3px 8px;">🟢 Підключено</span>
+                            <span class="status-badge status-published" style="font-size:11px;padding:3px 8px;">Налаштовано</span>
                             {% else %}
                             <span class="status-badge" style="font-size:11px;padding:3px 8px;background:var(--color-surface);color:var(--color-text-muted);border:1px solid var(--color-border);">⚪ Не підключено</span>
                             {% endif %}
@@ -143,7 +143,7 @@
                             <strong>Папка:</strong> {{ cloud_storage.google_folder_link }}
                         </div>
                         {% endif %}
-                        <div class="text-muted text-xs" style="margin-top:4px;">Доступ до файлів Google Drive активовано для завдань уроку</div>
+                        <div class="text-muted text-xs" style="margin-top:4px;">{% if cloud_storage.google_access_token or cloud_storage.google_refresh_token %}OAuth налаштовано. Перевірте доступ кнопкою нижче.{% else %}Режим публічних посилань. Приватні файли потребують OAuth.{% endif %}</div>
                     </div>
                     <div id="gd-test-result" style="margin-bottom:12px;display:none;font-size:12.5px;"></div>
                     {% endif %}
@@ -161,16 +161,8 @@
                                        value="{{ cloud_storage.google_user_email|default:'' }}">
                             </div>
 
-                            <div class="form-group" style="margin-bottom:10px;">
-                                <label class="form-label" style="font-size:12.5px;">Пароль або App Password (опціонально)</label>
-                                <input type="password" name="password" id="gd-input-password" class="form-input" style="font-size:13px;"
-                                       placeholder="Пароль облікового запису Google"
-                                       value="{{ cloud_storage.google_password|default:'' }}">
-                                <p class="form-hint" style="font-size:11px;margin-top:3px;">
-                                    💡 Якщо у вашому обліковому записі увімкнено 2FA, використовуйте <strong>Пароль додатку</strong>.
-                                </p>
-                            </div>
-
+                            <input type="hidden" name="public_links" value="1">
+                            <p class="form-hint">Публічні файли можна додавати за посиланням. Для приватних файлів підключіть Google OAuth нижче. Пароль Gmail для Drive не потрібний.</p>
                             <div class="form-group" style="margin-bottom:12px;">
                                 <label class="form-label" style="font-size:12.5px;">📁 Посилання на папку Google Drive</label>
                                 <input type="text" name="folder_link" id="gd-input-folder" class="form-input" style="font-size:13px;"
@@ -183,11 +175,17 @@
 
                             <div class="form-group" style="margin-bottom:12px;">
                                 <label class="form-label" style="font-size:12.5px;">🔑 Google Drive API Key (опціонально для авто-списку файлів)</label>
-                                <input type="text" name="api_key" id="gd-input-apikey" class="form-input" style="font-size:13px;"
+                                <input type="password" name="api_key" id="gd-input-apikey" class="form-input" style="font-size:13px;"
                                        placeholder="AIzaSy..."
-                                       value="{{ cloud_storage.google_api_key|default:'' }}">
+                                       autocomplete="off">
                                 <p class="form-hint" style="font-size:11px;margin-top:3px;">
-                                    Безкоштовний ключ з Google Cloud Console для автоматичного перегляду файлів у папках без OAuth.
+                                    Ключ API може використовуватися для публічних матеріалів; доступ до приватних файлів надає OAuth.
+                                </p>
+                                <p class="form-hint" style="margin-top:6px;">
+                                    <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer">🔑 Створити API key у Google Cloud ↗</a><br>
+                                    Виберіть або створіть проєкт → «Create credentials» → «API key».
+                                    У тому самому проєкті <a href="https://console.cloud.google.com/apis/library/drive.googleapis.com" target="_blank" rel="noopener noreferrer">увімкніть Google Drive API ↗</a>
+                                    та обмежте ключ цим API.
                                 </p>
                             </div>
 
@@ -211,7 +209,7 @@
                         <!-- Альтернативний вхід через Google OAuth (для тих, хто має OAuth Project) -->
                         <details style="margin-top:14px;font-size:11.5px;border-top:1px dashed var(--color-border);padding-top:10px;">
                             <summary style="cursor:pointer;color:var(--color-primary);font-weight:600;">
-                                ⚙️ Альтернатива: авторизація через Google OAuth2
+                                🔐 Google OAuth — приватні файли та стабільний список папок
                             </summary>
                             <div style="margin-top:8px;background:var(--color-surface);padding:10px;border-radius:var(--radius-md);border:1px solid var(--color-border);">
                                 <p class="text-muted text-xs mb-2">
@@ -226,7 +224,7 @@
                                     </div>
                                     <div class="form-group" style="margin-bottom:8px;">
                                         <label class="form-label" style="font-size:11px;">Client Secret</label>
-                                        <input type="password" name="client_secret" class="form-input" style="font-size:11.5px;" value="{{ cloud_storage.google_client_secret|default:'' }}">
+                                        <input type="password" name="client_secret" class="form-input" style="font-size:11.5px;" autocomplete="new-password" placeholder="Залиште порожнім, щоб зберегти наявний">
                                     </div>
                                     <div style="display:flex;gap:6px;">
                                         <button type="submit" class="btn btn-secondary btn-sm" style="font-size:11px;">💾 Зберегти ключі</button>
@@ -262,156 +260,5 @@
     </div>
 </div>
 
-<script>
-function toggleNcEditForm(show) {
-    var form = document.getElementById('nextcloud-form-container');
-    var actions = document.getElementById('nc-connected-actions');
-    if (form) form.style.display = show ? 'block' : 'none';
-    if (actions) actions.style.display = show ? 'none' : 'flex';
-}
 
-function toggleGdEditForm(show) {
-    var form = document.getElementById('google-form-container');
-    var actions = document.getElementById('gd-connected-actions');
-    if (form) form.style.display = show ? 'block' : 'none';
-    if (actions) actions.style.display = show ? 'none' : 'flex';
-}
-
-function testNextcloudConnection() {
-    var resBox = document.getElementById('nc-setup-test-result');
-    if (!resBox) return;
-    var url = document.getElementById('nc-input-url').value;
-    var username = document.getElementById('nc-input-username').value;
-    var password = document.getElementById('nc-input-password').value;
-    var ignoreSsl = document.getElementById('nc-input-ignore-ssl').checked;
-
-    if (!url || !username || !password) {
-        resBox.style.display = 'block';
-        resBox.innerHTML = '<span style="color:var(--color-danger);">Будь ласка, заповніть адресу сервера, логін та пароль.</span>';
-        return;
-    }
-
-    resBox.style.display = 'block';
-    resBox.innerHTML = '<span style="color:var(--color-text-muted);">⏳ Перевірка з\'єднання з Nextcloud...</span>';
-
-    var fd = new FormData();
-    fd.append('url', url);
-    fd.append('username', username);
-    fd.append('password', password);
-    fd.append('ignore_ssl', ignoreSsl ? '1' : '0');
-
-    fetch("{% url 'teacher_cloud_test_nextcloud' %}", {
-        method: 'POST',
-        headers: {
-            'X-CSRFToken': '{{ csrf_token }}',
-            'X-Requested-With': 'XMLHttpRequest'
-        },
-        body: fd
-    })
-    .then(r => r.json())
-    .then(data => {
-        if (data.success) {
-            resBox.innerHTML = '<span style="color:var(--color-success);font-weight:700;">' + data.message + '</span>';
-        } else {
-            resBox.innerHTML = '<span style="color:var(--color-danger);">' + data.message + '</span>';
-        }
-    })
-    .catch(err => {
-        resBox.innerHTML = '<span style="color:var(--color-danger);">Помилка мережі: ' + err + '</span>';
-    });
-}
-
-function testSavedNextcloud() {
-    var resBox = document.getElementById('nc-test-result');
-    if (!resBox) return;
-    resBox.style.display = 'block';
-    resBox.innerHTML = '<span style="color:var(--color-text-muted);">⏳ Тестування підключення до Nextcloud...</span>';
-
-    fetch("{% url 'teacher_cloud_test_nextcloud' %}", {
-        method: 'POST',
-        headers: {
-            'X-CSRFToken': '{{ csrf_token }}',
-            'X-Requested-With': 'XMLHttpRequest'
-        }
-    })
-    .then(r => r.json())
-    .then(data => {
-        if (data.success) {
-            resBox.innerHTML = '<span style="color:var(--color-success);font-weight:700;">' + data.message + '</span>';
-        } else {
-            resBox.innerHTML = '<span style="color:var(--color-danger);">' + data.message + '</span>';
-        }
-    })
-    .catch(err => {
-        resBox.innerHTML = '<span style="color:var(--color-danger);">Помилка: ' + err + '</span>';
-    });
-}
-
-function testGoogleSetupConnection() {
-    var resBox = document.getElementById('gd-setup-test-result');
-    if (!resBox) return;
-    var email = document.getElementById('gd-input-email').value.trim();
-    var password = document.getElementById('gd-input-password').value.trim();
-    var folder = document.getElementById('gd-input-folder') ? document.getElementById('gd-input-folder').value.trim() : '';
-
-    if (!email || !password) {
-        resBox.style.display = 'block';
-        resBox.innerHTML = '<span style="color:var(--color-danger);">Будь ласка, вкажіть Google Email (логін) та пароль.</span>';
-        return;
-    }
-
-    resBox.style.display = 'block';
-    resBox.innerHTML = '<span style="color:var(--color-text-muted);">⏳ Перевірка облікового запису Google...</span>';
-
-    var fd = new FormData();
-    fd.append('email', email);
-    fd.append('password', password);
-    if (folder) fd.append('folder_link', folder);
-
-    fetch("{% url 'teacher_cloud_test_google' %}", {
-        method: 'POST',
-        headers: {
-            'X-CSRFToken': '{{ csrf_token }}',
-            'X-Requested-With': 'XMLHttpRequest'
-        },
-        body: fd
-    })
-    .then(r => r.json())
-    .then(data => {
-        if (data.success) {
-            resBox.innerHTML = '<span style="color:var(--color-success);font-weight:700;">' + data.message + '</span>';
-        } else {
-            resBox.innerHTML = '<span style="color:var(--color-danger);">' + data.message + '</span>';
-        }
-    })
-    .catch(err => {
-        resBox.innerHTML = '<span style="color:var(--color-danger);">Помилка мережі: ' + err + '</span>';
-    });
-}
-
-function testSavedGoogleDrive() {
-    var resBox = document.getElementById('gd-test-result');
-    if (!resBox) return;
-    resBox.style.display = 'block';
-    resBox.innerHTML = '<span style="color:var(--color-text-muted);">⏳ Тестування доступу до Google Drive...</span>';
-
-    fetch("{% url 'teacher_cloud_test_google' %}", {
-        method: 'POST',
-        headers: {
-            'X-CSRFToken': '{{ csrf_token }}',
-            'X-Requested-With': 'XMLHttpRequest'
-        }
-    })
-    .then(r => r.json())
-    .then(data => {
-        if (data.success) {
-            resBox.innerHTML = '<span style="color:var(--color-success);font-weight:700;">' + data.message + '</span>';
-        } else {
-            resBox.innerHTML = '<span style="color:var(--color-danger);">' + data.message + '</span>';
-        }
-    })
-    .catch(err => {
-        resBox.innerHTML = '<span style="color:var(--color-danger);">Помилка: ' + err + '</span>';
-    });
-}
-</script>
+{% load static %}<script src="{% static 'js/cloud_storage_settings.js' %}?v=20261019-r1" defer></script>
