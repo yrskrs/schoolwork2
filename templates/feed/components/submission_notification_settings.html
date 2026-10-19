@@ -5,20 +5,25 @@
     <form method="post" class="form-card-body" id="submission-notification-form">
         {% csrf_token %}
         <input type="hidden" name="action" value="save_submission_notifications">
-        <p class="text-muted">Для ваших завдань. Оберіть себе, учнів або обох. Учні бачать сповіщення лише обраного класу; індивідуальні завдання їм не транслюються.</p>
+        <p class="text-muted">Для ваших завдань. Оберіть себе, учнів або обох. Налаштуйте реакцію на натискання картки учнем, показ без прив’язки до класу та роботу у фонових вкладках.</p>
         {{ submission_notification_form.non_field_errors }}
         <div class="submission-notification-options">
             <fieldset>
                 <legend>Для вчителя</legend>
                 <label>{{ submission_notification_form.teacher_enabled }} Показувати мені</label>
                 <label>{{ submission_notification_form.teacher_sound }} Зі звуком</label>
-                <small>Натискання на картку відкриває роботу для перевірки.</small>
+                <small class="text-muted">Натискання на картку відкриває роботу для перевірки.</small>
             </fieldset>
             <fieldset>
                 <legend>Для учнів</legend>
                 <label>{{ submission_notification_form.students_enabled }} Показувати учням</label>
                 <label>{{ submission_notification_form.students_sound }} Зі звуком</label>
-                <small>Натискання на картку закриває сповіщення.</small>
+                <label>{{ submission_notification_form.students_click_opens_task }} Натискання відкриває здане завдання</label>
+                <small class="text-muted" style="display:block;margin-bottom:6px;">Якщо вимкнено — натискання просто закриває сповіщення.</small>
+                <label>{{ submission_notification_form.students_all_classes }} Показувати без прив’язки до класу</label>
+                <small class="text-muted" style="display:block;margin-bottom:6px;">Учні бачать сповіщення незалежно від відкритого завдання чи обраного класу.</small>
+                <label>{{ submission_notification_form.students_background_active }} Сповіщати та грати звук у фонових вкладках</label>
+                <small class="text-muted" style="display:block;">Сповіщення надходять, навіть якщо вкладка учня згорнута або не є активною.</small>
             </fieldset>
         </div>
         <div class="form-group submission-notification-duration">
@@ -26,9 +31,12 @@
             {{ submission_notification_form.duration_seconds }}
             {{ submission_notification_form.duration_seconds.errors }}
         </div>
-        <label class="submission-notification-sticky">{{ submission_notification_form.until_dismissed }} Показувати до натискання замість таймера</label>
-        <p class="text-muted">Праворуч унизу з’являться повне прізвище, ім’я, клас і коротка назва завдання. Повторна здача має бурштиновий акцент та інший сигнал.</p>
-        <p class="text-muted" id="submission-notification-audio-help">Браузер дозволяє звук після першого кліку або натискання клавіші на сторінці. Гучність залежить від пристрою. У прихованій вкладці сповіщення призупинені.</p>
+        <div class="submission-notification-options" style="margin-top:0;">
+            <label class="submission-notification-sticky">{{ submission_notification_form.until_dismissed }} Показувати до натискання замість таймера</label>
+            <label>{{ submission_notification_form.show_class_badge }} Показувати назву класу в картці</label>
+        </div>
+        <p class="text-muted">Повідомлення пише «ПІБ здав/ла роботу» та назву завдання. Повторна здача має бурштиновий акцент та інший сигнал.</p>
+        <p class="text-muted" id="submission-notification-audio-help">Браузер дозволяє звук після першого кліку або натискання клавіші на сторінці. Гучність залежить від пристрою.</p>
         <div class="submission-notification-actions">
             <button type="submit" class="btn btn-primary">Зберегти сповіщення</button>
             <button type="button" class="btn btn-secondary" data-submission-preview="new">Приклад здачі</button>

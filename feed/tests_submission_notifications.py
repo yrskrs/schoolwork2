@@ -86,7 +86,10 @@ class SubmissionNotificationTests(TestCase):
             self.assertEqual(event['resubmission'], attempt == 2)
             self.assertEqual(event['attempt'], attempt)
             self.assertEqual(self.client.get(event['url']).status_code, 200)
-            self.assertEqual(data['policies'][str(self.teacher.pk)], {'sound': True, 'duration': 9, 'sticky': False})
+            self.assertEqual(data['policies'][str(self.teacher.pk)], {
+                'sound': True, 'duration': 9, 'sticky': False, 'click_opens_task': True,
+                'all_classes': True, 'background_active': True, 'show_class': False,
+            })
             baseline = data['cursor']
         self.assertEqual(SubmissionNotification.objects.count(), 2)
         self.assertEqual(self.poll(since=baseline).json()['events'], [])
@@ -145,7 +148,7 @@ class SubmissionNotificationTests(TestCase):
         self.assertNotEqual(self.client.get(reverse('view_file', args=[sub.pk])).status_code, 200)
 
     def test_students_receive_only_selected_class_and_no_review_links_or_grades(self):
-        self.enable()
+        self.enable(students_click_opens_task=False, students_all_classes=False)
         self.event(grade='12', teacher_comment='Приватний коментар')
         student = Client()
         data = self.poll(student, since=0, **{'class': self.group.pk}).json()
@@ -155,6 +158,24 @@ class SubmissionNotificationTests(TestCase):
         self.assertNotIn('teacher_comment', data['events'][0])
         self.assertFalse(self.poll(student, since=0).json()['enabled'])
         self.assertEqual(self.poll(student, since=0, **{'class': self.other_group.pk}).json()['events'], [])
+
+    def test_student_task_link_and_all_classes_delivery(self):
+        self.enable(students_click_opens_task=True, students_all_classes=True, show_class_badge=False)
+        self.event()
+        student = Client()
+        # Student receives notice without class parameter
+        data = self.poll(student, since=0).json()
+        self.assertTrue(data['enabled'])
+        self.assertEqual(len(data['events']), 1)
+        event = data['events'][0]
+        self.assertEqual(event['url'], reverse('assignment_detail', args=[self.assignment.pk]))
+        self.assertFalse(event['show_class'])
+        self.assertNotIn('/teacher/', event['url'])
+
+        # Now test show_class_badge
+        self.enable(show_class_badge=True)
+        data_badge = self.poll(student, since=0).json()
+        self.assertTrue(data_badge['events'][0]['show_class'])
 
     def test_individual_draft_and_archived_tasks_are_hidden_from_student_notices(self):
         self.enable()

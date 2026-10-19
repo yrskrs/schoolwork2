@@ -15,6 +15,10 @@ class SubmissionNotificationSettings(models.Model):
     teacher_sound = models.BooleanField('Звук для мене', default=False)
     students_enabled = models.BooleanField('Сповіщення для учнів', default=False)
     students_sound = models.BooleanField('Звук для учнів', default=False)
+    students_click_opens_task = models.BooleanField('Натискання учнем відкриває завдання', default=True)
+    students_all_classes = models.BooleanField('Показувати учням без прив’язки до класу', default=True)
+    students_background_active = models.BooleanField('Сповіщати у фонових вкладках', default=True)
+    show_class_badge = models.BooleanField('Показувати назву класу в картці', default=False)
     duration_seconds = models.PositiveSmallIntegerField(
         'Тривалість показу (секунди)', default=5,
         validators=[MinValueValidator(1), MaxValueValidator(60)],
@@ -38,7 +42,8 @@ class SubmissionNotificationSettingsForm(forms.ModelForm):
     class Meta:
         model = SubmissionNotificationSettings
         fields = ['teacher_enabled', 'teacher_sound', 'students_enabled', 'students_sound',
-                  'duration_seconds', 'until_dismissed']
+                  'students_click_opens_task', 'students_all_classes', 'students_background_active',
+                  'show_class_badge', 'duration_seconds', 'until_dismissed']
         widgets = {'duration_seconds': forms.NumberInput(attrs={'class': 'form-input', 'min': 1, 'max': 60})}
 
 
@@ -69,15 +74,25 @@ def submission_notifications(request):
     settings = SubmissionNotificationSettings.objects.all()
     if is_teacher:
         settings = settings.filter(teacher=teacher, teacher_enabled=True)
-    elif request.user.is_authenticated or not class_id:
+    elif request.user.is_authenticated and not is_teacher:
         settings = settings.none()
     else:
-        settings = settings.filter(students_enabled=True)
+        # Учні: якщо передано class_id, шукаємо вчителів з увімкненими сповіщеннями;
+        # якщо class_id немає, підходять ті вчителі, де увімкнено students_all_classes.
+        if class_id:
+            settings = settings.filter(students_enabled=True)
+        else:
+            settings = settings.filter(students_enabled=True, students_all_classes=True)
+
     policies = {
         str(setting.teacher_id): {
             'sound': setting.teacher_sound if is_teacher else setting.students_sound,
             'duration': setting.duration_seconds,
             'sticky': setting.until_dismissed,
+            'click_opens_task': True if is_teacher else setting.students_click_opens_task,
+            'all_classes': setting.students_all_classes,
+            'background_active': setting.students_background_active,
+            'show_class': setting.show_class_badge,
         }
         for setting in settings
     }
@@ -99,26 +114,43 @@ def submission_notifications(request):
     else:
         events = events.filter(
             for_students=True,
-            submission__class_group_id=int(class_id),
             submission__assignment__status='published',
             submission__assignment__is_individual=False,
         )
+        all_class_teachers = [s.teacher_id for s in settings if s.students_all_classes]
+        single_class_teachers = [s.teacher_id for s in settings if not s.students_all_classes]
+
+        class_query = models.Q(teacher_id__in=all_class_teachers)
+        if class_id and single_class_teachers:
+            class_query |= models.Q(teacher_id__in=single_class_teachers, submission__class_group_id=int(class_id))
+        events = events.filter(class_query)
+
     rows = list(events.order_by('pk').values(
         'pk', 'teacher_id', 'submission_id', 'submission__last_name', 'submission__first_name',
-        'submission__class_group__name', 'submission__assignment__title', 'submission__is_resubmission',
-        'submission__resubmission_attempt', 'submission__group_authors',
+        'submission__class_group__name', 'submission__assignment_id', 'submission__assignment__title',
+        'submission__is_resubmission', 'submission__resubmission_attempt', 'submission__group_authors',
     )[:26])
     payload['has_more'] = len(rows) > 25
     for row in rows[:25]:
+        policy = policies.get(str(row['teacher_id']), {})
+        if is_teacher:
+            target_url = reverse('view_file', args=[row['submission_id']])
+        elif policy.get('click_opens_task', True):
+            target_url = reverse('assignment_detail', args=[row['submission__assignment_id']])
+        else:
+            target_url = ''
+
         payload['events'].append({
-            'id': row['pk'], 'teacher_id': str(row['teacher_id']),
+            'id': row['pk'],
+            'teacher_id': str(row['teacher_id']),
             'name': f"{row['submission__last_name']} {row['submission__first_name']}".strip(),
             'class_name': row['submission__class_group__name'],
+            'show_class': policy.get('show_class', False),
             'assignment': row['submission__assignment__title'][:120],
             'resubmission': row['submission__is_resubmission'],
             'attempt': row['submission__resubmission_attempt'],
             'authors': row['submission__group_authors'],
-            'url': reverse('view_file', args=[row['submission_id']]) if is_teacher else '',
+            'url': target_url,
         })
     if payload['has_more']:
         payload['cursor'] = rows[24]['pk']

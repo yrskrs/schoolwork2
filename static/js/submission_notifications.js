@@ -21,6 +21,8 @@
     let stopped = false;
     const visible = new Map();
 
+    const originalTitle = document.title;
+
     function save() {
         try {
             sessionStorage.setItem(storageKey, JSON.stringify({cursor, pending: pending.filter(item => !item.preview)}));
@@ -40,8 +42,9 @@
     document.addEventListener('pointerdown', unlockAudio, {passive: true});
     document.addEventListener('keydown', unlockAudio);
 
-    function sound(repeat) {
-        if (!audio || audio.state !== 'running' || document.hidden) return;
+    function sound(repeat, allowBackground = false) {
+        if (!audio || audio.state !== 'running') return;
+        if (document.hidden && !allowBackground) return;
         // Short ascending pair for a new submission, descending three notes for a repeat.
         const notes = repeat ? [660, 523, 440] : [523, 784];
         const start = audio.currentTime;
@@ -72,7 +75,8 @@
         const card = document.createElement('article');
         card.className = 'submission-notice' + (item.resubmission ? ' is-resubmission' : '');
         card.dataset.eventId = item.id;
-        const canOpen = teacher && /^\/teacher\/view-file\/\d+\/$/.test(item.url || '');
+        const canOpen = (teacher && /^\/teacher\/view-file\/\d+\/$/.test(item.url || '')) ||
+                        (!teacher && /^\/assignment\/\d+\/$/.test(item.url || ''));
         const main = document.createElement(canOpen ? 'a' : 'button');
         main.className = 'submission-notice-main';
         if (canOpen) main.href = item.url;
@@ -81,10 +85,12 @@
         const name = document.createElement('span');
         name.className = 'submission-notice-name';
         name.textContent = item.name;
-        const group = document.createElement('span');
-        group.className = 'submission-notice-class';
-        group.textContent = item.class_name;
-        name.append(group);
+        if (item.show_class && item.class_name) {
+            const group = document.createElement('span');
+            group.className = 'submission-notice-class';
+            group.textContent = item.class_name;
+            name.append(group);
+        }
         const status = document.createElement('span');
         status.className = 'submission-notice-status';
         status.textContent = item.resubmission ? `Повторно здав/ла роботу · спроба ${item.attempt}` : 'Здав/ла роботу';
@@ -102,7 +108,15 @@
         }
         const hint = document.createElement('span');
         hint.className = 'submission-notice-hint';
-        hint.textContent = item.preview ? 'Приклад сповіщення' : canOpen ? 'Відкрити для перевірки →' : 'Натисніть, щоб закрити';
+        if (item.preview) {
+            hint.textContent = 'Приклад сповіщення';
+        } else if (teacher) {
+            hint.textContent = 'Відкрити для перевірки →';
+        } else if (canOpen) {
+            hint.textContent = 'Відкрити завдання →';
+        } else {
+            hint.textContent = 'Натисніть, щоб закрити';
+        }
         main.append(hint);
         const close = document.createElement('button');
         close.type = 'button';
@@ -112,6 +126,10 @@
         close.addEventListener('click', () => dismiss(item.id));
         card.append(main, close);
         return card;
+    }
+
+    function hasBackgroundPolicy() {
+        return Object.values(policies).some(p => p.background_active !== false);
     }
 
     function render() {
@@ -127,6 +145,7 @@
             if (!active.has(id)) { entry.card.remove(); visible.delete(id); }
         });
         let play = null;
+        let playBackground = false;
         pending.slice(0, 3).forEach(item => {
             const policy = item.preview ? item.policy : policies[item.teacher_id];
             if (!item.shownAt) item.shownAt = now;
@@ -136,10 +155,13 @@
                 visible.set(item.id, entry);
                 list.append(entry.card);
                 // One sound per batch; repeated submissions take precedence.
-                if (!item.sounded && policy.sound) play = Boolean(play || item.resubmission);
+                if (!item.sounded && policy && policy.sound) {
+                    play = Boolean(play || item.resubmission);
+                    if (policy.background_active !== false) playBackground = true;
+                }
                 item.sounded = true;
             }
-            if (!policy.sticky) {
+            if (policy && !policy.sticky) {
                 entry.timer = setTimeout(() => {
                     // Do not remove the control while someone uses the keyboard on it.
                     if (entry.card.contains(document.activeElement)) {
@@ -148,7 +170,7 @@
                 }, Math.max(1, policy.duration * 1000 - (now - item.shownAt)));
             }
         });
-        if (play !== null) sound(play);
+        if (play !== null) sound(play, playBackground);
         clear.hidden = pending.length < 2;
         clear.textContent = pending.length > 3 ? `Ще ${pending.length - 3} у черзі · Закрити всі` : 'Закрити всі';
         save();
@@ -156,14 +178,23 @@
 
     clear.addEventListener('click', () => { pending = []; render(); schedule(0); });
 
+    function hasAllClassesPolicy() {
+        const list = Object.values(policies);
+        return list.length > 0 && list.some(p => p.all_classes);
+    }
+
     function schedule(delay) {
         clearTimeout(timer);
-        if (stopped || document.hidden || navigator.onLine === false || (!teacher && !classId)) return;
+        if (stopped || navigator.onLine === false) return;
+        if (!teacher && !classId && Object.keys(policies).length > 0 && !hasAllClassesPolicy()) return;
+        if (document.hidden && !hasBackgroundPolicy()) return;
         timer = setTimeout(poll, delay);
     }
 
     async function poll() {
-        if (controller || stopped || document.hidden || navigator.onLine === false) return;
+        if (controller || stopped || navigator.onLine === false) return;
+        if (!teacher && !classId && Object.keys(policies).length > 0 && !hasAllClassesPolicy()) return;
+        if (document.hidden && !hasBackgroundPolicy()) return;
         const currentGeneration = generation;
         controller = new AbortController();
         const currentController = controller;
@@ -171,32 +202,38 @@
         let delay = 5000;
         try {
             const url = new URL(root.dataset.endpoint, location.origin);
-            if (!teacher) url.searchParams.set('class', classId);
+            if (!teacher && classId) url.searchParams.set('class', classId);
             if (cursor !== null) url.searchParams.set('since', cursor);
             const response = await fetch(url, {signal: currentController.signal, cache: 'no-store',
                 headers: {'Accept': 'application/json'}, credentials: 'same-origin'});
             if (!response.ok) throw new Error('Notification request failed');
             const data = await response.json();
             if (currentGeneration !== generation || stopped) return;
-            policies = data.policies;
+            policies = data.policies || {};
             if (cursor !== null && data.cursor < cursor) pending = []; // Database restore.
             pending = pending.filter(item => item.preview || policies[item.teacher_id]);
             const known = new Set(pending.map(item => item.id));
             let accepted = cursor;
             let full = false;
+            let newBatch = 0;
             for (const item of data.events) {
                 if (!known.has(item.id)) {
                     // Keep DOM small and retain cursor backpressure for a long sticky queue.
                     if (pending.length >= 100) { full = true; break; }
                     pending.push(item);
                     known.add(item.id);
+                    newBatch += 1;
                 }
                 accepted = item.id;
             }
             cursor = full ? accepted : data.cursor;
             failures = 0;
-            delay = data.has_more && !full ? 1000 : data.poll_after * 1000;
+            delay = data.has_more && !full ? 1000 : (document.hidden ? 8000 : data.poll_after * 1000);
+            if (newBatch > 0 && document.hidden) {
+                document.title = '🔔 Здано роботу!';
+            }
             render();
+            if (!teacher && !classId && !hasAllClassesPolicy()) return;
         } catch (_) {
             failures += 1;
             delay = Math.min(60000, 5000 * (2 ** Math.min(failures, 4)));
@@ -212,10 +249,9 @@
         if (controller) controller.abort();
         classId = teacher ? '' : String(classSelect ? classSelect.value : feedClassSelect ? feedClassSelect.value : root.dataset.classId || '');
         if (!/^\d+$/.test(classId)) classId = '';
-        storageKey = 'schoolnet-submission-notices:' + root.dataset.viewer + ':' + classId;
+        storageKey = 'schoolnet-submission-notices:' + root.dataset.viewer + (classId ? ':' + classId : '');
         cursor = null;
         pending = [];
-        policies = {};
         visible.forEach(entry => { clearTimeout(entry.timer); entry.card.remove(); });
         visible.clear();
         clear.hidden = true;
@@ -231,10 +267,13 @@
     if (classSelect) classSelect.addEventListener('change', selectClass);
     if (!teacher) document.addEventListener('schoolnet:class-change', selectClass);
     document.addEventListener('visibilitychange', () => {
-        if (document.hidden) {
+        if (!document.hidden) {
+            document.title = originalTitle;
+            schedule(0);
+        } else if (!hasBackgroundPolicy()) {
             clearTimeout(timer);
             if (controller) controller.abort();
-        } else schedule(0);
+        }
     });
     window.addEventListener('offline', () => { clearTimeout(timer); if (controller) controller.abort(); });
     window.addEventListener('online', () => schedule(0));
@@ -257,10 +296,15 @@
                 sound: form.elements.teacher_sound.checked || form.elements.students_sound.checked,
                 duration: Math.max(1, Math.min(60, Number(form.elements.duration_seconds.value) || 5)),
                 sticky: form.elements.until_dismissed.checked,
+                background_active: form.elements.students_background_active ? form.elements.students_background_active.checked : true,
+                show_class: form.elements.show_class_badge ? form.elements.show_class_badge.checked : false,
+                click_opens_task: form.elements.students_click_opens_task ? form.elements.students_click_opens_task.checked : true,
             };
+            const previewUrl = teacher ? '/teacher/view-file/1/' : (policy.click_opens_task ? '/assignment/34/' : '');
             pending.unshift({id: 'preview-' + Date.now(), preview: true, policy,
-                name: 'Шевченко Олександра', class_name: '7-А', assignment: 'Практична робота: створення презентації',
-                resubmission: repeat, attempt: repeat ? 2 : 1, url: ''});
+                name: 'Шевченко Олександра', class_name: '7-А', show_class: policy.show_class,
+                assignment: 'Практична робота: створення презентації',
+                resubmission: repeat, attempt: repeat ? 2 : 1, url: previewUrl});
             render();
         });
     });

@@ -172,6 +172,10 @@ def main():
             assert cards() == 0
             print('PASS: repeat signal, persistent card and teacher review navigation', flush=True)
 
+            prefs.students_click_opens_task = False
+            prefs.students_all_classes = False
+            prefs.students_background_active = False
+            prefs.save()
             cdp.call('Page.navigate', {'url': base + '/teacher/logout/'})
             cdp.until("location.pathname==='/' && document.readyState==='complete' && document.querySelector('#submission-notifications')?.dataset.viewer==='student'")
             navigate(f'/assignment/{assignment.pk}/?class={group.pk}')
@@ -191,6 +195,18 @@ def main():
             click('.submission-notice-main')
             assert cards() == 0 and cdp.evaluate('location.href') == current
             print('PASS: student mobile/dark layout, independent audio and click dismissal', flush=True)
+
+            # Test student click opening assignment
+            prefs.students_click_opens_task = True; prefs.save()
+            submit()
+            cdp.until("document.querySelector('.submission-notice-main[href]')!==null", timeout=9)
+            assert cdp.evaluate(f"document.querySelector('.submission-notice-main').getAttribute('href')==='/assignment/{assignment.pk}/'")
+            click('.submission-notice-main')
+            cdp.until(f"location.pathname==='/assignment/{assignment.pk}/' && document.readyState==='complete'")
+            assert cards() == 0
+            print('PASS: student click opens task navigation', flush=True)
+            prefs.students_click_opens_task = False; prefs.save()
+            navigate(f'/assignment/{assignment.pk}/?class={group.pk}')
 
             # Queue is bounded in the DOM and survives page navigation without replaying sound.
             for _ in range(6):
@@ -220,7 +236,7 @@ def main():
             time.sleep(5.5)
             assert cards() == 0, 'Disabled student notices still arrived'
             outsider = Student.objects.create(first_name='Іван', last_name='Коваль', class_group=other_group)
-            prefs.students_enabled = True; prefs.students_sound = False; prefs.save()
+            prefs.students_enabled = True; prefs.students_sound = False; prefs.show_class_badge = True; prefs.save()
             navigate(f'/assignment/{assignment.pk}/?class={group.pk}&noaudio=1')
             submit(outsider)
             time.sleep(5.5)
