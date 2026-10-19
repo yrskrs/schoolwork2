@@ -1,0 +1,170 @@
+{
+  "release": {
+    "image": "schoolwork2-app:4.5.9-9dc940a0eb8f",
+    "revision": "06179d1289d7e80d75caf6b52ed7e5a79c198afe+dirty.9dc940a0eb8f",
+    "source_digest": "9dc940a0eb8f1b9131b18735e7dfead28d63e2d44b09ffd248d898b4264ee67d",
+    "status": "deployed",
+    "counts_preserved": true,
+    "previous_image": "schoolwork2-app:before-cloud-459-20261019-195934"
+  },
+  "tests": {
+    "postgresql": {
+      "tests": 810,
+      "result": "OK",
+      "skipped": 0,
+      "seconds": 74.691
+    },
+    "maintenance": {
+      "tests": 31,
+      "result": "OK"
+    },
+    "new_cloud_tests": 34,
+    "templates": 107,
+    "browser": {
+      "browser": "Chrome",
+      "result": "PASS",
+      "checks": [
+        "lazy help/history",
+        "provider errors as plain text",
+        "filtered select-all",
+        "real direct-link name/type",
+        "visible progress",
+        "provider locked during import",
+        "native document export",
+        "mobile/desktop layout",
+        "assignment save",
+        "exact original bytes and SHA256",
+        "AI source selection"
+      ],
+      "files": 3
+    }
+  },
+  "http": {
+    "health": {
+      "status": "ok",
+      "version": "4.5.9"
+    },
+    "routes": [
+      {
+        "path": "/healthz/",
+        "status": 200,
+        "ms": 5.95,
+        "bytes": 196
+      },
+      {
+        "path": "/teacher/login/",
+        "status": 200,
+        "ms": 25.26,
+        "bytes": 34879
+      },
+      {
+        "path": "/static/css/main.css",
+        "status": 200,
+        "ms": 1.11,
+        "bytes": 137299
+      },
+      {
+        "path": "/static/css/platform_layout.css",
+        "status": 200,
+        "ms": 0.8,
+        "bytes": 22620
+      },
+      {
+        "path": "/static/css/school_ui.css?ui=20261018-r6",
+        "status": 200,
+        "ms": 1.0,
+        "bytes": 46173
+      },
+      {
+        "path": "/static/js/ai_jobs.js?ui=20261018",
+        "status": 200,
+        "ms": 0.97,
+        "bytes": 21719
+      },
+      {
+        "path": "/static/js/main.js?ui=20261019-r5",
+        "status": 200,
+        "ms": 0.73,
+        "bytes": 46733
+      },
+      {
+        "path": "/static/js/responsive_tables.js",
+        "status": 200,
+        "ms": 0.81,
+        "bytes": 4057
+      },
+      {
+        "path": "/static/js/school_ui.js?ui=20261018-r6",
+        "status": 200,
+        "ms": 0.74,
+        "bytes": 9588
+      },
+      {
+        "path": "/static/js/site_preferences.js?ui=20261018",
+        "status": 200,
+        "ms": 0.69,
+        "bytes": 4081
+      },
+      {
+        "path": "/static/js/teacher_tools.js",
+        "status": 200,
+        "ms": 0.69,
+        "bytes": 6806
+      },
+      {
+        "path": "/static/js/upload_progress.js",
+        "status": 200,
+        "ms": 0.69,
+        "bytes": 2921
+      },
+      {
+        "path": "/teacher/cloud/status/",
+        "status": 302,
+        "ms": 1.4,
+        "bytes": 0
+      },
+      {
+        "path": "/teacher/cloud/browse/?drive=nextcloud",
+        "status": 302,
+        "ms": 1.43,
+        "bytes": 0
+      },
+      {
+        "path": "/teacher/cloud/browse/?drive=google",
+        "status": 302,
+        "ms": 1.52,
+        "bytes": 0
+      },
+      {
+        "path": "/teacher/cloud/download/?drive=nextcloud&path=audit-missing",
+        "status": 302,
+        "ms": 1.32,
+        "bytes": 0
+      },
+      {
+        "path": "/teacher/cloud/download/?drive=google&file_id=audit-missing",
+        "status": 302,
+        "ms": 1.25,
+        "bytes": 0
+      }
+    ],
+    "health_smoke": {
+      "requests": 40,
+      "concurrency": 4,
+      "errors": 0,
+      "median_ms": 1.93,
+      "p95_ms": 9.26,
+      "max_ms": 11.52
+    },
+    "nextcloud_public_status": {
+      "http": 200,
+      "installed": true,
+      "maintenance": false,
+      "needsDbUpgrade": false,
+      "versionstring": "35.0.2",
+      "productname": "Nextcloud"
+    }
+  },
+  "login_html_reduction_percent": 90.1,
+  "private_accounts_tested": false
+}

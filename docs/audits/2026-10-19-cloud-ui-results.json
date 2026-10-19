@@ -1,0 +1,79 @@
+{
+  "version": "4.5.10",
+  "image": "schoolwork2-app:4.5.10-a0c6b403af7e",
+  "revision": "0ac3e8ceac95fa45788917793901bdbfdf13490c+dirty.a0c6b403af7e",
+  "source_digest": "a0c6b403af7ebac9ac152a089f02c6adcc7bc2e7f095b8ef72699f8bf27e6adc",
+  "django_postgresql": {
+    "tests": 814,
+    "result": "OK",
+    "seconds": 82.306
+  },
+  "operational_tests": {
+    "tests": 31,
+    "result": "OK"
+  },
+  "browser": {
+    "browser": "Chrome",
+    "result": "PASS",
+    "checks": [
+      "readable default font and saved zoom",
+      "completion closes modal and shows receipt",
+      "reload retains only this draft",
+      "removed file stays removed after reload",
+      "new drafts ignore old/global imports",
+      "Google API and public header file sizes",
+      "Google API setup links",
+      "lazy help/history",
+      "provider errors as plain text",
+      "filtered select-all",
+      "real direct-link name/type",
+      "visible progress",
+      "provider locked during import",
+      "native document export",
+      "mobile/desktop layout at 150%",
+      "assignment save",
+      "exact original bytes and SHA256",
+      "AI source selection"
+    ],
+    "files": 3
+  },
+  "pip_check": "OK",
+  "migration_check": "OK",
+  "privacy": "Only synthetic test accounts and files; no credentials displayed.",
+  "deployment": {
+    "version": "4.5.10",
+    "image": "schoolwork2-app:4.5.10-a0c6b403af7e",
+    "revision": "0ac3e8ceac95fa45788917793901bdbfdf13490c+dirty.a0c6b403af7e",
+    "source_digest": "a0c6b403af7ebac9ac152a089f02c6adcc7bc2e7f095b8ef72699f8bf27e6adc",
+    "status": "deployed",
+    "counts_preserved": true,
+    "previous_image": "schoolwork2-app:before-cloud-4510-20261019-205625"
+  },
+  "backup": "backups/2026-10-19_20-56-25_wUnFz3",
+  "post_deploy": {
+    "health_version": "4.5.10",
+    "app_worker_source_verified": true,
+    "new_scripts_served": true,
+    "services_healthy": [
+      "app",
+      "ai_worker",
+      "updater",
+      "postgres"
+    ],
+    "nextcloud_from_app": {
+      "http": 200,
+      "version": "35.0.2",
+      "maintenance": false,
+      "needsDbUpgrade": false
+    },
+    "health_http": {
+      "requests": 40,
+      "concurrency": 4,
+      "errors": 0,
+      "median_ms": 1.52,
+      "p95_ms": 196.76,
+      "max_ms": 204.97
+    }
+  },
+  "implementation_commit": "0ac3e8ceac95fa45788917793901bdbfdf13490c"
+}
