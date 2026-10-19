@@ -374,6 +374,103 @@ class Teacher(models.Model):
             Q(grade__isnull=True) | Q(grade='')
         ).count()
 
+    @property
+    def has_cloud_storage(self):
+        """Перевіряє, чи підключено хоча б одне хмарне сховище (Nextcloud чи Google Drive)."""
+        try:
+            cs = getattr(self, 'cloud_storage', None)
+            if cs:
+                return cs.has_any_connected()
+        except Exception:
+            pass
+        return False
+
+    def get_cloud_storage(self):
+        """Отримує або створює конфігурацію хмарного сховища вчителя."""
+        storage, _ = TeacherCloudStorage.objects.get_or_create(teacher=self)
+        return storage
+
+
+# ─── Хмарні сховища вчителя (Nextcloud, Google Drive) ─────────────────────────
+class TeacherCloudStorage(models.Model):
+    """
+    Налаштування підключення хмарних сховищ вчителя (Nextcloud та Google Drive).
+    Дозволяє прикріплювати файли до завдань безпосередньо з хмарного диску.
+    """
+    teacher = models.OneToOneField(
+        Teacher,
+        on_delete=models.CASCADE,
+        related_name='cloud_storage',
+        verbose_name='Вчитель'
+    )
+    # Nextcloud
+    nextcloud_enabled = models.BooleanField('Nextcloud увімкнено', default=False)
+    nextcloud_url = models.CharField('URL сервера Nextcloud', max_length=500, blank=True)
+    nextcloud_username = models.CharField('Користувач Nextcloud', max_length=255, blank=True)
+    nextcloud_password = models.CharField('Пароль / App Password', max_length=500, blank=True)
+    nextcloud_ignore_ssl = models.BooleanField('Ігнорувати SSL помилки (для локальних серверів)', default=False)
+
+    # Google Drive
+    google_drive_enabled = models.BooleanField('Google Drive увімкнено', default=False)
+    google_client_id = models.CharField('Google Client ID', max_length=500, blank=True)
+    google_client_secret = models.CharField('Google Client Secret', max_length=500, blank=True)
+    google_access_token = models.TextField('Google Access Token', blank=True)
+    google_refresh_token = models.TextField('Google Refresh Token', blank=True)
+    google_token_expiry = models.DateTimeField('Термін дії токена', null=True, blank=True)
+    google_user_email = models.CharField('Google Email', max_length=255, blank=True)
+    google_password = models.CharField('Google Пароль / App Password', max_length=500, blank=True)
+    google_folder_link = models.CharField('Посилання на папку / диск Google Drive', max_length=500, blank=True)
+    google_api_key = models.CharField('Google API Key (опціонально для автоматичного перегляду папок)', max_length=500, blank=True)
+
+    created_at = models.DateTimeField('Створено', auto_now_add=True)
+    updated_at = models.DateTimeField('Оновлено', auto_now=True)
+
+    class Meta:
+        verbose_name = 'Хмарне сховище вчителя'
+        verbose_name_plural = 'Хмарні сховища вчителів'
+
+    def __str__(self):
+        return f"Хмарні сховища: {self.teacher.full_name}"
+
+    def has_nextcloud(self):
+        return bool(self.nextcloud_enabled and self.nextcloud_url and self.nextcloud_username and self.nextcloud_password)
+
+    def has_google_drive(self):
+        return bool(self.google_drive_enabled and (
+            self.google_access_token or
+            self.google_refresh_token or
+            (self.google_user_email and self.google_password) or
+            self.google_folder_link or
+            self.google_api_key
+        ))
+
+    def has_any_connected(self):
+        return self.has_nextcloud() or self.has_google_drive()
+
+    def get_nextcloud_client(self):
+        from .cloud_storage import NextcloudClient
+        return NextcloudClient(
+            base_url=self.nextcloud_url,
+            username=self.nextcloud_username,
+            password=self.nextcloud_password,
+            ignore_ssl=self.nextcloud_ignore_ssl
+        )
+
+    def get_google_drive_client(self):
+        from .cloud_storage import GoogleDriveClient
+        return GoogleDriveClient(
+            client_id=self.google_client_id,
+            client_secret=self.google_client_secret,
+            access_token=self.google_access_token,
+            refresh_token=self.google_refresh_token,
+            token_expiry=self.google_token_expiry,
+            email=self.google_user_email,
+            password=self.google_password,
+            folder_link=self.google_folder_link,
+            api_key=self.google_api_key
+        )
+
+
 
 # ─── Розклад дзвінків ────────────────────────────────────────────────────────
 class BellSchedule(models.Model):

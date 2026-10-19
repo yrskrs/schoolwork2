@@ -1,13 +1,13 @@
 name: ${COMPOSE_PROJECT_NAME:-schoolwork2}
 services:
   app:
-    image: ${SCHOOLWORK_IMAGE:-schoolwork2-app:4.5.7}
+    image: ${SCHOOLWORK_IMAGE:-schoolwork2-app:4.5.8}
     build:
       context: .
       dockerfile: Dockerfile
       args:
         VCS_REF: ${VCS_REF:-local}
-        APP_VERSION: '4.5.7'
+        APP_VERSION: '4.5.8'
     container_name: schoolnet_app
     restart: unless-stopped
     depends_on:
@@ -20,6 +20,8 @@ services:
       AI_CACHE_DIR: '/var/cache/schoolnet/ai'
       CODE_RUNNER_URL: 'http://code_runner:8002'
       CODE_RUNNER_TOKEN: '${CODE_RUNNER_TOKEN:-${SECRET_KEY}}'
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       default: {}
       runner_control: {}
@@ -37,7 +39,7 @@ services:
       start_period: 45s
 
   ai_worker:
-    image: ${SCHOOLWORK_IMAGE:-schoolwork2-app:4.5.7}
+    image: ${SCHOOLWORK_IMAGE:-schoolwork2-app:4.5.8}
     container_name: schoolnet_ai_worker
     restart: unless-stopped
     command: ["python", "manage.py", "process_ai_jobs"]
@@ -46,6 +48,8 @@ services:
     environment:
       AI_JOBS_EAGER: 'False'
       AI_CACHE_DIR: '/var/cache/schoolnet/ai'
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       app:
         condition: service_healthy

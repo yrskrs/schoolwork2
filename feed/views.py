@@ -1538,6 +1538,8 @@ def assignment_create(request):
         'submitted_ai_grs': request.POST.getlist('default_ai_grs'),
         'teacher_lesson_schedules': teacher_lesson_schedules,
         'existing_target_dates': initial_target_dates,
+        'has_cloud_storage': teacher.has_cloud_storage,
+        'cloud_storage': teacher.get_cloud_storage(),
     }
     return render(request, 'feed/assignment_form.html', context)
 
@@ -1731,6 +1733,8 @@ def assignment_edit(request, pk):
         'teacher_lesson_schedules': teacher_lesson_schedules,
         'existing_target_dates': existing_target_dates,
         'submitted_ai_grs': request.POST.getlist('default_ai_grs'),
+        'has_cloud_storage': teacher.has_cloud_storage,
+        'cloud_storage': teacher.get_cloud_storage(),
     }
     return render(request, 'feed/assignment_form.html', context)
 
@@ -2208,6 +2212,7 @@ def teacher_profile(request):
         'other_subjects': other_subjects,
         'other_classes': other_classes,
         'all_teachers': all_teachers,
+        'cloud_storage': teacher.get_cloud_storage(),
     }
     return render(request, 'feed/teacher_profile.html', context)
 
@@ -8142,6 +8147,7 @@ def teacher_settings_view(request):
         'journal_connection_code': journal_connection_code,
         'api_base_url': request.build_absolute_uri('/')[:-1],
         'teacher': teacher,
+        'cloud_storage': teacher.get_cloud_storage(),
         'school': school,
         'profile_form': profile_form,
         'subject_form': subject_form,

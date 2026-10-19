@@ -6,6 +6,7 @@ from . import journal_api
 from . import school_api_v2
 from . import views_updates
 from . import python_runner
+from . import views_cloud
 from school_sync import django_backend as roster_views
 
 urlpatterns = [
@@ -157,4 +158,15 @@ urlpatterns = [
     path('teacher/roster-sync/', roster_views.roster_ui, name='roster_sync'),
     path('api/v1/journal/roster/', journal_api.api_journal_roster, name='api_journal_roster'),
     path('api/v1/journal/pull/', journal_api.api_journal_pull_from_external, name='api_journal_pull_from_external'),
+
+    # ── Інтеграція хмарних сховищ (Nextcloud та Google Drive) ─────────────────
+    path('teacher/cloud/status/', views_cloud.teacher_cloud_status, name='teacher_cloud_status'),
+    path('teacher/cloud/test-nextcloud/', views_cloud.teacher_cloud_test_nextcloud, name='teacher_cloud_test_nextcloud'),
+    path('teacher/cloud/save-nextcloud/', views_cloud.teacher_cloud_save_nextcloud, name='teacher_cloud_save_nextcloud'),
+    path('teacher/cloud/google/start/', views_cloud.teacher_cloud_google_auth_start, name='teacher_cloud_google_auth_start'),
+    path('teacher/cloud/google/callback/', views_cloud.teacher_cloud_google_callback, name='teacher_cloud_google_callback'),
+    path('teacher/cloud/test-google/', views_cloud.teacher_cloud_test_google, name='teacher_cloud_test_google'),
+    path('teacher/cloud/save-google/', views_cloud.teacher_cloud_save_google, name='teacher_cloud_save_google'),
+    path('teacher/cloud/browse/', views_cloud.teacher_cloud_browse, name='teacher_cloud_browse'),
+    path('teacher/cloud/download/', views_cloud.teacher_cloud_download, name='teacher_cloud_download'),
 ]

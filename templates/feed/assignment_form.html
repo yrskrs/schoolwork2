@@ -172,6 +172,7 @@ document.addEventListener('DOMContentLoaded', function() {
         syncFilesToInput();
         renderNewFilesUI();
     }
+    window.addFilesToStore = addFilesToStore;
 
     window.removeAssignmentNewFile = function(index) {
         var newStore = new DataTransfer();

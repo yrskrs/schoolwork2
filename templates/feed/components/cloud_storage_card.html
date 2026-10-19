@@ -1,0 +1,417 @@
+<div class="form-card mb-4" id="cloud-storage-settings-card">
+    <div class="form-card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+        <h2 class="form-card-title">☁️ Хмарні диски та сховища</h2>
+        <span class="text-muted text-xs">Підключіть хмарні диски для легкого прикріплення матеріалів до завдань</span>
+    </div>
+    <div class="form-card-body">
+        <p class="text-muted text-sm mb-4">
+            Після підключення Nextcloud або Google Drive при створенні та редагуванні завдань з'явиться кнопка
+            <strong>«☁️ Додати з хмарного диска»</strong>, яка дозволить обирати потрібні матеріали прямо з вашої хмари.
+        </p>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(320px, 1fr));gap:20px;">
+
+            <!-- ════ 1. NEXTCLOUD ════ -->
+            <div class="cloud-drive-box" style="border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:18px;background:var(--color-bg-secondary);display:flex;flex-direction:column;justify-content:space-between;">
+                <div>
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                        <div style="display:flex;align-items:center;gap:8px;font-weight:700;font-size:15px;color:var(--color-text-primary);">
+                            <span style="font-size:20px;">📁</span> Nextcloud
+                        </div>
+                        <div>
+                            {% if cloud_storage.has_nextcloud %}
+                            <span class="status-badge status-published" style="font-size:11px;padding:3px 8px;">🟢 Підключено</span>
+                            {% else %}
+                            <span class="status-badge" style="font-size:11px;padding:3px 8px;background:var(--color-surface);color:var(--color-text-muted);border:1px solid var(--color-border);">⚪ Не підключено</span>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    {% if cloud_storage.has_nextcloud %}
+                    <!-- Інформація про підключений Nextcloud -->
+                    <div style="font-size:13px;line-height:1.6;margin-bottom:14px;background:var(--color-surface);padding:12px;border-radius:var(--radius-md);border:1px solid var(--color-border);">
+                        <div><strong>Сервер:</strong> <code style="font-size:12px;word-break:break-all;">{{ cloud_storage.nextcloud_url }}</code></div>
+                        <div><strong>Користувач:</strong> {{ cloud_storage.nextcloud_username }}</div>
+                        {% if cloud_storage.nextcloud_ignore_ssl %}
+                        <div class="text-muted text-xs" style="margin-top:4px;">⚠️ Режим ігнорування SSL (локальний сервер)</div>
+                        {% endif %}
+                    </div>
+                    <div id="nc-test-result" style="margin-bottom:12px;display:none;font-size:12.5px;"></div>
+                    {% endif %}
+
+                    <!-- Форма підключення / редагування Nextcloud -->
+                    <div id="nextcloud-form-container" style="{% if cloud_storage.has_nextcloud %}display:none;{% endif %}">
+                        <form method="POST" action="{% url 'teacher_cloud_save_nextcloud' %}" id="nextcloud-setup-form">
+                            {% csrf_token %}
+                            <input type="hidden" name="cloud_action" value="save">
+
+                            <div class="form-group" style="margin-bottom:10px;">
+                                <label class="form-label required" style="font-size:12.5px;">URL сервера Nextcloud</label>
+                                <input type="text" name="url" id="nc-input-url" class="form-input" style="font-size:13px;"
+                                       placeholder="http://localhost:8090 або https://cloud.school.ua"
+                                       value="{{ cloud_storage.nextcloud_url|default:'' }}" required>
+                                <p class="form-hint" style="font-size:11px;margin-top:3px;">
+                                    Підтримуються локальні сервери (наприклад, <code>http://localhost:8090</code>) та зовнішні домени. Сервер автоматично налаштовує зв'язок з хостом.
+                                </p>
+                            </div>
+
+                            <div class="form-group" style="margin-bottom:10px;">
+                                <label class="form-label required" style="font-size:12.5px;">Ім'я користувача (логін)</label>
+                                <input type="text" name="username" id="nc-input-username" class="form-input" style="font-size:13px;"
+                                       placeholder="Логін у Nextcloud"
+                                       value="{{ cloud_storage.nextcloud_username|default:'' }}" required>
+                            </div>
+
+                            <div class="form-group" style="margin-bottom:12px;">
+                                <label class="form-label required" style="font-size:12.5px;">Пароль або App Password (токен)</label>
+                                <input type="password" name="password" id="nc-input-password" class="form-input" style="font-size:13px;"
+                                       placeholder="Пароль або токен застосунку"
+                                       value="{{ cloud_storage.nextcloud_password|default:'' }}" required>
+                                <p class="form-hint" style="font-size:11px;margin-top:3px;">
+                                    Рекомендується створити «Токен застосунку» в Nextcloud: Налаштування → Безпека.
+                                </p>
+                            </div>
+
+                            <div class="form-group" style="margin-bottom:14px;">
+                                <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;color:var(--color-text-primary);">
+                                    <input type="checkbox" name="ignore_ssl" id="nc-input-ignore-ssl" value="1" {% if cloud_storage.nextcloud_ignore_ssl %}checked{% endif %}>
+                                    <span>Ігнорувати помилки SSL (для локального самопідписаного HTTPS)</span>
+                                </label>
+                            </div>
+
+                            <div id="nc-setup-test-result" style="margin-bottom:12px;display:none;font-size:12.5px;"></div>
+
+                            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                                <button type="button" class="btn btn-secondary btn-sm" onclick="testNextcloudConnection()" style="font-size:12px;">
+                                    🔍 Перевірити
+                                </button>
+                                <button type="submit" class="btn btn-primary btn-sm" style="font-size:12px;font-weight:700;">
+                                    💾 Зберегти та підключити
+                                </button>
+                                {% if cloud_storage.has_nextcloud %}
+                                <button type="button" class="btn btn-secondary btn-sm" onclick="toggleNcEditForm(false)" style="font-size:12px;">
+                                    Скасувати
+                                </button>
+                                {% endif %}
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Кнопки керування для підключеного Nextcloud -->
+                {% if cloud_storage.has_nextcloud %}
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:14px;padding-top:10px;border-top:1px solid var(--color-border);" id="nc-connected-actions">
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="testSavedNextcloud()" style="font-size:12px;">
+                        🔍 Перевірити з'єднання
+                    </button>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="toggleNcEditForm(true)" style="font-size:12px;">
+                        ✏️ Змінити
+                    </button>
+                    <form method="POST" action="{% url 'teacher_cloud_save_nextcloud' %}" style="display:inline;margin:0;">
+                        {% csrf_token %}
+                        <input type="hidden" name="cloud_action" value="disconnect">
+                        <button type="submit" class="btn btn-secondary btn-sm" style="color:var(--color-danger);font-size:12px;" data-confirm="Від'єднати Nextcloud від вашого профілю?">
+                            ✕ Від'єднати
+                        </button>
+                    </form>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- ════ 2. GOOGLE DRIVE ════ -->
+            <div class="cloud-drive-box" style="border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:18px;background:var(--color-bg-secondary);display:flex;flex-direction:column;justify-content:space-between;">
+                <div>
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                        <div style="display:flex;align-items:center;gap:8px;font-weight:700;font-size:15px;color:var(--color-text-primary);">
+                            <span style="font-size:20px;">🔺</span> Google Drive
+                        </div>
+                        <div>
+                            {% if cloud_storage.has_google_drive %}
+                            <span class="status-badge status-published" style="font-size:11px;padding:3px 8px;">🟢 Підключено</span>
+                            {% else %}
+                            <span class="status-badge" style="font-size:11px;padding:3px 8px;background:var(--color-surface);color:var(--color-text-muted);border:1px solid var(--color-border);">⚪ Не підключено</span>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    {% if cloud_storage.has_google_drive %}
+                    <!-- Інформація про підключений Google Drive -->
+                    <div style="font-size:13px;line-height:1.6;margin-bottom:14px;background:var(--color-surface);padding:12px;border-radius:var(--radius-md);border:1px solid var(--color-border);">
+                        <div><strong>Обліковий запис:</strong> {{ cloud_storage.google_user_email|default:"Google Акаунт" }}</div>
+                        {% if cloud_storage.google_folder_link %}
+                        <div style="font-size:11.5px;color:var(--color-text-muted);word-break:break-all;margin-top:2px;">
+                            <strong>Папка:</strong> {{ cloud_storage.google_folder_link }}
+                        </div>
+                        {% endif %}
+                        <div class="text-muted text-xs" style="margin-top:4px;">Доступ до файлів Google Drive активовано для завдань уроку</div>
+                    </div>
+                    <div id="gd-test-result" style="margin-bottom:12px;display:none;font-size:12.5px;"></div>
+                    {% endif %}
+
+                    <!-- Форма підключення / редагування Google Drive за логіном та паролем -->
+                    <div id="google-form-container" style="{% if cloud_storage.has_google_drive %}display:none;{% endif %}">
+                        <form method="POST" action="{% url 'teacher_cloud_save_google' %}" id="google-setup-form">
+                            {% csrf_token %}
+                            <input type="hidden" name="cloud_action" value="save">
+
+                            <div class="form-group" style="margin-bottom:10px;">
+                                <label class="form-label" style="font-size:12.5px;">Google Email (або обліковий запис)</label>
+                                <input type="email" name="email" id="gd-input-email" class="form-input" style="font-size:13px;"
+                                       placeholder="teacher@gmail.com або шкільний акаунт"
+                                       value="{{ cloud_storage.google_user_email|default:'' }}">
+                            </div>
+
+                            <div class="form-group" style="margin-bottom:10px;">
+                                <label class="form-label" style="font-size:12.5px;">Пароль або App Password (опціонально)</label>
+                                <input type="password" name="password" id="gd-input-password" class="form-input" style="font-size:13px;"
+                                       placeholder="Пароль облікового запису Google"
+                                       value="{{ cloud_storage.google_password|default:'' }}">
+                                <p class="form-hint" style="font-size:11px;margin-top:3px;">
+                                    💡 Якщо у вашому обліковому записі увімкнено 2FA, використовуйте <strong>Пароль додатку</strong>.
+                                </p>
+                            </div>
+
+                            <div class="form-group" style="margin-bottom:12px;">
+                                <label class="form-label" style="font-size:12.5px;">📁 Посилання на папку Google Drive</label>
+                                <input type="text" name="folder_link" id="gd-input-folder" class="form-input" style="font-size:13px;"
+                                       placeholder="https://drive.google.com/drive/folders/..."
+                                       value="{{ cloud_storage.google_folder_link|default:'' }}">
+                                <p class="form-hint" style="font-size:11px;margin-top:3px;">
+                                    Вкажіть посилання на папку із завданнями на Google Drive (переконайтеся, що доступ: <em>«Усі, хто має посилання: Переглядач»</em>).
+                                </p>
+                            </div>
+
+                            <div class="form-group" style="margin-bottom:12px;">
+                                <label class="form-label" style="font-size:12.5px;">🔑 Google Drive API Key (опціонально для авто-списку файлів)</label>
+                                <input type="text" name="api_key" id="gd-input-apikey" class="form-input" style="font-size:13px;"
+                                       placeholder="AIzaSy..."
+                                       value="{{ cloud_storage.google_api_key|default:'' }}">
+                                <p class="form-hint" style="font-size:11px;margin-top:3px;">
+                                    Безкоштовний ключ з Google Cloud Console для автоматичного перегляду файлів у папках без OAuth.
+                                </p>
+                            </div>
+
+                            <div id="gd-setup-test-result" style="margin-bottom:12px;display:none;font-size:12.5px;"></div>
+
+                            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
+                                <button type="button" class="btn btn-secondary btn-sm" onclick="testGoogleSetupConnection()" style="font-size:12px;">
+                                    🔍 Перевірити
+                                </button>
+                                <button type="submit" class="btn btn-primary btn-sm" style="font-size:12px;font-weight:700;">
+                                    💾 Зберегти та підключити
+                                </button>
+                                {% if cloud_storage.has_google_drive %}
+                                <button type="button" class="btn btn-secondary btn-sm" onclick="toggleGdEditForm(false)" style="font-size:12px;">
+                                    Скасувати
+                                </button>
+                                {% endif %}
+                            </div>
+                        </form>
+
+                        <!-- Альтернативний вхід через Google OAuth (для тих, хто має OAuth Project) -->
+                        <details style="margin-top:14px;font-size:11.5px;border-top:1px dashed var(--color-border);padding-top:10px;">
+                            <summary style="cursor:pointer;color:var(--color-primary);font-weight:600;">
+                                ⚙️ Альтернатива: авторизація через Google OAuth2
+                            </summary>
+                            <div style="margin-top:8px;background:var(--color-surface);padding:10px;border-radius:var(--radius-md);border:1px solid var(--color-border);">
+                                <p class="text-muted text-xs mb-2">
+                                    Якщо у вашому закладі налаштовано Google Cloud Console із власним Client ID:
+                                </p>
+                                <form method="POST" action="{% url 'teacher_cloud_save_google' %}" style="margin-bottom:8px;">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="cloud_action" value="save">
+                                    <div class="form-group" style="margin-bottom:6px;">
+                                        <label class="form-label" style="font-size:11px;">Client ID</label>
+                                        <input type="text" name="client_id" class="form-input" style="font-size:11.5px;" value="{{ cloud_storage.google_client_id|default:'' }}" placeholder="xxxx.apps.googleusercontent.com">
+                                    </div>
+                                    <div class="form-group" style="margin-bottom:8px;">
+                                        <label class="form-label" style="font-size:11px;">Client Secret</label>
+                                        <input type="password" name="client_secret" class="form-input" style="font-size:11.5px;" value="{{ cloud_storage.google_client_secret|default:'' }}">
+                                    </div>
+                                    <div style="display:flex;gap:6px;">
+                                        <button type="submit" class="btn btn-secondary btn-sm" style="font-size:11px;">💾 Зберегти ключі</button>
+                                        <a href="{% url 'teacher_cloud_google_auth_start' %}" class="btn btn-secondary btn-sm" style="font-size:11px;">🔗 Увійти через OAuth</a>
+                                    </div>
+                                </form>
+                            </div>
+                        </details>
+                    </div>
+                </div>
+
+                <!-- Кнопки керування для підключеного Google Drive -->
+                {% if cloud_storage.has_google_drive %}
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:14px;padding-top:10px;border-top:1px solid var(--color-border);" id="gd-connected-actions">
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="testSavedGoogleDrive()" style="font-size:12px;">
+                        🔍 Перевірити з'єднання
+                    </button>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="toggleGdEditForm(true)" style="font-size:12px;">
+                        ✏️ Змінити
+                    </button>
+                    <form method="POST" action="{% url 'teacher_cloud_save_google' %}" style="display:inline;margin:0;">
+                        {% csrf_token %}
+                        <input type="hidden" name="cloud_action" value="disconnect">
+                        <button type="submit" class="btn btn-secondary btn-sm" style="color:var(--color-danger);font-size:12px;" data-confirm="Від'єднати Google Drive від вашого профілю?">
+                            ✕ Від'єднати
+                        </button>
+                    </form>
+                </div>
+                {% endif %}
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<script>
+function toggleNcEditForm(show) {
+    var form = document.getElementById('nextcloud-form-container');
+    var actions = document.getElementById('nc-connected-actions');
+    if (form) form.style.display = show ? 'block' : 'none';
+    if (actions) actions.style.display = show ? 'none' : 'flex';
+}
+
+function toggleGdEditForm(show) {
+    var form = document.getElementById('google-form-container');
+    var actions = document.getElementById('gd-connected-actions');
+    if (form) form.style.display = show ? 'block' : 'none';
+    if (actions) actions.style.display = show ? 'none' : 'flex';
+}
+
+function testNextcloudConnection() {
+    var resBox = document.getElementById('nc-setup-test-result');
+    if (!resBox) return;
+    var url = document.getElementById('nc-input-url').value;
+    var username = document.getElementById('nc-input-username').value;
+    var password = document.getElementById('nc-input-password').value;
+    var ignoreSsl = document.getElementById('nc-input-ignore-ssl').checked;
+
+    if (!url || !username || !password) {
+        resBox.style.display = 'block';
+        resBox.innerHTML = '<span style="color:var(--color-danger);">Будь ласка, заповніть адресу сервера, логін та пароль.</span>';
+        return;
+    }
+
+    resBox.style.display = 'block';
+    resBox.innerHTML = '<span style="color:var(--color-text-muted);">⏳ Перевірка з\'єднання з Nextcloud...</span>';
+
+    var fd = new FormData();
+    fd.append('url', url);
+    fd.append('username', username);
+    fd.append('password', password);
+    fd.append('ignore_ssl', ignoreSsl ? '1' : '0');
+
+    fetch("{% url 'teacher_cloud_test_nextcloud' %}", {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}',
+            'X-Requested-With': 'XMLHttpRequest'
+        },
+        body: fd
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            resBox.innerHTML = '<span style="color:var(--color-success);font-weight:700;">' + data.message + '</span>';
+        } else {
+            resBox.innerHTML = '<span style="color:var(--color-danger);">' + data.message + '</span>';
+        }
+    })
+    .catch(err => {
+        resBox.innerHTML = '<span style="color:var(--color-danger);">Помилка мережі: ' + err + '</span>';
+    });
+}
+
+function testSavedNextcloud() {
+    var resBox = document.getElementById('nc-test-result');
+    if (!resBox) return;
+    resBox.style.display = 'block';
+    resBox.innerHTML = '<span style="color:var(--color-text-muted);">⏳ Тестування підключення до Nextcloud...</span>';
+
+    fetch("{% url 'teacher_cloud_test_nextcloud' %}", {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}',
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            resBox.innerHTML = '<span style="color:var(--color-success);font-weight:700;">' + data.message + '</span>';
+        } else {
+            resBox.innerHTML = '<span style="color:var(--color-danger);">' + data.message + '</span>';
+        }
+    })
+    .catch(err => {
+        resBox.innerHTML = '<span style="color:var(--color-danger);">Помилка: ' + err + '</span>';
+    });
+}
+
+function testGoogleSetupConnection() {
+    var resBox = document.getElementById('gd-setup-test-result');
+    if (!resBox) return;
+    var email = document.getElementById('gd-input-email').value.trim();
+    var password = document.getElementById('gd-input-password').value.trim();
+    var folder = document.getElementById('gd-input-folder') ? document.getElementById('gd-input-folder').value.trim() : '';
+
+    if (!email || !password) {
+        resBox.style.display = 'block';
+        resBox.innerHTML = '<span style="color:var(--color-danger);">Будь ласка, вкажіть Google Email (логін) та пароль.</span>';
+        return;
+    }
+
+    resBox.style.display = 'block';
+    resBox.innerHTML = '<span style="color:var(--color-text-muted);">⏳ Перевірка облікового запису Google...</span>';
+
+    var fd = new FormData();
+    fd.append('email', email);
+    fd.append('password', password);
+    if (folder) fd.append('folder_link', folder);
+
+    fetch("{% url 'teacher_cloud_test_google' %}", {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}',
+            'X-Requested-With': 'XMLHttpRequest'
+        },
+        body: fd
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            resBox.innerHTML = '<span style="color:var(--color-success);font-weight:700;">' + data.message + '</span>';
+        } else {
+            resBox.innerHTML = '<span style="color:var(--color-danger);">' + data.message + '</span>';
+        }
+    })
+    .catch(err => {
+        resBox.innerHTML = '<span style="color:var(--color-danger);">Помилка мережі: ' + err + '</span>';
+    });
+}
+
+function testSavedGoogleDrive() {
+    var resBox = document.getElementById('gd-test-result');
+    if (!resBox) return;
+    resBox.style.display = 'block';
+    resBox.innerHTML = '<span style="color:var(--color-text-muted);">⏳ Тестування доступу до Google Drive...</span>';
+
+    fetch("{% url 'teacher_cloud_test_google' %}", {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}',
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            resBox.innerHTML = '<span style="color:var(--color-success);font-weight:700;">' + data.message + '</span>';
+        } else {
+            resBox.innerHTML = '<span style="color:var(--color-danger);">' + data.message + '</span>';
+        }
+    })
+    .catch(err => {
+        resBox.innerHTML = '<span style="color:var(--color-danger);">Помилка: ' + err + '</span>';
+    });
+}
+</script>
