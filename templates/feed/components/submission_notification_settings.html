@@ -6,11 +6,11 @@
     <form method="post" class="form-card-body" id="submission-notification-form">
         {% csrf_token %}
         <input type="hidden" name="action" value="save_submission_notifications">
-        <p class="text-muted">Налаштуйте сповіщення для ваших завдань: оберіть шаблон формулювання («Роботу здано»), мелодію дзвіночка, аудиторію показу та фонові права для учнів.</p>
+        <p class="text-muted">Оберіть текст, мелодію та аудиторію сповіщень для ваших завдань. Приклади використовують поточні значення форми; зміни застосуються після збереження.</p>
         {{ submission_notification_form.non_field_errors }}
 
         <!-- Шаблони та звуки -->
-        <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));gap:16px;margin-bottom:20px;">
+        <div class="submission-notification-customization">
             <div class="form-group" style="margin-bottom:0;">
                 <label class="form-label" for="id_text_template" style="font-weight:700;">📝 Шаблон формулювання сповіщення</label>
                 {{ submission_notification_form.text_template }}
@@ -30,8 +30,8 @@
             </div>
             <div class="form-group" style="margin-bottom:0;">
                 <label class="form-label" for="id_sound_preset" style="font-weight:700;">🎵 Мелодія звукового сигналу</label>
-                <div style="display:flex;gap:8px;align-items:center;">
-                    <div style="flex:1;">
+                <div class="submission-notification-sound-picker">
+                    <div>
                         {{ submission_notification_form.sound_preset }}
                     </div>
                     <button type="button" class="btn btn-secondary" id="btn-preview-sound" title="Прослухати обрану мелодію" style="white-space:nowrap;font-weight:700;">

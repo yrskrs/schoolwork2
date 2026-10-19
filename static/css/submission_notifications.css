@@ -99,9 +99,15 @@
     cursor: pointer;
 }
 .submission-notification-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin: 18px 0; }
+.submission-notification-customization { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 16px; margin-bottom: 20px; }
+.submission-notification-customization > div { min-width: 0; }
+.submission-notification-customization select { width: 100%; min-width: 0; max-width: 100%; }
+.submission-notification-sound-picker { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.submission-notification-sound-picker > div { flex: 1 1 180px; min-width: 0; }
 .submission-notification-options fieldset { min-width: 0; border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: 14px; }
 .submission-notification-options legend { font-weight: 700; padding: 0 5px; }
 .submission-notification-options label { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; cursor: pointer; }
+.submission-notification-options input[type="checkbox"] { flex-shrink: 0; }
 .submission-notification-options small { display: block; color: var(--color-text-muted); }
 .submission-notification-duration input { max-width: 130px; }
 .submission-notification-sticky { display: flex; align-items: center; gap: 8px; cursor: pointer; }

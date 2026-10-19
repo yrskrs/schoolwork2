@@ -29,7 +29,13 @@ window.noticePolls = [];
 window.noticeFrequencies = [];
 const originalFetch = window.fetch;
 window.fetch = (...args) => {
-  if (String(args[0]).includes('/api/submission-notifications/')) window.noticePolls.push(Date.now());
+  if (String(args[0]).includes('/api/submission-notifications/')) {
+    window.noticePolls.push(Date.now());
+    return originalFetch(...args).then(async response => {
+      window.noticePolicies = (await response.clone().json()).policies;
+      return response;
+    });
+  }
   return originalFetch(...args);
 };
 const NativeAudio = window.AudioContext;
@@ -46,6 +52,8 @@ if (location.search.includes('noaudio=1')) window.AudioContext = window.webkitAu
 
 
 def main():
+    import dotenv
+    dotenv.load_dotenv = lambda *args, **kwargs: False
     os.environ['DJANGO_SETTINGS_MODULE'] = 'schoolnet.test_settings'
     os.environ['ROSTER_PEERS'] = '[]'
     chrome = os.environ.get('CHROME_BINARY') or shutil.which('google-chrome') or shutil.which('chromium')
@@ -114,8 +122,9 @@ def main():
                 'value': client.cookies[settings.SESSION_COOKIE_NAME].value, 'url': base})
 
             def navigate(path):
+                cdp.evaluate('window.noticeNavigating=true')
                 cdp.call('Page.navigate', {'url': base + path})
-                cdp.until("location.href===" + json.dumps(base + path) + " && document.readyState==='complete' && !!document.querySelector('#submission-notifications')")
+                cdp.until("!window.noticeNavigating && location.href===" + json.dumps(base + path) + " && document.readyState==='complete' && !!document.querySelector('#submission-notifications')")
                 cdp.until('window.noticePolls.length>0')
 
             def submit(pupil=student):
@@ -138,10 +147,56 @@ def main():
             def cards():
                 return cdp.evaluate("document.querySelectorAll('.submission-notice').length")
 
-            navigate('/teacher/settings/?tab=environment&section=notifications')
+            navigate('/teacher/settings/?tab=environment')
+            click('#env-subtab-btn-notifications')
+            cdp.until("document.readyState==='complete' && !document.querySelector('#tab-section-ai') && !!document.querySelector('#submission-notification-form')")
+            click('#settings-sidebar-links a[href*="tab=profile"]')
+            cdp.until("location.search==='?tab=profile' && document.readyState==='complete'")
+            click('#settings-sidebar-links a[href*="section=notifications"]')
+            cdp.until("document.readyState==='complete' && !document.querySelector('#tab-section-ai') && !!document.querySelector('#submission-notification-form')")
+            assert not cdp.evaluate("!!document.querySelector('#tab-section-ai')")
+            # Test sound is independent of the switches used for real delivery.
+            presets = {'chime': [523, 784], 'marimba': [440, 554, 659],
+                       'ping': [880, 1318], 'bell': [587, 880, 1174],
+                       'subtle': [392, 523], 'fanfare': [523, 659, 784, 1046]}
+            for preset, notes in presets.items():
+                cdp.evaluate(f"document.querySelector('#id_sound_preset').value={json.dumps(preset)}; window.noticeFrequencies=[]")
+                click('#btn-preview-sound')
+                cdp.until(f'window.noticeFrequencies.length==={len(notes)}')
+                assert json.loads(cdp.evaluate('JSON.stringify(window.noticeFrequencies)')) == notes
+            cdp.evaluate("document.querySelector('#id_sound_preset').value='chime'; window.noticeFrequencies=[]")
+            templates = {'work_submitted': 'Роботу здано', 'new_work': 'Нове надходження роботи',
+                         'task_completed': 'Завдання успішно виконано',
+                         'submission_received': 'Отримано відповідь на завдання',
+                         'submission_success': 'Здано на перевірку вчителю'}
+            for key, label in templates.items():
+                cdp.evaluate(f"document.querySelector('#id_text_template').value={json.dumps(key)}; document.querySelector('#id_text_template').dispatchEvent(new Event('change'))")
+                assert cdp.evaluate("document.querySelector('#template-live-status').textContent") == label
+                click('[data-submission-preview="new"]')
+                assert not cdp.evaluate("!!document.querySelector('.submission-notice-main[href]')")
+                assert cdp.evaluate("document.querySelector('.submission-notice-status').textContent") == label
+                current = cdp.evaluate('location.href')
+                click('.submission-notice-main')
+                assert cards() == 0 and cdp.evaluate('location.href') == current
+                click('[data-submission-preview="repeat"]')
+                assert cdp.evaluate("document.querySelector('.submission-notice-status').textContent.includes('спроба 2')")
+                click('.submission-notice-close')
+            cdp.evaluate("document.querySelector('#id_text_template').value='work_submitted'; document.querySelector('#id_text_template').dispatchEvent(new Event('change'))")
+            cdp.evaluate('window.scrollTo(0,0)')
+            screenshot('settings-desktop.png')
+            for width in (320, 390, 768):
+                cdp.call('Emulation.setDeviceMetricsOverride', {'width': width, 'height': 844, 'deviceScaleFactor': 1, 'mobile': True})
+                assert cdp.evaluate("(() => { const f=document.querySelector('#submission-notification-form'); return f.scrollWidth<=f.clientWidth+1 && [...f.querySelectorAll('select,button,input')].every(e=>{const r=e.getBoundingClientRect(); return r.left>=0 && r.right<=innerWidth;}); })()"), f'Settings overflow at {width}px'
+                if width == 390:
+                    cdp.evaluate("document.documentElement.dataset.theme='dark'")
+                    screenshot('settings-mobile-dark.png')
+                    cdp.evaluate("document.documentElement.dataset.theme='light'")
+            cdp.call('Emulation.setDeviceMetricsOverride', {'width': 1440, 'height': 1000, 'deviceScaleFactor': 1, 'mobile': False})
+            print('PASS: lightweight settings, all six sound presets with sound disabled, five templates, safe examples, 320/390/768px layout', flush=True)
             cdp.evaluate("document.querySelector('#id_teacher_enabled').checked=true; document.querySelector('#id_students_enabled').checked=true; document.querySelector('#id_teacher_sound').checked=true; document.querySelector('#id_students_sound').checked=true; document.querySelector('#id_duration_seconds').value='5'")
+            cdp.evaluate('window.noticeSaving=true')
             click('#submission-notification-form button[type=submit]')
-            cdp.until("location.hash==='#submission-notification-settings' && document.readyState==='complete'")
+            cdp.until("!window.noticeSaving && location.hash==='#submission-notification-settings' && document.readyState==='complete'")
             cdp.until('window.noticePolls.length>0')
             prefs = SubmissionNotificationSettings.objects.get(teacher=teacher)
             assert prefs.teacher_enabled and prefs.students_sound and prefs.duration_seconds == 5
@@ -170,10 +225,13 @@ def main():
             screenshot('teacher-light-resubmitted.png')
             time.sleep(5.3)
             assert cards() == 1, 'Sticky card expired'
+            cdp.call('Page.reload')
+            cdp.until("document.readyState==='complete' && document.querySelectorAll('.submission-notice').length===1")
+            assert cdp.evaluate('window.noticeFrequencies.length') == 0, 'Sticky reload replayed audio'
             click('.submission-notice-main')
             cdp.until("location.pathname.startsWith('/teacher/view-file/') && document.readyState==='complete'")
             assert cards() == 0
-            print('PASS: repeat signal, persistent card and teacher review navigation', flush=True)
+            print('PASS: repeat signal, sticky card survives reload after its normal duration, no replay, teacher review navigation', flush=True)
 
             prefs.students_click_opens_task = False
             prefs.students_all_classes = False
@@ -220,8 +278,15 @@ def main():
             cdp.until("document.readyState==='complete' && document.querySelectorAll('.submission-notice').length===3")
             assert cdp.evaluate('window.noticeFrequencies.length') == 0, 'Reload replayed audio'
             screenshot('student-dark-queue.png')
+            queue_key = f'schoolnet-submission-notices:student:{group.pk}'
+            stale_queue = cdp.evaluate(f'sessionStorage.getItem({json.dumps(queue_key)})')
             click('.submission-notifications-clear')
             assert cards() == 0
+            # A stale queue in another class scope must respect "close all" too.
+            cdp.evaluate(f'sessionStorage.setItem({json.dumps(queue_key)}, {json.dumps(stale_queue)})')
+            cdp.call('Page.reload')
+            cdp.until(f"document.readyState==='complete' && JSON.parse(sessionStorage.getItem({json.dumps(queue_key)})||'null')?.pending.length===0")
+            assert cards() == 0, 'Close all replayed a stale queue'
 
             # Simulate document visibility to verify the controller stops and resumes polling.
             cdp.evaluate("Object.defineProperty(document,'hidden',{configurable:true,get:()=>window.noticeHidden}); window.noticeHidden=true; document.dispatchEvent(new Event('visibilitychange')); window.hiddenPollCount=window.noticePolls.length")
@@ -258,8 +323,18 @@ def main():
             cdp.evaluate("applyFilter('all',null); window.allClassPolls=window.noticePolls.length")
             time.sleep(5.5)
             assert cards() == 0 and cdp.evaluate('window.noticePolls.length===window.allClassPolls')
+            prefs.students_background_active = True; prefs.students_sound = True; prefs.save()
+            navigate(f'/assignment/{assignment.pk}/?class={group.pk}&background=1')
+            cdp.until(f"window.noticePolicies?.['{teacher.pk}']?.background_active===true")
+            click('h1')
+            cdp.evaluate("Object.defineProperty(document,'hidden',{configurable:true,get:()=>window.noticeHidden}); window.noticeHidden=true; document.dispatchEvent(new Event('visibilitychange'))")
+            submit()
+            cdp.until("document.querySelector('.submission-notice')!==null && window.noticeFrequencies.length===3", timeout=12)
+            assert cdp.evaluate("document.title==='🔔 Роботу здано!'")
+            cdp.evaluate("window.noticeHidden=false; document.dispatchEvent(new Event('visibilitychange'))")
+            assert cdp.evaluate("document.title!=='🔔 Роботу здано!'")
             assert not cdp.errors, cdp.errors
-            print('PASS: live disable, class isolation, AJAX class switching, text without AudioContext; no JS exceptions', flush=True)
+            print('PASS: live disable, class isolation, AJAX class switching, text without AudioContext, background delivery/audio/title; no JS exceptions', flush=True)
             print('Artifacts: ' + str(artifacts), flush=True)
         finally:
             browser.terminate(); browser.wait(timeout=10)

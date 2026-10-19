@@ -1491,6 +1491,14 @@ document.addEventListener('click', function(e) {
 });
 
 function switchEnvSubtab(sectionName, btnEl) {
+    if (sectionName === 'notifications') {
+        var notificationsUrl = new URL(window.location.href);
+        notificationsUrl.searchParams.set('tab', 'environment');
+        notificationsUrl.searchParams.set('section', 'notifications');
+        notificationsUrl.hash = 'submission-notification-settings';
+        window.location.assign(notificationsUrl);
+        return false;
+    }
     var schoolPanel = document.getElementById('env-panel-school');
     var notifPanel = document.getElementById('env-panel-notifications');
     var schoolBtn = document.getElementById('env-subtab-btn-school');

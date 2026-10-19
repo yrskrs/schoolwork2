@@ -1,4 +1,4 @@
-/* Submission notices use small JSON polls; hidden/offline pages do no work. */
+/* Small JSON polls; background delivery follows the teacher's policy. */
 (() => {
     'use strict';
     const root = document.getElementById('submission-notifications');
@@ -29,8 +29,8 @@
         } catch (_) { /* Notifications also work with storage disabled. */ }
     }
 
-    function unlockAudio() {
-        if (!Object.values(policies).some(policy => policy.sound) &&
+    function unlockAudio(force = false) {
+        if (force !== true && !Object.values(policies).some(policy => policy.sound) &&
             !document.querySelector('#submission-notification-form input[name$="_sound"]:checked')) return;
         try {
             const Audio = window.AudioContext || window.webkitAudioContext;
@@ -91,11 +91,12 @@
         }
     }
 
-    function markDismissed(id) {
-        if (!id) return;
+    function markDismissed(ids) {
         try {
             const set = getDismissedIds();
-            set.add(String(id));
+            for (const id of Array.isArray(ids) ? ids : [ids]) {
+                if (id && !String(id).startsWith('preview-')) set.add(String(id));
+            }
             sessionStorage.setItem(DISMISSED_KEY, JSON.stringify(Array.from(set).slice(-200)));
         } catch (_) {}
     }
@@ -276,7 +277,12 @@
         save();
     }
 
-    clear.addEventListener('click', () => { pending = []; render(); schedule(0); });
+    clear.addEventListener('click', () => {
+        markDismissed(pending.filter(item => !item.preview).map(item => item.id));
+        pending = [];
+        render();
+        schedule(0);
+    });
 
     function hasAllClassesPolicy() {
         const list = Object.values(policies);
@@ -330,7 +336,7 @@
             }
             cursor = full ? accepted : data.cursor;
             failures = 0;
-            delay = data.has_more && !full ? 1000 : (document.hidden ? 8000 : data.poll_after * 1000);
+            delay = data.has_more && !full ? 1000 : Math.max(document.hidden ? 8000 : 0, data.poll_after * 1000);
             if (newBatch > 0 && document.hidden) {
                 document.title = '🔔 Роботу здано!';
             }
@@ -362,14 +368,9 @@
             if (state && Number.isSafeInteger(state.cursor) && state.cursor >= 0) {
                 cursor = state.cursor;
                 const dismissed = getDismissedIds();
-                const now = Date.now();
                 const rawPending = Array.isArray(state.pending) ? state.pending.slice(0, 100) : [];
-                pending = rawPending.filter(item => {
-                    if (dismissed.has(String(item.id))) return false;
-                    const dur = (item.duration || 5) * 1000;
-                    if (item.shownAt && (now - item.shownAt >= dur)) return false;
-                    return true;
-                });
+                // render() applies the current server policy, including sticky cards.
+                pending = rawPending.filter(item => !dismissed.has(String(item.id)));
             }
         } catch (_) { /* Fresh baseline when storage is unavailable. */ }
         schedule(0);
@@ -412,12 +413,11 @@
                 template: form.elements.text_template ? form.elements.text_template.value : 'work_submitted',
                 sound_preset: form.elements.sound_preset ? form.elements.sound_preset.value : 'chime',
             };
-            const previewUrl = teacher ? '/teacher/view-file/1/' : (policy.click_opens_task ? '/assignment/34/' : '');
             pending.unshift({id: 'preview-' + Date.now(), preview: true, policy,
                 name: 'Шевченко Олександра', class_name: '7-А', show_class: policy.show_class,
                 template: policy.template, sound_preset: policy.sound_preset,
                 assignment: 'Практична робота: створення презентації',
-                resubmission: repeat, attempt: repeat ? 2 : 1, url: previewUrl});
+                resubmission: repeat, attempt: repeat ? 2 : 1, url: ''});
             render();
         });
     });
@@ -425,7 +425,7 @@
     const soundPreviewBtn = document.getElementById('btn-preview-sound');
     if (soundPreviewBtn) {
         soundPreviewBtn.addEventListener('click', async () => {
-            unlockAudio();
+            unlockAudio(true);
             if (audio && audio.state === 'suspended') await audio.resume().catch(() => {});
             const presetSelect = document.getElementById('id_sound_preset');
             const preset = presetSelect ? presetSelect.value : 'chime';

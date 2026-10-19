@@ -3,7 +3,9 @@ import json
 
 from django.contrib.auth import get_user_model
 from django.db import transaction
+from django.db import connection
 from django.test import Client, RequestFactory, TestCase
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
@@ -311,3 +313,19 @@ class SubmissionNotificationTests(TestCase):
         # Multi-class assignment has no implied audience until a class is selected.
         response = Client().get(reverse('assignment_detail', args=[self.assignment.pk]), {'class': self.group.pk})
         self.assertContains(response, f'data-class-id="{self.group.pk}"')
+
+    def test_notification_subpage_skips_unrelated_statistics_and_hidden_tabs(self):
+        with CaptureQueriesContext(connection) as queries:
+            response = self.client.get(reverse('teacher_settings'), {
+                'tab': 'environment', 'section': 'notifications',
+            })
+        self.assertTemplateUsed(response, 'feed/notification_settings.html')
+        self.assertContains(response, 'id="submission-notification-form"')
+        self.assertNotContains(response, 'id="tab-section-ai"')
+        self.assertNotContains(response, 'js/ai_usage_chart.js')
+        self.assertIn('no-store', response.headers['Cache-Control'])
+        for query in queries:
+            self.assertNotIn('feed_airequestlog', query['sql'].lower())
+            self.assertNotIn('feed_aierrorlog', query['sql'].lower())
+        alias = self.client.get(reverse('teacher_settings'), {'tab': 'notifications'})
+        self.assertTemplateUsed(alias, 'feed/notification_settings.html')

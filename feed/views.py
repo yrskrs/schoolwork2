@@ -7377,13 +7377,6 @@ def teacher_settings_view(request):
     3. Штучний інтелект (API ключ, системний промт, пріоритети моделей, черга fallback, видалення моделей, статистика).
     """
     teacher = request.user.teacher_profile
-    ai_settings = AISettings.get_solo()
-    if request.method == 'GET' and request.GET.get('tab') == 'ai':
-        ai_settings.import_legacy_connections()
-    school = School.objects.first()
-    if not school:
-        school = School.objects.create(name="Наш Заклад Освіти", admin=request.user)
-
     tab = request.GET.get('tab', 'profile')
     env_section = request.GET.get('section', 'school')
     if tab == 'notifications':
@@ -7398,6 +7391,34 @@ def teacher_settings_view(request):
         notification_settings = SubmissionNotificationSettings(teacher=teacher)
     notification_form = SubmissionNotificationSettingsForm(instance=notification_settings)
 
+    # This subpage needs neither AI statistics nor storage scans or hidden forms.
+    def render_notification_settings():
+        response = render(request, 'feed/notification_settings.html', {
+            'active_tab': 'environment', 'active_env_section': 'notifications',
+            'teacher': teacher, 'school': School.objects.first(),
+            'is_superadmin_mode': request.session.get('superadmin_mode', False),
+            'submission_notification_form': notification_form,
+        })
+        response['Cache-Control'] = 'no-store'
+        return response
+
+    if request.method == 'POST' and request.POST.get('action') == 'save_submission_notifications':
+        notification_form = SubmissionNotificationSettingsForm(request.POST, instance=notification_settings)
+        if notification_form.is_valid():
+            notification_form.save()
+            messages.success(request, 'Сповіщення про здачу робіт збережено.')
+            return redirect(f"{reverse('teacher_settings')}?tab=environment&section=notifications#submission-notification-settings")
+        return render_notification_settings()
+    if request.method == 'GET' and tab == 'environment' and env_section == 'notifications':
+        return render_notification_settings()
+
+    ai_settings = AISettings.get_solo()
+    if request.method == 'GET' and tab == 'ai':
+        ai_settings.import_legacy_connections()
+    school = School.objects.first()
+    if not school:
+        school = School.objects.create(name="Наш Заклад Освіти", admin=request.user)
+
     profile_form = TeacherProfileForm(instance=teacher)
     subject_form = SubjectForm()
     class_form = ClassGroupForm()
@@ -7408,16 +7429,7 @@ def teacher_settings_view(request):
         is_superadmin_mode = bool(request.user.is_superuser and request.session.get('superadmin_mode', False))
 
         # ── 1. ДІЇ ПРОФІЛЮ ────────────────────────────────────────────────────
-        if action == 'save_submission_notifications':
-            notification_form = SubmissionNotificationSettingsForm(request.POST, instance=notification_settings)
-            if notification_form.is_valid():
-                notification_form.save()
-                messages.success(request, 'Сповіщення про здачу робіт збережено.')
-                return redirect(f"{reverse('teacher_settings')}?tab=environment&section=notifications#submission-notification-settings")
-            tab = 'environment'
-            env_section = 'notifications'
-
-        elif action == 'update_profile':
+        if action == 'update_profile':
             profile_form = TeacherProfileForm(request.POST, request.FILES, instance=teacher)
             if profile_form.is_valid():
                 profile_form.save()

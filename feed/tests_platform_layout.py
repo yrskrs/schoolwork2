@@ -232,13 +232,14 @@ class PlatformNavigationTests(TestCase):
             links = page.get_element_by_id(element).xpath(selector)
             self.assertEqual({parse_qs(urlparse(link).query)['tab'][0] for link in links},
                              {'profile', 'environment', 'ai', 'api'})
-            self.assertEqual(len(links), 4)
+            self.assertEqual(len(links), 5 if element == 'settings-sidebar-links' else 4)
         for route, tab in [('teacher_profiles', 'environment'), ('ai_settings', 'ai')]:
             alias = self.page(self.client.get(reverse(route)))
             tools = alias.get_element_by_id('teacher-page-tools')
             self.assertTrue(tools.xpath('.//a[@href=$href]', href=reverse('download_database_backup')))
             active = alias.get_element_by_id('settings-sidebar-links').xpath('./li[contains(@class, "active")]/a/@href')
-            self.assertEqual(active, [reverse('teacher_settings') + f'?tab={tab}'])
+            suffix = '&section=school' if tab == 'environment' else ''
+            self.assertEqual(active, [reverse('teacher_settings') + f'?tab={tab}' + suffix])
 
     def test_student_portal_keeps_filtered_statuses_without_summary_or_grades(self):
         group = self.classes[0]

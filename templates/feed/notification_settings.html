@@ -1,0 +1,31 @@
+{% extends 'feed/settings.html' %}
+
+{% block title %}Сповіщення про здачі — Шкільні Завдання{% endblock %}
+
+{% block content %}
+<div class="page-wrapper teacher-settings-page">
+    <div class="feed-layout">
+        {% include 'feed/components/settings_sidebar.html' %}
+        <div class="feed-main-content">
+            <div class="page-hero">
+                <div class="page-hero-kicker">Параметри системи</div>
+                <h1>Сповіщення про здачі</h1>
+                <div class="page-hero-sub">{{ teacher.full_name }} · {{ school.name }}</div>
+            </div>
+            <nav class="tabs settings-mobile-tabs" id="settings-main-tabs" aria-label="Розділи налаштувань">
+                <a href="{% url 'teacher_settings' %}?tab=profile" class="tab-btn">👤 Профіль</a>
+                <a href="{% url 'teacher_settings' %}?tab=environment" class="tab-btn active">🏫 Середовище</a>
+                <a href="{% url 'teacher_settings' %}?tab=ai" class="tab-btn">🤖 ШІ</a>
+                <a href="{% url 'teacher_settings' %}?tab=api" class="tab-btn">🌐 API та журнал</a>
+            </nav>
+            <nav class="tabs env-subtabs" aria-label="Розділи середовища">
+                <a href="{% url 'teacher_settings' %}?tab=environment&amp;section=school" class="tab-btn">🏫 Заклад та класи</a>
+                <a href="{% url 'teacher_settings' %}?tab=environment&amp;section=notifications" class="tab-btn active" aria-current="page">🔔 Сповіщення про здачі</a>
+            </nav>
+            {% include 'feed/components/submission_notification_settings.html' %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}{% endblock %}
