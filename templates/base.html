@@ -39,6 +39,7 @@
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📚</text></svg>">
 
     {% block extra_head %}{% endblock %}
+    <link rel="stylesheet" href="{% static 'css/submission_notifications.css' %}">
     <link rel="stylesheet" href="{% static 'css/platform_layout.css' %}">
     <link rel="stylesheet" href="{% static 'css/school_ui.css' %}?ui=20261018-r6">
 </head>
@@ -394,6 +395,15 @@
 <script src="{% static 'js/responsive_tables.js' %}"></script>
 <script src="{% static 'js/ai_jobs.js' %}?ui=20261018"></script>
 <script src="{% static 'js/upload_progress.js' %}"></script>
+<div id="submission-notifications" class="submission-notifications"
+     data-endpoint="{% url 'submission_notifications' %}"
+     data-viewer="{% if user.is_authenticated and user.teacher_profile %}teacher-{{ user.pk }}{% else %}student{% endif %}"
+     data-class-id="{% firstof selected_class_id selected_submission_class_id selected_class.pk latest_submission.class_group_id request.session.selected_class '' %}"
+     role="region" aria-label="Сповіщення про здачу робіт">
+    <div class="submission-notifications-list" aria-live="polite" aria-relevant="additions"></div>
+    <button type="button" class="submission-notifications-clear" hidden></button>
+</div>
+<script src="{% static 'js/submission_notifications.js' %}" defer></script>
 <script src="{% static 'js/school_ui.js' %}?ui=20261018-r6" defer></script>
 {% block extra_scripts %}{% endblock %}
 

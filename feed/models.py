@@ -18,6 +18,9 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.utils import timezone
 
+# Registered with the feed app, kept separate from the main model module.
+from .submission_notifications import SubmissionNotification, SubmissionNotificationSettings
+
 
 
 # ─── Предмет ──────────────────────────────────────────────────────────────────

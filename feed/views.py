@@ -676,6 +676,7 @@ def assignment_detail(request, pk):
         'files_with_preview': files_with_preview,
         'has_assignment_materials': bool(files_with_preview or assignment.link_url or assignment.additional_links.all() or assignment.all_youtube_videos),
         'assignment_submit_url': assignment_submit_url,
+        'selected_submission_class_id': selected_class.pk if selected_class else '',
     }
     return render(request, 'feed/assignment_detail.html', context)
 
@@ -2886,6 +2887,7 @@ def _submission_form_context(assignment, form):
         'assignment': assignment,
         'form': form,
         'selected_submission_class_name': selected_class_name,
+        'selected_submission_class_id': selected_class,
     }
 
 
@@ -7381,6 +7383,12 @@ def teacher_settings_view(request):
     if tab not in ['profile', 'environment', 'ai', 'api']:
         tab = 'profile'
 
+    from .submission_notifications import SubmissionNotificationSettings, SubmissionNotificationSettingsForm
+    notification_settings = SubmissionNotificationSettings.objects.filter(teacher=teacher).first()
+    if notification_settings is None:
+        notification_settings = SubmissionNotificationSettings(teacher=teacher)
+    notification_form = SubmissionNotificationSettingsForm(instance=notification_settings)
+
     profile_form = TeacherProfileForm(instance=teacher)
     subject_form = SubjectForm()
     class_form = ClassGroupForm()
@@ -7391,7 +7399,15 @@ def teacher_settings_view(request):
         is_superadmin_mode = bool(request.user.is_superuser and request.session.get('superadmin_mode', False))
 
         # ── 1. ДІЇ ПРОФІЛЮ ────────────────────────────────────────────────────
-        if action == 'update_profile':
+        if action == 'save_submission_notifications':
+            notification_form = SubmissionNotificationSettingsForm(request.POST, instance=notification_settings)
+            if notification_form.is_valid():
+                notification_form.save()
+                messages.success(request, 'Сповіщення про здачу робіт збережено.')
+                return redirect(f"{reverse('teacher_settings')}?tab=environment#submission-notification-settings")
+            tab = 'environment'
+
+        elif action == 'update_profile':
             profile_form = TeacherProfileForm(request.POST, request.FILES, instance=teacher)
             if profile_form.is_valid():
                 profile_form.save()
@@ -8170,6 +8186,7 @@ def teacher_settings_view(request):
         'api_base_url': request.build_absolute_uri('/')[:-1],
         'teacher': teacher,
         'cloud_storage': teacher.get_cloud_storage(),
+        'submission_notification_form': notification_form,
         'school': school,
         'profile_form': profile_form,
         'subject_form': subject_form,

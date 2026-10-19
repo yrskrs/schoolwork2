@@ -108,7 +108,7 @@ class OnlineClientsMiddleware:
             elif status >= 400:
                 log_line = f"[КЛІЄНТ IP: {ip}] ⚠️ \"{request.method} {path}\" {status}\n"
                 _safe_log(log_line, is_error=True)
-            elif not path.startswith('/static/') and not path.startswith('/media/'):
+            elif not path.startswith(('/static/', '/media/', '/api/submission-notifications/')):
                 # Для звичайних сторінок та API запитів
                 log_line = f"[КЛІЄНТ IP: {ip}] \"{request.method} {path}\" {status} OK\n"
                 _safe_log(log_line, is_error=False)

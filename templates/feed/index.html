@@ -78,6 +78,7 @@ var _lastFingerprint    = '';
 var _liveTimer          = null;
 
 function applyFilter(classVal, subjectVal, dateVal, queryVal) {
+    var previousClass = _currentClass;
     if (classVal !== null && classVal !== undefined) {
         var cStr = String(classVal).trim();
         _currentClass = (cStr === '' || cStr === 'all' || cStr === 'null') ? 'all' : cStr;
@@ -118,6 +119,7 @@ function applyFilter(classVal, subjectVal, dateVal, queryVal) {
     if (clEl)  clEl.classList.add('active');
     var compactClassSelect = document.getElementById('school-class-select');
     if (compactClassSelect) compactClassSelect.value = _currentClass;
+    if (previousClass !== _currentClass) document.dispatchEvent(new Event('schoolnet:class-change'));
     if (subEl) subEl.classList.add('active');
 
     /* — Оновити мобільні чіпси — */

@@ -8,9 +8,11 @@ from . import views_updates
 from . import python_runner
 from . import views_cloud
 from .views_dialogs import ui_dialog
+from .submission_notifications import submission_notifications
 from school_sync import django_backend as roster_views
 
 urlpatterns = [
+    path('api/submission-notifications/', submission_notifications, name='submission_notifications'),
     path('ui/dialog/<str:kind>/', ui_dialog, name='ui_dialog'),
     path('healthz/', views_updates.healthz_view, name='healthz'),
     path('teacher/updates/', views_updates.system_updates_view, name='system_updates'),

@@ -1070,6 +1070,8 @@ class SubmissionForm(forms.Form):
         if not self.cleaned_data.get('shared_roster') and not self.cleaned_data.get('selected_coauthors'):
             auto_bind_coauthors_from_comment(submission)
 
+        from .submission_notifications import record_submission_notification
+        record_submission_notification(submission)
         return submission
 
 

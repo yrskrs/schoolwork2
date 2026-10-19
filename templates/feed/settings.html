@@ -288,6 +288,8 @@
             <!-- ═══════════════════════════════════════════════════════════════════ -->
             <div id="tab-section-environment" class="settings-tab-pane" style="{% if active_tab != 'environment' %}display:none;{% endif %}">
 
+                {% include 'feed/components/submission_notification_settings.html' %}
+
                 <!-- 2.1. Заклад та резервне копіювання -->
                 <div class="form-card mb-4">
                     <div class="form-card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">

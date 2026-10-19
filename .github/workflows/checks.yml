@@ -32,3 +32,4 @@ jobs:
         run: |
           docker build -f docker/Dockerfile.qa --build-arg APP_IMAGE=schoolnet-ci:tested -t schoolnet-ci:browser .
           docker run --rm --network none --shm-size=512m schoolnet-ci:browser
+          docker run --rm --network none --shm-size=512m schoolnet-ci:browser python scripts/test_submission_notifications_ui.py

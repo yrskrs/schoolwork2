@@ -1,0 +1,38 @@
+<section class="form-card mb-4" id="submission-notification-settings" aria-labelledby="submission-notification-heading">
+    <div class="form-card-header">
+        <h2 class="form-card-title" id="submission-notification-heading">🔔 Сповіщення про здачу робіт</h2>
+    </div>
+    <form method="post" class="form-card-body" id="submission-notification-form">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="save_submission_notifications">
+        <p class="text-muted">Для ваших завдань. Оберіть себе, учнів або обох. Учні бачать сповіщення лише обраного класу; індивідуальні завдання їм не транслюються.</p>
+        {{ submission_notification_form.non_field_errors }}
+        <div class="submission-notification-options">
+            <fieldset>
+                <legend>Для вчителя</legend>
+                <label>{{ submission_notification_form.teacher_enabled }} Показувати мені</label>
+                <label>{{ submission_notification_form.teacher_sound }} Зі звуком</label>
+                <small>Натискання на картку відкриває роботу для перевірки.</small>
+            </fieldset>
+            <fieldset>
+                <legend>Для учнів</legend>
+                <label>{{ submission_notification_form.students_enabled }} Показувати учням</label>
+                <label>{{ submission_notification_form.students_sound }} Зі звуком</label>
+                <small>Натискання на картку закриває сповіщення.</small>
+            </fieldset>
+        </div>
+        <div class="form-group submission-notification-duration">
+            <label class="form-label" for="id_duration_seconds">Тривалість показу для всіх, секунд (1–60)</label>
+            {{ submission_notification_form.duration_seconds }}
+            {{ submission_notification_form.duration_seconds.errors }}
+        </div>
+        <label class="submission-notification-sticky">{{ submission_notification_form.until_dismissed }} Показувати до натискання замість таймера</label>
+        <p class="text-muted">Праворуч унизу з’являться повне прізвище, ім’я, клас і коротка назва завдання. Повторна здача має бурштиновий акцент та інший сигнал.</p>
+        <p class="text-muted" id="submission-notification-audio-help">Браузер дозволяє звук після першого кліку або натискання клавіші на сторінці. Гучність залежить від пристрою. У прихованій вкладці сповіщення призупинені.</p>
+        <div class="submission-notification-actions">
+            <button type="submit" class="btn btn-primary">Зберегти сповіщення</button>
+            <button type="button" class="btn btn-secondary" data-submission-preview="new">Приклад здачі</button>
+            <button type="button" class="btn btn-secondary" data-submission-preview="repeat">Приклад повторної здачі</button>
+        </div>
+    </form>
+</section>
