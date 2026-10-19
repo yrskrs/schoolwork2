@@ -9,6 +9,24 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_GET
 
 
+TEXT_TEMPLATE_CHOICES = [
+    ('work_submitted', 'Роботу здано (за замовчуванням)'),
+    ('new_work', 'Нова здана робота'),
+    ('task_completed', 'Завдання виконано'),
+    ('submission_received', 'Отримано відповідь'),
+    ('submission_success', 'Успішна здача роботи'),
+]
+
+SOUND_PRESET_CHOICES = [
+    ('chime', 'Класичний дзвіночок (за замовчуванням)'),
+    ('marimba', 'М’який теплий акорд'),
+    ('ping', 'Яскравий пінг'),
+    ('bell', 'Шкільний дзвінок'),
+    ('subtle', 'Стриманий сигнал'),
+    ('fanfare', 'Святковий акорд'),
+]
+
+
 class SubmissionNotificationSettings(models.Model):
     teacher = models.OneToOneField('Teacher', on_delete=models.CASCADE, related_name='submission_notification_settings')
     teacher_enabled = models.BooleanField('Сповіщення для мене', default=False)
@@ -19,6 +37,18 @@ class SubmissionNotificationSettings(models.Model):
     students_all_classes = models.BooleanField('Показувати учням без прив’язки до класу', default=True)
     students_background_active = models.BooleanField('Сповіщати у фонових вкладках', default=True)
     show_class_badge = models.BooleanField('Показувати назву класу в картці', default=False)
+    text_template = models.CharField(
+        'Шаблон тексту сповіщення',
+        max_length=32,
+        choices=TEXT_TEMPLATE_CHOICES,
+        default='work_submitted',
+    )
+    sound_preset = models.CharField(
+        'Мелодія звукового сигналу',
+        max_length=32,
+        choices=SOUND_PRESET_CHOICES,
+        default='chime',
+    )
     duration_seconds = models.PositiveSmallIntegerField(
         'Тривалість показу (секунди)', default=5,
         validators=[MinValueValidator(1), MaxValueValidator(60)],
@@ -43,8 +73,12 @@ class SubmissionNotificationSettingsForm(forms.ModelForm):
         model = SubmissionNotificationSettings
         fields = ['teacher_enabled', 'teacher_sound', 'students_enabled', 'students_sound',
                   'students_click_opens_task', 'students_all_classes', 'students_background_active',
-                  'show_class_badge', 'duration_seconds', 'until_dismissed']
-        widgets = {'duration_seconds': forms.NumberInput(attrs={'class': 'form-input', 'min': 1, 'max': 60})}
+                  'show_class_badge', 'text_template', 'sound_preset', 'duration_seconds', 'until_dismissed']
+        widgets = {
+            'duration_seconds': forms.NumberInput(attrs={'class': 'form-input', 'min': 1, 'max': 60}),
+            'text_template': forms.Select(attrs={'class': 'form-input', 'id': 'id_text_template'}),
+            'sound_preset': forms.Select(attrs={'class': 'form-input', 'id': 'id_sound_preset'}),
+        }
 
 
 def record_submission_notification(submission):
@@ -93,6 +127,8 @@ def submission_notifications(request):
             'all_classes': setting.students_all_classes,
             'background_active': setting.students_background_active,
             'show_class': setting.show_class_badge,
+            'template': setting.text_template,
+            'sound_preset': setting.sound_preset,
         }
         for setting in settings
     }
@@ -146,6 +182,8 @@ def submission_notifications(request):
             'name': f"{row['submission__last_name']} {row['submission__first_name']}".strip(),
             'class_name': row['submission__class_group__name'],
             'show_class': policy.get('show_class', False),
+            'template': policy.get('template', 'work_submitted'),
+            'sound_preset': policy.get('sound_preset', 'chime'),
             'assignment': row['submission__assignment__title'][:120],
             'resubmission': row['submission__is_resubmission'],
             'attempt': row['submission__resubmission_attempt'],

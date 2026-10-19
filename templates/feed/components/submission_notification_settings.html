@@ -1,12 +1,37 @@
 <section class="form-card mb-4" id="submission-notification-settings" aria-labelledby="submission-notification-heading">
-    <div class="form-card-header">
+    <div class="form-card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
         <h2 class="form-card-title" id="submission-notification-heading">🔔 Сповіщення про здачу робіт</h2>
+        <span class="badge" style="background:var(--color-primary-light, #e0f2fe);color:var(--color-primary);font-weight:700;">Зручні шаблони та мелодії</span>
     </div>
     <form method="post" class="form-card-body" id="submission-notification-form">
         {% csrf_token %}
         <input type="hidden" name="action" value="save_submission_notifications">
-        <p class="text-muted">Для ваших завдань. Оберіть себе, учнів або обох. Налаштуйте реакцію на натискання картки учнем, показ без прив’язки до класу та роботу у фонових вкладках.</p>
+        <p class="text-muted">Налаштуйте сповіщення для ваших завдань: оберіть шаблон формулювання («Роботу здано»), мелодію дзвіночка, аудиторію показу та фонові права для учнів.</p>
         {{ submission_notification_form.non_field_errors }}
+
+        <!-- Шаблони та звуки -->
+        <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));gap:16px;margin-bottom:20px;">
+            <div class="form-group" style="margin-bottom:0;">
+                <label class="form-label" for="id_text_template" style="font-weight:700;">📝 Шаблон формулювання сповіщення</label>
+                {{ submission_notification_form.text_template }}
+                {{ submission_notification_form.text_template.errors }}
+                <div class="text-muted text-xs mt-1" id="template-description-hint">Нейтральний і стильний стиль («Роботу здано») без поділу на стать.</div>
+            </div>
+            <div class="form-group" style="margin-bottom:0;">
+                <label class="form-label" for="id_sound_preset" style="font-weight:700;">🎵 Мелодія звукового сигналу</label>
+                <div style="display:flex;gap:8px;align-items:center;">
+                    <div style="flex:1;">
+                        {{ submission_notification_form.sound_preset }}
+                    </div>
+                    <button type="button" class="btn btn-secondary" id="btn-preview-sound" title="Прослухати обрану мелодію" style="white-space:nowrap;font-weight:700;">
+                        ▶ Тест звуку
+                    </button>
+                </div>
+                {{ submission_notification_form.sound_preset.errors }}
+                <div class="text-muted text-xs mt-1">Оберіть тональність для першої та повторної здачі.</div>
+            </div>
+        </div>
+
         <div class="submission-notification-options">
             <fieldset>
                 <legend>Для вчителя</legend>
@@ -19,13 +44,14 @@
                 <label>{{ submission_notification_form.students_enabled }} Показувати учням</label>
                 <label>{{ submission_notification_form.students_sound }} Зі звуком</label>
                 <label>{{ submission_notification_form.students_click_opens_task }} Натискання відкриває здане завдання</label>
-                <small class="text-muted" style="display:block;margin-bottom:6px;">Якщо вимкнено — натискання просто закриває сповіщення.</small>
+                <small class="text-muted" style="display:block;margin-bottom:6px;">Якщо вимкнено — натискання просто закриває картку.</small>
                 <label>{{ submission_notification_form.students_all_classes }} Показувати без прив’язки до класу</label>
-                <small class="text-muted" style="display:block;margin-bottom:6px;">Учні бачать сповіщення незалежно від відкритого завдання чи обраного класу.</small>
-                <label>{{ submission_notification_form.students_background_active }} Сповіщати та грати звук у фонових вкладках</label>
-                <small class="text-muted" style="display:block;">Сповіщення надходять, навіть якщо вкладка учня згорнута або не є активною.</small>
+                <small class="text-muted" style="display:block;margin-bottom:6px;">Учні бачать сповіщення незалежно від відкритого завдання чи класу.</small>
+                <label>{{ submission_notification_form.students_background_active }} Доставляти сповіщення та звук у фонових вкладках</label>
+                <small class="text-muted" style="display:block;">Сповіщення надходять навіть при згорнутій або неактивній вкладці учня.</small>
             </fieldset>
         </div>
+
         <div class="form-group submission-notification-duration">
             <label class="form-label" for="id_duration_seconds">Тривалість показу для всіх, секунд (1–60)</label>
             {{ submission_notification_form.duration_seconds }}
@@ -35,7 +61,7 @@
             <label class="submission-notification-sticky">{{ submission_notification_form.until_dismissed }} Показувати до натискання замість таймера</label>
             <label>{{ submission_notification_form.show_class_badge }} Показувати назву класу в картці</label>
         </div>
-        <p class="text-muted">Повідомлення пише «ПІБ здав/ла роботу» та назву завдання. Повторна здача має бурштиновий акцент та інший сигнал.</p>
+        <p class="text-muted">Повідомлення пише «ПІБ учня», обраний шаблон статусу та назву завдання. Повторна здача має бурштиновий акцент та власний звуковий сигнал.</p>
         <p class="text-muted" id="submission-notification-audio-help">Браузер дозволяє звук після першого кліку або натискання клавіші на сторінці. Гучність залежить від пристрою.</p>
         <div class="submission-notification-actions">
             <button type="submit" class="btn btn-primary">Зберегти сповіщення</button>

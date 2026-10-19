@@ -11,9 +11,14 @@
                     <span>👤</span><span>Профіль вчителя</span>
                 </a>
             </li>
-            <li class="sidebar-tab-item {% if active_tab == 'environment' %}active{% endif %}">
-                <a href="{% url 'teacher_settings' %}?tab=environment" onclick="if(typeof switchSettingsTabFromSidebar==='function'){return switchSettingsTabFromSidebar('environment', this);}">
+            <li class="sidebar-tab-item {% if active_tab == 'environment' and active_env_section != 'notifications' %}active{% endif %}">
+                <a href="{% url 'teacher_settings' %}?tab=environment&amp;section=school" onclick="if(typeof switchSettingsTabFromSidebar==='function'){return switchSettingsTabFromSidebar('environment', this, 'school');}">
                     <span>🏫</span><span>Середовище та заклад</span>
+                </a>
+            </li>
+            <li class="sidebar-tab-item {% if active_tab == 'notifications' or active_tab == 'environment' and active_env_section == 'notifications' %}active{% endif %}" style="padding-left:14px;">
+                <a href="{% url 'teacher_settings' %}?tab=environment&amp;section=notifications" onclick="if(typeof switchSettingsTabFromSidebar==='function'){return switchSettingsTabFromSidebar('environment', this, 'notifications');}">
+                    <span>🔔</span><span>Сповіщення про здачі</span>
                 </a>
             </li>
             <li class="sidebar-tab-item {% if active_tab == 'ai' %}active{% endif %}">

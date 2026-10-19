@@ -42,25 +42,93 @@
     document.addEventListener('pointerdown', unlockAudio, {passive: true});
     document.addEventListener('keydown', unlockAudio);
 
-    function sound(repeat, allowBackground = false) {
+    const SOUND_PRESETS = {
+        chime: {
+            type: 'sine',
+            normal: [523, 784],
+            repeat: [660, 523, 440],
+            step: 0.12,
+        },
+        marimba: {
+            type: 'triangle',
+            normal: [440, 554, 659],
+            repeat: [659, 554, 440],
+            step: 0.10,
+        },
+        ping: {
+            type: 'sine',
+            normal: [880, 1318],
+            repeat: [1318, 988, 880],
+            step: 0.08,
+        },
+        bell: {
+            type: 'sine',
+            normal: [587, 880, 1174],
+            repeat: [1174, 880, 587],
+            step: 0.12,
+        },
+        subtle: {
+            type: 'sine',
+            normal: [392, 523],
+            repeat: [523, 392],
+            step: 0.14,
+        },
+        fanfare: {
+            type: 'triangle',
+            normal: [523, 659, 784, 1046],
+            repeat: [1046, 784, 659, 523],
+            step: 0.09,
+        },
+    };
+
+    const TEMPLATES = {
+        work_submitted: {
+            normal: 'Роботу здано',
+            repeat: attempt => `Роботу здано повторно · спроба ${attempt}`,
+        },
+        new_work: {
+            normal: 'Нова здана робота',
+            repeat: attempt => `Повторна здача роботи · спроба ${attempt}`,
+        },
+        task_completed: {
+            normal: 'Завдання виконано',
+            repeat: attempt => `Завдання виконано повторно · спроба ${attempt}`,
+        },
+        submission_received: {
+            normal: 'Отримано відповідь',
+            repeat: attempt => `Отримано оновлену відповідь · спроба ${attempt}`,
+        },
+        submission_success: {
+            normal: 'Успішна здача роботи',
+            repeat: attempt => `Повторна здача · спроба ${attempt}`,
+        },
+    };
+
+    function formatStatus(item) {
+        const key = item.template || (item.policy && item.policy.template) || 'work_submitted';
+        const tpl = TEMPLATES[key] || TEMPLATES.work_submitted;
+        return item.resubmission ? tpl.repeat(item.attempt || 2) : tpl.normal;
+    }
+
+    function sound(repeat, allowBackground = false, presetKey = null) {
         if (!audio || audio.state !== 'running') return;
         if (document.hidden && !allowBackground) return;
-        // Short ascending pair for a new submission, descending three notes for a repeat.
-        const notes = repeat ? [660, 523, 440] : [523, 784];
+        const config = SOUND_PRESETS[presetKey] || SOUND_PRESETS.chime;
+        const notes = repeat ? config.repeat : config.normal;
         const start = audio.currentTime;
         notes.forEach((frequency, index) => {
             const oscillator = audio.createOscillator();
             const gain = audio.createGain();
-            const at = start + index * .12;
-            oscillator.type = 'sine';
+            const at = start + index * config.step;
+            oscillator.type = config.type || 'sine';
             oscillator.frequency.value = frequency;
             gain.gain.setValueAtTime(0, at);
             gain.gain.linearRampToValueAtTime(.08, at + .015);
-            gain.gain.exponentialRampToValueAtTime(.001, at + .11);
+            gain.gain.exponentialRampToValueAtTime(.001, at + (config.step - .01));
             oscillator.connect(gain);
             gain.connect(audio.destination);
             oscillator.start(at);
-            oscillator.stop(at + .12);
+            oscillator.stop(at + config.step);
             oscillator.onended = () => { oscillator.disconnect(); gain.disconnect(); };
         });
     }
@@ -93,7 +161,7 @@
         }
         const status = document.createElement('span');
         status.className = 'submission-notice-status';
-        status.textContent = item.resubmission ? `Повторно здав/ла роботу · спроба ${item.attempt}` : 'Здав/ла роботу';
+        status.textContent = formatStatus(item);
         const assignment = document.createElement('span');
         assignment.className = 'submission-notice-assignment';
         assignment.textContent = item.assignment;
@@ -146,6 +214,7 @@
         });
         let play = null;
         let playBackground = false;
+        let playPreset = null;
         pending.slice(0, 3).forEach(item => {
             const policy = item.preview ? item.policy : policies[item.teacher_id];
             if (!item.shownAt) item.shownAt = now;
@@ -158,6 +227,7 @@
                 if (!item.sounded && policy && policy.sound) {
                     play = Boolean(play || item.resubmission);
                     if (policy.background_active !== false) playBackground = true;
+                    playPreset = item.sound_preset || (policy && policy.sound_preset) || playPreset;
                 }
                 item.sounded = true;
             }
@@ -170,7 +240,7 @@
                 }, Math.max(1, policy.duration * 1000 - (now - item.shownAt)));
             }
         });
-        if (play !== null) sound(play, playBackground);
+        if (play !== null) sound(play, playBackground, playPreset);
         clear.hidden = pending.length < 2;
         clear.textContent = pending.length > 3 ? `Ще ${pending.length - 3} у черзі · Закрити всі` : 'Закрити всі';
         save();
@@ -230,7 +300,7 @@
             failures = 0;
             delay = data.has_more && !full ? 1000 : (document.hidden ? 8000 : data.poll_after * 1000);
             if (newBatch > 0 && document.hidden) {
-                document.title = '🔔 Здано роботу!';
+                document.title = '🔔 Роботу здано!';
             }
             render();
             if (!teacher && !classId && !hasAllClassesPolicy()) return;
@@ -299,14 +369,45 @@
                 background_active: form.elements.students_background_active ? form.elements.students_background_active.checked : true,
                 show_class: form.elements.show_class_badge ? form.elements.show_class_badge.checked : false,
                 click_opens_task: form.elements.students_click_opens_task ? form.elements.students_click_opens_task.checked : true,
+                template: form.elements.text_template ? form.elements.text_template.value : 'work_submitted',
+                sound_preset: form.elements.sound_preset ? form.elements.sound_preset.value : 'chime',
             };
             const previewUrl = teacher ? '/teacher/view-file/1/' : (policy.click_opens_task ? '/assignment/34/' : '');
             pending.unshift({id: 'preview-' + Date.now(), preview: true, policy,
                 name: 'Шевченко Олександра', class_name: '7-А', show_class: policy.show_class,
+                template: policy.template, sound_preset: policy.sound_preset,
                 assignment: 'Практична робота: створення презентації',
                 resubmission: repeat, attempt: repeat ? 2 : 1, url: previewUrl});
             render();
         });
     });
+
+    const soundPreviewBtn = document.getElementById('btn-preview-sound');
+    if (soundPreviewBtn) {
+        soundPreviewBtn.addEventListener('click', async () => {
+            unlockAudio();
+            if (audio && audio.state === 'suspended') await audio.resume().catch(() => {});
+            const presetSelect = document.getElementById('id_sound_preset');
+            const preset = presetSelect ? presetSelect.value : 'chime';
+            sound(false, true, preset);
+        });
+    }
+
+    const templateSelect = document.getElementById('id_text_template');
+    const templateHint = document.getElementById('template-description-hint');
+    const templateDescriptions = {
+        work_submitted: 'Нейтральний і стильний стиль («Роботу здано») без поділу на стать.',
+        new_work: 'Акцент на новому надходженні («Нова здана робота»).',
+        task_completed: 'Акцент на успішному виконанні («Завдання виконано»).',
+        submission_received: 'Діловий стиль для вчителя та учнів («Отримано відповідь»).',
+        submission_success: 'Позитивний мотивуючий статус («Успішна здача роботи»).',
+    };
+    if (templateSelect && templateHint) {
+        templateSelect.addEventListener('change', () => {
+            templateHint.textContent = templateDescriptions[templateSelect.value] || '';
+        });
+    }
+
+    window.playNotificationSound = (preset, repeat) => sound(repeat, true, preset);
     selectClass();
 })();

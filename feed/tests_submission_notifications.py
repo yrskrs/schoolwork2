@@ -89,6 +89,7 @@ class SubmissionNotificationTests(TestCase):
             self.assertEqual(data['policies'][str(self.teacher.pk)], {
                 'sound': True, 'duration': 9, 'sticky': False, 'click_opens_task': True,
                 'all_classes': True, 'background_active': True, 'show_class': False,
+                'template': 'work_submitted', 'sound_preset': 'chime',
             })
             baseline = data['cursor']
         self.assertEqual(SubmissionNotification.objects.count(), 2)
@@ -228,15 +229,28 @@ class SubmissionNotificationTests(TestCase):
             'action': 'save_submission_notifications', 'teacher': self.other_teacher.pk,
             'teacher_enabled': 'on', 'students_enabled': 'on', 'students_sound': 'on',
             'duration_seconds': '12', 'until_dismissed': 'on',
+            'text_template': 'task_completed', 'sound_preset': 'marimba',
         })
-        self.assertRedirects(response, reverse('teacher_settings') + '?tab=environment#submission-notification-settings')
+        self.assertRedirects(response, reverse('teacher_settings') + '?tab=environment&section=notifications#submission-notification-settings')
         self.settings.refresh_from_db()
         self.assertTrue(self.settings.teacher_enabled)
         self.assertFalse(self.settings.teacher_sound)
         self.assertTrue(self.settings.students_sound)
         self.assertTrue(self.settings.until_dismissed)
         self.assertEqual(self.settings.duration_seconds, 12)
+        self.assertEqual(self.settings.text_template, 'task_completed')
+        self.assertEqual(self.settings.sound_preset, 'marimba')
         self.assertFalse(SubmissionNotificationSettings.objects.filter(teacher=self.other_teacher).exists())
+
+    def test_text_template_and_sound_preset_customization(self):
+        self.enable(text_template='submission_success', sound_preset='bell')
+        self.event()
+        data = self.poll(since=0).json()
+        event = data['events'][0]
+        self.assertEqual(event['template'], 'submission_success')
+        self.assertEqual(event['sound_preset'], 'bell')
+        self.assertEqual(data['policies'][str(self.teacher.pk)]['template'], 'submission_success')
+        self.assertEqual(data['policies'][str(self.teacher.pk)]['sound_preset'], 'bell')
 
     def test_duration_validation_and_anonymous_settings_protection(self):
         for duration in ('0', '61', 'invalid'):

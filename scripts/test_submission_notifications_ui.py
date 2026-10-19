@@ -138,7 +138,7 @@ def main():
             def cards():
                 return cdp.evaluate("document.querySelectorAll('.submission-notice').length")
 
-            navigate('/teacher/settings/?tab=environment')
+            navigate('/teacher/settings/?tab=environment&section=notifications')
             cdp.evaluate("document.querySelector('#id_teacher_enabled').checked=true; document.querySelector('#id_students_enabled').checked=true; document.querySelector('#id_teacher_sound').checked=true; document.querySelector('#id_students_sound').checked=true; document.querySelector('#id_duration_seconds').value='5'")
             click('#submission-notification-form button[type=submit]')
             cdp.until("location.hash==='#submission-notification-settings' && document.readyState==='complete'")
@@ -149,12 +149,14 @@ def main():
             click('[data-submission-preview="new"]')
             cdp.until("document.querySelector('.submission-notice') && window.noticeFrequencies.length===2")
             assert cdp.evaluate('JSON.stringify(window.noticeFrequencies)') == '[523,784]'
+            assert cdp.evaluate("document.querySelector('.submission-notice-status').textContent==='Роботу здано'")
             screenshot('teacher-light-preview.png')
             click('.submission-notice-close')
             cdp.evaluate('window.noticeFrequencies=[]')
             submit()
             cdp.until("document.querySelector('.submission-notice-main[href]')!==null", timeout=9)
             assert cdp.evaluate("document.querySelector('.submission-notice-name').textContent.includes('Шевченко Олександра')")
+            assert cdp.evaluate("document.querySelector('.submission-notice-status').textContent==='Роботу здано'")
             assert cdp.evaluate('JSON.stringify(window.noticeFrequencies)') == '[523,784]'
             screenshot('teacher-light-submitted.png')
             cdp.until("document.querySelectorAll('.submission-notice').length===0", timeout=7)
@@ -164,6 +166,7 @@ def main():
             submit()
             cdp.until("document.querySelector('.submission-notice.is-resubmission')!==null", timeout=9)
             assert cdp.evaluate('JSON.stringify(window.noticeFrequencies.slice(-3))') == '[660,523,440]'
+            assert cdp.evaluate("document.querySelector('.submission-notice-status').textContent.includes('Роботу здано повторно')")
             screenshot('teacher-light-resubmitted.png')
             time.sleep(5.3)
             assert cards() == 1, 'Sticky card expired'

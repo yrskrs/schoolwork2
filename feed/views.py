@@ -7380,7 +7380,11 @@ def teacher_settings_view(request):
         school = School.objects.create(name="Наш Заклад Освіти", admin=request.user)
 
     tab = request.GET.get('tab', 'profile')
-    if tab not in ['profile', 'environment', 'ai', 'api']:
+    env_section = request.GET.get('section', 'school')
+    if tab == 'notifications':
+        tab = 'environment'
+        env_section = 'notifications'
+    elif tab not in ['profile', 'environment', 'ai', 'api']:
         tab = 'profile'
 
     from .submission_notifications import SubmissionNotificationSettings, SubmissionNotificationSettingsForm
@@ -7404,8 +7408,9 @@ def teacher_settings_view(request):
             if notification_form.is_valid():
                 notification_form.save()
                 messages.success(request, 'Сповіщення про здачу робіт збережено.')
-                return redirect(f"{reverse('teacher_settings')}?tab=environment#submission-notification-settings")
+                return redirect(f"{reverse('teacher_settings')}?tab=environment&section=notifications#submission-notification-settings")
             tab = 'environment'
+            env_section = 'notifications'
 
         elif action == 'update_profile':
             profile_form = TeacherProfileForm(request.POST, request.FILES, instance=teacher)
@@ -8187,6 +8192,7 @@ def teacher_settings_view(request):
         'teacher': teacher,
         'cloud_storage': teacher.get_cloud_storage(),
         'submission_notification_form': notification_form,
+        'active_env_section': env_section,
         'school': school,
         'profile_form': profile_form,
         'subject_form': subject_form,
