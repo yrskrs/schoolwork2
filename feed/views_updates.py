@@ -1,8 +1,7 @@
-from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import connection
 from django.http import JsonResponse, HttpResponseForbidden
-from django.shortcuts import render, redirect
+from django.shortcuts import render
 from django.views.decorators.http import require_POST, require_GET
 
 from feed.services.updates import (
@@ -16,7 +15,7 @@ from feed.services.updates import (
 
 
 def _user_can_manage_updates(user, session=None):
-    """Checks whether the user has administrator privileges to view or perform updates."""
+    """Checks administrator privileges for deployment operations and diagnostics."""
     if not user.is_authenticated:
         return False
     is_super = user.is_superuser
@@ -25,15 +24,22 @@ def _user_can_manage_updates(user, session=None):
     return is_super
 
 
+def _user_can_view_updates(user, session=None):
+    """Teachers can inspect installed and available releases without deployment access."""
+    return user.is_authenticated and (
+        _user_can_manage_updates(user, session) or hasattr(user, 'teacher_profile')
+    )
+
+
 @login_required(login_url='teacher_login')
 def system_updates_view(request):
     """Web interface for system updates."""
     can_update = _user_can_manage_updates(request.user, request.session)
-    if not can_update:
-        return HttpResponseForbidden('Доступ до розділу оновлень мають лише адміністратори системи.')
+    if not _user_can_view_updates(request.user, request.session):
+        return HttpResponseForbidden('Доступ до розділу оновлень мають учителі та адміністратори системи.')
 
     current_version = get_current_local_version()
-    status_info = get_update_status()
+    status_info = get_update_status() if can_update else None
 
     context = {
         'current_version': current_version,
@@ -49,8 +55,8 @@ def system_updates_view(request):
 @login_required
 def updates_check_api_view(request):
     """Checks GitHub for new releases and returns releases_between changelog diff."""
-    if not _user_can_manage_updates(request.user, request.session):
-        return HttpResponseForbidden('Тільки адміністратор може перевіряти оновлення.')
+    if not _user_can_view_updates(request.user, request.session):
+        return HttpResponseForbidden('Перевіряти оновлення можуть учителі та адміністратори.')
     result = check_updates_available()
     return JsonResponse(result)
 

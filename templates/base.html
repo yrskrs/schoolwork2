@@ -280,11 +280,9 @@
                     <a href="{% url 'teacher_settings' %}" class="user-menu-link">
                         <span>⚙️</span> <span>Налаштування</span>
                     </a>
-                    {% if user.is_superuser or is_superadmin_mode %}
                     <a href="{% url 'system_updates' %}" class="user-menu-link">
                         <span>🚀</span> <span>Оновлення системи</span>
                     </a>
-                    {% endif %}
                     {% if user.is_superuser and not is_superadmin_mode %}
                     <a href="{% url 'enter_superadmin_mode' %}" class="user-menu-link">
                         <span>👑</span> <span>Режим адміна</span>
@@ -372,7 +370,7 @@
 </main>
 
 <footer class="site-footer">
-    Шкільні Завдання · Локальна шкільна мережа{% if user.is_superuser or is_superadmin_mode %} · <a href="{% url 'system_updates' %}" style="color:var(--color-primary);text-decoration:none;font-weight:700;">🚀 Оновлення системи</a>{% endif %}
+    Шкільні Завдання · Локальна шкільна мережа{% if user.is_authenticated and user.teacher_profile or user.is_superuser or is_superadmin_mode %} · <a href="{% url 'system_updates' %}" style="color:var(--color-primary);text-decoration:none;font-weight:700;">🚀 Оновлення системи</a>{% endif %}
     <p id="simplified-site-help">Сайт пригальмовує? Увімкніть «Спрощений сайт» у меню: анімації, розмиття й декоративні тіні вимкнуться. Вибір зберігається в цьому браузері; завдання та всі функції залишаються доступними.</p>
 </footer>
 

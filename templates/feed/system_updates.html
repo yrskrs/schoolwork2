@@ -112,7 +112,7 @@
   <header class="updates-page-heading">
     <span class="updates-eyebrow">Керування системою</span>
     <h1 id="updatesPageTitle">Оновлення системи</h1>
-    <p>Перевіряйте нові версії, переглядайте зміни та стежте за оновленням крок за кроком.</p>
+    <p>{% if can_update %}Перевіряйте нові версії, переглядайте зміни та стежте за оновленням крок за кроком.{% else %}Переглядайте встановлену версію, опис змін і перевіряйте наявність нових випусків.{% endif %}</p>
   </header>
 
   <section class="updates-card installed-version" aria-label="Встановлена версія">
@@ -135,12 +135,16 @@
       </button>
       {% if can_update %}<button type="button" class="updates-button" id="btnRebuildCurrent" onclick="forceRebuildCurrentVersion()">⚡ Перезібрати поточну версію</button>{% endif %}
     </div>
+    {% if can_update %}
     <p class="updates-hint">Перед оновленням або перезбіркою буде створено резервну копію.</p>
+    {% else %}
+    <p class="updates-hint">Оновлення, перезбірку та відкат запускає адміністратор. Увійдіть в обліковий запис адміністратора, щоб керувати оновленнями.</p>
+    {% endif %}
   </section>
 
   <section id="updateCheckResult" class="updates-card check-result" hidden aria-live="polite" aria-atomic="false"></section>
 
-  <details id="updateProgressSection" class="updates-operation" hidden>
+  {% if can_update %}<details id="updateProgressSection" class="updates-operation" hidden>
     <summary class="operation-summary">
       <span class="operation-heading">
         <strong id="progressTitle">Оновлення системи</strong>
@@ -182,7 +186,7 @@
       </section>
       <p class="updates-hint">Натисніть на заголовок панелі, щоб згорнути або розгорнути деталі.</p>
     </div>
-  </details>
+  </details>{% endif %}
 </section>
 </div></div></div>{% endblock %}
 {% block extra_scripts %}<script>
@@ -422,6 +426,7 @@ async function triggerManualRollback() {
   } catch (error) { launchPending = false; showError(error.message); }
 }
 document.addEventListener('DOMContentLoaded', async () => {
+  if (!updatesConfig.canUpdate) return;
   try {
     const data = await apiRequest('status');
     if (launchPending || activeJobId) return;

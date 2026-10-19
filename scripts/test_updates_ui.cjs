@@ -21,11 +21,12 @@ module.exports = async function verify(root, template) {
     }
     return elements.get(id);
   }
-  let response = {state: 'idle'}, copied, posted;
+  let response = {state: 'idle'}, copied, posted, domReady;
+  const requests = [];
   const context = vm.createContext({
-    document: {getElementById: element, querySelector: () => ({value: 'synthetic-csrf'}), addEventListener() {}},
+    document: {getElementById: element, querySelector: () => ({value: 'synthetic-csrf'}), addEventListener(name, callback) {if (name === 'DOMContentLoaded') domReady = callback}},
     FormData: class {constructor() {this.fields = {}} append(k, v) {this.fields[k] = v}},
-    fetch: async (url, options) => {if (options.method === 'POST') posted = options; return {ok: true, json: async () => response}},
+    fetch: async (url, options) => {requests.push(url); if (options.method === 'POST') posted = options; return {ok: true, json: async () => response}},
     navigator: {clipboard: {writeText: async value => {copied = value}}},
     confirm: () => true, setInterval: () => 1, clearInterval() {}, Date, console,
   });
@@ -95,6 +96,19 @@ module.exports = async function verify(root, template) {
   assert.equal(payload.ref, 'HEAD');
   assert.equal(payload.version, '9.2.0');
   assert.equal(element('progressTitle').textContent, 'Перезбірка поточної версії');
+  vm.runInContext('updatesConfig.canUpdate = false; setBusy(false)', context);
+  requests.length = 0;
+  await domReady();
+  assert.equal(requests.length, 0, 'Teacher page must not poll administrative status');
+  response = {has_update: true, current_version: '9.2.0', latest_version: '9.3.0', releases: []};
+  await context.checkUpdates();
+  assert(element('updateCheckResult').innerHTML.includes('9.3.0'));
+  assert(element('updateCheckResult').innerHTML.includes('Запуск оновлення доступний адміністратору'));
+  assert(!element('updateCheckResult').innerHTML.includes('btnStartUpdate'));
+  requests.length = 0;
+  await context.proceedWithUpdate('HEAD');
+  await context.triggerManualRollback();
+  assert.equal(requests.length, 0, 'Teacher cannot initiate deployment operations');
   console.log(path.basename(root) + ': update UI regression checks passed');
 };
 if (require.main === module) {

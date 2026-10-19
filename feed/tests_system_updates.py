@@ -137,16 +137,69 @@ class SystemUpdatesViewAndAPITests(TestCase):
         self.assertEqual(resp.status_code, 302)
         self.assertIn('/teacher/login/', resp.url)
 
-    def test_regular_teacher_forbidden(self):
+    def test_anonymous_users_have_no_update_links_or_api_access(self):
+        resp = self.client.get(reverse('teacher_login'))
+        self.assertNotContains(resp, 'href="' + reverse('system_updates') + '"')
+        with patch('feed.views_updates.check_updates_available') as check:
+            self.assertEqual(self.client.get(reverse('updates_check_api')).status_code, 302)
+        check.assert_not_called()
+
+    def test_regular_teacher_can_view_updates_without_admin_operations(self):
         self.client.force_login(self.teacher_user)
-        resp = self.client.get(reverse('system_updates'))
-        self.assertEqual(resp.status_code, 403)
+        with patch('feed.views_updates.get_update_status') as status:
+            resp = self.client.get(reverse('system_updates'))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, 'Поточна встановлена версія')
+        self.assertContains(resp, get_current_local_version())
+        self.assertContains(resp, 'Перевірити наявність оновлень')
+        self.assertContains(resp, 'Оновлення, перезбірку та відкат запускає адміністратор.')
+        self.assertNotContains(resp, 'id="btnRebuildCurrent"')
+        self.assertNotContains(resp, 'id="btnManualRollback"')
+        self.assertNotContains(resp, 'id="terminalBody"')
+        self.assertFalse(resp.context['can_update'])
+        status.assert_not_called()
 
-        api_resp = self.client.get(reverse('updates_check_api'))
-        self.assertEqual(api_resp.status_code, 403)
+    def test_regular_teacher_can_check_new_releases(self):
+        self.client.force_login(self.teacher_user)
+        result = {'ok': True, 'has_update': False, 'current_version': get_current_local_version()}
+        with patch('feed.views_updates.check_updates_available', return_value=result) as check:
+            resp = self.client.get(reverse('updates_check_api'))
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json(), result)
+        check.assert_called_once_with()
 
-        start_resp = self.client.post(reverse('updates_start_api'), {'version': '4.4.5'})
-        self.assertEqual(start_resp.status_code, 403)
+    def test_regular_teacher_cannot_start_rebuild_rollback_or_read_diagnostics(self):
+        self.client.force_login(self.teacher_user)
+        with patch('feed.views_updates.start_update') as start, \
+                patch('feed.views_updates.start_rollback') as rollback, \
+                patch('feed.views_updates.get_update_status') as status:
+            for ref in ('origin/main', 'HEAD'):
+                with self.subTest(ref=ref):
+                    resp = self.client.post(reverse('updates_start_api'), {'ref': ref, 'version': '4.4.5'})
+                    self.assertEqual(resp.status_code, 403)
+            self.assertEqual(self.client.post(reverse('updates_rollback_api')).status_code, 403)
+            self.assertEqual(self.client.get(reverse('updates_status_api')).status_code, 403)
+        start.assert_not_called()
+        rollback.assert_not_called()
+        status.assert_not_called()
+
+    def test_teacher_settings_links_to_updates_from_profile_sidebar_and_footer(self):
+        from lxml import html
+        self.client.force_login(self.teacher_user)
+        resp = self.client.get(reverse('teacher_settings') + '?tab=profile')
+        self.assertEqual(resp.status_code, 200)
+        page = html.fromstring(resp.content)
+        for selector in ('//*[@id="user-menu"]', '//*[@id="settings-main-sidebar"]', '//footer'):
+            with self.subTest(selector=selector):
+                self.assertEqual(len(page.xpath(selector + '//a[@href=$href]', href=reverse('system_updates'))), 1)
+
+    def test_authenticated_user_without_teacher_profile_cannot_view_or_check_updates(self):
+        user = User.objects.create_user(username='non_teacher', is_staff=True)
+        self.client.force_login(user)
+        with patch('feed.views_updates.check_updates_available') as check:
+            self.assertEqual(self.client.get(reverse('system_updates')).status_code, 403)
+            self.assertEqual(self.client.get(reverse('updates_check_api')).status_code, 403)
+        check.assert_not_called()
 
     def test_admin_can_view_updates_page(self):
         self.client.force_login(self.admin_user)
