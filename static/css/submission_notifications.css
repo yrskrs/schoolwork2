@@ -24,6 +24,9 @@
     pointer-events: auto;
     animation: submission-notice-in .16s ease-out;
 }
+.submission-notice.is-restored {
+    animation: none;
+}
 .submission-notice.is-resubmission {
     --notice-accent: var(--color-warning);
     --notice-tint: var(--color-warning-light);

@@ -252,6 +252,25 @@ class SubmissionNotificationTests(TestCase):
         self.assertEqual(data['policies'][str(self.teacher.pk)]['template'], 'submission_success')
         self.assertEqual(data['policies'][str(self.teacher.pk)]['sound_preset'], 'bell')
 
+    def test_student_does_not_receive_notice_for_own_submission(self):
+        self.enable(students_enabled=True, students_all_classes=True)
+        submitting_student = Client()
+        classmate = Client()
+        baseline = self.poll().json()['cursor']
+        values = {'student_id': self.student.pk, 'full_name': self.student.get_full_name(),
+                  'class_group': self.group.pk, 'comment_student': 'Я здав роботу'}
+        response = submitting_student.post(reverse('submit_assignment', args=[self.assignment.pk]), values)
+        self.assertEqual(response.status_code, 302)
+        # Учень, який щойно здав роботу, НЕ отримує сповіщення про власну здачу
+        sub_data = submitting_student.get(reverse('submission_notifications'), {'since': baseline}).json()
+        self.assertEqual(sub_data['events'], [])
+        # Однокласник та вчитель отримують сповіщення
+        classmate_data = classmate.get(reverse('submission_notifications'), {'since': baseline}).json()
+        self.assertEqual(len(classmate_data['events']), 1)
+        self.assertEqual(classmate_data['events'][0]['name'], 'Шевченко Олександра')
+        teacher_data = self.poll(since=baseline).json()
+        self.assertEqual(len(teacher_data['events']), 1)
+
     def test_duration_validation_and_anonymous_settings_protection(self):
         for duration in ('0', '61', 'invalid'):
             response = self.client.post(reverse('teacher_settings'), {

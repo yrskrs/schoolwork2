@@ -2958,6 +2958,11 @@ def submit_assignment(request, pk):
 
             # Зберігаємо ID останньої здачі для кнопки самоперевірки учня (ШІ)
             request.session['last_submission_id'] = submission.id
+            # Зберігаємо ID здачі в сесії поточного користувача, щоб не надсилати сповіщення автору роботи
+            my_subs = request.session.get('my_submission_ids', [])
+            if submission.id not in my_subs:
+                my_subs.append(submission.id)
+                request.session['my_submission_ids'] = my_subs[-100:]
 
             log_submission_activity(
                 None,

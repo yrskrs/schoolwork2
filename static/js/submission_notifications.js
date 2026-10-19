@@ -81,26 +81,45 @@
         },
     };
 
+    const DISMISSED_KEY = 'schoolnet-dismissed-notices';
+    function getDismissedIds() {
+        try {
+            const raw = sessionStorage.getItem(DISMISSED_KEY);
+            return new Set(raw ? JSON.parse(raw) : []);
+        } catch (_) {
+            return new Set();
+        }
+    }
+
+    function markDismissed(id) {
+        if (!id) return;
+        try {
+            const set = getDismissedIds();
+            set.add(String(id));
+            sessionStorage.setItem(DISMISSED_KEY, JSON.stringify(Array.from(set).slice(-200)));
+        } catch (_) {}
+    }
+
     const TEMPLATES = {
         work_submitted: {
             normal: 'Роботу здано',
             repeat: attempt => `Роботу здано повторно · спроба ${attempt}`,
         },
         new_work: {
-            normal: 'Нова здана робота',
-            repeat: attempt => `Повторна здача роботи · спроба ${attempt}`,
+            normal: 'Нове надходження роботи',
+            repeat: attempt => `Оновлена версія роботи · спроба ${attempt}`,
         },
         task_completed: {
-            normal: 'Завдання виконано',
-            repeat: attempt => `Завдання виконано повторно · спроба ${attempt}`,
+            normal: 'Завдання успішно виконано',
+            repeat: attempt => `Завдання виконано знову · спроба ${attempt}`,
         },
         submission_received: {
-            normal: 'Отримано відповідь',
-            repeat: attempt => `Отримано оновлену відповідь · спроба ${attempt}`,
+            normal: 'Отримано відповідь на завдання',
+            repeat: attempt => `Отримано змінену відповідь · спроба ${attempt}`,
         },
         submission_success: {
-            normal: 'Успішна здача роботи',
-            repeat: attempt => `Повторна здача · спроба ${attempt}`,
+            normal: 'Здано на перевірку вчителю',
+            repeat: attempt => `Повторно надіслано вчителю · спроба ${attempt}`,
         },
     };
 
@@ -134,14 +153,15 @@
     }
 
     function dismiss(id) {
-        pending = pending.filter(item => item.id !== id);
+        markDismissed(id);
+        pending = pending.filter(item => String(item.id) !== String(id));
         save();
         render();
     }
 
     function createCard(item) {
         const card = document.createElement('article');
-        card.className = 'submission-notice' + (item.resubmission ? ' is-resubmission' : '');
+        card.className = 'submission-notice' + (item.resubmission ? ' is-resubmission' : '') + (item.shownAt ? ' is-restored' : '');
         card.dataset.eventId = item.id;
         const canOpen = (teacher && /^\/teacher\/view-file\/\d+\/$/.test(item.url || '')) ||
                         (!teacher && /^\/assignment\/\d+\/$/.test(item.url || ''));
@@ -149,7 +169,16 @@
         main.className = 'submission-notice-main';
         if (canOpen) main.href = item.url;
         else main.type = 'button';
-        main.addEventListener('click', () => dismiss(item.id));
+        main.addEventListener('click', (e) => {
+            dismiss(item.id);
+            if (canOpen && item.url) {
+                const targetUrl = new URL(item.url, window.location.origin);
+                if (window.location.pathname === targetUrl.pathname && (!targetUrl.search || window.location.search === targetUrl.search)) {
+                    // Already on this exact assignment page: smoothly dismiss notice without reloading!
+                    e.preventDefault();
+                }
+            }
+        });
         const name = document.createElement('span');
         name.className = 'submission-notice-name';
         name.textContent = item.name;
@@ -218,6 +247,7 @@
         pending.slice(0, 3).forEach(item => {
             const policy = item.preview ? item.policy : policies[item.teacher_id];
             if (!item.shownAt) item.shownAt = now;
+            if (policy) item.duration = policy.duration;
             let entry = visible.get(item.id);
             if (!entry) {
                 entry = {card: createCard(item)};
@@ -269,7 +299,7 @@
         controller = new AbortController();
         const currentController = controller;
         const timeout = setTimeout(() => currentController.abort(), 10000);
-        let delay = 5000;
+        let delay = 3000;
         try {
             const url = new URL(root.dataset.endpoint, location.origin);
             if (!teacher && classId) url.searchParams.set('class', classId);
@@ -283,10 +313,12 @@
             if (cursor !== null && data.cursor < cursor) pending = []; // Database restore.
             pending = pending.filter(item => item.preview || policies[item.teacher_id]);
             const known = new Set(pending.map(item => item.id));
+            const dismissed = getDismissedIds();
             let accepted = cursor;
             let full = false;
             let newBatch = 0;
             for (const item of data.events) {
+                if (dismissed.has(String(item.id))) continue;
                 if (!known.has(item.id)) {
                     // Keep DOM small and retain cursor backpressure for a long sticky queue.
                     if (pending.length >= 100) { full = true; break; }
@@ -306,7 +338,7 @@
             if (!teacher && !classId && !hasAllClassesPolicy()) return;
         } catch (_) {
             failures += 1;
-            delay = Math.min(60000, 5000 * (2 ** Math.min(failures, 4)));
+            delay = Math.min(60000, 3000 * (2 ** Math.min(failures, 4)));
         } finally {
             clearTimeout(timeout);
             if (controller === currentController) controller = null;
@@ -329,7 +361,15 @@
             const state = JSON.parse(sessionStorage.getItem(storageKey));
             if (state && Number.isSafeInteger(state.cursor) && state.cursor >= 0) {
                 cursor = state.cursor;
-                pending = Array.isArray(state.pending) ? state.pending.slice(0, 100) : [];
+                const dismissed = getDismissedIds();
+                const now = Date.now();
+                const rawPending = Array.isArray(state.pending) ? state.pending.slice(0, 100) : [];
+                pending = rawPending.filter(item => {
+                    if (dismissed.has(String(item.id))) return false;
+                    const dur = (item.duration || 5) * 1000;
+                    if (item.shownAt && (now - item.shownAt >= dur)) return false;
+                    return true;
+                });
             }
         } catch (_) { /* Fresh baseline when storage is unavailable. */ }
         schedule(0);
@@ -395,18 +435,43 @@
 
     const templateSelect = document.getElementById('id_text_template');
     const templateHint = document.getElementById('template-description-hint');
+    const liveStatus = document.getElementById('template-live-status');
+    const showClassCheckbox = document.getElementById('id_show_class_badge');
+    const previewBadge = document.getElementById('preview-badge');
+
     const templateDescriptions = {
-        work_submitted: 'Нейтральний і стильний стиль («Роботу здано») без поділу на стать.',
-        new_work: 'Акцент на новому надходженні («Нова здана робота»).',
-        task_completed: 'Акцент на успішному виконанні («Завдання виконано»).',
-        submission_received: 'Діловий стиль для вчителя та учнів («Отримано відповідь»).',
-        submission_success: 'Позитивний мотивуючий статус («Успішна здача роботи»).',
+        work_submitted: '💡 За замовчуванням діє універсальне «Роботу здано» (без поділу на стать). Ви можете обрати інше формулювання або залишити як є.',
+        new_work: 'Діловий акцент на новому надходженні («Нове надходження роботи»).',
+        task_completed: 'Мотивуючий стиль успішного завершення («Завдання успішно виконано»).',
+        submission_received: 'Офіційний тон для журналу та вчителя («Отримано відповідь на завдання»).',
+        submission_success: 'Короткий дієвий стиль («Здано на перевірку вчителю»).',
     };
-    if (templateSelect && templateHint) {
-        templateSelect.addEventListener('change', () => {
-            templateHint.textContent = templateDescriptions[templateSelect.value] || '';
-        });
+
+    function updateLiveTemplatePreview() {
+        if (!templateSelect) return;
+        const key = templateSelect.value;
+        const tpl = TEMPLATES[key] || TEMPLATES.work_submitted;
+        if (templateHint) {
+            templateHint.textContent = templateDescriptions[key] || '';
+        }
+        if (liveStatus) {
+            liveStatus.textContent = tpl.normal;
+            liveStatus.style.transition = 'transform 0.15s ease';
+            liveStatus.style.transform = 'scale(1.05)';
+            setTimeout(() => { if (liveStatus) liveStatus.style.transform = 'scale(1)'; }, 150);
+        }
+        if (previewBadge && showClassCheckbox) {
+            previewBadge.style.display = showClassCheckbox.checked ? 'inline-block' : 'none';
+        }
     }
+
+    if (templateSelect) {
+        templateSelect.addEventListener('change', updateLiveTemplatePreview);
+    }
+    if (showClassCheckbox) {
+        showClassCheckbox.addEventListener('change', updateLiveTemplatePreview);
+    }
+    updateLiveTemplatePreview();
 
     window.playNotificationSound = (preset, repeat) => sound(repeat, true, preset);
     selectClass();

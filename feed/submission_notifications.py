@@ -10,11 +10,11 @@ from django.views.decorators.http import require_GET
 
 
 TEXT_TEMPLATE_CHOICES = [
-    ('work_submitted', 'Роботу здано (за замовчуванням)'),
-    ('new_work', 'Нова здана робота'),
-    ('task_completed', 'Завдання виконано'),
-    ('submission_received', 'Отримано відповідь'),
-    ('submission_success', 'Успішна здача роботи'),
+    ('work_submitted', 'Роботу здано (стандартний, нейтральний)'),
+    ('new_work', 'Нове надходження роботи (діловий стиль)'),
+    ('task_completed', 'Завдання успішно виконано (мотивуючий)'),
+    ('submission_received', 'Отримано відповідь на завдання (офіційний)'),
+    ('submission_success', 'Здано на перевірку вчителю (короткий)'),
 ]
 
 SOUND_PRESET_CHOICES = [
@@ -134,7 +134,7 @@ def submission_notifications(request):
     }
     high_water = SubmissionNotification.objects.order_by('-pk').values_list('pk', flat=True).first() or 0
     payload = {'cursor': high_water, 'events': [], 'policies': policies,
-               'enabled': bool(policies), 'poll_after': 5 if policies else 30, 'has_more': False}
+               'enabled': bool(policies), 'poll_after': 3 if policies else 30, 'has_more': False}
     # Establish a baseline on first visit; enabling notices never replays old submissions.
     if since is None or not policies:
         return JsonResponse(payload)
@@ -153,6 +153,13 @@ def submission_notifications(request):
             submission__assignment__status='published',
             submission__assignment__is_individual=False,
         )
+        # Не надсилати учневі сповіщення про його власні здані роботи з цієї сесії
+        own_sub_ids = set(request.session.get('my_submission_ids', []))
+        if request.session.get('last_submission_id'):
+            own_sub_ids.add(request.session['last_submission_id'])
+        if own_sub_ids:
+            events = events.exclude(submission_id__in=own_sub_ids)
+
         all_class_teachers = [s.teacher_id for s in settings if s.students_all_classes]
         single_class_teachers = [s.teacher_id for s in settings if not s.students_all_classes]
 
@@ -179,6 +186,7 @@ def submission_notifications(request):
         payload['events'].append({
             'id': row['pk'],
             'teacher_id': str(row['teacher_id']),
+            'submission_id': row['submission_id'],
             'name': f"{row['submission__last_name']} {row['submission__first_name']}".strip(),
             'class_name': row['submission__class_group__name'],
             'show_class': policy.get('show_class', False),
