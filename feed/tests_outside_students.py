@@ -91,7 +91,7 @@ class OutsideStudentsTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response['Content-Type'], 'application/pdf')
 
-    def test_journal_roster_auto_binds_unambiguous_single_student_in_class(self):
+    def test_journal_roster_keeps_unique_names_and_twins_for_explicit_confirmation(self):
         # Create a unique student in group
         solo = Student.objects.create(class_group=self.group, first_name='Соло', last_name='Унікальний')
         payload = {
@@ -108,12 +108,17 @@ class OutsideStudentsTests(TestCase):
         response = self.client.post('/api/v2/journal/roster/', data=payload, content_type='application/json', HTTP_AUTHORIZATION='Bearer synthetic-key')
         self.assertEqual(response.status_code, 200, response.content)
         data = response.json()
-        # Solo student was uniquely matched and mapped
+        # Even a unique equal name is only a candidate, never an identity.
         mapped_local_ids = [m['local_id'] for m in data.get('mappings', [])]
-        self.assertIn(solo.pk, mapped_local_ids)
-        # Twins remain in needs_review
+        self.assertNotIn(solo.pk, mapped_local_ids)
         review_names = [r['name'] for r in data.get('needs_review', [])]
         self.assertIn('Вигаданий Учень', review_names)
+        self.assertIn('Унікальний Соло', review_names)
+        payload['students'][0]['local_id'] = solo.pk
+        confirmed = self.client.post('/api/v2/journal/roster/', data=payload,
+            content_type='application/json', HTTP_AUTHORIZATION='Bearer synthetic-key')
+        self.assertEqual(confirmed.status_code, 200)
+        self.assertIn(solo.pk, [m['local_id'] for m in confirmed.json()['mappings']])
 
     def submit(self, identity):
         form = SubmissionForm({'full_name': 'Підмінний Учень', 'class_group': self.group.pk,
