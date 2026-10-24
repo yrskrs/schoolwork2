@@ -1,0 +1,25 @@
+# Optional Linux-only address inventory. No database, keys, sockets or host files.
+services:
+  app:
+    volumes:
+      - lan_inventory:/run/school-lan:ro
+  network_info:
+    image: ${SCHOOLWORK_IMAGE:-schoolwork2-app:4.5.15}
+    entrypoint: ["python", "-m", "school_sync.network_inventory"]
+    network_mode: host
+    user: '65534:65534'
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+    environment:
+      SCHOOL_LAN_INFO_FILE: /inventory/addresses.json
+    volumes:
+      - lan_inventory:/inventory
+volumes:
+  lan_inventory:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=65536,uid=65534,gid=65534,mode=0755

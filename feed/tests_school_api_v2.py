@@ -129,7 +129,7 @@ class SchoolAPIV2Tests(TestCase):
         self.assertEqual(response.status_code, 200)
         code = json.loads(unescape(re.search(r'<textarea[^>]*id="journal-connection-code"[^>]*>(.*?)</textarea>', response.content.decode(), re.S).group(1)))
         self.assertEqual(code['source'], 'schoolwork')
-        self.assertEqual(code['site_url'], 'http://example.invalid')
+        self.assertEqual(code['site_url'], 'http://testserver')
         key = JournalAPIKey.objects.get(key=code['api_key'])
         plain = unescape(re.search(r'<textarea[^>]*id="journal-api-key"[^>]*>(.*?)</textarea>', response.content.decode(), re.S).group(1))
         from .secret_fields import token_hash

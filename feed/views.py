@@ -8190,7 +8190,10 @@ def teacher_settings_view(request):
     from .models import JournalAPIKey
     journal_api_keys = (JournalAPIKey.objects.all() if request.user.is_superuser else JournalAPIKey.objects.filter(teacher=teacher)).order_by('-created_at')
     from django.conf import settings as journal_settings
-    journal_site_url = getattr(journal_settings, 'PUBLIC_BASE_URL', '') or request.build_absolute_uri('/')[:-1]
+    journal_site_url = request.build_absolute_uri(reverse('api_school_ping'))[:-len('/api/v2/ping')]
+    from school_sync.network_inventory import connection_addresses
+    from .school_api_v2 import local_instance_id
+    journal_connection_addresses = connection_addresses(journal_site_url, os.getenv('APP_PORT') or '8000')
     import json as journal_json
     journal_connection_code = journal_json.dumps({'source': 'schoolwork', 'site_url': journal_site_url, 'api_key': just_created_api_key}, ensure_ascii=False) if just_created_api_key else ''
 
@@ -8203,6 +8206,8 @@ def teacher_settings_view(request):
         'just_created_api_key': just_created_api_key,
         'just_created_api_key_name': just_created_api_key_name,
         'journal_site_url': journal_site_url,
+        'source_instance_id': local_instance_id(),
+        'connection_addresses': journal_connection_addresses,
         'journal_connection_code': journal_connection_code,
         'api_base_url': request.build_absolute_uri('/')[:-1],
         'teacher': teacher,

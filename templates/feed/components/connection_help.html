@@ -1,0 +1,9 @@
+{% load static %}
+<section class="card journal-connection-help" aria-label="Адреси для підключення до журналу">
+  <h2>Підключення до журналу</h2><p>У SchoolJournal відкрийте <strong>«Підключення → Підключити сервіс»</strong>. Скопіюйте адресу нижче та створіть ключ з обома дозволами.</p>
+  <p>Ідентифікатор сайту: <code id="journal-instance-id">{{ source_instance_id }}</code><button type="button" class="btn btn-secondary" data-copy-target="journal-instance-id">Копіювати ідентифікатор</button></p>
+  <div class="journal-address-list">{% for item in connection_addresses %}<div><label for="journal-address-{{ forloop.counter }}">{{ item.label }}</label><div class="journal-copy-row"><input id="journal-address-{{ forloop.counter }}" readonly value="{{ item.url }}"><button type="button" class="btn btn-secondary" data-copy-target="journal-address-{{ forloop.counter }}">Копіювати адресу</button></div></div>{% endfor %}</div>
+  <p>Один ключ працює в усіх мережах цього самого сервера. Журнал перевіряє мережу автоматично. Повний новий ключ показується лише під час створення.</p><p role="status" data-connection-copy-status></p>
+</section>
+<link rel="stylesheet" href="{% static 'css/connection_help.css' %}">
+<script src="{% static 'js/connection_help.js' %}" defer></script>
