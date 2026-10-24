@@ -5,7 +5,7 @@ from unittest.mock import patch
 from django.apps import apps
 from django.contrib.sessions.models import Session
 from django.db import connection
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from .models import JournalAPIKey
@@ -15,6 +15,14 @@ from . import tests_school_api_v2 as fixtures
 
 class ConnectionKeyTests(TestCase):
     setUp = fixtures.SchoolAPIV2Tests.setUp
+
+    @override_settings(PUBLIC_BASE_URL='http://obsolete.invalid')
+    def test_current_teacher_address_is_used_in_connection_help_and_export_code(self):
+        response = self.client.post(reverse('teacher_settings'), {'action': 'create_simple_journal_api_key'},
+            HTTP_HOST='schoolserver.local:9080')
+        self.assertEqual(response.context['journal_site_url'], 'http://schoolserver.local:9080')
+        self.assertContains(response, 'http://schoolserver.local:9080')
+        self.assertNotContains(response, 'http://obsolete.invalid')
 
     def test_database_has_only_digest_and_digest_cannot_authenticate(self):
         with connection.cursor() as cursor:

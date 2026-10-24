@@ -1,14 +1,14 @@
 name: ${COMPOSE_PROJECT_NAME:-schoolwork2}
 services:
   app:
-    image: ${SCHOOLWORK_IMAGE:-schoolwork2-app:4.5.15}
+    image: ${SCHOOLWORK_IMAGE:-schoolwork2-app:4.6.0}
     build:
       context: .
       dockerfile: Dockerfile
       args:
         VCS_REF: ${VCS_REF:-local}
         SOURCE_DIGEST: ${SOURCE_DIGEST:-unknown}
-        APP_VERSION: '4.5.15'
+        APP_VERSION: '4.6.0'
     container_name: schoolnet_app
     restart: unless-stopped
     depends_on:
@@ -41,7 +41,7 @@ services:
       start_period: 45s
 
   ai_worker:
-    image: ${SCHOOLWORK_IMAGE:-schoolwork2-app:4.5.15}
+    image: ${SCHOOLWORK_IMAGE:-schoolwork2-app:4.6.0}
     container_name: schoolnet_ai_worker
     restart: unless-stopped
     command: ["python", "manage.py", "process_ai_jobs"]
