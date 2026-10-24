@@ -179,6 +179,21 @@ class Deployment:
         self.path = Path(path)
         self.env.update(COMPOSE_FILE=path, UPDATER_COMPOSE_FILE=path)
         self.write()
+        self.original_config = copy.deepcopy(self.config)
+
+    def refresh(self):
+        """Load the checked-out release's services and environment after merge."""
+        replacement = Deployment()
+        try:
+            self.config = replacement.config
+            self.write()
+        finally:
+            replacement.close()
+
+    def restore_config(self):
+        """Rollback must keep the original volume/network/env configuration."""
+        self.config = copy.deepcopy(self.original_config)
+        self.write()
 
     def write(self):
         self.path.write_text(json.dumps(self.config), encoding='utf-8')
@@ -251,6 +266,9 @@ def verify_deployment(deployment, image, version):
 def perform_rollback(deployment, backup, old_image, old_commit, old_version):
     update_state(state='running', step_name='Автоматичний відкат до попередньої версії', progress=95)
     append_log('Відновлюємо попередній Docker-образ, БД, файли та ревізію коду…')
+    if 'code_runner' in deployment.config['services'] and 'code_runner' not in deployment.original_config['services']:
+        deployment.dc('stop', 'code_runner', timeout=120)
+    deployment.restore_config()
     deployment.select_image(old_image)
     deployment.env['EXPECTED_VERSION'] = old_version
     flags = ['--yes']
@@ -390,7 +408,13 @@ def execute_update_job(target_ref='origin/main', target_ver=None, releases_list=
         append_log('Крок 4/5: Застосовуємо ревізію і запускаємо зібраний образ…')
         deploy_started = True
         run_command(['git', 'merge', '--ff-only', commit], deployment.env, 60)
+        deployment.refresh()
         deployment.select_image(image)
+        if 'code_runner' in deployment.config['services']:
+            append_log('Перевіряємо службу виконання Python з конфігурації нового випуску…')
+            deployment.dc('build', 'code_runner', timeout=1200)
+            deployment.dc('up', '-d', '--no-build', '--no-deps', '--wait', '--wait-timeout', '180',
+                          'code_runner', timeout=240)
         if PROJECT != 'schooltest5':
             deployment.dc('run', '--rm', '--no-deps', '-T', '-e', 'SKIP_INIT=1', APP_SERVICE,
                           'python', 'manage.py', 'check')

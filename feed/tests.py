@@ -2003,7 +2003,12 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
             subject=self.subject,
             day_of_week=1
         )
-        resp = self.client.get(reverse('teacher_students') + '?tab=schedule')
+        # The timetable has weekday columns only. Pin a Monday so this
+        # assertion also tests the widget when the suite runs on a weekend.
+        from datetime import datetime, timezone as dt_timezone
+        from unittest.mock import patch
+        with patch('feed.views.timezone.now', return_value=datetime(2026, 10, 19, 6, 45, tzinfo=dt_timezone.utc)):
+            resp = self.client.get(reverse('teacher_students') + '?tab=schedule')
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, 'schedule-live-indicator-card')
         self.assertContains(resp, 'СЬОГОДНІ')
