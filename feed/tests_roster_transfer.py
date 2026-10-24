@@ -7,6 +7,19 @@ from feed.models import Student, ClassGroup, Submission
 class JournalRosterReceiveTests(TestCase):
     setUp = fixtures.SchoolAPIV2Tests.setUp
 
+    def test_unique_equal_name_requires_explicit_id_confirmation(self):
+        self.twin.delete()
+        before = Student.objects.count()
+        payload = self.payload(students=[{'id': str(uuid.uuid4()),
+            'last_name': self.student.last_name, 'first_name': self.student.first_name}])
+        report = self.send(payload).json()
+        self.assertEqual(report['mappings'], [])
+        self.assertEqual(report['counts']['needs_review'], 1)
+        self.assertEqual(Student.objects.count(), before)
+        payload['students'][0]['local_id'] = self.student.pk
+        confirmed = self.send(payload).json()
+        self.assertEqual(confirmed['mappings'][0]['local_id'], self.student.pk)
+
     def payload(self, **changes):
         data = {'schema_version': 2, 'journal_instance_id': '11111111-1111-4111-8111-111111111111',
             'class': {'id': '22222222-2222-4222-8222-222222222222', 'name': self.group.name, 'grade_level': 7, 'letter': 'А'},
