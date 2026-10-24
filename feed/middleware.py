@@ -87,7 +87,8 @@ class OnlineClientsMiddleware:
         path = safe_request_path(request)
         
         # Ігноруємо службові запити статистики від самого лаунчера
-        is_internal_poll = path.startswith('/api/server-stats/')
+        is_internal_poll = (path.startswith('/api/server-stats/') or
+            request.path in ('/api/v2/ping', '/api/v2/ping/', '/api/v2/journal/connection/'))
         is_disconnect = path.startswith('/api/client-disconnect/')
         
         if is_disconnect:

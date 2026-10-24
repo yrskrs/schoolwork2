@@ -15,11 +15,38 @@ from school_sync.django_backend import operate
 from school_sync.core import SyncError
 
 
+def local_instance_id():
+    from .models import RosterState
+    state = RosterState.objects.filter(pk=1).only('data').first()
+    identity = state.data.get('origin') if state and isinstance(state.data, dict) else None
+    return identity or operate(lambda engine, store: engine.origin)
+
+
+@require_GET
+def ping(request):
+    from .changelog import SITE_VERSION
+    from school_sync.discovery import ping_payload
+    return reply(ping_payload('schoolwork', local_instance_id(), SITE_VERSION))
+
+
+@require_GET
+def connection_info(request):
+    from .changelog import SITE_VERSION
+    from school_sync.discovery import ping_payload
+    key = authorized(request)
+    if not key:
+        return reply({'error': 'Ключ не прийнято. Створіть новий ключ для журналу.'}, 401)
+    data = ping_payload('schoolwork', local_instance_id(), SITE_VERSION)
+    data.update(schema_version=2, permissions={'export': key.can_export_grades,
+        'roster_import': key.can_import_roster})
+    return reply(data)
+
+
 def authorized(request):
     header = request.headers.get('Authorization', '')
     if not header.startswith('Bearer ') or not header[7:].strip():
         return None
-    key, error = get_authenticated_journal_key(request, 'export')
+    key, error = get_authenticated_journal_key(request)
     if key and key.teacher_id and not key.teacher.user.is_active:
         return None
     return key
@@ -94,6 +121,8 @@ def roster(request):
             return reply(operate(receive))
         except (SyncError, ValueError, TypeError, KeyError, AttributeError):
             return reply({'error': 'Не вдалося передати список. Перевірте відповідності та права власника ключа; місцеві дані збережено.'}, 400)
+    if not key.can_export_grades:
+        return reply({'error': 'У ключа немає права читати списки та оцінки. Увімкніть експорт у SchoolNet.'}, 403)
     from .outside_students import teaching_classes
     classes = teaching_classes(ClassGroup.objects.all())
     subjects = Subject.objects.all()
@@ -113,6 +142,8 @@ def grades(request):
     key = authorized(request)
     if not key:
         return reply({'error': 'Потрібен чинний Bearer-ключ із правом експорту.'}, 401)
+    if not key.can_export_grades:
+        return reply({'error': 'У ключа немає права експортувати оцінки. Увімкніть його в SchoolNet.'}, 403)
     try:
         class_id = int(request.GET['class_id'])
         subject_id = int(request.GET['subject_id'])

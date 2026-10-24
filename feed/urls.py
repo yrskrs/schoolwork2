@@ -157,6 +157,9 @@ urlpatterns = [
     # ── Інтеграція з локальним та зовнішніми журналами оцінок (API v1) ────────
     path('api/v1/journal/grades/', journal_api.api_journal_export_grades, name='api_journal_export_grades'),
     path('api/v2/journal/grades/', school_api_v2.grades, name='api_school_grades_v2'),
+    path('api/v2/ping', school_api_v2.ping, name='api_school_ping'),
+    path('api/v2/ping/', school_api_v2.ping),
+    path('api/v2/journal/connection/', school_api_v2.connection_info, name='api_school_connection'),
     path('api/v2/journal/roster/', school_api_v2.roster, name='api_school_roster_v2'),
     path('api/v2/roster-sync/', roster_views.roster_api, name='roster_sync_api'),
     path('teacher/roster-sync/', roster_views.roster_ui, name='roster_sync'),
