@@ -80,15 +80,9 @@
                             <td style="padding:12px 8px;">
                                 <div style="display:inline-flex;align-items:center;gap:6px;background:var(--color-bg-secondary);padding:4px 8px;border-radius:var(--radius-sm);border:1px solid var(--color-border);">
                                     <span id="key-display-{{ k.id }}" style="font-family:monospace;font-size:12px;font-weight:600;">
-                                        {{ k.key|slice:":12" }}••••••••••••••••
+                                        ••••••••••••••••
                                     </span>
-                                    <input type="hidden" id="key-full-{{ k.id }}" value="{{ k.key }}">
-                                    <button type="button" class="btn btn-secondary btn-sm" onclick="toggleKeyVisibility({{ k.id }})" style="padding:2px 6px;font-size:11px;" title="Показати/приховати токен">
-                                        👁️
-                                    </button>
-                                    <button type="button" class="btn btn-secondary btn-sm" onclick="copyTextToClipboard('{{ k.key }}', this)" style="padding:2px 6px;font-size:11px;" title="Скопіювати в буфер">
-                                        📋
-                                    </button>
+                                    <small>Показано лише під час створення</small>
                                 </div>
                             </td>
                             <td style="padding:12px 8px;">
@@ -460,19 +454,6 @@ function openCreateApiKeyModal() {
 function closeCreateApiKeyModal() {
     var modal = document.getElementById('modal-create-api-key');
     if (modal) modal.style.display = 'none';
-}
-
-function toggleKeyVisibility(keyId) {
-    var span = document.getElementById('key-display-' + keyId);
-    var hidden = document.getElementById('key-full-' + keyId);
-    if (!span || !hidden) return;
-    if (span.getAttribute('data-revealed') === 'true') {
-        span.textContent = hidden.value.substring(0, 12) + '••••••••••••••••';
-        span.removeAttribute('data-revealed');
-    } else {
-        span.textContent = hidden.value;
-        span.setAttribute('data-revealed', 'true');
-    }
 }
 
 function copyTextToClipboard(text, btnEl) {

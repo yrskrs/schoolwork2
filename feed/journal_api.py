@@ -58,6 +58,9 @@ def get_authenticated_journal_key(request: HttpRequest, required_permission: Opt
     if not raw_token:
         return None, "API ключ не надано. Вкажіть заголовок 'Authorization: Bearer <token>' або 'X-API-Key: <token>'."
 
+    from .secret_fields import PREFIX
+    if raw_token.startswith(PREFIX):
+        return None, 'Хеш ключа не є API-ключем. Використайте оригінальний ключ або створіть новий.'
     key_obj = JournalAPIKey.objects.filter(key=raw_token).first()
     if not key_obj:
         return None, "Недійсний або невідомий API ключ."

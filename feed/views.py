@@ -7377,6 +7377,7 @@ def teacher_settings_view(request):
     3. Штучний інтелект (API ключ, системний промт, пріоритети моделей, черга fallback, видалення моделей, статистика).
     """
     teacher = request.user.teacher_profile
+    just_created_api_key = just_created_api_key_name = None
     tab = request.GET.get('tab', 'profile')
     env_section = request.GET.get('section', 'school')
     if tab == 'notifications':
@@ -7937,10 +7938,10 @@ def teacher_settings_view(request):
                 local_journal_url=journal_url,
                 is_active=True
             )
-            request.session['just_created_api_key'] = key_token
-            request.session['just_created_api_key_name'] = name
+            just_created_api_key = key_token
+            just_created_api_key_name = name
+            tab = 'api'
             messages.success(request, f"API ключ «{name}» успішно згенеровано! 🔑 Скопіюйте його нижче для налаштування локального журналу.")
-            return redirect(f"{reverse('teacher_settings')}?tab=api")
 
         elif action == 'delete_journal_api_key':
             key_id = request.POST.get('key_id')
@@ -8188,8 +8189,6 @@ def teacher_settings_view(request):
 
     from .models import JournalAPIKey
     journal_api_keys = (JournalAPIKey.objects.all() if request.user.is_superuser else JournalAPIKey.objects.filter(teacher=teacher)).order_by('-created_at')
-    just_created_api_key = request.session.pop('just_created_api_key', None)
-    just_created_api_key_name = request.session.pop('just_created_api_key_name', None)
     from django.conf import settings as journal_settings
     journal_site_url = getattr(journal_settings, 'PUBLIC_BASE_URL', '') or request.build_absolute_uri('/')[:-1]
     import json as journal_json

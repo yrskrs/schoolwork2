@@ -9,6 +9,19 @@ from datetime import datetime
 from django.utils import timezone
 from threading import Lock
 from django.middleware.gzip import GZipMiddleware
+from urllib.parse import parse_qsl, urlencode
+
+
+def safe_request_path(request):
+    """Never retain legacy query credentials in logs or online-client metadata."""
+    query = request.META.get('QUERY_STRING', '')
+    try:
+        pairs = parse_qsl(query, keep_blank_values=True, max_num_fields=1000)
+        pairs = [(key, '***' if any(part in key.casefold() for part in
+            ('key', 'token', 'password', 'secret', 'authorization')) else value) for key, value in pairs]
+        return request.path + ('?' + urlencode(pairs) if pairs else '')
+    except ValueError:
+        return request.path
 
 
 class PageCompressionMiddleware(GZipMiddleware):
@@ -71,7 +84,7 @@ class OnlineClientsMiddleware:
     def __call__(self, request):
         ip = get_client_ip(request)
         now = time.time()
-        path = request.get_full_path()
+        path = safe_request_path(request)
         
         # Ігноруємо службові запити статистики від самого лаунчера
         is_internal_poll = path.startswith('/api/server-stats/')
@@ -91,10 +104,10 @@ class OnlineClientsMiddleware:
             response = self.get_response(request)
         except Exception as exc:
             # Фіксуємо помилку із вказанням конкретної IP клієнта
-            err_msg = f"[КЛІЄНТ IP: {ip}] ❌ ПОМИЛКА 500 на {request.method} {path}: {type(exc).__name__}: {str(exc)}\n"
+            err_msg = f"[КЛІЄНТ IP: {ip}] ❌ ПОМИЛКА 500 на {request.method} {path}: {type(exc).__name__}\n"
             _safe_log(err_msg, is_error=True)
             try:
-                traceback.print_exc()
+                traceback.print_tb(exc.__traceback__)
             except Exception:
                 pass
             raise
@@ -117,8 +130,8 @@ class OnlineClientsMiddleware:
 
     def process_exception(self, request, exception):
         ip = get_client_ip(request)
-        path = request.get_full_path()
-        err_msg = f"[КЛІЄНТ IP: {ip}] ❌ ВИНЯТОК на {request.method} {path}: {str(exception)}\n"
+        path = safe_request_path(request)
+        err_msg = f"[КЛІЄНТ IP: {ip}] ❌ ВИНЯТОК на {request.method} {path}: {type(exception).__name__}\n"
         _safe_log(err_msg, is_error=True)
         return None
 

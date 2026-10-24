@@ -3185,6 +3185,9 @@ class School(models.Model):
 
 
 # ─── API Ключі для локальних журналів оцінок ──────────────────────────────────
+from .secret_fields import HashedTokenField
+
+
 class JournalAPIKey(models.Model):
     """
     API ключ для двосторонньої інтеграції з локальними та зовнішніми журналами оцінок.
@@ -3192,7 +3195,7 @@ class JournalAPIKey(models.Model):
     - Отримання та синхронізація списків учнів і класів з журналу до платформи.
     """
     name = models.CharField('Назва / Призначення', max_length=150, default='Локальний журнал оцінок')
-    key = models.CharField('API ключ / Токен', max_length=64, unique=True, db_index=True)
+    key = HashedTokenField('API ключ / Токен', max_length=71, unique=True, db_index=True)
     teacher = models.ForeignKey(
         'Teacher',
         on_delete=models.CASCADE,
@@ -3220,7 +3223,7 @@ class JournalAPIKey(models.Model):
         return f"sk_journal_{secrets.token_hex(20)}"
 
     def __str__(self):
-        return f"{self.name} ({self.key[:14]}...)"
+        return self.name
 
 
 def log_submission_activity(actor, action_type, description, submission=None):
