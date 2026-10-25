@@ -169,6 +169,7 @@ class MergeAndCoauthorsTests(TestCase):
         ).first()
         self.assertIsNotNone(coauthor_sub)
         self.assertEqual(coauthor_sub.primary_submission, primary_sub)
+        self.assertEqual(coauthor_sub.submitted_at, primary_sub.submitted_at)
         self.assertTrue(coauthor_sub.is_group_work)
         self.assertEqual(str(coauthor_sub.grade), '11')
         self.assertEqual(coauthor_sub.teacher_comment, 'Відмінний проект!')

@@ -2938,9 +2938,20 @@ class Submission(models.Model):
 
     def save(self, *args, **kwargs):
         """Автоматично заповнює вчителя з завдання якщо не вказано."""
+        adding = self._state.adding
         if not self.teacher and self.assignment:
             self.teacher = self.assignment.teacher
         super().save(*args, **kwargs)
+        if adding and self.is_group_work and self.primary_submission_id:
+            # Adding an author is not another upload. auto_now_add runs during
+            # INSERT, so copy the primary timestamp after that field hook.
+            primary_time = type(self).objects.using(self._state.db).filter(
+                pk=self.primary_submission_id, assignment_id=self.assignment_id,
+                class_group_id=self.class_group_id,
+            ).values_list('submitted_at', flat=True).first()
+            if primary_time is not None:
+                type(self).objects.using(self._state.db).filter(pk=self.pk).update(submitted_at=primary_time)
+                self.submitted_at = primary_time
 
 
 def submission_file_upload_path(instance, filename):

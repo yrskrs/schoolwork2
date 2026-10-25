@@ -370,6 +370,7 @@
 </main>
 
 <footer class="site-footer">
+    <span>Час здачі та оцінювання показано за Києвом.</span>
     Шкільні Завдання · Локальна шкільна мережа{% if user.is_authenticated and user.teacher_profile or user.is_superuser or is_superadmin_mode %} · <a href="{% url 'system_updates' %}" style="color:var(--color-primary);text-decoration:none;font-weight:700;">🚀 Оновлення системи</a>{% endif %}
     <p id="simplified-site-help">Сайт пригальмовує? Увімкніть «Спрощений сайт» у меню: анімації, розмиття й декоративні тіні вимкнуться. Вибір зберігається в цьому браузері; завдання та всі функції залишаються доступними.</p>
 </footer>

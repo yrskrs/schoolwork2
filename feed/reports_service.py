@@ -90,7 +90,7 @@ class NumberedCanvas(canvas.Canvas):
         self.line(28, footer_y + 12, 595.27 - 28, footer_y + 12)
 
         # Текст колонтитула
-        timestamp = datetime.now().strftime("%d.%m.%Y %H:%M")
+        timestamp = timezone.localtime().strftime("%d.%m.%Y %H:%M")
         self.drawString(28, footer_y, f"Звіт сформовано в системі «Шкільні Завдання» | {timestamp}")
         page_str = f"Сторінка {self._pageNumber} з {page_count}"
         self.drawRightString(595.27 - 28, footer_y, page_str)
@@ -395,7 +395,7 @@ def generate_teacher_report_pdf(buffer, report_meta, submissions, mode='grades_o
             Paragraph("<b>Вчитель:</b>", style_meta_label),
             Paragraph(teacher_line, style_meta_val),
             Paragraph("<b>Дата формування:</b>", style_meta_label),
-            Paragraph(datetime.now().strftime("%d.%m.%Y %H:%M"), style_meta_val)
+            Paragraph(timezone.localtime().strftime("%d.%m.%Y %H:%M"), style_meta_val)
         ])
 
     subj = report_meta.get('subject_name') or 'Всі предмети'
@@ -603,7 +603,7 @@ def generate_teacher_report_pdf(buffer, report_meta, submissions, mode='grades_o
 
             # Заголовок картки
             card_title = f"#{idx}. {sub.get_student_full_name()} — Клас: {report_class_name(sub)}"
-            d_sub = sub.submitted_at.strftime("%d.%m.%Y %H:%M") if sub.submitted_at else "—"
+            d_sub = timezone.localtime(sub.submitted_at).strftime("%d.%m.%Y %H:%M") if sub.submitted_at else "—"
             
             sub_elements.append(Paragraph(
                 f"<b>{card_title}</b> &nbsp;|&nbsp; Здано: {d_sub} &nbsp;|&nbsp; Оцінка: <b>{sub.grade or 'Без оцінки'}</b>",
@@ -685,8 +685,8 @@ def generate_teacher_report_pdf(buffer, report_meta, submissions, mode='grades_o
             Paragraph("<font size='7' color='#64748b'>(підпис та ПІБ основного вчителя)</font>", style_cell)
         ],
         [
-            Paragraph(f"Дата: «___» ____________ {datetime.now().year} р.", style_cell),
-            Paragraph(f"Дата: «___» ____________ {datetime.now().year} р.", style_cell)
+            Paragraph(f"Дата: «___» ____________ {timezone.localtime().year} р.", style_cell),
+            Paragraph(f"Дата: «___» ____________ {timezone.localtime().year} р.", style_cell)
         ]
     ]
 

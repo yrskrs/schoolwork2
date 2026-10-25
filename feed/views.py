@@ -569,12 +569,12 @@ def assignment_detail(request, pk):
             'student_display': assignment.student_display,
             'views_count': assignment.views_count,
             'is_teacher': is_teacher,
-            'published_at': assignment.published_at.strftime('%d.%m.%Y %H:%M') if assignment.published_at else '',
+            'published_at': timezone.localtime(assignment.published_at).strftime('%d.%m.%Y %H:%M') if assignment.published_at else '',
             'relative_published_at': assignment.relative_published_display,
             'is_today': assignment.is_published_today,
             'is_yesterday': assignment.is_published_yesterday,
             'days_ago': assignment.days_ago,
-            'unarchived_at': assignment.unarchived_at.strftime('%d.%m.%Y %H:%M') if assignment.unarchived_at else '',
+            'unarchived_at': timezone.localtime(assignment.unarchived_at).strftime('%d.%m.%Y %H:%M') if assignment.unarchived_at else '',
             'unarchived_display': assignment.unarchived_display,
             'due_date': assignment.due_date.strftime('%d.%m.%Y') if assignment.due_date else '',
             'link_url': assignment.link_url,
@@ -3373,7 +3373,7 @@ def view_file(request, submission_id):
                             'id': comment.id,
                             'text': comment.text,
                             'author': comment.get_author_name(),
-                            'created_at': comment.created_at.strftime("%d.%m.%Y %H:%M")
+                            'created_at': timezone.localtime(comment.created_at).strftime("%d.%m.%Y %H:%M")
                         }
                     })
                 messages.success(request, 'Коментар додано!')
@@ -5324,7 +5324,7 @@ def add_submission_comment(request, sub_id):
             'id': comment.id,
             'author': comment.get_author_name(),
             'text': comment.text,
-            'created_at': comment.created_at.strftime('%d.%m.%Y %H:%M'),
+            'created_at': timezone.localtime(comment.created_at).strftime('%d.%m.%Y %H:%M'),
         }
     })
 
@@ -6577,7 +6577,7 @@ def export_grades(request):
     for sub in submissions:
         assignment_title = sub.assignment.title if sub.assignment else '-'
         teacher_name = sub.teacher.full_name if sub.teacher else (sub.assignment.teacher.full_name if sub.assignment else '-')
-        graded_at_str = sub.graded_at.strftime('%d.%m.%Y %H:%M') if sub.graded_at else ''
+        graded_at_str = timezone.localtime(sub.graded_at).strftime('%d.%m.%Y %H:%M') if sub.graded_at else ''
         assign_date_str = sub.effective_grade_date.strftime('%d.%m.%Y')
         writer.writerow([
             sub.last_name,
@@ -6586,7 +6586,7 @@ def export_grades(request):
             assignment_title,
             assign_date_str,
             teacher_name,
-            sub.submitted_at.strftime('%d.%m.%Y %H:%M'),
+            timezone.localtime(sub.submitted_at).strftime('%d.%m.%Y %H:%M'),
             graded_at_str,
             sub.grade
         ])
@@ -6791,7 +6791,7 @@ def archive_old_activity_logs(days=30):
     for log in old_logs:
         rows.append([
             str(log.id),
-            log.timestamp.strftime("%d.%m.%Y %H:%M:%S"),
+            timezone.localtime(log.timestamp).strftime("%d.%m.%Y %H:%M:%S"),
             log.actor.username if log.actor else "Гість / Учень",
             log.get_action_type_display(),
             log.description,
@@ -7029,7 +7029,7 @@ def archive_submissions_to_master_zip(teacher_name, teacher_submissions):
                 sub.first_name,
                 sub.class_group.name if sub.class_group else "-",
                 teacher_name,
-                sub.submitted_at.strftime("%d.%m.%Y %H:%M"),
+                timezone.localtime(sub.submitted_at).strftime("%d.%m.%Y %H:%M"),
                 sub.grade or "-",
                 work_item,
                 comments_str,

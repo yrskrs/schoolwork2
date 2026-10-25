@@ -6278,7 +6278,7 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
         prev = submission.previous_submission
         prev_info = []
         if prev:
-            prev_time = prev.submitted_at.strftime('%d.%m.%Y %H:%M') if prev.submitted_at else 'раніше'
+            prev_time = timezone.localtime(prev.submitted_at).strftime('%d.%m.%Y %H:%M') if prev.submitted_at else 'раніше'
             prev_info.append(f"• Дата та час попередньої здачі: {prev_time}")
             if prev.student_ai_grade:
                 prev_info.append(f"• Чернова оцінка ШІ за першу спробу: {prev.student_ai_grade} ({prev.student_ai_summary or ''})")
