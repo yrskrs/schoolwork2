@@ -45,6 +45,15 @@ class SchoolAPIV2Tests(TestCase):
         updated=self.export().json()['grades'][0];self.assertEqual(record['id'],updated['id']);self.assertEqual(updated['value'],'10')
         self.key.teacher=Teacher.objects.create(user=get_user_model().objects.create_user(username='other-v2'),full_name='Інший');self.key.save()
         self.assertEqual(self.export().json()['grades'],[])
+    def test_non_journal_marks_stay_on_source_without_exporting_invalid_values(self):
+        sub=self.sub()
+        for value in ['0','Н','8.5','доопрацювати']:
+            sub.grade=value;sub.save()
+            self.assertEqual(self.export().json()['grades'],[])
+            sub.refresh_from_db();self.assertEqual(sub.grade,value)
+        sub.grade='12';sub.save()
+        self.assertEqual(self.export().json()['grades'][0]['value'],'12')
+
     def test_new_attempt_suppresses_old_grade(self):
         old=self.sub();new=Submission.objects.create(assignment=self.assignment,student=self.student,class_group=self.group,last_name='Вигаданий',first_name='Учень')
         self.assertEqual(self.export().json()['grades'],[])

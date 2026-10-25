@@ -145,6 +145,10 @@ def grades(request):
         # Filter after choosing the latest attempt so an older mark stays hidden.
         if sub.grade.strip().casefold() == 'доопрацювати':
             continue
+        # Arbitrary teacher labels and zero stay on the assignment site. They
+        # are not marks in the journal's integer 1–12 contract.
+        if not sub.grade.isdigit() or not 1 <= int(sub.grade) <= 12:
+            continue
         date = sub.effective_grade_date
         if not start <= date <= end:
             continue
