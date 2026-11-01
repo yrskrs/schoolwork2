@@ -98,6 +98,8 @@ class Adapter:
                 # Shared lists owned/used by this teacher, never other teachers' tasks.
                 for obj in teacher.classes.all(): add(obj)
                 for obj in teacher.subjects.all(): add(obj)
+                for label in ('ClassGroup','Subject'):
+                    for obj in apps.get_model('feed',label).objects.filter(created_by=teacher):add(obj)
                 if config['students']:
                     for obj in Submission.objects.filter(Q(teacher=teacher) | Q(teacher__isnull=True, assignment__teacher=teacher)):
                         add(obj)
@@ -118,7 +120,11 @@ class Adapter:
                                     continue
                                 if related is Assignment and (label, str(pk)) not in selected:
                                     continue
-                                add(related.objects.filter(pk=pk).first())
+                                related_object=related.objects.filter(pk=pk).first()
+                                if related is Submission and related_object is not None:
+                                    if related_object.teacher_id != int(owner) and not (related_object.teacher_id is None and related_object.assignment_id is not None and Assignment.objects.filter(pk=related_object.assignment_id,teacher_id=owner).exists()):
+                                        continue
+                                add(related_object)
                         for field in obj._meta.many_to_many:
                             if field.remote_field.model._meta.label_lower in allowed:
                                 for related in getattr(obj, field.name).all(): add(related)

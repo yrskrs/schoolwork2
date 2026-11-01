@@ -105,6 +105,14 @@ class CloudBackupGraphTests(TransactionTestCase):
             with self.assertRaises(ValueError): self.adapter.restore(self.teacher.pk,self.config,directory)
         self.assertEqual(Assignment.objects.count(),2)
 
+    def test_cross_teacher_submission_link_does_not_expand_private_work(self):
+        other=Submission.objects.create(teacher=self.admin,assignment=self.other,class_group=self.group,first_name='Чужа',last_name='Робота',comment_student='private other body')
+        Submission.objects.filter(pk=self.submission.pk).update(previous_submission=other)
+        repo,snapshot=self.capture();contents=dict(repo.read(snapshot))
+        self.assertNotIn(f'db/feed.submission/{other.pk}.json',contents)
+        own=json.loads(contents[f'db/feed.submission/{self.submission.pk}.json'])
+        self.assertIsNone(own['fields']['previous_submission'])
+
     def test_data_only_and_teacher_file_selection(self):
         self.config.update(materials=False,students=False,student_files=False)
         repo,snapshot=self.capture();contents=dict(repo.read(snapshot))

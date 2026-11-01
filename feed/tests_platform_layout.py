@@ -232,7 +232,8 @@ class PlatformNavigationTests(TestCase):
             links = page.get_element_by_id(element).xpath(selector)
             self.assertEqual({parse_qs(urlparse(link).query)['tab'][0] for link in links if urlparse(link).query},
                              {'profile', 'environment', 'ai', 'api'})
-            self.assertEqual(len(links), 6 if element == 'settings-sidebar-links' else 4)
+            self.assertEqual(len(links), 7 if element == 'settings-sidebar-links' else 5)
+            self.assertEqual(links.count(reverse('cloud_backups')),1)
             if element == 'settings-sidebar-links':
                 self.assertEqual(links.count(reverse('system_updates')), 1)
         for route, tab in [('teacher_profiles', 'environment'), ('ai_settings', 'ai')]:
