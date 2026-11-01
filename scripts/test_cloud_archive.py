@@ -137,6 +137,14 @@ class StateTests(unittest.TestCase):
         self.assertEqual(configuration(self.state,1,'personal')['password'],'one')
         self.assertEqual(configuration(self.state,1,'server')['password'],'two')
 
+    def test_google_oauth_callback_uses_explicit_public_https_origin(self):
+        from cloud_backup.control import begin_oauth
+        from urllib.parse import urlsplit,parse_qs
+        save_config(self.state,1,'personal',{'provider':'google','client_id':'client','client_secret':'secret','public_url':'https://school.example'})
+        url=begin_oauth(self.state,1,'personal','http://internal:8000/teacher/backups/google/callback?scope=personal')
+        self.assertEqual(parse_qs(urlsplit(url).query)['redirect_uri'],['https://school.example/teacher/backups/google/callback?scope=personal'])
+        with self.assertRaises(ValueError):save_config(self.state,1,'personal',{'public_url':'https://school.example/foreign/path'})
+
     def test_queue_is_durable_and_refuses_overlapping_jobs(self):
         job = self.state.enqueue(1,'backup',{'config':{'password':'secret'}})
         with self.assertRaises(ValueError): self.state.enqueue(1,'backup',{})

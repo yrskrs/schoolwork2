@@ -1,5 +1,6 @@
 """Framework-neutral input validation and safe page data."""
 import json
+import os
 import re
 import secrets
 import time
@@ -26,7 +27,7 @@ def configuration(state, owner, scope):
 def save_config(state, owner, scope, form):
     old = configuration(state, owner, scope)
     config = {**old}
-    for key in ('provider','format','url','username','client_id'):
+    for key in ('provider','format','url','username','client_id','public_url'):
         config[key] = str(form.get(key, old.get(key, ''))).strip()
     repository = str(form.get('repository', '')).strip() or old['repository'] or uuid.uuid4().hex
     if not re.fullmatch('[a-f0-9]{32}', repository):
@@ -43,6 +44,11 @@ def save_config(state, owner, scope, form):
     if form.get('new_repository'):
         repository = uuid.uuid4().hex
     config['repository'] = repository
+    if config.get('public_url'):
+        public=urllib.parse.urlsplit(config['public_url'])
+        if (public.scheme!='https' and not (public.scheme=='http' and public.hostname in ('localhost','127.0.0.1'))) or not public.hostname or public.username or public.query or public.fragment or public.path not in ('','/'):
+            raise ValueError('Публічна адреса: HTTPS-адреса сайту без шляху, логіна та параметрів')
+        config['public_url']=config['public_url'].rstrip('/')
     if config['provider'] not in ('nextcloud','google') or config['format'] not in ('incremental','zip'):
         raise ValueError('Оберіть сховище та формат зі списку')
     config['scope'] = scope
@@ -82,6 +88,13 @@ def begin_oauth(state, owner, scope, redirect_uri):
     config = configuration(state, owner, scope)
     if not config.get('client_id') or not config.get('client_secret'):
         raise ValueError('Спочатку збережіть Google Client ID і Client Secret')
+    public_url=config.get('public_url','')
+    if not public_url and not redirect_uri.startswith('https://'):
+        candidate=os.environ.get('PUBLIC_BASE_URL','').rstrip('/')
+        if candidate.startswith('https://'):public_url=candidate
+    if public_url:
+        original=urllib.parse.urlsplit(redirect_uri)
+        redirect_uri=public_url.rstrip('/')+original.path+('?' + original.query if original.query else '')
     parsed = urllib.parse.urlsplit(redirect_uri)
     if parsed.scheme != 'https' and parsed.hostname not in ('localhost','127.0.0.1'):
         raise ValueError('Google OAuth потребує HTTPS-домену сайту. Відкрийте сайт за HTTPS-адресою та додайте callback до Google Cloud Console')

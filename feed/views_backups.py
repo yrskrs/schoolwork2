@@ -31,16 +31,14 @@ def backups(request):
         try:
             operation = request.POST.get('action','save')
             if operation == 'save':
-                if request.POST.get('reuse_nextcloud'):
-                    from cloud_backup.control import profile, configuration
-                    old = configuration(store,owner,scope)
-                    existing = request.user.teacher_profile.get_cloud_storage()
-                    old.update(url=existing.nextcloud_url, username=existing.nextcloud_username, app_password=existing.nextcloud_password)
-                    store.save(profile(owner,scope),old)
                 form = request.POST.copy()
                 if request.POST.get('reuse_nextcloud'):
-                    form['url'] = form.get('url') or existing.nextcloud_url
+                    existing = request.user.teacher_profile.get_cloud_storage()
+                    if not existing.has_nextcloud():
+                        raise ValueError('У профілі ще немає підключеного Nextcloud. Укажіть адресу, користувача й пароль додатка')
+                    form['url'] = form.get('url') or existing.nextcloud_url.split('/remote.php/',1)[0]
                     form['username'] = form.get('username') or existing.nextcloud_username
+                    form['app_password'] = form.get('app_password') or existing.nextcloud_password
                 save_config(store,owner,scope,form)
                 messages.success(request,'Налаштування збережено. Збережіть ідентифікатор сховища поза сервером.')
             elif operation == 'read':

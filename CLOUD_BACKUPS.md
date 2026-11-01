@@ -35,7 +35,7 @@
 1. У [Google Cloud Console](https://console.cloud.google.com/) створіть/оберіть проєкт, увімкніть **Google Drive API**.
 2. Налаштуйте OAuth consent screen. У тестовому режимі додайте потрібні акаунти до test users. Для тривалої роботи врахуйте правила Google щодо строку дії offline-токенів тестових застосунків.
 3. Створіть OAuth client типу **Web application**.
-4. Відкрийте сайт за HTTPS-доменом. Додайте до **Authorized redirect URIs** точні адреси, які показує довідка на сторінці. Приклади:
+4. Відкрийте сайт за HTTPS-доменом. За потреби вкажіть його в полі **Публічна HTTPS-адреса цього сайту** (без шляху). Це також виправляє callback за проксі без довіри до довільних HTTP-заголовків. Якщо поле порожнє, використовується адреса запиту або HTTPS PUBLIC_BASE_URL. Додайте до **Authorized redirect URIs** точні адреси, які показує довідка на сторінці. Приклади:
    - `https://test.school.example/teacher/backups/google/callback?scope=personal`
    - `https://test.school.example/teacher/backups/google/callback?scope=server`
 5. Збережіть Client ID / Client Secret у відповідному обсязі резервування. Натисніть **Підключити Google** та підтвердьте доступ.

@@ -159,6 +159,18 @@ class CloudBackupRoutesTests(TestCase):
         self.assertEqual(self.client.get('/teacher/backups?scope=server').status_code,403)
         self.assertEqual(self.client.get('/teacher/backups/download/'+'a'*32).status_code,404)
 
+    def test_reuses_profile_nextcloud_without_exposing_password(self):
+        import re
+        from .models import TeacherCloudStorage
+        from cloud_backup.control import profile
+        TeacherCloudStorage.objects.create(teacher=self.teacher,nextcloud_enabled=True,nextcloud_url='https://cloud.example',nextcloud_username='teacher',nextcloud_password='profile-private-secret')
+        page=self.client.get('/teacher/backups')
+        csrf=re.search(r'name="csrfmiddlewaretoken" value="([a-zA-Z0-9]+)"',page.content.decode())[1]
+        response=self.client.post('/teacher/backups',{'csrfmiddlewaretoken':csrf,'action':'save','provider':'nextcloud','reuse_nextcloud':'on','url':'','username':''})
+        self.assertEqual(response.status_code,302)
+        self.assertEqual(self.store.config(profile(Adapter.owner(self.teacher),'personal'))['app_password'],'profile-private-secret')
+        self.assertNotIn('profile-private-secret',self.client.get('/teacher/backups/status').content.decode())
+
     def test_callback_rejects_unsolicited_oauth_state(self):
         response=self.client.get('/teacher/backups/google/callback?state=forged&code=fake')
         self.assertEqual(response.status_code,302)

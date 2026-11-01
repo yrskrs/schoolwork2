@@ -29,6 +29,7 @@ assert(document.querySelector('[name=recovery_only]'),'Read-only recovery settin
 assert(document.querySelector('[name=automatic]'),'Schedule setting');
 assert([...document.querySelectorAll('input[type=password]')].every(i=>!i.value),'Secrets never prefilled');
 assert(document.documentElement.scrollWidth<=innerWidth+1,'No horizontal page overflow');
+const provider=document.getElementById('backup-provider');for(const value of ['nextcloud','google']){provider.value=value;provider.dispatchEvent(new Event('change'));assert(document.querySelector('div[data-backup-provider='+value+']').hidden===false,'Selected provider visible');assert(document.documentElement.scrollWidth<=innerWidth+1,'Provider fits viewport: '+value)}provider.value='nextcloud';provider.dispatchEvent(new Event('change'));
 for(const item of document.querySelectorAll('.backup-page section,.backup-page input:not([type=hidden]),.backup-page select')){const b=item.getBoundingClientRect();assert(b.left>=-1&&b.right<=innerWidth+1,'Control fits viewport: '+(item.id||item.tagName))}
 result.textContent=JSON.stringify({ok:true,width:innerWidth,sections:document.querySelectorAll('.backup-page section').length});
 }catch(e){result.textContent=JSON.stringify({ok:false,error:String(e),width:innerWidth})}document.body.append(result)},400));
