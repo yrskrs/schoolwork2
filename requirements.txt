@@ -34,3 +34,8 @@ whitenoise>=6.7.0
 psycopg[binary]>=3.1.18
 dj-database-url>=2.1.0
 python-dotenv>=1.0.1
+
+# Cloud backup archives and private control-store encryption
+pyzipper==0.4.0
+cryptography>=46.0.0,<51
+defusedxml>=0.7.1,<1

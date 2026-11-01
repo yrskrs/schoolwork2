@@ -96,3 +96,6 @@ compose.override.yaml
 
 # Local design delivery packages; integrated source files are tracked separately.
 site-redesign*.zip
+
+# Private cloud backup control store (never serve or commit)
+private-backups/
