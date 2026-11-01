@@ -100,6 +100,7 @@ class CloudBackupGraphTests(TransactionTestCase):
         group=Group.objects.create(name='Reviewers');group.permissions.add(Permission.objects.get(codename='view_assignment'))
         self.user.groups.add(group);self.user.user_permissions.add(Permission.objects.get(codename='change_submission'))
         repo,snapshot=self.capture(self.admin.pk);target=self.target();self.config['_snapshot']=snapshot
+        expected = {name: value for name, value in repo.read(snapshot, scope='server') if name != 'index.json'}
         with recovery(self.root,repo,snapshot,'server') as directory:
             self.adapter.restore(target.pk,self.config,directory)
         self.assertEqual(Assignment.objects.count(),2)
@@ -108,6 +109,11 @@ class CloudBackupGraphTests(TransactionTestCase):
         recovered=User.objects.get(username='teacher')
         self.assertTrue(recovered.groups.filter(name='Reviewers').exists())
         self.assertTrue(recovered.user_permissions.filter(codename='change_submission').exists())
+        # Compare every exported record and original file after recovery, not
+        # just counts: passwords, settings, relationships and content must match.
+        recovered_repo, recovered_snapshot = self.capture(target.pk)
+        actual = {name: value for name, value in recovered_repo.read(recovered_snapshot, scope='server') if name != 'index.json'}
+        self.assertEqual(actual, expected)
 
     def test_refuses_restore_over_existing_work(self):
         repo,snapshot=self.capture();self.config['_snapshot']=snapshot
@@ -186,3 +192,48 @@ class CloudBackupRoutesTests(TestCase):
         response=self.client.get('/teacher/backups/google/callback?state=forged&code=fake')
         self.assertEqual(response.status_code,302)
         self.assertFalse(self.store.config(str(self.teacher.pk)+'/personal').get('refresh_token'))
+
+    def connect_google(self, **fields):
+        page = self.client.get('/teacher/backups', secure=True)
+        import re
+        csrf = re.search(r'name="csrfmiddlewaretoken" value="([a-zA-Z0-9]+)"', page.content.decode())[1]
+        return self.client.post('/teacher/backups', {
+            'csrfmiddlewaretoken': csrf, 'action': 'connect_google',
+            'client_id': 'synthetic-client', 'client_secret': 'synthetic-secret', **fields,
+        }, secure=True, HTTP_REFERER='https://testserver/teacher/backups')
+
+    def test_connect_saves_current_form_and_starts_google_without_separate_save(self):
+        from urllib.parse import urlsplit, parse_qs
+        from cloud_backup.control import profile
+        response = self.connect_google(public_url='https://work.example', reuse_nextcloud='on')
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(urlsplit(response.url).hostname, 'accounts.google.com')
+        query = parse_qs(urlsplit(response.url).query)
+        self.assertEqual(query['client_id'], ['synthetic-client'])
+        self.assertEqual(query['redirect_uri'], ['https://work.example/teacher/backups/google/callback?scope=personal'])
+        config = self.store.config(profile(Adapter.owner(self.teacher), 'personal'))
+        self.assertEqual(config['provider'], 'google')
+        self.assertEqual(config['client_secret'], 'synthetic-secret')
+        self.assertEqual(config['oauth']['state'], query['state'][0])
+        page = self.client.get('/teacher/backups', secure=True)
+        self.assertContains(page, query['redirect_uri'][0])
+        self.assertNotContains(page, 'synthetic-secret')
+
+    def test_connect_missing_keys_explains_where_to_get_them(self):
+        response = self.connect_google(client_id='', client_secret='')
+        self.assertEqual(response.status_code, 302)
+        page = self.client.get(response.url, secure=True)
+        self.assertContains(page, 'Google Auth Platform')
+        self.assertContains(page, 'Зберегти й підключити Google')
+        self.assertNotContains(page, 'Спочатку збережіть Google Client ID')
+
+    def test_connect_reuses_saved_secret_when_password_field_is_empty(self):
+        self.connect_google()
+        response = self.connect_google(client_secret='')
+        self.assertIn('https://accounts.google.com/', response.url)
+
+    def test_connect_lan_http_explains_https_requirement(self):
+        response = self.connect_google(public_url='http://192.168.1.13:8080')
+        self.assertEqual(response.status_code, 302)
+        self.assertNotIn('accounts.google.com', response.url)
+        self.assertContains(self.client.get(response.url), 'HTTPS-адреса сайту')

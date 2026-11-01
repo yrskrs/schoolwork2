@@ -83,11 +83,8 @@ def check_connection(config):
         raise ValueError('Спочатку збережіть підключення Nextcloud або підключіть Google через OAuth')
 
 
-def begin_oauth(state, owner, scope, redirect_uri):
-    from .remote import GoogleDrive
-    config = configuration(state, owner, scope)
-    if not config.get('client_id') or not config.get('client_secret'):
-        raise ValueError('Спочатку збережіть Google Client ID і Client Secret')
+def google_redirect_uri(config, redirect_uri):
+    """Use the same external callback in setup instructions and authorization."""
     public_url=config.get('public_url','')
     if not public_url and not redirect_uri.startswith('https://'):
         candidate=os.environ.get('PUBLIC_BASE_URL','').rstrip('/')
@@ -95,6 +92,17 @@ def begin_oauth(state, owner, scope, redirect_uri):
     if public_url:
         original=urllib.parse.urlsplit(redirect_uri)
         redirect_uri=public_url.rstrip('/')+original.path+('?' + original.query if original.query else '')
+    return redirect_uri
+
+
+def begin_oauth(state, owner, scope, redirect_uri):
+    from .remote import GoogleDrive
+    config = configuration(state, owner, scope)
+    if not config.get('client_id') or not config.get('client_secret'):
+        raise ValueError('Заповніть OAuth Client ID і Client Secret у розділі «Google Drive». '
+                         'Їх потрібно створити в Google Cloud Console → Google Auth Platform → Clients '
+                         '(тип Web application). Потім натисніть «Зберегти й підключити Google»')
+    redirect_uri = google_redirect_uri(config, redirect_uri)
     parsed = urllib.parse.urlsplit(redirect_uri)
     if parsed.scheme != 'https' and parsed.hostname not in ('localhost','127.0.0.1'):
         raise ValueError('Google OAuth потребує HTTPS-домену сайту. Відкрийте сайт за HTTPS-адресою та додайте callback до Google Cloud Console')

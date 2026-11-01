@@ -3,14 +3,17 @@
 Забезпечує чітке розділення змін для учнів та для вчителів.
 """
 
-SITE_VERSION = "4.7.0"
-SITE_VERSION_SHORT = "v4.7.0"
+SITE_VERSION = "4.7.1"
+SITE_VERSION_SHORT = "v4.7.1"
 
 CHANGELOG_DATA = [
+{'version': '4.7.1', 'date': '1 листопада 2026', 'badge': 'Виправлення', 'is_latest': True,
+ 'student_changes': [], 'teacher_changes': [{'icon': '☁', 'title': 'Простіше підключення Google Drive',
+ 'desc': 'Одна кнопка «Зберегти й підключити Google», пояснення та посилання для створення Client ID / Secret, точна адреса повернення для Google Cloud. Перевірка відновлення описана в документації резервування.'}]},
 {'version': '4.7.0',
  'date': '1 листопада 2026',
  'badge': 'Оновлення',
- 'is_latest': True,
+ 'is_latest': False,
  'student_changes': [],
  'teacher_changes': [{'icon': '☁',
                       'title': 'Хмарні резервні копії',

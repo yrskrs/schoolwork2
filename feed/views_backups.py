@@ -9,7 +9,7 @@ from django.views.decorators.http import require_http_methods
 from django.views.decorators.cache import never_cache
 from .views import teacher_required
 from .cloud_backups import Adapter, state
-from cloud_backup.control import begin_oauth, finish_oauth, page_data, save_config, enqueue
+from cloud_backup.control import begin_oauth, finish_oauth, page_data, save_config, enqueue, google_redirect_uri
 
 
 def scope_of(request):
@@ -31,9 +31,11 @@ def backups(request):
     if request.method == 'POST':
         try:
             operation = request.POST.get('action','save')
-            if operation == 'save':
+            if operation in ('save', 'connect_google'):
                 form = request.POST.copy()
-                if request.POST.get('reuse_nextcloud'):
+                if operation == 'connect_google':
+                    form['provider'] = 'google'
+                if form.get('provider') == 'nextcloud' and request.POST.get('reuse_nextcloud'):
                     existing = request.user.teacher_profile.get_cloud_storage()
                     if not existing.has_nextcloud():
                         raise ValueError('У профілі ще немає підключеного Nextcloud. Укажіть адресу, користувача й пароль додатка')
@@ -41,6 +43,9 @@ def backups(request):
                     form['username'] = form.get('username') or existing.nextcloud_username
                     form['app_password'] = form.get('app_password') or existing.nextcloud_password
                 save_config(store,owner,scope,form)
+                if operation == 'connect_google':
+                    uri = request.build_absolute_uri(reverse('backup_google_callback'))+'?scope='+scope
+                    return redirect(begin_oauth(store,owner,scope,uri))
                 messages.success(request,'Налаштування збережено. Збережіть ідентифікатор сховища поза сервером.')
             elif operation == 'read':
                 store.mark_seen(owner)
@@ -55,7 +60,10 @@ def backups(request):
                 messages.success(request,'Операцію додано до черги. Підсумок з’явиться у центрі сповіщень.')
         except ValueError as error: messages.error(request,str(error))
         return redirect(reverse('cloud_backups')+'?'+urlencode({'scope':scope}))
-    return render(request,'feed/backups.html', {**page_data(store,owner,scope),
+    data = page_data(store,owner,scope)
+    uri = request.build_absolute_uri(reverse('backup_google_callback'))+'?scope='+scope
+    data['backup_google_callback'] = google_redirect_uri(data['backup'], uri)
+    return render(request,'feed/backups.html', {**data,
         'teacher':request.user.teacher_profile,'backup_csrf':get_token(request),
         'backup_admin':request.user.is_superuser,'backup_base':'/teacher/backups', 'active_tab':'backups'})
 
