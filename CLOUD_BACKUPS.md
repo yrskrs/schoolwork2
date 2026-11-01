@@ -100,3 +100,7 @@ python -m cloud_backup.cli --application schooltest --owner 1 --scope server \
 - [Google Drive scopes](https://developers.google.com/workspace/drive/api/guides/api-specific-auth)
 - [Drive resumable upload](https://developers.google.com/workspace/drive/api/guides/manage-uploads)
 - [Nextcloud WebDAV](https://docs.nextcloud.com/server/stable/developer_manual/client_apis/WebDAV/basic.html)
+
+## Перевірка встановленого випуску
+
+Результати тестів, установлені образи, перевірка цілісності та розташування захисних копій: [звіт 01.11.2026](CLOUD_BACKUP_VALIDATION_2026-11-01.md). Нові хмарні підключення потрібно налаштувати у своєму акаунті.
