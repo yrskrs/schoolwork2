@@ -1,0 +1,9 @@
+{% extends 'feed/settings.html' %}
+{% block title %}Хмарні резервні копії — Шкільні Завдання{% endblock %}
+{% block content %}
+<div class="page-wrapper teacher-settings-page"><div class="feed-layout">
+{% include 'feed/components/settings_sidebar.html' %}
+<div class="feed-main-content">{% include 'feed/components/cloud_backups.html' %}</div>
+</div></div>
+{% endblock %}
+{% block extra_scripts %}{% endblock %}

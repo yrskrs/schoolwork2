@@ -28,6 +28,7 @@
 
 
             <nav class="tabs settings-mobile-tabs" id="settings-main-tabs" aria-label="Розділи налаштувань">
+                <a href="{% url 'cloud_backups' %}" class="tab-btn">☁ Резервні копії</a>
                 <a href="{% url 'teacher_settings' %}?tab=profile" class="tab-btn {% if active_tab == 'profile' %}active{% endif %}" onclick="return switchSettingsTab('profile', this)">👤 Профіль</a>
                 <a href="{% url 'teacher_settings' %}?tab=environment" class="tab-btn {% if active_tab == 'environment' %}active{% endif %}" onclick="return switchSettingsTab('environment', this)">🏫 Середовище</a>
                 <a href="{% url 'teacher_settings' %}?tab=ai" class="tab-btn {% if active_tab == 'ai' %}active{% endif %}" onclick="return switchSettingsTab('ai', this)">🤖 ШІ</a>

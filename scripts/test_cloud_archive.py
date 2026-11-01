@@ -154,4 +154,51 @@ class StateTests(unittest.TestCase):
             with install_files([(src,target)]): pass
         self.assertEqual(target.read_bytes(),b'old')
 
+
+class QueueExecutionTests(unittest.TestCase):
+    def setUp(self):
+        self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup)
+        self.state=State(self.temp.name,'server-secret')
+        self.remote=MemoryRemote()
+        self.config={'provider':'nextcloud','scope':'personal','repository':'f'*32,'format':'incremental','password':'p','hour':2,'frequency':'daily','automatic':True}
+        self.notified=[]
+        outer=self
+        class Adapter:
+            app='test'
+            def authorize(self,owner,scope): pass
+            @contextlib.contextmanager
+            def snapshot(self,owner,config): yield [('index.json',bytes_source(b'{}'))]
+            def notify(self,owner,title,body): outer.notified.append(title)
+        self.adapter=Adapter()
+        self.patch=patch('cloud_backup.remote.transport',return_value=self.remote);self.patch.start();self.addCleanup(self.patch.stop)
+
+    def test_manual_and_due_schedule_finish_with_notifications(self):
+        self.state.enqueue(1,'backup',{'config':self.config})
+        self.state.tick(self.adapter)
+        self.assertEqual(self.state.history(1)[0]['status'],'completed')
+        self.state.save('1/personal',self.config)
+        with self.state.db() as db: db.execute('UPDATE configs SET due=0')
+        self.state.tick(self.adapter)
+        self.assertEqual(len(self.notified),2)
+        self.assertEqual(len(self.state.notices(1)),2)
+        with self.state.db() as db: self.assertGreater(db.execute('SELECT due FROM configs').fetchone()[0],0)
+
+    def test_failed_and_interrupted_runs_are_durable_failures(self):
+        self.state.enqueue(1,'backup',{'config':self.config})
+        with patch.object(self.remote,'put',side_effect=OSError('network failed')):
+            self.state.tick(self.adapter)
+        self.assertEqual(self.state.history(1)[0]['status'],'failed')
+        self.assertEqual(len(self.state.notices(1)),1)
+        job=self.state.enqueue(1,'backup',{'config':self.config})
+        with self.state.db() as db: db.execute("UPDATE jobs SET status='running' WHERE id=?",(job,))
+        self.state.tick(self.adapter)
+        self.assertEqual(self.state.history(1)[0]['status'],'failed')
+        self.assertEqual(len(self.state.notices(1)),2)
+
+    def test_provider_error_does_not_leak_secrets(self):
+        self.state.enqueue(1,'backup',{'config':self.config})
+        with patch.object(self.remote,'put',side_effect=RuntimeError('token=private-password')):
+            self.state.tick(self.adapter)
+        self.assertNotIn('private-password',self.state.history(1)[0]['error'])
+
 if __name__ == '__main__': unittest.main()

@@ -151,11 +151,15 @@ class Repository:
         if archive_format == 'zip':
             members = [(name, value.pop('content')) for name, value in manifest['files'].items()]
             encoded = work/'snapshot.zip'
-            write_zip(encoded, [('backup-manifest.json', lambda: io.BytesIO(json_bytes(manifest)))]+
+            metadata = json_bytes(manifest)
+            if len(metadata)>MAX_MANIFEST: raise ValueError('Завеликий опис копії')
+            write_zip(encoded, [('backup-manifest.json', lambda: io.BytesIO(metadata))]+
                       [(name, lambda p=path: p.open('rb')) for name,path in members], self.password)
             manifest['uploaded_bytes'] = encoded.stat().st_size
         else:
-            encoded = pack([('backup-manifest.json', json_bytes(manifest))], self.password)
+            metadata = json_bytes(manifest)
+            if len(metadata)>MAX_MANIFEST: raise ValueError('Завеликий опис копії')
+            encoded = pack([('backup-manifest.json', metadata)], self.password)
             manifest['uploaded_bytes'] += len(encoded)
         path = 'snapshots/' + stamp
         # File-capable transports stream ZIP bodies without loading whole backups

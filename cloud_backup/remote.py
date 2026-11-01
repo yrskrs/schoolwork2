@@ -19,20 +19,28 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 def request(url, method='GET', data=None, headers=None, limit=MAX_RESPONSE):
     if isinstance(data, Path):
         with data.open('rb') as stream:
-            return request(url, method, stream, {**(headers or {}), 'Content-Length': str(data.stat().st_size)}, limit)
-    req = urllib.request.Request(url, data=data, headers=headers or {}, method=method)
-    try:
-        with urllib.request.build_opener(NoRedirect()).open(req, timeout=90) as response:
-            value = response.read(limit + 1)
-            if len(value) > limit:
-                raise ValueError('Відповідь хмари перевищує ліміт')
-            return value, response.headers
-    except urllib.error.HTTPError as error:
-        if error.code == 404:
-            raise FileNotFoundError('Об’єкт відсутній у хмарі') from None
-        raise ValueError(f'Хмарне сховище відхилило запит (HTTP {error.code}). Перевірте доступ, вільне місце та підключення') from None
-    except (urllib.error.URLError, TimeoutError, OSError):
-        raise ValueError('Хмарне сховище недоступне. Перевірте адресу та мережу') from None
+            return request(url, method, stream, {**(headers or {}), 'Content-Length':str(data.stat().st_size)}, limit)
+    import time
+    start = data.tell() if hasattr(data,'tell') else None
+    retries = 3 if method in ('GET','HEAD','PUT','PROPFIND') else 1
+    for attempt in range(retries):
+        if start is not None: data.seek(start)
+        req = urllib.request.Request(url, data=data, headers=headers or {}, method=method)
+        try:
+            with urllib.request.build_opener(NoRedirect()).open(req, timeout=90) as response:
+                value = response.read(limit+1)
+                if len(value)>limit: raise ValueError('Відповідь хмари перевищує ліміт')
+                return value,response.headers
+        except urllib.error.HTTPError as error:
+            code = error.code
+            if code in (408,429,500,502,503,504) and attempt+1<retries:
+                time.sleep(0.5*(2**attempt));continue
+            if code==404: raise FileNotFoundError('Об’єкт відсутній у хмарі') from None
+            raise ValueError(f'Хмарне сховище відхилило запит (HTTP {code}). Перевірте доступ, вільне місце та підключення') from None
+        except (urllib.error.URLError,TimeoutError,OSError):
+            if attempt+1<retries:
+                time.sleep(0.5*(2**attempt));continue
+            raise ValueError('Хмарне сховище недоступне. Перевірте адресу та мережу') from None
 
 
 def download(url, target, headers, limit):

@@ -33,6 +33,9 @@ class Command(BaseCommand):
         signal.signal(signal.SIGTERM, stop)
         signal.signal(signal.SIGINT, stop)
         if not options['once']:
+            from feed.cloud_backups import Adapter as BackupAdapter, state as backup_state
+            from cloud_backup.state import start_worker as start_backup_worker
+            start_backup_worker(backup_state(), BackupAdapter(), cloud_stop)
             from feed.cloud_imports import start_worker as start_cloud_worker
             start_cloud_worker(cloud_stop)
             from school_sync.django_backend import start_worker

@@ -86,12 +86,18 @@ class CloudBackupGraphTests(TransactionTestCase):
 
     def test_server_recovers_all_accounts_and_work(self):
         self.config['scope']='server'
+        from django.contrib.auth.models import Group,Permission
+        group=Group.objects.create(name='Reviewers');group.permissions.add(Permission.objects.get(codename='view_assignment'))
+        self.user.groups.add(group);self.user.user_permissions.add(Permission.objects.get(codename='change_submission'))
         repo,snapshot=self.capture(self.admin.pk);target=self.target();self.config['_snapshot']=snapshot
         with recovery(self.root,repo,snapshot,'server') as directory:
             self.adapter.restore(target.pk,self.config,directory)
         self.assertEqual(Assignment.objects.count(),2)
         self.assertTrue(User.objects.get(username='teacher').check_password('private-login'))
         self.assertTrue(User.objects.get(username='admin').is_superuser)
+        recovered=User.objects.get(username='teacher')
+        self.assertTrue(recovered.groups.filter(name='Reviewers').exists())
+        self.assertTrue(recovered.user_permissions.filter(codename='change_submission').exists())
 
     def test_refuses_restore_over_existing_work(self):
         repo,snapshot=self.capture();self.config['_snapshot']=snapshot
@@ -113,3 +119,39 @@ class CloudBackupGraphTests(TransactionTestCase):
         new=self.target()
         self.assertNotEqual(self.adapter.owner(new),principal)
         with self.assertRaises(ValueError): self.adapter.resolve(principal)
+
+from django.test import TestCase, Client
+from unittest.mock import patch
+from cloud_backup.state import State
+
+
+class CloudBackupRoutesTests(TestCase):
+    def setUp(self):
+        self.work=tempfile.TemporaryDirectory(prefix='schoolwork-cloud-routes-');self.addCleanup(self.work.cleanup)
+        self.store=State(self.work.name,'test-secret')
+        self.mock=patch('feed.views_backups.state',return_value=self.store);self.mock.start();self.addCleanup(self.mock.stop)
+        User.objects.create_superuser(username='setup-admin',password='setup-only')
+        self.user=User.objects.create_user(username='teacher',password='p')
+        self.teacher=Teacher.objects.create(user=self.user,full_name='Учитель')
+        self.client=Client(enforce_csrf_checks=True);self.client.force_login(self.user)
+
+    def test_settings_render_csrf_and_secrets_stay_private(self):
+        import re
+        page=self.client.get('/teacher/backups')
+        self.assertEqual(page.status_code,200)
+        self.assertContains(page,'Інкрементальне сховище')
+        self.assertEqual(self.client.post('/teacher/backups',{'action':'save'}).status_code,403)
+        csrf=re.search(r'name="csrfmiddlewaretoken" value="([a-zA-Z0-9]+)"',page.content.decode())[1]
+        saved=self.client.post('/teacher/backups',{'csrfmiddlewaretoken':csrf,'action':'save','provider':'nextcloud','url':'https://cloud.example','username':'teacher','app_password':'private-cloud-pass','password':'private-archive-pass','materials':'on','students':'on'})
+        self.assertEqual(saved.status_code,302)
+        status=self.client.get('/teacher/backups/status')
+        self.assertEqual(status.status_code,200)
+        self.assertNotIn('private-cloud-pass',status.content.decode())
+        self.assertNotIn('private-archive-pass',status.content.decode())
+        self.assertEqual(self.client.get('/teacher/backups?scope=server').status_code,403)
+        self.assertEqual(self.client.get('/teacher/backups/download/'+'a'*32).status_code,404)
+
+    def test_callback_rejects_unsolicited_oauth_state(self):
+        response=self.client.get('/teacher/backups/google/callback?state=forged&code=fake')
+        self.assertEqual(response.status_code,302)
+        self.assertFalse(self.store.config(str(self.teacher.pk)+'/personal').get('refresh_token'))

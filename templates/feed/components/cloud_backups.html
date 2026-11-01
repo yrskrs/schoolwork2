@@ -1,0 +1,77 @@
+<style>
+.backup-page{max-width:1060px;margin:0 auto;padding:20px;color:var(--text-primary,inherit)}
+.backup-page h1{font-size:1.8rem}.backup-page h2{font-size:1.25rem;margin:0 0 14px}
+.backup-page section{border:1px solid var(--border-color,#8190a34d);border-radius:14px;padding:22px;margin:20px 0;background:var(--bg-card,var(--card-bg,transparent))}
+.backup-page label{display:block;margin:14px 0 6px;text-transform:none;letter-spacing:normal}.backup-page input:not([type=checkbox]),.backup-page select{display:block;width:100%;box-sizing:border-box;padding:10px;border-radius:7px;border:1px solid #8190a380;background:var(--input-bg,transparent);color:inherit;font:inherit}
+.backup-page input[type=checkbox]{margin-right:8px}.backup-page .backup-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:0 22px}.backup-page button,.backup-page .backup-link{display:inline-block;padding:10px 16px;margin:10px 8px 0 0;border-radius:8px;border:1px solid #8190a380;background:var(--primary-color,#3558d4);color:white;font:inherit;cursor:pointer;text-decoration:none}
+.backup-page .backup-note{opacity:.85;font-size:.94rem;line-height:1.6}.backup-page .backup-alert{padding:14px;border:1px solid #b66a32;border-radius:8px;margin:12px 0}.backup-page code{overflow-wrap:anywhere}.backup-page details{margin:16px 0}.backup-page summary{cursor:pointer;font-weight:600}.backup-page li{margin:12px 0;overflow-wrap:anywhere}.backup-page [data-backup-provider][hidden]{display:none!important}.backup-page nav a{margin-right:20px}.backup-page .backup-badge{font-weight:600}
+</style>
+<div class="backup-page">
+<h1>Хмарні резервні копії</h1>
+<p>Збережіть дані поза сервером і відновіть їх на новому встановленні сайту після втрати сервера.</p>
+<nav aria-label="Обсяг резервування"><a href="{{ backup_base }}?scope=personal">Мої роботи</a>{% if backup_admin %}<a href="{{ backup_base }}?scope=server">Увесь сайт · адміністратор</a>{% endif %}</nav>
+<p class="backup-badge">{% if backup.scope == 'server' %}Повна копія сайту: усі вчителі та вибрані роботи{% else %}Особиста копія: ваші матеріали та вибрані роботи ваших учнів{% endif %}</p>
+{% if backup_error %}<div class="backup-alert" role="alert">{{ backup_error }}</div>{% endif %}
+{% if backup_message %}<div class="backup-alert" role="status">{{ backup_message }}</div>{% endif %}
+<form method="post" action="{{ backup_base }}?scope={{ backup.scope }}" autocomplete="off">
+<input type="hidden" name="csrfmiddlewaretoken" value="{{ backup_csrf }}">
+<section><h2>1. Що та як зберігати</h2>
+<p>Основні дані завжди включаються: тести або завдання, налаштування робіт, класи та списки учнів.</p>
+<label><input type="checkbox" name="materials" {% if backup.materials %}checked{% endif %}>Файли й матеріали вчителя</label>
+<label><input type="checkbox" name="students" {% if backup.students %}checked{% endif %}>Роботи, відповіді, оцінки та історія учнів</label>
+<label><input type="checkbox" name="student_files" {% if backup.student_files %}checked{% endif %}>Також файли робіт учнів (разом із роботами)</label>
+<label for="backup-format">Формат</label>
+<select id="backup-format" name="format"><option value="incremental" {% if backup.format == 'incremental' %}selected{% endif %}>Інкрементальне сховище — рекомендовано для регулярних копій</option><option value="zip" {% if backup.format == 'zip' %}selected{% endif %}>Повний ZIP — окремий переносний архів</option></select>
+<p class="backup-note"><strong>Інкрементальне:</strong> стиснені ZIP-блоки повторно використовуються між копіями, у хмару передаються лише нові дані. Для відновлення потрібні опис копії та її блоки; сайт збирає їх автоматично. Можна підготувати повний ZIP для завантаження.<br><strong>ZIP:</strong> звичайний архів з даними й вибраними файлами, зручний для ручного перенесення. Кожен запуск передає повний архів, тому потребує більше місця та трафіку.</p>
+<label for="backup-password">Пароль архіву · необов’язково{% if backup.has_password %} · уже збережено{% endif %}</label>
+<input id="backup-password" type="password" name="password" autocomplete="new-password" placeholder="Залиште порожнім, щоб не змінювати пароль">
+<label><input type="checkbox" name="clear_password">Прибрати пароль і почати нове сховище</label>
+<p class="backup-note">Із паролем використовується AES-256 ZIP; для відкриття потрібна сумісна програма, наприклад 7-Zip. Без пароля копія не зашифрована. Пароль зберігається на сервері в зашифрованому вигляді для розкладу. Збережіть його окремо: після втрати сервера забутий пароль відновити неможливо. Зміна пароля починає нове сховище; старим копіям потрібен старий пароль.</p>
+</section>
+<section><h2>2. Хмарне сховище</h2>
+<label for="backup-provider">Куди зберігати</label><select id="backup-provider" name="provider"><option value="nextcloud" {% if backup.provider == 'nextcloud' %}selected{% endif %}>Nextcloud</option><option value="google" {% if backup.provider == 'google' %}selected{% endif %}>Google Drive</option></select>
+<div class="backup-grid"><div data-backup-provider="nextcloud"><h3>Nextcloud</h3><label><input type="checkbox" name="reuse_nextcloud">Використати підключення Nextcloud із профілю (порожні поля нижче)</label><label for="backup-url">Базова адреса Nextcloud</label><input id="backup-url" type="url" name="url" value="{{ backup.url }}" placeholder="https://cloud.school.example">
+<label for="backup-user">Ім’я користувача</label><input id="backup-user" name="username" value="{{ backup.username }}">
+<label for="backup-app-password">Пароль додатка{% if backup.has_nextcloud_password %} · збережено{% endif %}</label><input id="backup-app-password" type="password" name="app_password" autocomplete="new-password">
+</div><div data-backup-provider="google"><h3>Google Drive</h3><label for="backup-client">OAuth Client ID</label><input id="backup-client" name="client_id" value="{{ backup.client_id }}">
+<label for="backup-secret">OAuth Client Secret{% if backup.has_client_secret %} · збережено{% endif %}</label><input id="backup-secret" type="password" name="client_secret" autocomplete="new-password">
+<p>{% if backup.google_connected %}Google підключено для резервування.{% else %}Спочатку збережіть Client ID / Secret, потім натисніть «Підключити Google».{% endif %}</p></div></div>
+<label for="backup-repository">Ідентифікатор сховища для відновлення</label><input id="backup-repository" name="repository" value="{{ backup.repository }}" pattern="[a-f0-9]{32}" maxlength="32" placeholder="Буде створений під час збереження">
+<label><input type="checkbox" name="recovery_only" {% if backup.recovery_only %}checked{% endif %}>Підключаю наявне сховище лише для відновлення (розклад вимкнеться)</label>
+<label><input type="checkbox" name="new_repository">Створити нове незалежне сховище</label>
+<p class="backup-note">Запишіть цей ідентифікатор поза сервером. На новому встановленні підключіть той самий хмарний акаунт, укажіть цей ідентифікатор, пароль і відповідний обсяг копії та позначте «лише для відновлення». Сайти використовують різні папки. Одне сховище має обслуговувати лише один сервер; після відновлення створіть нове для подальших запусків.</p>
+<details><summary>Початкове налаштування Nextcloud та Google Drive</summary>
+<p><strong>Nextcloud:</strong> у своєму акаунті відкрийте «Налаштування → Безпека → Паролі додатків», створіть окремий пароль для цього сайту. Введіть базову адресу без <code>/remote.php/…</code>, логін і пароль додатка. Сервер сайту має мати доступ до Nextcloud; для HTTPS потрібен дійсний сертифікат.</p>
+<p><strong>Google:</strong> у <a href="https://console.cloud.google.com/" target="_blank" rel="noopener noreferrer">Google Cloud Console</a> створіть проєкт, увімкніть Google Drive API, налаштуйте OAuth consent screen та OAuth client типу Web application. Додайте свій акаунт до тестових користувачів, якщо застосунок у тестовому режимі. Відкрийте сайт через HTTPS-домен. До Authorized redirect URIs додайте точну адресу: адреса цього сайту + <code>{{ backup_base }}/google/callback?scope={{ backup.scope }}</code>. Для обох обсягів додайте обидві адреси: <code>scope=personal</code> і <code>scope=server</code>.</p>
+<p>Збережіть Client ID / Secret і натисніть «Підключити Google». Потрібен доступ <code>drive.file</code> до створених застосунком файлів; пароль Gmail та API key не підходять. Після втрати сервера використайте той самий OAuth client; його налаштування збережіть окремо. У тестовому режимі Google offline-доступ може спливати — перепідключіть акаунт за повідомленням про помилку.</p>
+</details></section>
+<section><h2>3. Автоматичні копії</h2>
+<label><input type="checkbox" name="automatic" {% if backup.automatic %}checked{% endif %}>Увімкнути автоматичне резервування</label>
+<div class="backup-grid"><div><label for="backup-frequency">Періодичність</label><select id="backup-frequency" name="frequency"><option value="daily" {% if backup.frequency == 'daily' %}selected{% endif %}>Щодня</option><option value="weekly" {% if backup.frequency == 'weekly' %}selected{% endif %}>Щопонеділка</option></select></div><div><label for="backup-hour">Година за Києвом · 0–23</label><input id="backup-hour" name="hour" type="number" min="0" max="23" value="{{ backup.hour }}"></div></div>
+<p class="backup-note">Розклад працює, поки сервер і фоновий процес увімкнені. Після простою виконається один пропущений запуск. Історія точок відновлення — 30 днів; остання успішна копія зберігається завжди. Блоки зберігаються для цілісності копій; зайняте місце може перевищувати розмір останньої копії.</p>
+<button name="action" value="save">Зберегти налаштування</button></section>
+</form>
+<form method="post" action="{{ backup_base }}?scope={{ backup.scope }}"><input type="hidden" name="csrfmiddlewaretoken" value="{{ backup_csrf }}">
+<section><h2>4. Запуск і відновлення</h2><p>Операції використовують збережені налаштування.</p>
+<button name="action" value="oauth" data-backup-provider="google">Підключити Google</button><button name="action" value="backup">Створити копію зараз</button><button name="action" value="list">Знайти копії у хмарі</button><a class="backup-link" href="{{ backup_base }}?scope={{ backup.scope }}">Оновити список і стан</a>
+<label for="backup-snapshot">Копія для перевірки / відновлення</label><select id="backup-snapshot" name="snapshot"><option value="">Спочатку натисніть «Знайти копії у хмарі», потім оновіть список</option>{% for snapshot in snapshot_choices %}<option value="{{ snapshot.value }}">{{ snapshot.label }}</option>{% endfor %}</select>
+<button name="action" value="verify">Перевірити копію без відновлення</button><button name="action" value="download">Підготувати повний ZIP</button>
+<p class="backup-note">Відновлюйте на новому встановленні сумісної версії, без тестів, завдань та інших учителів. Особиста копія приєднується до поточного вчителя; повна копія відновлює облікові записи та може вимагати повторного входу. Зовнішні інтеграції й доступи налаштовуються повторно. Якщо файли не включались до копії, їх неможливо відновити.</p>
+<label for="backup-confirm">Для відновлення введіть ВІДНОВИТИ</label><input id="backup-confirm" name="confirmation" autocomplete="off"><button name="action" value="restore">Відновити на цьому встановленні</button>
+</section></form>
+<section><h2>Статистика й журнал операцій</h2><p class="backup-note">Обсяг даних — до стиснення; передано — стиснені архіви; повторно використано — дані, які не завантажувались знову. Перевірка наявних блоків може завантажувати їх із хмари. Підготовлений ZIP доступний для завантаження протягом 24 годин.</p>
+<ul id="backup-jobs">{% for job in jobs %}<li><strong>{{ job.kind_label }} · {{ job.status_label }} · {{ job.created_label }}</strong>{% if job.error %}<p>{{ job.error }}</p>{% endif %}<div>{{ job.summary }}</div>{% if job.result.download %}<a href="{{ backup_base }}/download/{{ job.id }}">Завантажити ZIP</a>{% endif %}</li>{% endfor %}</ul>
+</section>
+<section><h2>Сповіщення резервування</h2><form method="post" action="{{ backup_base }}?scope={{ backup.scope }}"><input type="hidden" name="csrfmiddlewaretoken" value="{{ backup_csrf }}"><button name="action" value="read">Позначити прочитаними</button></form><ul id="backup-notices">{% for notice in backup_notices %}<li><strong>{{ notice.title }}</strong><p>{{ notice.body }}</p></li>{% endfor %}</ul></section>
+</div>
+<script>
+(()=>{const base='{{ backup_base }}',scope='{{ backup.scope }}';
+const provider=document.getElementById('backup-provider');const showProvider=()=>document.querySelectorAll('[data-backup-provider]').forEach(el=>el.hidden=el.dataset.backupProvider!==provider.value);provider.addEventListener('change',showProvider);showProvider();
+const labels={backup:'Резервування',list:'Пошук копій',verify:'Перевірка',restore:'Відновлення',download:'Підготовка ZIP',queued:'У черзі',running:'Виконується',completed:'Завершено',failed:'Помилка'};
+const bytes=n=>new Intl.NumberFormat('uk-UA',{maximumFractionDigits:2}).format((n||0)/1048576)+' МіБ';
+async function update(){try{const r=await fetch(base+'/status?scope='+scope,{cache:'no-store'});if(!r.ok)return;const data=await r.json();
+const list=document.getElementById('backup-jobs');list.replaceChildren();for(const job of data.jobs){const li=document.createElement('li'),title=document.createElement('strong');title.textContent=(labels[job.kind]||job.kind)+' · '+(labels[job.status]||job.status)+(job.result.percent!=null?' · '+job.result.percent+'%':'');li.append(title);const p=document.createElement('p'),s=job.result||{};p.textContent=job.error||('Об’єктів: '+(s.objects??s.records??'—')+'; файлів: '+(s.files??s.files_count??'—')+'; даних: '+bytes(s.original_bytes)+'; передано: '+bytes(s.uploaded_bytes)+'; використано наявних: '+bytes(s.reused_bytes));li.append(p);if(s.download){const a=document.createElement('a');a.href=base+'/download/'+job.id;a.textContent='Завантажити ZIP';li.append(a)}if(s.options){const p=document.createElement('p');p.textContent='У копії: матеріали '+(s.options.materials?'так':'ні')+', роботи учнів '+(s.options.students?'так':'ні')+', файли учнів '+(s.options.student_files?'так':'ні');li.append(p)}list.append(li)}
+const notices=document.getElementById('backup-notices');notices.replaceChildren();for(const n of data.backup_notices){const li=document.createElement('li'),b=document.createElement('strong'),p=document.createElement('p');b.textContent=n.title;p.textContent=n.body;li.append(b,p);notices.append(li)}
+}catch(e){/* The last server-rendered state stays available while offline. */}}
+update();setInterval(update,8000);})();
+</script>

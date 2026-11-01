@@ -5,6 +5,8 @@ import secrets
 import time
 import urllib.parse
 import uuid
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 SECRET_FIELDS = ('password', 'app_password', 'client_secret', 'refresh_token')
 
@@ -121,9 +123,17 @@ def page_data(state, owner, scope):
     snapshots = []
     for row in history:
         row['result'] = json.loads(row['result'])
+        kind_labels = {'backup':'Резервування','list':'Пошук копій','verify':'Перевірка','restore':'Відновлення','download':'Підготовка ZIP'}
+        status_labels = {'queued':'У черзі','running':'Виконується','completed':'Завершено','failed':'Помилка'}
+        row['kind_label'] = kind_labels.get(row['kind'],row['kind'])
+        row['status_label'] = status_labels.get(row['status'],row['status'])
+        row['created_label'] = datetime.fromtimestamp(row['created'],ZoneInfo('Europe/Kyiv')).strftime('%d.%m.%Y %H:%M')
+        result = row['result']
+        row['summary'] = f"Об’єктів: {result.get('objects',result.get('records','—'))}; файлів: {result.get('files',result.get('files_count','—'))}; даних: {result.get('original_bytes',0)/1048576:.2f} МіБ; передано: {result.get('uploaded_bytes',0)/1048576:.2f} МіБ; повторно використано: {result.get('reused_bytes',0)/1048576:.2f} МіБ."
         if not snapshots and row['kind'] == 'list' and row['status'] == 'completed' and row['result'].get('repository') == config['repository']:
             snapshots = row['result'].get('snapshots', [])
-    return {'backup':public, 'jobs':history, 'snapshots':snapshots, 'backup_notices':state.notices(owner)}
+    choices = [{'value':snapshot,'label':datetime.fromtimestamp(int(snapshot.split('-')[0])/1000,ZoneInfo('Europe/Kyiv')).strftime('%d.%m.%Y %H:%M:%S · Київ')} for snapshot in snapshots]
+    return {'backup':public, 'jobs':history, 'snapshots':snapshots, 'snapshot_choices':choices, 'backup_notices':state.notices(owner)}
 
 
 def enqueue(state, owner, scope, action, form):

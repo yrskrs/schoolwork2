@@ -98,15 +98,16 @@ class State:
         with self.db() as db:
             return [dict(r) for r in db.execute('SELECT * FROM notices WHERE owner=? ORDER BY created DESC LIMIT 30', (str(owner),))]
 
+    def mark_seen(self, owner):
+        with self.db() as db:
+            db.execute('UPDATE notices SET seen=1 WHERE owner=?',(str(owner),))
+
     def tick(self, adapter):
-        import fcntl
+        from .locking import worker_lock
         # One process owns the queue, including restart recovery. No clock-based
         # stealing of a lease while a slow cloud transfer is still running.
-        with (self.root/'worker.lock').open('a') as lock:
-            try:
-                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            except BlockingIOError:
-                return
+        with worker_lock(self.root/'worker.lock') as acquired:
+            if not acquired: return
             with self.db() as db:
                 interrupted = db.execute("SELECT id,owner FROM jobs WHERE status='running'").fetchall()
                 for row in interrupted:
@@ -114,6 +115,8 @@ class State:
                 configs = db.execute('SELECT owner,value FROM configs WHERE due<=?', (time.time(),)).fetchall()
             for row in interrupted:
                 self.notice(row['owner'], 'Резервування перервано', 'Повторіть операцію. Попередні завершені копії збережено.', row['id'])
+                try: adapter.notify(row['owner'], 'Резервування перервано', 'Повторіть операцію. Попередні завершені копії збережено.')
+                except Exception: pass
             for row in configs:
                 config = self.unseal(row['value'])
                 try:
@@ -168,7 +171,11 @@ class State:
                 with self.db() as db:
                     db.execute("UPDATE jobs SET status='completed',updated=? WHERE id=?", (time.time(), row['id']))
                 self.notice(row['owner'], title, body, row['id'])
-                try: adapter.notify(row['owner'], title, body)
+                try:
+                    if row['kind']=='restore' and config['scope']=='server' and hasattr(adapter,'notify_restored'):
+                        adapter.notify_restored(title,body)
+                    else:
+                        adapter.notify(row['owner'],title,body)
                 except Exception: pass
             except Exception as error:
                 # Exception text may contain file paths, SQL or credentials.
@@ -194,7 +201,8 @@ def start_worker(state, adapter, stop):
             except Exception:
                 # The durable queue remains for the next tick. Credentials are
                 # intentionally not logged by a background worker.
-                pass
+                import logging
+                logging.getLogger(__name__).warning('Cloud backup control store is unavailable; retrying without exposing credentials')
             stop.wait(5)
     thread = threading.Thread(target=run, daemon=True, name='cloud-backup')
     thread.start()

@@ -380,3 +380,7 @@ docker compose run --rm --no-deps app python manage.py test --settings=schoolnet
 ## Ліцензія
 
 [MIT](LICENSE).
+
+## Хмарні резервні копії · 4.7.0
+
+**Налаштування → Резервні копії**: Google Drive / Nextcloud, особисті та повні адміністративні копії, вибір даних і файлів, ZIP або інкрементальне сховище, необов’язковий пароль та розклад. Фонові завдання працюють у наявному ai_worker; для локального запуску існує `python manage.py process_cloud_backups`. [Налаштування, відновлення та обмеження](CLOUD_BACKUPS.md).

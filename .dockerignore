@@ -49,3 +49,6 @@ test_media*/
 # Runtime updater files
 .maintenance.lock
 .release-image.yaml
+
+# Private cloud-backup configuration and downloaded archives
+private-backups/

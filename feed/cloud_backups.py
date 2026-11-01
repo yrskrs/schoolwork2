@@ -55,6 +55,8 @@ class Adapter:
         return number
 
     def authorize(self, owner, scope):
+        from django.db import close_old_connections
+        if not connection.in_atomic_block: close_old_connections()
         owner = self.resolve(owner)
         if scope not in ('personal', 'server'):
             raise ValueError('Некоректний обсяг копії')
@@ -157,9 +159,14 @@ class Adapter:
                                     fields[field.name] = None
                                 else:
                                     raise ValueError('Не вдалося включити обов’язковий зв’язок до особистої копії')
-            index = {'app':self.app, 'protocol':1, 'scope':config['scope'], 'owner':int(owner),
+            from .changelog import SITE_VERSION
+            index = {'app':self.app, 'protocol':1, 'application_version':SITE_VERSION, 'scope':config['scope'], 'owner':int(owner),
                      'user':Teacher.objects.get(pk=owner).user_id, 'schema':schema(), 'records':len(data),
                      'options':{k:config[k] for k in ('materials','students','student_files')}}
+            if not personal:
+                from django.contrib.auth.models import Group
+                index['groups'] = {group.name:[list(p.natural_key()) for p in group.permissions.all()] for group in Group.objects.all()}
+                index['user_roles'] = {str(user.pk):{'groups':list(user.groups.values_list('name',flat=True)), 'permissions':[list(p.natural_key()) for p in user.user_permissions.all()]} for user in User.objects.all()}
             entries = [('index.json', bytes_source(json_bytes(index)))]
             files = {}
             for row in sorted(data, key=lambda r: (r['model'], str(r['pk']))):
@@ -207,6 +214,30 @@ class Adapter:
                 if row['model'] == 'feed.assignment' and row['fields'].get('teacher') != int(owner):
                     raise ValueError('Копія містить сторонні завдання')
             rows = [r for r in rows if not (r['model'] == 'feed.teacher' or r['model'] == 'auth.user' and r['pk'] == index['user'])]
+            # Attribution-only accounts must not collide with the new installer.
+            last_user = User.objects.order_by('-pk').values_list('pk',flat=True).first() or 0
+            remap = {}
+            for row in rows:
+                if row['model'] == 'auth.user':
+                    last_user += 1
+                    remap[row['pk']] = last_user
+                    row['pk'] = last_user
+                    if User.objects.filter(username=row['fields']['username']).exists():
+                        row['fields']['username'] = ('archive_'+str(last_user)+'_'+row['fields']['username'])[:150]
+            # Owner FK values were mapped above; distinguish them using the
+            # untouched fixture payload when applying attribution remapping.
+            original = {(r['model'],r['pk']):r for r in [json.loads(path.read_text()) for path in sorted((directory/'db').rglob('*.json'))]}
+            inverse_users = {new:old for old,new in remap.items()}
+            for row in rows:
+                original_pk = inverse_users.get(row['pk'],row['pk']) if row['model']=='auth.user' else row['pk']
+                source_fields = original[(row['model'],original_pk)]['fields']
+                for field in allowed[row['model']]._meta.fields:
+                    if field.is_relation and (field.many_to_one or field.one_to_one) and field.remote_field.model is User:
+                        value = source_fields.get(field.name)
+                        if value == index['user']:
+                            row['fields'][field.name] = target.user_id
+                        elif value in remap:
+                            row['fields'][field.name] = remap[value]
             # Other attribution-only user accounts retain their IDs but never
             # gain login privileges. A collision is rejected, never overwritten.
         pairs = []
@@ -235,7 +266,7 @@ class Adapter:
             with transaction.atomic():
                 if connection.vendor == 'postgresql':
                     with connection.cursor() as cursor:
-                        cursor.execute('LOCK TABLE feed_teacher, feed_assignment, feed_submission IN ACCESS EXCLUSIVE MODE')
+                        cursor.execute('LOCK TABLE '+', '.join(connection.ops.quote_name(m._meta.db_table) for m in sorted(models().values(),key=lambda m:m._meta.db_table))+' IN ACCESS EXCLUSIVE MODE')
                 with connection.cursor() as cursor:
                     cursor.execute('CREATE TABLE IF NOT EXISTS cloud_restore_receipts (receipt VARCHAR(200) PRIMARY KEY)')
                     receipt = config['repository']+':'+config['_snapshot']
@@ -249,10 +280,11 @@ class Adapter:
                 personal = config['scope'] == 'personal'
                 file_guard.enter_context(install_files(pairs))
                 if personal:
-                    # Never overwrite bootstrap/global rows on a personal restore.
-                    for obj in objects:
-                        if type(obj.object).objects.filter(pk=obj.object.pk).exists():
-                            raise ValueError('Конфлікт записів. Особиста копія потребує порожніх списків і налаштувань')
+                    # On the fresh target, replace automatically seeded metadata
+                    # as well. Keep the installer login and school identity.
+                    for model in reversed(list(models().values())):
+                        if model not in (Teacher, apps.get_model('feed','School')):
+                            model.objects.all().delete()
                 else:
                     for model in reversed(list(models().values())):
                         model.objects.all().delete()
@@ -272,6 +304,17 @@ class Adapter:
                     teacher.save_base(raw=True)
                     teacher.classes.set(teacher_fields.get('classes',[]))
                     teacher.subjects.set(teacher_fields.get('subjects',[]))
+                if not personal:
+                    from django.contrib.auth.models import Group,Permission
+                    restored_groups = {}
+                    for name,keys in index.get('groups',{}).items():
+                        group,_=Group.objects.get_or_create(name=name)
+                        group.permissions.set([Permission.objects.get_by_natural_key(*key) for key in keys])
+                        restored_groups[name]=group
+                    for user_id,roles in index.get('user_roles',{}).items():
+                        user=User.objects.get(pk=user_id)
+                        user.groups.set([restored_groups[name] for name in roles['groups']])
+                        user.user_permissions.set([Permission.objects.get_by_natural_key(*key) for key in roles['permissions']])
                 connection.check_constraints()
                 with connection.cursor() as cursor:
                     for sql in connection.ops.sequence_reset_sql(no_style(), list(restored_models)):
@@ -287,3 +330,8 @@ class Adapter:
         if Teacher.objects.filter(pk=owner).exists():
             SystemNotification.objects.create(teacher_id=owner, notification_type='info', title=title, message=body,
                                               action_url='/teacher/backups/', action_label='Резервні копії')
+
+    def notify_restored(self,title,body):
+        for teacher in Teacher.objects.select_related('user').filter(user__is_superuser=True,user__is_active=True):
+            state().notice(self.owner(teacher),title,body)
+            self.notify(self.owner(teacher),title,body)

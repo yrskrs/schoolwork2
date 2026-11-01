@@ -6,12 +6,17 @@ from . import journal_api
 from . import school_api_v2
 from . import views_updates
 from . import python_runner
-from . import views_cloud
+from . import views_cloud, views_backups
 from .views_dialogs import ui_dialog
 from .submission_notifications import submission_notifications
 from school_sync import django_backend as roster_views
 
 urlpatterns = [
+    path('teacher/backups', views_backups.backups, name='cloud_backups'),
+    path('teacher/backups/', views_backups.backups),
+    path('teacher/backups/status', views_backups.status, name='backup_status'),
+    path('teacher/backups/google/callback', views_backups.callback, name='backup_google_callback'),
+    path('teacher/backups/download/<str:job>', views_backups.download, name='backup_download'),
     path('api/submission-notifications/', submission_notifications, name='submission_notifications'),
     path('ui/dialog/<str:kind>/', ui_dialog, name='ui_dialog'),
     path('healthz/', views_updates.healthz_view, name='healthz'),
