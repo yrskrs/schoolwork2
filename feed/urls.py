@@ -15,7 +15,6 @@ urlpatterns = [
     path('teacher/backups', views_backups.backups, name='cloud_backups'),
     path('teacher/backups/', views_backups.backups),
     path('teacher/backups/status', views_backups.status, name='backup_status'),
-    path('teacher/backups/google/callback', views_backups.callback, name='backup_google_callback'),
     path('teacher/backups/download/<str:job>', views_backups.download, name='backup_download'),
     path('api/submission-notifications/', submission_notifications, name='submission_notifications'),
     path('ui/dialog/<str:kind>/', ui_dialog, name='ui_dialog'),

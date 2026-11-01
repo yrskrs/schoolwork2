@@ -204,52 +204,50 @@ class CloudBackupRoutesTests(TestCase):
         self.assertEqual(self.store.config(profile(Adapter.owner(self.teacher),'personal'))['app_password'],'profile-private-secret')
         self.assertNotIn('profile-private-secret',self.client.get('/teacher/backups/status').content.decode())
 
-    def test_callback_rejects_unsolicited_oauth_state(self):
-        response=self.client.get('/teacher/backups/google/callback?state=forged&code=fake')
-        self.assertEqual(response.status_code,302)
-        self.assertFalse(self.store.config(str(self.teacher.pk)+'/personal').get('refresh_token'))
-
-    def connect_google(self, **fields):
-        page = self.client.get('/teacher/backups', secure=True)
+    def backup_post(self, **fields):
         import re
+        page = self.client.get('/teacher/backups')
         csrf = re.search(r'name="csrfmiddlewaretoken" value="([a-zA-Z0-9]+)"', page.content.decode())[1]
-        return self.client.post('/teacher/backups', {
-            'csrfmiddlewaretoken': csrf, 'action': 'connect_google',
-            'client_id': 'synthetic-client', 'client_secret': 'synthetic-secret', **fields,
-        }, secure=True, HTTP_REFERER='https://testserver/teacher/backups')
+        return self.client.post('/teacher/backups', {'csrfmiddlewaretoken': csrf, **fields})
 
-    def test_connect_saves_current_form_and_starts_google_without_separate_save(self):
-        from urllib.parse import urlsplit, parse_qs
+    def test_only_nextcloud_is_available_and_google_callback_is_removed(self):
+        page = self.client.get('/teacher/backups')
+        self.assertContains(page, 'Nextcloud')
+        for text in ('Google Drive', 'OAuth', 'connect_google', 'backup-public-url'):
+            self.assertNotContains(page, text)
+        self.assertEqual(self.client.get('/teacher/backups/google/callback?state=forged&code=fake').status_code, 404)
+
+    def test_forged_google_actions_cannot_save_connect_or_enqueue(self):
         from cloud_backup.control import profile
-        response = self.connect_google(public_url='https://work.example', reuse_nextcloud='on')
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(urlsplit(response.url).hostname, 'accounts.google.com')
-        query = parse_qs(urlsplit(response.url).query)
-        self.assertEqual(query['client_id'], ['synthetic-client'])
-        self.assertEqual(query['redirect_uri'], ['https://work.example/teacher/backups/google/callback?scope=personal'])
-        config = self.store.config(profile(Adapter.owner(self.teacher), 'personal'))
-        self.assertEqual(config['provider'], 'google')
-        self.assertEqual(config['client_secret'], 'synthetic-secret')
-        self.assertEqual(config['oauth']['state'], query['state'][0])
-        page = self.client.get('/teacher/backups', secure=True)
-        self.assertContains(page, query['redirect_uri'][0])
-        self.assertNotContains(page, 'synthetic-secret')
+        for fields in ({'action':'save','provider':'google'}, {'action':'oauth'}, {'action':'connect_google'}):
+            response = self.backup_post(**fields)
+            self.assertEqual(response.status_code, 302)
+            self.assertNotIn('accounts.google.com', response.url)
+            self.assertEqual(self.store.config(profile(Adapter.owner(self.teacher), 'personal')), {})
+            self.assertEqual(self.store.history(Adapter.owner(self.teacher)), [])
 
-    def test_connect_missing_keys_explains_where_to_get_them(self):
-        response = self.connect_google(client_id='', client_secret='')
-        self.assertEqual(response.status_code, 302)
-        page = self.client.get(response.url, secure=True)
-        self.assertContains(page, 'Google Auth Platform')
-        self.assertContains(page, 'Зберегти й підключити Google')
-        self.assertNotContains(page, 'Спочатку збережіть Google Client ID')
-
-    def test_connect_reuses_saved_secret_when_password_field_is_empty(self):
-        self.connect_google()
-        response = self.connect_google(client_secret='')
-        self.assertIn('https://accounts.google.com/', response.url)
-
-    def test_connect_lan_http_explains_https_requirement(self):
-        response = self.connect_google(public_url='http://192.168.1.13:8080')
-        self.assertEqual(response.status_code, 302)
-        self.assertNotIn('accounts.google.com', response.url)
-        self.assertContains(self.client.get(response.url), 'HTTPS-адреса сайту')
+    def test_legacy_google_settings_require_explicit_nextcloud_setup(self):
+        from cloud_backup.control import profile
+        key = profile(Adapter.owner(self.teacher), 'personal')
+        original = {'provider':'google','scope':'personal','repository':'b'*32,
+                    'client_id':'old-client','client_secret':'old-secret','refresh_token':'old-token',
+                    'public_url':'https://old.example','automatic':True,'hour':2,'frequency':'daily'}
+        self.store.save(key, original)
+        page = self.client.get('/teacher/backups')
+        self.assertContains(page, 'Підключіть Nextcloud')
+        status = self.client.get('/teacher/backups/status').json()['backup']
+        self.assertEqual(status['provider'], 'nextcloud')
+        self.assertFalse(status['automatic'])
+        for name in ('client_id','client_secret','refresh_token','public_url','google_connected','has_client_secret'):
+            self.assertNotIn(name, status)
+        self.backup_post(action='backup')
+        self.assertEqual(self.store.history(Adapter.owner(self.teacher)), [])
+        self.assertEqual(self.store.config(key), original)
+        self.backup_post(action='save',provider='nextcloud',url='https://cloud.example',username='teacher',app_password='nextcloud-secret')
+        saved = self.store.config(key)
+        self.assertEqual(saved['provider'], 'nextcloud')
+        self.assertEqual(saved['app_password'], 'nextcloud-secret')
+        self.assertNotIn('refresh_token', saved)
+        self.assertNotEqual(saved['repository'], original['repository'])
+        self.backup_post(action='backup')
+        self.assertEqual(self.store.history(Adapter.owner(self.teacher))[0]['status'], 'queued')

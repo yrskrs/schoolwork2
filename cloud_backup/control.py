@@ -1,15 +1,12 @@
 """Framework-neutral input validation and safe page data."""
 import json
-import os
 import re
-import secrets
-import time
-import urllib.parse
 import uuid
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
 SECRET_FIELDS = ('password', 'app_password', 'client_secret', 'refresh_token')
+GOOGLE_FIELDS = ('client_id', 'client_secret', 'refresh_token', 'public_url', 'oauth')
 
 
 def profile(owner, scope):
@@ -27,12 +24,16 @@ def configuration(state, owner, scope):
 def save_config(state, owner, scope, form):
     old = configuration(state, owner, scope)
     config = {**old}
-    for key in ('provider','format','url','username','client_id','public_url'):
+    config['provider'] = str(form.get('provider', 'nextcloud')).strip()
+    for key in GOOGLE_FIELDS:
+        config.pop(key, None)
+    for key in ('format','url','username'):
         config[key] = str(form.get(key, old.get(key, ''))).strip()
-    repository = str(form.get('repository', '')).strip() or old['repository'] or uuid.uuid4().hex
+    existing_repository = old['repository'] if old.get('provider') == 'nextcloud' else ''
+    repository = str(form.get('repository', '')).strip() or existing_repository or uuid.uuid4().hex
     if not re.fullmatch('[a-f0-9]{32}', repository):
         raise ValueError('Ідентифікатор сховища: 32 символи 0–9, a–f')
-    for key in SECRET_FIELDS:
+    for key in ('password', 'app_password'):
         if form.get(key): config[key] = str(form[key])
     if form.get('clear_password'):
         config['password'] = ''
@@ -44,13 +45,10 @@ def save_config(state, owner, scope, form):
     if form.get('new_repository'):
         repository = uuid.uuid4().hex
     config['repository'] = repository
-    if config.get('public_url'):
-        public=urllib.parse.urlsplit(config['public_url'])
-        if (public.scheme!='https' and not (public.scheme=='http' and public.hostname in ('localhost','127.0.0.1'))) or not public.hostname or public.username or public.query or public.fragment or public.path not in ('','/'):
-            raise ValueError('Публічна адреса: HTTPS-адреса сайту без шляху, логіна та параметрів')
-        config['public_url']=config['public_url'].rstrip('/')
-    if config['provider'] not in ('nextcloud','google') or config['format'] not in ('incremental','zip'):
-        raise ValueError('Оберіть сховище та формат зі списку')
+    if config['provider'] != 'nextcloud':
+        raise ValueError('Для резервних копій доступний лише Nextcloud')
+    if config['format'] not in ('incremental','zip'):
+        raise ValueError('Оберіть формат зі списку')
     config['scope'] = scope
     for key in ('materials','students','student_files','automatic'):
         config[key] = form.get(key) in ('1','on','true',True)
@@ -70,76 +68,29 @@ def save_config(state, owner, scope, form):
         config['automatic'] = False
     if config['automatic']:
         check_connection(config)
-    if (config.get('client_id'), config.get('client_secret')) != (old.get('client_id'), old.get('client_secret')):
-        config.pop('refresh_token', None)
-        config['automatic'] = False
     state.save(profile(owner, scope), config)
     return config
 
 
+def require_nextcloud(config):
+    if config.get('provider') != 'nextcloud':
+        raise ValueError('Для резервних копій доступний лише Nextcloud. Збережіть підключення Nextcloud')
+
+
 def check_connection(config):
-    required = ('url','username','app_password') if config['provider'] == 'nextcloud' else ('client_id','client_secret','refresh_token')
-    if not all(config.get(k) for k in required):
-        raise ValueError('Спочатку збережіть підключення Nextcloud або підключіть Google через OAuth')
-
-
-def google_redirect_uri(config, redirect_uri):
-    """Use the same external callback in setup instructions and authorization."""
-    public_url=config.get('public_url','')
-    if not public_url and not redirect_uri.startswith('https://'):
-        candidate=os.environ.get('PUBLIC_BASE_URL','').rstrip('/')
-        if candidate.startswith('https://'):public_url=candidate
-    if public_url:
-        original=urllib.parse.urlsplit(redirect_uri)
-        redirect_uri=public_url.rstrip('/')+original.path+('?' + original.query if original.query else '')
-    return redirect_uri
-
-
-def begin_oauth(state, owner, scope, redirect_uri):
-    from .remote import GoogleDrive
-    config = configuration(state, owner, scope)
-    if not config.get('client_id') or not config.get('client_secret'):
-        raise ValueError('Заповніть OAuth Client ID і Client Secret у розділі «Google Drive». '
-                         'Їх потрібно створити в Google Cloud Console → Google Auth Platform → Clients '
-                         '(тип Web application). Потім натисніть «Зберегти й підключити Google»')
-    redirect_uri = google_redirect_uri(config, redirect_uri)
-    parsed = urllib.parse.urlsplit(redirect_uri)
-    if parsed.scheme != 'https' and parsed.hostname not in ('localhost','127.0.0.1'):
-        raise ValueError('Google OAuth потребує HTTPS-домену сайту. Відкрийте сайт за HTTPS-адресою та додайте callback до Google Cloud Console')
-    token = secrets.token_urlsafe(32)
-    config['oauth'] = {'state':token, 'expires':time.time()+600, 'redirect':redirect_uri}
-    state.save(profile(owner, scope), config)
-    return 'https://accounts.google.com/o/oauth2/v2/auth?'+urllib.parse.urlencode({
-        'client_id':config['client_id'], 'redirect_uri':redirect_uri, 'response_type':'code',
-        'scope':GoogleDrive.SCOPE, 'access_type':'offline', 'prompt':'consent', 'state':token})
-
-
-def finish_oauth(state, owner, scope, token, code):
-    from .remote import request
-    config = configuration(state, owner, scope)
-    pending = config.pop('oauth', {})
-    if not token or not secrets.compare_digest(str(token), str(pending.get('state',''))) or pending.get('expires',0) < time.time():
-        raise ValueError('Спроба OAuth застаріла. Підключіть Google ще раз')
-    # Consume before making external requests, preventing callback replay.
-    state.save(profile(owner, scope), config)
-    data,_ = request('https://oauth2.googleapis.com/token', 'POST', urllib.parse.urlencode({
-        'code':code, 'client_id':config['client_id'], 'client_secret':config['client_secret'],
-        'redirect_uri':pending['redirect'], 'grant_type':'authorization_code'}).encode(),
-        {'Content-Type':'application/x-www-form-urlencoded'})
-    token_data = json.loads(data)
-    if not token_data.get('refresh_token'):
-        raise ValueError('Google не надав offline-доступ. Повторіть підключення з підтвердженням дозволу')
-    config['refresh_token'] = token_data['refresh_token']
-    state.save(profile(owner, scope), config)
+    require_nextcloud(config)
+    if not all(config.get(k) for k in ('url', 'username', 'app_password')):
+        raise ValueError('Спочатку вкажіть адресу Nextcloud, користувача й пароль додатка та збережіть налаштування')
 
 
 def page_data(state, owner, scope):
     config = configuration(state, owner, scope)
-    public = {key:value for key,value in config.items() if key not in SECRET_FIELDS and key != 'oauth'}
+    public = {key:value for key,value in config.items() if key not in SECRET_FIELDS and key not in GOOGLE_FIELDS}
     public['has_password'] = bool(config.get('password'))
     public['has_nextcloud_password'] = bool(config.get('app_password'))
-    public['google_connected'] = bool(config.get('refresh_token'))
-    public['has_client_secret'] = bool(config.get('client_secret'))
+    public['needs_connection'] = config['provider'] != 'nextcloud'
+    if public['needs_connection']:
+        public.update(provider='nextcloud', automatic=False, repository='')
     history = [row for row in state.history(owner) if row.get('scope','personal') == scope]
     snapshots = []
     for row in history:
@@ -153,6 +104,8 @@ def page_data(state, owner, scope):
         row['summary'] = f"Записів даних: {result.get('records','—')}; об’єктів: {result.get('objects',result.get('records','—'))}; файлів: {result.get('files',result.get('files_count','—'))}; даних: {result.get('original_bytes',0)/1048576:.2f} МіБ; передано: {result.get('uploaded_bytes',0)/1048576:.2f} МіБ; повторно використано: {result.get('reused_bytes',0)/1048576:.2f} МіБ."
         if not snapshots and row['kind'] == 'list' and row['status'] == 'completed' and row['result'].get('repository') == config['repository']:
             snapshots = row['result'].get('snapshots', [])
+    if public['needs_connection']:
+        snapshots = []
     choices = [{'value':snapshot,'label':datetime.fromtimestamp(int(snapshot.split('-')[0])/1000,ZoneInfo('Europe/Kyiv')).strftime('%d.%m.%Y %H:%M:%S · Київ')} for snapshot in snapshots]
     return {'backup':public, 'jobs':history, 'snapshots':snapshots, 'snapshot_choices':choices, 'backup_notices':state.notices(owner)}
 

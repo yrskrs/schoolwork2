@@ -3,11 +3,14 @@
 Забезпечує чітке розділення змін для учнів та для вчителів.
 """
 
-SITE_VERSION = "4.7.1"
-SITE_VERSION_SHORT = "v4.7.1"
+SITE_VERSION = "4.7.2"
+SITE_VERSION_SHORT = "v4.7.2"
 
 CHANGELOG_DATA = [
-{'version': '4.7.1', 'date': '1 листопада 2026', 'badge': 'Виправлення', 'is_latest': True,
+{'version': '4.7.2', 'date': '1 листопада 2026', 'badge': 'Оновлення', 'is_latest': True,
+ 'student_changes': [], 'teacher_changes': [{'icon': '☁', 'title': 'Резервні копії через Nextcloud',
+ 'desc': 'У резервуванні залишено Nextcloud. Прибрано підключення Google Drive та складне OAuth-налаштування. ZIP, інкрементальні копії, розклад, перевірка та відновлення збережені. Імпорт матеріалів із Google Drive працює окремо, як раніше.'}]},
+{'version': '4.7.1', 'date': '1 листопада 2026', 'badge': 'Виправлення', 'is_latest': False,
  'student_changes': [], 'teacher_changes': [{'icon': '☁', 'title': 'Простіше підключення Google Drive',
  'desc': 'Одна кнопка «Зберегти й підключити Google», пояснення та посилання для створення Client ID / Secret, точна адреса повернення для Google Cloud. Дати в нових копіях зберігаються без втрати мікросекунд. Перевірка фактичного відновлення описана в документації резервування.'}]},
 {'version': '4.7.0',

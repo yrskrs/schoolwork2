@@ -278,4 +278,6 @@ class GoogleDrive:
 
 
 def transport(config, app, repository_id):
-    return (Nextcloud if config['provider'] == 'nextcloud' else GoogleDrive)(config, app, repository_id)
+    from .control import require_nextcloud
+    require_nextcloud(config)
+    return Nextcloud(config, app, repository_id)

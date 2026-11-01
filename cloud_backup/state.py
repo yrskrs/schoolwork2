@@ -132,6 +132,11 @@ class State:
                 except Exception: pass
             for row in configs:
                 config = self.unseal(row['value'])
+                if config.get('provider') != 'nextcloud':
+                    config['automatic'] = False
+                    self.save(row['owner'], config)
+                    self.notice(row['owner'].split('/')[0], 'Розклад резервування вимкнено', 'Налаштуйте Nextcloud і збережіть розклад повторно.')
+                    continue
                 try:
                     self.enqueue(row['owner'].split('/')[0], 'backup', {'config': config})
                 except ValueError:

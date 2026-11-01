@@ -9,7 +9,7 @@ from django.views.decorators.http import require_http_methods
 from django.views.decorators.cache import never_cache
 from .views import teacher_required
 from .cloud_backups import Adapter, state
-from cloud_backup.control import begin_oauth, finish_oauth, page_data, save_config, enqueue, google_redirect_uri
+from cloud_backup.control import page_data, save_config, enqueue
 
 
 def scope_of(request):
@@ -31,10 +31,8 @@ def backups(request):
     if request.method == 'POST':
         try:
             operation = request.POST.get('action','save')
-            if operation in ('save', 'connect_google'):
+            if operation == 'save':
                 form = request.POST.copy()
-                if operation == 'connect_google':
-                    form['provider'] = 'google'
                 if form.get('provider') == 'nextcloud' and request.POST.get('reuse_nextcloud'):
                     existing = request.user.teacher_profile.get_cloud_storage()
                     if not existing.has_nextcloud():
@@ -43,43 +41,21 @@ def backups(request):
                     form['username'] = form.get('username') or existing.nextcloud_username
                     form['app_password'] = form.get('app_password') or existing.nextcloud_password
                 save_config(store,owner,scope,form)
-                if operation == 'connect_google':
-                    uri = request.build_absolute_uri(reverse('backup_google_callback'))+'?scope='+scope
-                    return redirect(begin_oauth(store,owner,scope,uri))
                 messages.success(request,'Налаштування збережено. Збережіть ідентифікатор сховища поза сервером.')
             elif operation == 'read':
                 store.mark_seen(owner)
                 from .models import SystemNotification
                 SystemNotification.objects.filter(teacher=request.user.teacher_profile,action_url='/teacher/backups/').update(is_read=True)
                 messages.success(request,'Сповіщення позначено прочитаними')
-            elif operation == 'oauth':
-                uri = request.build_absolute_uri(reverse('backup_google_callback'))+'?scope='+scope
-                return redirect(begin_oauth(store,owner,scope,uri))
             else:
                 enqueue(store,owner,scope,operation,request.POST)
                 messages.success(request,'Операцію додано до черги. Підсумок з’явиться у центрі сповіщень.')
         except ValueError as error: messages.error(request,str(error))
         return redirect(reverse('cloud_backups')+'?'+urlencode({'scope':scope}))
     data = page_data(store,owner,scope)
-    uri = request.build_absolute_uri(reverse('backup_google_callback'))+'?scope='+scope
-    data['backup_google_callback'] = google_redirect_uri(data['backup'], uri)
     return render(request,'feed/backups.html', {**data,
         'teacher':request.user.teacher_profile,'backup_csrf':get_token(request),
         'backup_admin':request.user.is_superuser,'backup_base':'/teacher/backups', 'active_tab':'backups'})
-
-
-@teacher_required
-@never_cache
-def callback(request):
-    from urllib.parse import urlencode
-    try:
-        scope = scope_of(request)
-        if request.GET.get('error'): raise ValueError('Доступ Google не надано')
-        finish_oauth(state(),Adapter.owner(request.user.teacher_profile),scope,request.GET.get('state'),request.GET.get('code'))
-        messages.success(request,'Google Drive підключено для резервування')
-    except ValueError as error:
-        messages.error(request,str(error)); scope = 'personal'
-    return redirect(reverse('cloud_backups')+'?'+urlencode({'scope':scope}))
 
 
 @teacher_required

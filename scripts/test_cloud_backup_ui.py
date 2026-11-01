@@ -24,13 +24,13 @@ addEventListener('load',()=>setTimeout(async()=>{const result=document.createEle
 const assert=(x,m)=>{if(!x)throw Error(m)};
 assert(document.querySelector('.backup-page'),'Backup page exists');
 assert(document.getElementById('backup-format').options.length===2,'Both archive formats');
-assert(document.getElementById('backup-provider').options.length===2,'Both providers');
+const provider=document.getElementById('backup-provider');if(provider){assert(provider.options.length===2,'Both providers')}else{assert(document.querySelector('input[name=provider]').value==='nextcloud','Nextcloud only');assert(!document.querySelector('[name=client_secret]'),'No backup OAuth setup')}
 assert(document.querySelector('[name=recovery_only]'),'Read-only recovery setting');
 assert(document.querySelector('[name=automatic]'),'Schedule setting');
 if(window.openProblemsModal){window.currentServerNotifications=[{type:'backup',test_title:'Резервну копію створено',problem_type:'Успіх',message:'Копію перевірено',problem_detail:'Копію перевірено',link:'/teacher/backups'}];window.openProblemsModal();await new Promise(resolve=>setTimeout(resolve,300));const modal=document.getElementById('problems-modal');assert(modal.innerText.includes('Відкрити резервні копії'),'Backup notification opens backups');assert(!modal.innerText.includes('Перейти до питання'),'Backup success is not a question error');window.closeProblemsModal();await new Promise(resolve=>setTimeout(resolve,300))}
 assert([...document.querySelectorAll('input[type=password]')].every(i=>!i.value),'Secrets never prefilled');
 assert(document.documentElement.scrollWidth<=innerWidth+1,'No horizontal page overflow');
-const provider=document.getElementById('backup-provider');for(const value of ['nextcloud','google']){provider.value=value;provider.dispatchEvent(new Event('change'));assert(document.querySelector('div[data-backup-provider='+value+']').hidden===false,'Selected provider visible');assert(document.documentElement.scrollWidth<=innerWidth+1,'Provider fits viewport: '+value)}provider.value='nextcloud';provider.dispatchEvent(new Event('change'));
+if(provider){for(const value of ['nextcloud','google']){provider.value=value;provider.dispatchEvent(new Event('change'));assert(document.querySelector('div[data-backup-provider='+value+']').hidden===false,'Selected provider visible');assert(document.documentElement.scrollWidth<=innerWidth+1,'Provider fits viewport: '+value)}provider.value='nextcloud';provider.dispatchEvent(new Event('change'))}
 for(const item of document.querySelectorAll('.backup-page section,.backup-page input:not([type=hidden]),.backup-page select')){const b=item.getBoundingClientRect();assert(b.left>=-1&&b.right<=innerWidth+1,'Control fits viewport: '+(item.id||item.tagName))}
 result.textContent=JSON.stringify({ok:true,width:innerWidth,sections:document.querySelectorAll('.backup-page section').length});
 }catch(e){result.textContent=JSON.stringify({ok:false,error:String(e),width:innerWidth})}document.body.append(result)},400));

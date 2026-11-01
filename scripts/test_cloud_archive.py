@@ -155,13 +155,41 @@ class StateTests(unittest.TestCase):
         self.assertEqual(configuration(self.state,1,'personal')['password'],'one')
         self.assertEqual(configuration(self.state,1,'server')['password'],'two')
 
-    def test_google_oauth_callback_uses_explicit_public_https_origin(self):
-        from cloud_backup.control import begin_oauth
-        from urllib.parse import urlsplit,parse_qs
-        save_config(self.state,1,'personal',{'provider':'google','client_id':'client','client_secret':'secret','public_url':'https://school.example'})
-        url=begin_oauth(self.state,1,'personal','http://internal:8000/teacher/backups/google/callback?scope=personal')
-        self.assertEqual(parse_qs(urlsplit(url).query)['redirect_uri'],['https://school.example/teacher/backups/google/callback?scope=personal'])
-        with self.assertRaises(ValueError):save_config(self.state,1,'personal',{'public_url':'https://school.example/foreign/path'})
+    def test_unsupported_provider_cannot_be_saved_or_constructed(self):
+        from cloud_backup.remote import transport
+        for provider in ('google', 'unknown'):
+            with self.assertRaises(ValueError):
+                save_config(self.state, 1, 'personal', {'provider':provider})
+            with patch('cloud_backup.remote.request') as http:
+                with self.assertRaises(ValueError):
+                    transport({'provider':provider}, 'schoolwork', 'a'*32)
+                http.assert_not_called()
+        self.assertEqual(self.state.config(profile(1,'personal')), {})
+
+    def test_legacy_google_schedule_is_disabled_without_network_access(self):
+        config = {'provider':'google','scope':'personal','repository':'a'*32,
+                  'automatic':True,'hour':2,'frequency':'daily'}
+        self.state.save(profile(1,'personal'), config)
+        with self.state.db() as db:
+            db.execute('UPDATE configs SET due=0')
+        with patch('cloud_backup.remote.request') as http:
+            self.state.tick(object())
+            http.assert_not_called()
+        self.assertFalse(self.state.config(profile(1,'personal'))['automatic'])
+        self.assertEqual(self.state.history(1), [])
+        with self.state.db() as db:
+            self.assertIsNone(db.execute('SELECT due FROM configs').fetchone()[0])
+
+    def test_queued_google_job_fails_without_network_access(self):
+        job = self.state.enqueue(1,'backup',{'config':{'provider':'google','scope':'personal','repository':'a'*32}})
+        class Adapter:
+            app = 'schoolwork'
+            def authorize(self, *args): pass
+            def notify(self, *args): pass
+        with patch('cloud_backup.remote.request') as http:
+            self.state.tick(Adapter())
+            http.assert_not_called()
+        self.assertEqual(self.state.history(1)[0]['status'], 'failed')
 
     def test_queue_is_durable_and_refuses_overlapping_jobs(self):
         job = self.state.enqueue(1,'backup',{'config':{'password':'secret'}})
