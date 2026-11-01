@@ -23,6 +23,7 @@ class MemoryRemote:
         if name not in self.objects: raise FileNotFoundError(name)
         if len(self.objects[name]) > limit: raise ValueError('limit')
         return self.objects[name]
+    def rename(self, source, target): self.objects[target]=self.objects.pop(source)
     def delete(self, name): self.objects.pop(name, None)
     def list(self, directory): return [p.split('/',1)[1] for p in self.objects if p.startswith(directory+'/')]
 
@@ -52,6 +53,13 @@ class ArchiveTests(unittest.TestCase):
             raw = repo.remote.get('snapshots/'+run['snapshot'])
             self.assertIn('index.json', unpack(raw, password))
 
+    def test_plain_repository_cannot_silently_mix_password_protected_blocks(self):
+        remote=MemoryRemote();plain=Repository(remote,'test','c'*32)
+        plain.backup(self.entries)
+        before=remote.objects.copy()
+        with self.assertRaises(ValueError):Repository(remote,'test','c'*32,'new-password').backup(self.entries)
+        self.assertEqual(before,remote.objects)
+
     def test_wrong_password_does_not_publish_or_mutate(self):
         self.repo.backup(self.entries)
         before = self.remote.objects.copy()
@@ -77,6 +85,16 @@ class ArchiveTests(unittest.TestCase):
         with self.assertRaises(OSError): self.repo.backup([('changed', bytes_source(b'new'))])
         self.assertIn('index.json', dict(self.repo.read(old['snapshot'])))
         self.assertEqual(len(self.repo.snapshots()), 1)
+
+    def test_snapshot_is_not_published_when_final_readback_is_corrupt(self):
+        self.repo.backup(self.entries)
+        previous=self.repo.snapshots()
+        get=self.remote.get
+        def corrupt(name,limit=10**10):
+            return b'corrupt readback' if name.startswith('snapshots/') and name.endswith('.partial') else get(name,limit)
+        self.remote.get=corrupt
+        with self.assertRaises(ValueError):self.repo.backup(self.entries)
+        self.assertEqual(self.repo.snapshots(),previous)
 
     def test_repository_header_is_verified_before_publishing_any_snapshot(self):
         put=self.remote.put
@@ -157,6 +175,17 @@ class StateTests(unittest.TestCase):
         self.assertEqual((weekly.day,weekly.hour,weekly.weekday()), (2,2,0))
         daily = datetime.fromtimestamp(next_run(2,'daily',now),ZoneInfo('Europe/Kyiv'))
         self.assertEqual(daily.day,2)
+
+    def test_expired_exports_and_abandoned_work_are_cleaned_while_queue_is_idle(self):
+        import os,time
+        root=Path(self.temp.name)
+        exported=root/('a'*32+'.zip');exported.write_bytes(b'derived archive')
+        abandoned=root/'cloud-archive-abandoned';abandoned.mkdir();(abandoned/'temporary').write_bytes(b'partial')
+        kept=root/'kept-data';kept.mkdir();(kept/'work').write_bytes(b'original')
+        for path in (exported,abandoned,kept):os.utime(path,(time.time()-90000,time.time()-90000))
+        self.state.tick(object())
+        self.assertFalse(exported.exists());self.assertFalse(abandoned.exists())
+        self.assertEqual((kept/'work').read_bytes(),b'original')
 
     def test_file_install_rolls_back_and_refuses_overwrite(self):
         root = Path(self.temp.name)

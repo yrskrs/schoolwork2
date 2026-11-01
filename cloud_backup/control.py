@@ -142,7 +142,7 @@ def page_data(state, owner, scope):
         row['status_label'] = status_labels.get(row['status'],row['status'])
         row['created_label'] = datetime.fromtimestamp(row['created'],ZoneInfo('Europe/Kyiv')).strftime('%d.%m.%Y %H:%M')
         result = row['result']
-        row['summary'] = f"Об’єктів: {result.get('objects',result.get('records','—'))}; файлів: {result.get('files',result.get('files_count','—'))}; даних: {result.get('original_bytes',0)/1048576:.2f} МіБ; передано: {result.get('uploaded_bytes',0)/1048576:.2f} МіБ; повторно використано: {result.get('reused_bytes',0)/1048576:.2f} МіБ."
+        row['summary'] = f"Записів даних: {result.get('records','—')}; об’єктів: {result.get('objects',result.get('records','—'))}; файлів: {result.get('files',result.get('files_count','—'))}; даних: {result.get('original_bytes',0)/1048576:.2f} МіБ; передано: {result.get('uploaded_bytes',0)/1048576:.2f} МіБ; повторно використано: {result.get('reused_bytes',0)/1048576:.2f} МіБ."
         if not snapshots and row['kind'] == 'list' and row['status'] == 'completed' and row['result'].get('repository') == config['repository']:
             snapshots = row['result'].get('snapshots', [])
     choices = [{'value':snapshot,'label':datetime.fromtimestamp(int(snapshot.split('-')[0])/1000,ZoneInfo('Europe/Kyiv')).strftime('%d.%m.%Y %H:%M:%S · Київ')} for snapshot in snapshots]

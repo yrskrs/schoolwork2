@@ -13,12 +13,22 @@ from cloud_backup.archive import Repository
 from cloud_backup.staging import recovery
 
 
+def archive_rows(contents,label):
+    rows=[]
+    for name,value in contents.items():
+        if name.startswith('db/'+label+'/'):
+            value=json.loads(value)
+            rows.extend(value if isinstance(value,list) else [value])
+    return rows
+
+
 class Remote:
     def __init__(self): self.objects={}
     def put(self,name,data): self.objects[name]=data
     def get(self,name,limit=10**12): return self.objects[name]
     def exists(self,name): return name in self.objects
     def list(self,name): return [key.split('/',1)[1] for key in self.objects if key.startswith(name+'/')]
+    def rename(self,source,target): self.objects[target]=self.objects.pop(source)
     def delete(self,name): self.objects.pop(name,None)
 
 
@@ -63,9 +73,9 @@ class CloudBackupGraphTests(TransactionTestCase):
 
     def test_personal_owns_only_own_work_and_excludes_credentials(self):
         repo,snapshot=self.capture();contents=dict(repo.read(snapshot))
-        tasks=[json.loads(v) for n,v in contents.items() if n.startswith('db/feed.assignment/')]
+        tasks=archive_rows(contents,'feed.assignment')
         self.assertEqual([r['fields']['title'] for r in tasks],['Own'])
-        auth=[json.loads(v) for n,v in contents.items() if n.startswith('db/auth.user/')]
+        auth=archive_rows(contents,'auth.user')
         self.assertTrue(all(r['fields']['password']=='!' and not r['fields']['is_superuser'] for r in auth))
         self.assertTrue(any(n.startswith('files/media/submissions/') for n in contents))
 
@@ -109,8 +119,9 @@ class CloudBackupGraphTests(TransactionTestCase):
         other=Submission.objects.create(teacher=self.admin,assignment=self.other,class_group=self.group,first_name='Чужа',last_name='Робота',comment_student='private other body')
         Submission.objects.filter(pk=self.submission.pk).update(previous_submission=other)
         repo,snapshot=self.capture();contents=dict(repo.read(snapshot))
-        self.assertNotIn(f'db/feed.submission/{other.pk}.json',contents)
-        own=json.loads(contents[f'db/feed.submission/{self.submission.pk}.json'])
+        submissions=archive_rows(contents,'feed.submission')
+        self.assertNotIn(other.pk,[row['pk'] for row in submissions])
+        own=next(row for row in submissions if row['pk']==self.submission.pk)
         self.assertIsNone(own['fields']['previous_submission'])
 
     def test_data_only_and_teacher_file_selection(self):

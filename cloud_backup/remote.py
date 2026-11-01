@@ -1,6 +1,7 @@
 """Private WebDAV / Drive transports. No tokens in errors, URLs or logs."""
 import base64
 import json
+import time
 from pathlib import Path
 import contextlib
 import urllib.error
@@ -108,6 +109,9 @@ class Nextcloud:
         self.call(temporary, 'PUT', data, {'Content-Type': 'application/zip'})
         self.call(temporary, 'MOVE', headers={'Destination': self.url(path), 'Overwrite': 'T'})
 
+    def rename(self, source, target):
+        self.call(source,'MOVE',headers={'Destination':self.url(target),'Overwrite':'F'})
+
     def get(self, path, limit=MAX_RESPONSE):
         return self.call(path, limit=limit)[0]
 
@@ -144,18 +148,29 @@ class GoogleDrive:
         self.ids = {}
         self.folder = None
         self.token = ''
+        self.token_expires = 0
 
     def authenticate(self):
         form = {key: self.config[key] for key in ('client_id', 'client_secret', 'refresh_token')}
         form['grant_type'] = 'refresh_token'
         body, _ = request('https://oauth2.googleapis.com/token', 'POST', urllib.parse.urlencode(form).encode(),
                           {'Content-Type': 'application/x-www-form-urlencoded'})
-        self.token = json.loads(body)['access_token']
+        value=json.loads(body)
+        self.token=value['access_token']
+        self.token_expires=time.monotonic()+max(0,int(value.get('expires_in',3600))-60)
+
+    def ensure_token(self):
+        if not self.token or (self.token_expires and time.monotonic()>=self.token_expires):
+            self.authenticate()
 
     def call(self, url, method='GET', data=None, headers=None, limit=MAX_RESPONSE):
-        if not self.token:
+        self.ensure_token()
+        try:
+            return request(url,method,data,{'Authorization':'Bearer '+self.token,**(headers or {})},limit)
+        except ValueError as error:
+            if 'HTTP 401' not in str(error):raise
             self.authenticate()
-        return request(url, method, data, {'Authorization': 'Bearer '+self.token, **(headers or {})}, limit)
+            return request(url,method,data,{'Authorization':'Bearer '+self.token,**(headers or {})},limit)
 
     def query(self, q):
         items, token = [], ''
@@ -215,6 +230,14 @@ class GoogleDrive:
         body = self.call(location, 'PUT', data, {'Content-Type': 'application/zip'}, MAX_RESPONSE)[0]
         self.ids[path] = json.loads(body)['id']
 
+    def rename(self, source, target):
+        from .archive import safe_path
+        safe_path(target)
+        object_id=self.lookup(source)
+        if not object_id:raise FileNotFoundError('Об’єкт не знайдено')
+        self.call(self.API+'/'+object_id,'PATCH',json.dumps({'name':target.replace('/','__')}).encode(),{'Content-Type':'application/json'})
+        self.ids[target]=object_id;self.ids.pop(source,None)
+
     def get(self, path, limit=MAX_RESPONSE):
         object_id = self.lookup(path)
         if not object_id:
@@ -224,8 +247,13 @@ class GoogleDrive:
     def download(self, path, target, limit):
         object_id = self.lookup(path)
         if not object_id: raise FileNotFoundError('Копію не знайдено')
-        if not self.token: self.authenticate()
-        download(self.API+'/'+object_id+'?alt=media', target, {'Authorization':'Bearer '+self.token}, limit)
+        self.ensure_token()
+        try:
+            download(self.API+'/'+object_id+'?alt=media',target,{'Authorization':'Bearer '+self.token},limit)
+        except ValueError as error:
+            if 'HTTP 401' not in str(error):raise
+            self.authenticate()
+            download(self.API+'/'+object_id+'?alt=media',target,{'Authorization':'Bearer '+self.token},limit)
 
     def delete(self, path):
         object_id = self.lookup(path)

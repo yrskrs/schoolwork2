@@ -54,18 +54,21 @@ def main():
     parser.add_argument('--password-prompt',action='store_true')
     parser.add_argument('--verify-only',action='store_true')
     parser.add_argument('--yes',action='store_true')
+    parser.add_argument('--work-dir',type=Path,help='Приватний дисковий каталог для підготовки відновлення')
     args=parser.parse_args()
     if args.application=='schoolwork':
         os.environ.setdefault('DJANGO_SETTINGS_MODULE','schoolnet.settings')
         import django
         django.setup()
-        from feed.cloud_backups import Adapter
+        from feed.cloud_backups import Adapter,state
     else:
-        from app.services.cloud_backups import Adapter
+        from app.services.cloud_backups import Adapter,state
     adapter=Adapter();adapter.authorize(args.owner,args.scope)
     password=getpass.getpass('Пароль архіву: ') if args.password_prompt else ''
     config={'scope':args.scope,'repository':file_digest(args.archive)[:32], '_snapshot':'offline-'+file_digest(args.archive)}
-    with tempfile.TemporaryDirectory(prefix='offline-restore-') as directory:
+    work_root=args.work_dir or state().root
+    work_root.mkdir(parents=True,exist_ok=True,mode=0o700)
+    with tempfile.TemporaryDirectory(prefix='offline-restore-',dir=work_root) as directory:
         extract_portable(args.archive,directory,password)
         directory=Path(directory)
         print(json.dumps(adapter.validate(args.owner,config,directory),ensure_ascii=False))

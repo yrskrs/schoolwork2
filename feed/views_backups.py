@@ -1,4 +1,5 @@
 import re
+import time
 from django.http import FileResponse, Http404, HttpResponseForbidden, JsonResponse
 from django.shortcuts import redirect, render
 from django.contrib import messages
@@ -93,5 +94,5 @@ def download(request, job):
     if not any(r['id']==job and r['kind']=='download' and r['status']=='completed' for r in store.history(Adapter.owner(request.user.teacher_profile))):
         raise Http404
     path = store.root/(job+'.zip')
-    if not path.is_file(): raise Http404('Архів уже видалено. Підготуйте завантаження повторно')
+    if not path.is_file() or path.stat().st_mtime<time.time()-86400: raise Http404('Архів уже видалено. Підготуйте завантаження повторно')
     return FileResponse(path.open('rb'),as_attachment=True,filename='schoolwork-backup.zip',content_type='application/zip')

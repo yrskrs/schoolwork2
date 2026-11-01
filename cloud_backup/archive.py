@@ -4,6 +4,7 @@ A snapshot is visible only after all referenced blocks have been read back and
 verified. Failed runs never replace earlier snapshots. No executable pickle/SQL.
 """
 import hashlib
+import contextlib
 import io
 import json
 import tempfile
@@ -68,14 +69,20 @@ def json_bytes(value):
 
 
 class Repository:
-    def __init__(self, remote, app, repository_id, password=''):
+    def __init__(self, remote, app, repository_id, password='', work_root=None):
         if not re.fullmatch(r'[a-f0-9]{32}', repository_id):
             raise ValueError('Ідентифікатор сховища повинен містити 32 шістнадцяткові символи')
         self.remote, self.app, self.id, self.password = remote, app, repository_id, password
+        self.work_root=work_root
 
     def open(self, create=False, scope='personal'):
         if self.remote.exists('repository.zip'):
-            meta = json.loads(unpack(self.remote.get('repository.zip', MAX_MANIFEST), self.password, MAX_MANIFEST)['repository.json'])
+            header=self.remote.get('repository.zip',MAX_MANIFEST)
+            with pyzipper.AESZipFile(io.BytesIO(header)) as archive:
+                encrypted=bool(archive.getinfo('repository.json').flag_bits & 1)
+            if encrypted!=bool(self.password):
+                raise ValueError('Сховище має інший режим шифрування. Укажіть початковий пароль або створіть нове сховище')
+            meta = json.loads(unpack(header, self.password, MAX_MANIFEST)['repository.json'])
             if meta != {'protocol': 1, 'app': self.app, 'id': self.id, 'scope': scope}:
                 raise ValueError('Інший сайт, обсяг копії або несумісний формат')
         elif create:
@@ -89,25 +96,32 @@ class Repository:
         return sorted((name for name in self.remote.list('snapshots') if re.fullmatch(r'[0-9]{13}-[a-f0-9]{32}\.zip', name)), reverse=True)
 
     def backup(self, entries, scope='personal', archive_format='incremental', progress=lambda **kw: None):
-        with tempfile.TemporaryDirectory(prefix='cloud-archive-') as work:
-            return self._backup(entries, scope, archive_format, progress, Path(work))
+        with tempfile.TemporaryDirectory(prefix='cloud-archive-',dir=self.work_root) as work:
+            target=Path(work)/'snapshot.zip'
+            with (pyzipper.AESZipFile(target,'w',compression=pyzipper.ZIP_DEFLATED,compresslevel=6,allowZip64=True)
+                  if archive_format=='zip' else contextlib.nullcontext(None)) as full_zip:
+                if full_zip and self.password:
+                    full_zip.setpassword(self.password.encode())
+                    full_zip.setencryption(pyzipper.WZ_AES,nbits=256)
+                return self._backup(entries,scope,archive_format,progress,Path(work),full_zip)
 
-    def _backup(self, entries, scope, archive_format, progress, work):
+    def _backup(self, entries, scope, archive_format, progress, work, full_zip):
         self.open(True, scope)
+        self.prune_pending()
         if archive_format not in ('incremental', 'zip'):
             raise ValueError('Невідомий формат')
         stamp = f'{int(time.time()*1000):013d}-{uuid.uuid4().hex}.zip'
         manifest = {'protocol': 1, 'app': self.app, 'scope': scope, 'format': archive_format,
                     'created': time.time(), 'files': {}, 'original_bytes': 0, 'uploaded_bytes': 0,
                     'reused_bytes': 0, 'objects': 0, 'files_count': 0, 'records': 0, 'percent': 0}
-        full = None
+        declared_records=getattr(entries,'record_count',None)
+        if declared_records is not None:manifest['records']=declared_records
         for name, source in entries:
             safe_path(name)
             if name in manifest['files']:
                 raise ValueError('Дубль шляху')
             hashes, size, h = [], 0, hashlib.sha256()
-            full = tempfile.TemporaryFile() if archive_format == 'zip' else None
-            with source() as stream:
+            with source() as stream, (full_zip.open(name,'w',force_zip64=True) if full_zip else contextlib.nullcontext(None)) as full:
                 while True:
                     block = stream.read(CHUNK)
                     if not block:
@@ -117,7 +131,7 @@ class Repository:
                     if manifest['original_bytes'] > MAX_TOTAL:
                         raise ValueError('Перевищено ліміт копії 100 GiB')
                     h.update(block)
-                    if archive_format == 'zip':
+                    if full_zip:
                         full.write(block)
                     else:
                         key = digest(block)
@@ -136,42 +150,39 @@ class Repository:
                             manifest['uploaded_bytes'] += len(encoded)
                         hashes.append(key)
             manifest['files'][name] = {'size': size, 'sha256': h.hexdigest(), 'blocks': hashes}
-            if archive_format == 'zip':
-                # Full ZIP intentionally trades deduplication for portability.
-                full.seek(0)
-                temporary = work/str(manifest['objects'])
-                with temporary.open('wb') as out:
-                    __import__('shutil').copyfileobj(full, out)
-                full.close()
-                manifest['files'][name]['content'] = temporary
             manifest['objects'] += 1
             manifest['files_count'] += int(name.startswith('files/'))
-            manifest['records'] += int(name.startswith('db/'))
+            if declared_records is None:manifest['records'] += int(name.startswith('db/'))
             manifest['percent'] = min(95, round(manifest['objects']*95/max(len(entries),1))) if hasattr(entries,'__len__') else 0
             progress(**{k: manifest[k] for k in ('objects', 'original_bytes', 'uploaded_bytes', 'reused_bytes','files_count','records','percent')})
-        if archive_format == 'zip':
-            members = [(name, value.pop('content')) for name, value in manifest['files'].items()]
-            encoded = work/'snapshot.zip'
-            metadata = json_bytes(manifest)
-            if len(metadata)>MAX_MANIFEST: raise ValueError('Завеликий опис копії')
-            write_zip(encoded, [('backup-manifest.json', lambda: io.BytesIO(metadata))]+
-                      [(name, lambda p=path: p.open('rb')) for name,path in members], self.password)
-            manifest['uploaded_bytes'] = encoded.stat().st_size
+        if full_zip:
+            metadata=json_bytes(manifest)
+            if len(metadata)>MAX_MANIFEST:raise ValueError('Завеликий опис копії')
+            full_zip.writestr('backup-manifest.json',metadata)
+            full_zip.close()
+            encoded=work/'snapshot.zip'
+            manifest['uploaded_bytes']=encoded.stat().st_size
         else:
             metadata = json_bytes(manifest)
             if len(metadata)>MAX_MANIFEST: raise ValueError('Завеликий опис копії')
             encoded = pack([('backup-manifest.json', metadata)], self.password)
             manifest['uploaded_bytes'] += len(encoded)
-        path = 'snapshots/' + stamp
+        path = 'snapshots/' + stamp+'.partial'
         # File-capable transports stream ZIP bodies without loading whole backups
         # into the web worker's memory. Test transports may accept bytes only.
-        self.remote.put(path, encoded if not isinstance(encoded, Path) or hasattr(self.remote,'download') else encoded.read_bytes())
-        verified = work/'verified.zip'
-        self._download(path, verified)
-        expected = file_digest(encoded) if isinstance(encoded, Path) else digest(encoded)
-        if file_digest(verified) != expected:
-            self.remote.delete(path)
-            raise ValueError('Не вдалося перевірити завершену копію')
+        try:
+            self.remote.put(path, encoded if not isinstance(encoded, Path) or hasattr(self.remote,'download') else encoded.read_bytes())
+            verified = work/'verified.zip'
+            self._download(path, verified)
+            expected = file_digest(encoded) if isinstance(encoded, Path) else digest(encoded)
+            if file_digest(verified) != expected:
+                self.remote.delete(path)
+                raise ValueError('Не вдалося перевірити завершену копію')
+        except BaseException:
+            try:self.remote.delete(path)
+            except Exception:pass
+            raise
+        self.remote.rename(path,'snapshots/'+stamp)
         return {'snapshot': stamp, 'percent':100, **{k: manifest[k] for k in ('objects', 'original_bytes', 'uploaded_bytes', 'reused_bytes','files_count','records')}}
 
     def _download(self, path, target):
@@ -185,7 +196,7 @@ class Repository:
         if snapshot not in self.snapshots():
             raise ValueError('Копію не знайдено')
         directory = Path(directory)
-        with tempfile.TemporaryDirectory(prefix='cloud-download-') as work:
+        with tempfile.TemporaryDirectory(prefix='cloud-download-',dir=self.work_root) as work:
             archive = Path(work)/'snapshot.zip'
             self._download('snapshots/'+snapshot, archive)
             with pyzipper.AESZipFile(archive) as z:
@@ -238,10 +249,17 @@ class Repository:
 
     def read(self, snapshot, scope='personal'):
         # Convenience API for small consumers/tests; workers use extract().
-        with tempfile.TemporaryDirectory(prefix='cloud-read-') as work:
+        with tempfile.TemporaryDirectory(prefix='cloud-read-',dir=self.work_root) as work:
             self.extract(snapshot, work, scope)
             for path in sorted(Path(work).rglob('*')):
                 if path.is_file(): yield path.relative_to(work).as_posix(), path.read_bytes()
+
+    def prune_pending(self):
+        cutoff=(time.time()-86400)*1000
+        for name in self.remote.list('snapshots'):
+            match=re.fullmatch(r'([0-9]{13})-[a-f0-9]{32}\.zip\.partial(?:\.[a-f0-9]{32}\.partial)?',name)
+            if match and int(match[1])<cutoff:
+                self.remote.delete('snapshots/'+name)
 
     def prune(self, days=30):
         # Retain at least the newest snapshot. Blocks are deliberately retained:

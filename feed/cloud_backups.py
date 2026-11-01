@@ -16,6 +16,7 @@ from django.db.models import FileField, Q
 from cloud_backup.archive import json_bytes
 from cloud_backup.files import bytes_source, destination, file_source, install_files
 from cloud_backup.state import State
+from cloud_backup.records import RecordEntries,add_records,read_records
 from .models import Assignment, Submission, Teacher, SystemNotification
 
 # Transient processes and external access credentials are reconfigured after
@@ -146,6 +147,9 @@ class Adapter:
             data = json.loads(serializers.serialize('json', list(selected.values())))
             for row in data:
                 fields = row['fields']
+                model=(allowed | {'auth.user':User})[row['model']]
+                for field in model._meta.many_to_many:
+                    fields[field.name]=sorted(fields.get(field.name,[]),key=str)
                 if row['model'] == 'auth.user':
                     fields['groups'] = []
                     fields['user_permissions'] = []
@@ -173,10 +177,11 @@ class Adapter:
                 from django.contrib.auth.models import Group
                 index['groups'] = {group.name:[list(p.natural_key()) for p in group.permissions.all()] for group in Group.objects.all()}
                 index['user_roles'] = {str(user.pk):{'groups':list(user.groups.values_list('name',flat=True)), 'permissions':[list(p.natural_key()) for p in user.user_permissions.all()]} for user in User.objects.all()}
-            entries = [('index.json', bytes_source(json_bytes(index)))]
+            entries = RecordEntries([('index.json', bytes_source(json_bytes(index)))])
+            for label in sorted({row['model'] for row in data}):
+                add_records(entries,label,[row for row in data if row['model']==label],'pk')
             files = {}
             for row in sorted(data, key=lambda r: (r['model'], str(r['pk']))):
-                entries.append((f"db/{row['model']}/{row['pk']}.json", bytes_source(json_bytes(row))))
                 obj = selected[(row['model'], str(row['pk']))]
                 for field in obj._meta.fields:
                     if not isinstance(field, FileField): continue
@@ -194,7 +199,7 @@ class Adapter:
         index = json.loads((directory/'index.json').read_text())
         if index.get('app') != self.app or index.get('scope') != config['scope'] or index.get('schema') != schema():
             raise ValueError('Копія несумісна з цією схемою SchoolWork. Установіть сумісну версію сайту')
-        rows = [json.loads(path.read_text()) for path in sorted((directory/'db').rglob('*.json'))]
+        rows = read_records(directory/'db',recursive=True)
         if len(rows) != index['records']:
             raise ValueError('Неповний склад БД')
         allowed = models() | {'auth.user':User}
@@ -232,7 +237,7 @@ class Adapter:
                         row['fields']['username'] = ('archive_'+str(last_user)+'_'+row['fields']['username'])[:150]
             # Owner FK values were mapped above; distinguish them using the
             # untouched fixture payload when applying attribution remapping.
-            original = {(r['model'],r['pk']):r for r in [json.loads(path.read_text()) for path in sorted((directory/'db').rglob('*.json'))]}
+            original = {(r['model'],r['pk']):r for r in read_records(directory/'db',recursive=True)}
             inverse_users = {new:old for old,new in remap.items()}
             for row in rows:
                 original_pk = inverse_users.get(row['pk'],row['pk']) if row['model']=='auth.user' else row['pk']

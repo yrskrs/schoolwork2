@@ -32,7 +32,9 @@ class TransportTests(unittest.TestCase):
             self.assertTrue(remote.exists('snapshots/123.zip'))
             self.assertEqual(remote.get('snapshots/123.zip'),b'archive')
             self.assertEqual(remote.list('snapshots'),['123.zip'])
-            remote.delete('snapshots/123.zip')
+            remote.rename('snapshots/123.zip','snapshots/final.zip')
+            self.assertEqual(remote.get('snapshots/final.zip'),b'archive')
+            remote.delete('snapshots/final.zip')
         self.assertTrue(any(method=='MOVE' and headers['Destination'].endswith('/snapshots/123.zip') for url,method,headers in calls))
 
     def test_drive_refresh_folder_and_resumable_upload_then_update(self):
@@ -52,8 +54,9 @@ class TransportTests(unittest.TestCase):
         with patch('cloud_backup.remote.request',side_effect=call):
             remote.prepare();remote.put('snapshots/test.zip',b'archive')
             remote.put('snapshots/test.zip',b'archive2')
-            self.assertEqual(remote.get('snapshots/test.zip'),b'archive')
-            remote.delete('snapshots/test.zip')
+            remote.rename('snapshots/test.zip','snapshots/final.zip')
+            self.assertEqual(remote.get('snapshots/final.zip'),b'archive')
+            remote.delete('snapshots/final.zip')
         self.assertTrue(any(method=='POST' and 'uploadType=resumable' in url for url,method,data,headers in calls))
         self.assertTrue(any(method=='PATCH' and '/file-id?' in url for url,method,data,headers in calls))
         self.assertEqual(GoogleDrive.SCOPE,'https://www.googleapis.com/auth/drive.file')
@@ -63,6 +66,22 @@ class TransportTests(unittest.TestCase):
         remote=GoogleDrive({},'test','a'*32);remote.token='secret';remote.folder='folder'
         with patch.object(remote,'lookup',return_value=None),patch.object(remote,'call',return_value=(b'',{'Location':'https://attacker.example/upload'})):
             with self.assertRaises(ValueError):remote.put('blocks/test.zip',b'archive')
+
+    def test_expiring_drive_token_is_refreshed_before_long_job_continues(self):
+        remote=GoogleDrive({},'test','a'*32);remote.token='old';remote.token_expires=1
+        def renew():remote.token='new';remote.token_expires=1000
+        with patch('cloud_backup.remote.time.monotonic',return_value=10),patch.object(remote,'authenticate',side_effect=renew) as auth,patch('cloud_backup.remote.request',return_value=(b'ok',{})) as call:
+            self.assertEqual(remote.call(remote.API)[0],b'ok')
+            auth.assert_called_once()
+            self.assertEqual(call.call_args.args[3]['Authorization'],'Bearer new')
+
+    def test_drive_download_recovers_one_unauthorized_access_token(self):
+        remote=GoogleDrive({},'test','a'*32);remote.token='old';remote.token_expires=1000
+        def renew():remote.token='new';remote.token_expires=1000
+        with patch('cloud_backup.remote.time.monotonic',return_value=10),patch.object(remote,'lookup',return_value='file'),patch.object(remote,'authenticate',side_effect=renew) as auth,patch('cloud_backup.remote.download',side_effect=[ValueError('HTTP 401'),None]) as get:
+            remote.download('snapshot.zip','unused-test-path',100)
+            auth.assert_called_once();self.assertEqual(get.call_count,2)
+            self.assertEqual(get.call_args.args[2]['Authorization'],'Bearer new')
 
     def test_retry_transient_reads_and_bound_response_size(self):
         response=io.BytesIO(b'ok');response.headers={}

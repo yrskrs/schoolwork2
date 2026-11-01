@@ -102,12 +102,25 @@ class State:
         with self.db() as db:
             db.execute('UPDATE notices SET seen=1 WHERE owner=?',(str(owner),))
 
+    def cleanup(self):
+        import re,shutil
+        cutoff=time.time()-86400
+        for path in self.root.iterdir():
+            try:
+                if path.stat().st_mtime>=cutoff:continue
+                if path.is_file() and re.fullmatch(r'[a-f0-9]{32}\.zip',path.name):path.unlink()
+                elif path.is_dir() and path.name.startswith(('cloud-archive-','cloud-download-','cloud-read-','restore-')):shutil.rmtree(path)
+            except OSError:
+                # A download still open on Windows will be cleaned next tick.
+                pass
+
     def tick(self, adapter):
         from .locking import worker_lock
         # One process owns the queue, including restart recovery. No clock-based
         # stealing of a lease while a slow cloud transfer is still running.
         with worker_lock(self.root/'worker.lock') as acquired:
             if not acquired: return
+            self.cleanup()
             with self.db() as db:
                 interrupted = db.execute("SELECT id,owner FROM jobs WHERE status='running'").fetchall()
                 for row in interrupted:
@@ -137,7 +150,7 @@ class State:
                 config = payload['config']
                 adapter.authorize(row['owner'], config['scope'])
                 remote = transport(config, adapter.app, config['repository'])
-                repo = Repository(remote, adapter.app, config['repository'], config.get('password', ''))
+                repo = Repository(remote, adapter.app, config['repository'], config.get('password', ''),work_root=self.root)
                 if row['kind'] == 'backup':
                     remote.prepare()
                     with adapter.snapshot(row['owner'], config) as entries:
@@ -155,6 +168,7 @@ class State:
                         if row['kind'] == 'restore':
                             result = adapter.restore(row['owner'], config, directory)
                             title, body = 'Відновлення завершено', 'Дані та вибрані файли відновлено. Оновіть сторінку; для повної копії увійдіть знову.'
+                            if result.get('already_restored'):body='Цю копію вже було відновлено. Повторних записів не створено.'
                         elif row['kind'] == 'download':
                             from .archive import write_zip
                             target = self.root/(row['id']+'.zip')
@@ -186,10 +200,6 @@ class State:
                 self.notice(row['owner'], 'Помилка резервного копіювання / відновлення', detail[:600], row['id'])
                 try: adapter.notify(row['owner'], 'Помилка резервного копіювання / відновлення', detail[:600])
                 except Exception: pass
-            # Ready ZIP exports are temporary private files, not a second backup.
-            for path in self.root.glob('*.zip'):
-                if path.stat().st_mtime < time.time()-86400:
-                    path.unlink(missing_ok=True)
 
 
 def start_worker(state, adapter, stop):
