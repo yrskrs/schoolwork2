@@ -5,7 +5,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 ROOT_FILES = ('Dockerfile', 'compose.yaml', 'compose.integration.yaml', 'VERSION',
               'requirements.txt', 'requirements-docker.txt', 'requirements-docker.lock', 'gunicorn.conf.py', 'manage.py')
-SOURCE_ROOTS = ('feed', 'schoolnet', 'school_sync', 'runner', 'static', 'templates', 'scripts')
+SOURCE_ROOTS = ('cloud_backup', 'feed', 'schoolnet', 'school_sync', 'runner', 'static', 'templates', 'scripts')
 EXTENSIONS = {'.py','.html','.js','.css','.ttf','.txt'}
 
 
