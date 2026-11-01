@@ -121,6 +121,22 @@ class CloudBackupGraphTests(TransactionTestCase):
             with self.assertRaises(ValueError): self.adapter.restore(self.teacher.pk,self.config,directory)
         self.assertEqual(Assignment.objects.count(),2)
 
+    def test_server_preserves_exact_timestamp_precision(self):
+        from django.utils import timezone
+        created = timezone.now().replace(microsecond=123456)
+        updated = created.replace(microsecond=1)
+        Assignment.objects.filter(pk=self.task.pk).update(created_at=created, updated_at=updated)
+        self.config['scope'] = 'server'
+        task_id = self.task.pk
+        repo, snapshot = self.capture(self.admin.pk)
+        target = self.target()
+        self.config['_snapshot'] = snapshot
+        with recovery(self.root, repo, snapshot, 'server') as directory:
+            self.adapter.restore(target.pk, self.config, directory)
+        restored = Assignment.objects.get(pk=task_id)
+        self.assertEqual(restored.created_at, created)
+        self.assertEqual(restored.updated_at, updated)
+
     def test_cross_teacher_submission_link_does_not_expand_private_work(self):
         other=Submission.objects.create(teacher=self.admin,assignment=self.other,class_group=self.group,first_name='Чужа',last_name='Робота',comment_student='private other body')
         Submission.objects.filter(pk=self.submission.pk).update(previous_submission=other)

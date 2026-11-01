@@ -3,12 +3,14 @@ import contextlib
 import hashlib
 import json
 import os
+from datetime import datetime, time
 from pathlib import Path
 
 from django.apps import apps
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.core import serializers
+from django.core.serializers.json import DjangoJSONEncoder
 from django.core.management.color import no_style
 from django.db import connection, transaction
 from django.db.models import FileField, Q
@@ -23,6 +25,15 @@ from .models import Assignment, Submission, Teacher, SystemNotification
 # recovery; do not accidentally resume a code runner or export cloud passwords.
 EXCLUDE = {'teachercloudstorage', 'cloudimport', 'aijob', 'journalapikey',
            'submissionnotification', 'onlineclient', 'systemnotification', 'studentaicheckreservation'}
+
+
+class BackupJSONEncoder(DjangoJSONEncoder):
+    """Django's default JSON encoder truncates datetime/time microseconds."""
+
+    def default(self, value):
+        if isinstance(value, (datetime, time)):
+            return value.isoformat()
+        return super().default(value)
 
 
 def state():
@@ -144,7 +155,7 @@ class Adapter:
                     class_ids = [o.pk for o in selected.values() if o._meta.model_name == 'classgroup']
                     for obj in Student.objects.filter(class_group_id__in=class_ids): add(obj)
                     changed = len(selected) != before
-            data = json.loads(serializers.serialize('json', list(selected.values())))
+            data = json.loads(serializers.serialize('json', list(selected.values()), cls=BackupJSONEncoder))
             for row in data:
                 fields = row['fields']
                 model=(allowed | {'auth.user':User})[row['model']]
