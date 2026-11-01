@@ -78,6 +78,14 @@ class ArchiveTests(unittest.TestCase):
         self.assertIn('index.json', dict(self.repo.read(old['snapshot'])))
         self.assertEqual(len(self.repo.snapshots()), 1)
 
+    def test_repository_header_is_verified_before_publishing_any_snapshot(self):
+        put=self.remote.put
+        def corrupt(name,value):
+            put(name,b'broken' if name=='repository.zip' else value)
+        self.remote.put=corrupt
+        with self.assertRaises(Exception):self.repo.backup(self.entries)
+        self.assertFalse(self.repo.snapshots())
+
     def test_missing_block_rejected(self):
         run = self.repo.backup(self.entries)
         self.remote.objects.pop(next(p for p in self.remote.objects if p.startswith('blocks/')))

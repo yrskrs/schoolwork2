@@ -81,6 +81,7 @@ class Repository:
         elif create:
             self.remote.put('repository.zip', pack([('repository.json', json_bytes(
                 {'protocol': 1, 'app': self.app, 'id': self.id, 'scope': scope}))], self.password))
+            self.open(False, scope)
         else:
             raise ValueError('Сховище не знайдено. Перевірте підключення та ідентифікатор')
 
