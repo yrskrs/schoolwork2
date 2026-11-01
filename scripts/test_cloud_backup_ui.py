@@ -27,6 +27,7 @@ assert(document.getElementById('backup-format').options.length===2,'Both archive
 assert(document.getElementById('backup-provider').options.length===2,'Both providers');
 assert(document.querySelector('[name=recovery_only]'),'Read-only recovery setting');
 assert(document.querySelector('[name=automatic]'),'Schedule setting');
+if(window.openProblemsModal){window.currentServerNotifications=[{type:'backup',test_title:'Резервну копію створено',problem_type:'Успіх',message:'Копію перевірено',problem_detail:'Копію перевірено',link:'/teacher/backups'}];window.openProblemsModal();const modal=document.getElementById('problems-modal');assert(modal.innerText.includes('Відкрити резервні копії'),'Backup notification opens backups');assert(!modal.innerText.includes('Перейти до питання'),'Backup success is not a question error');window.closeProblemsModal()}
 assert([...document.querySelectorAll('input[type=password]')].every(i=>!i.value),'Secrets never prefilled');
 assert(document.documentElement.scrollWidth<=innerWidth+1,'No horizontal page overflow');
 const provider=document.getElementById('backup-provider');for(const value of ['nextcloud','google']){provider.value=value;provider.dispatchEvent(new Event('change'));assert(document.querySelector('div[data-backup-provider='+value+']').hidden===false,'Selected provider visible');assert(document.documentElement.scrollWidth<=innerWidth+1,'Provider fits viewport: '+value)}provider.value='nextcloud';provider.dispatchEvent(new Event('change'));
