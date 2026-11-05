@@ -202,7 +202,7 @@ class PublicAccessTests(TestCase):
         preview = Path(settings.MEDIA_ROOT) / 'previews' / str(material.pk) / 'slide-1.png'
         preview.parent.mkdir(parents=True, exist_ok=True); preview.write_bytes(b'png')
         response = self.get(f'/media/previews/{material.pk}/slide-1.png')
-        self.assertEqual(response.status_code, 200); response.close()
+        self.assertEqual(response.status_code, 200); b''.join(response.streaming_content)
         link.revoked_at = timezone.now(); link.save()
         self.assertEqual(self.get(material.file.url).status_code, 403)
         self.assertEqual(self.get(reverse('file_download', args=[material.pk])).status_code, 403)
@@ -307,12 +307,12 @@ class PublicAccessTests(TestCase):
         peer.file = SimpleUploadedFile('peer.txt', b'peer'); peer.save()
         self.enter(self.link('student', student=self.pupil))
         response = self.get(own.file.url)
-        self.assertEqual(response.status_code, 200); response.close()
+        self.assertEqual(response.status_code, 200); b''.join(response.streaming_content)
         self.assertEqual(self.get(peer.file.url).status_code, 404)
         # A group file can have an earlier owner outside this personal scope.
         own.file = peer.file.name; own.save()
         response = self.get(own.file.url)
-        self.assertEqual(response.status_code, 200); response.close()
+        self.assertEqual(response.status_code, 200); b''.join(response.streaming_content)
         own_job = AIJob.objects.create(kind='student_check', submission=own, status='succeeded')
         peer_job = AIJob.objects.create(kind='student_check', submission=peer, status='succeeded')
         self.assertEqual(self.get(reverse('ai_job_status', args=[own_job.pk])).status_code, 200)
