@@ -5,7 +5,7 @@
 - Автоматичне визначення встановленого Tailscale CLI та необов’язковий compose.tailscale.yaml для керування службою хоста з Docker.
 - Міграція 0072 зберігає захищений режим за замовчуванням.
 
-Інструкція: [Tailscale та доступ](docs/TAILSCALE_ACCESS.md).
+Інструкція: [Tailscale та доступ](docs/TAILSCALE_ACCESS.md). [Перевірки та встановлення 4.8.1](docs/TAILSCALE_4_8_1_VALIDATION_2026-11-06.md).
 
 # 4.8.0 — 2026-11-06
 
