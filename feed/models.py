@@ -4579,3 +4579,6 @@ class AICriteriaPreset(models.Model):
 from .job_models import AIJob, StudentAICheckReservation  # noqa: E402, F401
 from .cloud_models import CloudImport  # noqa: E402, F401
 from .roster_models import RosterReplica, RosterState  # noqa: E402, F401
+
+# Optional Tailscale connection and passwordless public access.
+from .access_models import TailscaleConnection, AccessLink, AccessVisitor, AccessLinkEvent

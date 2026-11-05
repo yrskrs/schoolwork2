@@ -1,0 +1,46 @@
+.access-page{min-width:0}
+.access-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:20px}
+.access-heading h1{margin:0 0 8px}
+.access-heading h2{margin:0;font-size:1.15rem;overflow-wrap:anywhere}
+.access-heading p,.access-footnote{color:var(--color-text-muted,#64748b);line-height:1.6}
+.access-notice{padding:16px 20px;background:var(--color-bg-secondary,#eef2ff);border:1px solid var(--color-border,#dbe3f2);border-radius:12px;margin-bottom:24px;line-height:1.65}
+.access-error,.errorlist{color:var(--color-danger,#b91c1c)}
+.access-error{padding:16px;border:1px solid currentColor;margin-bottom:20px;border-radius:12px}
+.access-grid{display:grid;grid-template-columns:minmax(260px,0.8fr) minmax(320px,1.4fr);gap:24px;align-items:start}
+.access-page .form-card{padding:24px;margin-bottom:20px}
+.access-page .form-group{margin-bottom:16px}
+.access-page small{display:block;margin-top:6px;color:var(--color-text-muted,#64748b)}
+.access-page input[type=url]{width:100%;max-width:600px;padding:10px}
+.access-kind-help{font-size:.9rem;line-height:1.6;color:var(--color-text-muted,#64748b)}
+.access-stats{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.access-stats dt{font-size:.8rem;color:var(--color-text-muted,#64748b)}
+.access-stats dd{margin:4px 0 0;font-weight:600}
+.access-state{font-size:.75rem;background:var(--color-bg-secondary,#f1f5f9);padding:5px 10px;border-radius:20px}
+.access-state.is-active{color:#047857;background:#d1fae5}
+.access-copy{display:flex;gap:8px}
+.access-copy input{min-width:0}
+.access-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:20px}
+.access-qr{margin-top:16px}
+.access-qr summary{cursor:pointer}
+.access-qr img{display:block;background:#fff;max-width:100%;margin-top:12px}
+.access-footnote{font-size:.85rem}
+.access-page ol{padding-left:24px;line-height:1.8}
+.access-page li{margin-bottom:12px}
+.access-page code{overflow-wrap:anywhere}
+.access-landing{font-family:system-ui,sans-serif;margin:0;min-height:100vh;display:grid;place-items:center;background:#f3f6fb;color:#18233b}
+.access-landing-card{max-width:480px;background:white;border:1px solid #e2e8f0;border-radius:24px;box-shadow:0 20px 70px #1e3a5f12;padding:40px;margin:20px;line-height:1.7}
+.access-landing-card h1{font-size:1.8rem;line-height:1.25;overflow-wrap:anywhere}
+.access-eyebrow{font-size:.8rem;letter-spacing:.1em;text-transform:uppercase;color:#65718a}
+.access-open{font:inherit;border:0;border-radius:12px;background:#4338ca;color:white;padding:14px 24px;cursor:pointer;margin-top:12px}
+.access-landing a{color:#4338ca}
+@media(max-width:1100px){.access-grid{grid-template-columns:1fr}
+}
+@media(max-width:600px){.access-copy{flex-wrap:wrap}
+.access-page .form-card{padding:18px}
+.access-stats{gap:12px}
+.access-landing-card{padding:28px}
+}
+
+
+.access-copy input{flex:1}
+.access-copy button{flex-shrink:0;white-space:nowrap}

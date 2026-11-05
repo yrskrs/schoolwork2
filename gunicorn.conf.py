@@ -13,3 +13,6 @@ accesslog = "-"
 errorlog = "-"
 loglevel = "info"
 access_log_format = '[КЛІЄНТ IP: %(h)s] "%(r)s" %(s)s %(b)s %(M)sms'
+
+# Access tokens in pupil URLs must never appear in access logs.
+logger_class = 'feed.gunicorn_logging.AccessLogger'

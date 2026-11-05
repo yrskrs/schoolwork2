@@ -88,7 +88,7 @@ def enqueue_understanding_job(assignment, user=None, force_refresh=False, eager=
     return job
 
 
-def job_response(job, is_teacher=False):
+def job_response(job, is_teacher=False, request=None):
     if job.status in ('succeeded', 'failed'):
         result = dict(job.result)
         result['events'] = job.events
@@ -104,6 +104,9 @@ def job_response(job, is_teacher=False):
             result.pop('grade_explanation', None)
             result.pop('raw_json', None)
             result.pop('criteria_results', None)
+        if request is not None and 'duplicate_info' in result:
+            from .access_control import scope_duplicate_info
+            result['duplicate_info'] = scope_duplicate_info(request, result['duplicate_info'])
         if job.kind == 'understanding':
             result['is_teacher'] = is_teacher
         return JsonResponse(result, status=job.http_status)

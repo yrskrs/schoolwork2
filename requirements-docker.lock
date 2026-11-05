@@ -44,3 +44,5 @@ pyzipper==0.4.0
 cryptography==46.0.3
 cffi==2.0.0
 pycparser==2.23
+
+qrcode==8.2

@@ -10,6 +10,7 @@
             <a href="{% url 'teacher_students' %}">👥 Учні та класи</a>
             <a href="{% url 'ai_batch_check' %}">⚡ ШІ-перевірка</a>
             <a href="{% url 'teacher_rescheduled_calendar' %}">📅 Перенесення</a>
+            {% if request.tailscale_connection.enabled %}<a href="{% url 'access_links' %}">🔗 Посилання доступу</a>{% endif %}
             <a href="{% url 'teacher_settings' %}">⚙️ Налаштування</a>
             <a href="{% url 'teacher_settings' %}?tab=ai">🤖 Параметри ШІ</a>
             <a href="{% url 'activity_log' %}">🕒 Журнал дій</a>

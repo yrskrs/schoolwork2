@@ -23,7 +23,7 @@
         <div class="submission-class-check">
             <span>Обраний клас</span>
             <strong data-submission-class aria-live="polite">{{ selected_submission_class_name }}</strong>
-            <a href="#id_class_group">Перевірити / змінити</a>
+            {% if form.class_group.disabled %}<span>Клас задано посиланням</span>{% else %}<a href="#id_class_group">Перевірити / змінити</a>{% endif %}
         </div>
     </header>
 
@@ -45,11 +45,11 @@
         </footer>
 
                 <details class="submission-side-card submission-more-options" open>
-                    <summary id="submission-help-title">Допомога та групова робота</summary>
+                    <summary id="submission-help-title">{% if form.public_personal_access %}Допомога{% else %}Допомога та групова робота{% endif %}</summary>
                     <div class="submission-side-body">
                         <div class="submission-side-actions">
                             <button type="button" onclick="openCriteriaModal()" class="btn btn-secondary">📋 Критерії оцінювання</button>
-                            <button type="button" id="btn-add-coauthor" onclick="addCoauthorField()" class="btn btn-secondary" title="Для роботи, виконаної в парі чи групі">👥 Додати співавтора</button>
+                            <button {% if form.public_personal_access %}hidden{% endif %} type="button" id="btn-add-coauthor" onclick="addCoauthorField()" class="btn btn-secondary" title="Для роботи, виконаної в парі чи групі">👥 Додати співавтора</button>
                             <a href="{% url 'assignment_detail' assignment.pk %}" class="btn btn-secondary">← До сторінки завдання</a>
                         </div>
 
@@ -654,6 +654,13 @@ document.addEventListener('click', function(e) {
 });
 
 function loadClassRoster(classId) {
+    if (nameInput && nameInput.disabled) {
+        // Personal access is fixed by the server; show the supplied name directly.
+        if (rosterSelect) rosterSelect.style.display = 'none';
+        if (manualWrapper) manualWrapper.style.display = 'block';
+        if (toggleModeBtn) toggleModeBtn.style.display = 'none';
+        return;
+    }
     isStableClassRoster = false;
     closeRosterCustomDropdown();
     if (!classId) {

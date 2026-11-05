@@ -36,6 +36,7 @@
                 <a href="{% url 'system_updates' %}"><span>🚀</span><span>Оновлення</span></a>
             </li>
             {% endif %}
+            {% if request.tailscale_connection.enabled %}<li {% if request.resolver_match.url_name == 'access_links' %}class="active"{% endif %}><a href="{% url 'access_links' %}"><span>🔗</span><span>Посилання доступу</span></a></li>{% endif %}
         </ul>
     </div>
 

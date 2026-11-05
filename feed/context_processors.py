@@ -37,7 +37,8 @@ def teacher_stats_context(request):
     try:
         context['current_school'] = School.objects.first()
         context['all_bell_slots'] = list(BellSchedule.objects.all().order_by('lesson_number'))
-        context['all_classes'] = list(teaching_classes(ClassGroup.objects.all()).order_by('grade', 'letter', 'name'))
+        from .access_control import scope_classes
+        context['all_classes'] = list(scope_classes(request, teaching_classes(ClassGroup.objects.all())).order_by('grade', 'letter', 'name'))
     except Exception:
         pass
 

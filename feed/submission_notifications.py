@@ -118,6 +118,14 @@ def submission_notifications(request):
         else:
             settings = settings.filter(students_enabled=True, students_all_classes=True)
 
+    from .access_control import link_for, scope_assignments, scope_submissions
+    from .models import Assignment, Submission
+    link = link_for(request)
+    if link:
+        settings = settings.filter(teacher_id__in=scope_assignments(request, Assignment.objects.all()).values('teacher_id'))
+    visible_events = SubmissionNotification.objects.all()
+    if link:
+        visible_events = visible_events.filter(submission__in=scope_submissions(request, Submission.objects.all()))
     policies = {
         str(setting.teacher_id): {
             'sound': setting.teacher_sound if is_teacher else setting.students_sound,
@@ -132,7 +140,7 @@ def submission_notifications(request):
         }
         for setting in settings
     }
-    high_water = SubmissionNotification.objects.order_by('-pk').values_list('pk', flat=True).first() or 0
+    high_water = visible_events.order_by('-pk').values_list('pk', flat=True).first() or 0
     payload = {'cursor': high_water, 'events': [], 'policies': policies,
                'enabled': bool(policies), 'poll_after': 3 if policies else 30, 'has_more': False}
     # Establish a baseline on first visit; enabling notices never replays old submissions.
@@ -141,7 +149,7 @@ def submission_notifications(request):
     since = int(since)
     if since > high_water:  # A restored database may have a lower sequence.
         return JsonResponse(payload)
-    events = SubmissionNotification.objects.filter(
+    events = visible_events.filter(
         pk__gt=since, pk__lte=high_water, teacher_id__in=policies,
         submission__assignment__teacher_id=models.F('teacher_id'),
     )

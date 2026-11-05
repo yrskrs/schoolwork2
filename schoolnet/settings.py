@@ -48,6 +48,7 @@ MIDDLEWARE = [
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
+    'feed.access_middleware.PublicAccessMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'feed.middleware.OnlineClientsMiddleware',
     'feed.middleware.FirstRunSetupMiddleware',
@@ -167,3 +168,7 @@ ROSTER_PEERS = _roster_json.loads(os.getenv("ROSTER_PEERS", "[]"))
 ROSTER_SYNC_INTERVAL = int(os.getenv("ROSTER_SYNC_INTERVAL", "30"))
 ROSTER_SCHOOL_ID = int(os.getenv("ROSTER_SCHOOL_ID", "0"))
 ROSTER_YEAR_ID = int(os.getenv("ROSTER_YEAR_ID", "0"))
+
+# Optional: only set when the web process can access a local Tailscale daemon.
+SCHOOLNET_TAILSCALE_BINARY = os.environ.get('SCHOOLNET_TAILSCALE_BINARY', '')
+SCHOOLNET_TAILSCALE_TARGET_PORT = int(os.environ.get('SCHOOLNET_TAILSCALE_TARGET_PORT', os.environ.get('APP_PORT', '8000')))

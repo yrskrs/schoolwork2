@@ -102,6 +102,10 @@ logger = logging.getLogger(__name__)
 # ДОПОМІЖНІ ФУНКЦІЇ
 # ═══════════════════════════════════════════════════════════════════════════════
 
+from .access_control import (scope_assignments, scope_classes, scope_students, scope_submissions,
+    bind_submission_form, link_for, scope_duplicate_info)
+
+
 def get_teacher_or_none(request):
     """Повертає профіль вчителя або None якщо не авторизовано."""
     if request.user.is_authenticated:
@@ -161,7 +165,7 @@ def _async_trigger_ai_task_understanding(assignment_id, force_refresh=False):
         enqueue_understanding_job(assignment, force_refresh=force_refresh, eager=False)
 
 
-def get_visible_assignments(class_group_id=None):
+def get_visible_assignments(class_group_id=None, request=None):
     """
     Повертає QuerySet опублікованих завдань.
     - Автоматично архівує завдання старше 14 днів.
@@ -199,6 +203,9 @@ def get_visible_assignments(class_group_id=None):
     if class_group_id:
         qs = qs.filter(classes__id=class_group_id)
 
+    if request is not None:
+        qs = scope_assignments(request, qs)
+
     # ── Сортування за актуальністю ──────────────────────────────────────────────
     # Спочатку завдання з target_date >= сьогодні (найближчий урок — першим),
     # потім решта у зворотньо-хронологічному порядку за датою публікації.
@@ -229,7 +236,7 @@ def get_visible_assignments(class_group_id=None):
 # ПУБЛІЧНА ЧАСТИНА — СТРІЧКА НОВИН
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def get_calendar_context(year=None, month=None, selected_date_str=None, class_group_id=None, subject_id=None):
+def get_calendar_context(year=None, month=None, selected_date_str=None, class_group_id=None, subject_id=None, request=None):
     """
     Формує матрицю днів та кількість завдань для віджета Google Calendar.
     """
@@ -274,7 +281,7 @@ def get_calendar_context(year=None, month=None, selected_date_str=None, class_gr
         next_month, next_year = month + 1, year
 
     # Отримуємо всі опубліковані завдання для підрахунку на календарі за датою УРОКУ
-    upcoming_qs, rest_qs = get_visible_assignments(class_group_id)
+    upcoming_qs, rest_qs = get_visible_assignments(class_group_id, request=request)
     # Для календаря порядок неважливий — об'єднуємо
     from itertools import chain as _chain
     visible_all = list(_chain(
@@ -382,6 +389,9 @@ def _parse_filter_params(request):
             except (ValueError, TypeError):
                 date_str = None
 
+    link = link_for(request)
+    if link and link.restricted_class_id:
+        class_group_id = link.restricted_class_id
     query = request.GET.get('q', '').strip()
     return class_group_id, subject_id, date_str, query
 
@@ -415,7 +425,7 @@ def index(request):
     """
     class_group_id, subject_id, date_str, query = _parse_filter_params(request)
 
-    upcoming_qs, rest_qs = get_visible_assignments(class_group_id)
+    upcoming_qs, rest_qs = get_visible_assignments(class_group_id, request=request)
 
     if subject_id:
         upcoming_qs = upcoming_qs.filter(subject__id=subject_id)
@@ -445,7 +455,7 @@ def index(request):
         page_obj = paginator.page(paginator.num_pages)
 
     # Дані для UI
-    all_classes = ClassGroup.objects.filter(teacher__isnull=False).distinct().order_by('grade', 'letter')
+    all_classes = scope_classes(request, ClassGroup.objects.filter(teacher__isnull=False).distinct()).order_by('grade', 'letter')
     all_subjects = Subject.objects.filter(teacher__isnull=False).distinct()
     has_multiple_subjects = all_subjects.count() > 1
     selected_class = None
@@ -455,6 +465,7 @@ def index(request):
     cal_year = request.GET.get('cal_year')
     cal_month = request.GET.get('cal_month')
     calendar_ctx = get_calendar_context(
+        request=request,
         year=cal_year,
         month=cal_month,
         selected_date_str=date_str,
@@ -594,13 +605,13 @@ def assignment_detail(request, pk):
         return JsonResponse(data)
 
     # Інші завдання цього класу або вчителя для сайдбару
-    related_assignments = Assignment.objects.filter(
+    related_assignments = scope_assignments(request, Assignment.objects.all()).filter(
         status=Assignment.STATUS_PUBLISHED
     ).exclude(pk=assignment.pk).filter(
         Q(classes__in=assignment.classes.all()) | Q(teacher=assignment.teacher)
     ).distinct().select_related('teacher', 'subject')[:5]
 
-    submissions_count = Submission.objects.filter(assignment=assignment).count()
+    submissions_count = scope_submissions(request, Submission.objects.filter(assignment=assignment)).count()
 
     # Підготовка матеріалів для вбудованого перегляду у тій же вкладці
     files_with_preview = []
@@ -657,7 +668,7 @@ def assignment_detail(request, pk):
             'pdf_preview_url': pdf_preview_url,
         })
 
-    assigned_classes = list(assignment.classes.all())
+    assigned_classes = list(scope_classes(request, assignment.classes.all()))
     selected_class = next((group for group in assigned_classes if str(group.pk) == request.GET.get('class')), None)
     if selected_class is None and len(assigned_classes) == 1:
         selected_class = assigned_classes[0]
@@ -672,7 +683,7 @@ def assignment_detail(request, pk):
         'can_edit': can_edit,
         'related_assignments': related_assignments,
         'submissions_count': submissions_count,
-        'all_classes': teaching_classes(ClassGroup.objects.all()).order_by('grade', 'letter'),
+        'all_classes': scope_classes(request, teaching_classes(ClassGroup.objects.all())).order_by('grade', 'letter'),
         'files_with_preview': files_with_preview,
         'has_assignment_materials': bool(files_with_preview or assignment.link_url or assignment.additional_links.all() or assignment.all_youtube_videos),
         'assignment_submit_url': assignment_submit_url,
@@ -689,7 +700,7 @@ def student_submissions_portal(request):
     - Переглянути статус (Очікує перевірки / Оцінено).
     - Прочитати коментарі та зауваження вчителя.
     """
-    class_groups = teaching_classes(ClassGroup.objects.all()).order_by('grade', 'letter', 'name')
+    class_groups = scope_classes(request, teaching_classes(ClassGroup.objects.all())).order_by('grade', 'letter', 'name')
     selected_class_id = request.GET.get('class')
     search_query = request.GET.get('search', '').strip()
 
@@ -699,6 +710,7 @@ def student_submissions_portal(request):
         'assignment', 'class_group', 'teacher', 'assignment__subject', 'previous_submission'
     ).prefetch_related('comments', 'comments__author', 'files').order_by('-submitted_at')
 
+    submissions_qs = scope_submissions(request, submissions_qs)
     if not show_all:
         submissions_qs = submissions_qs.filter(is_latest_attempt=True)
 
@@ -739,7 +751,7 @@ def feed_fragment(request):
     class_group_id, subject_id, date_str, query = _parse_filter_params(request)
     page_number = request.GET.get('page', 1)
 
-    upcoming_qs, rest_qs = get_visible_assignments(class_group_id)
+    upcoming_qs, rest_qs = get_visible_assignments(class_group_id, request=request)
 
     # Застосовуємо додаткові фільтри до обох частин
     if subject_id:
@@ -809,6 +821,7 @@ def calendar_fragment(request):
     cal_month = request.GET.get('cal_month')
 
     calendar_ctx = get_calendar_context(
+        request=request,
         year=cal_year,
         month=cal_month,
         selected_date_str=date_str,
@@ -827,7 +840,7 @@ def feed_check_updates(request):
 
     # Для перевірки оновлень не потрібне сортування — робимо прямий запит
     from django.db.models import Max, Count
-    qs = Assignment.objects.filter(status=Assignment.STATUS_PUBLISHED)
+    qs = scope_assignments(request, Assignment.objects.filter(status=Assignment.STATUS_PUBLISHED))
     if class_group_id:
         qs = qs.filter(classes__id=class_group_id)
     if subject_id:
@@ -2930,10 +2943,10 @@ def submit_assignment(request, pk):
     elif assignment.classes.exists():
         initial_data['class_group'] = assignment.classes.all().order_by('grade', 'letter', 'name').first()
 
-    form = SubmissionForm(assignment=assignment, initial=initial_data)
+    form = bind_submission_form(request, SubmissionForm(assignment=assignment, initial=initial_data))
 
     if request.method == 'POST':
-        form = SubmissionForm(request.POST, request.FILES, assignment=assignment)
+        form = bind_submission_form(request, SubmissionForm(request.POST, request.FILES, assignment=assignment))
         if form.is_valid():
             if form.cleaned_data.get('other_student'):
                 from .outside_students import browser_identity
@@ -2951,7 +2964,7 @@ def submit_assignment(request, pk):
                 )
                 return render(request, 'feed/submit_assignment.html', _submission_form_context(assignment, form))
 
-            dup_info = check_submission_duplicates(submission)
+            dup_info = scope_duplicate_info(request, check_submission_duplicates(submission))
             if dup_info['is_duplicate']:
                 request.session['submission_duplicate_warning'] = dup_info['warning_message']
                 request.session['submission_duplicate_type'] = dup_info['type']
@@ -2981,7 +2994,7 @@ def submit_success(request, pk):
     """Сторінка підтвердження успішної здачі роботи."""
     assignment = get_object_or_404(Assignment, pk=pk, status__in=[Assignment.STATUS_PUBLISHED, Assignment.STATUS_ARCHIVED])
     # Відображаємо тільки актуальні (останні) здачі учнів без дублювання записів та співавторів
-    submissions = Submission.objects.filter(assignment=assignment, is_latest_attempt=True, primary_submission__isnull=True).order_by('-submitted_at').select_related('class_group')
+    submissions = scope_submissions(request, Submission.objects.filter(assignment=assignment, is_latest_attempt=True, primary_submission__isnull=True)).order_by('-submitted_at').select_related('class_group')
     
     search_query = request.GET.get('search', '').strip()
     if search_query:
@@ -2994,32 +3007,33 @@ def submit_success(request, pk):
     duplicate_type = request.session.pop('submission_duplicate_type', None)
 
     # Визначаємо останню здачу для кнопки самоперевірки учня
+    scoped_submissions = scope_submissions(request, Submission.objects.filter(assignment=assignment))
     latest_submission_id = request.session.get('last_submission_id', None)
     latest_submission = None
     can_student_ai_check = False
     ai_check_already_used = False
 
     if not latest_submission_id and request.user.is_authenticated and hasattr(request.user, 'student_profile'):
-        sub = Submission.objects.filter(assignment=assignment, student=request.user.student_profile, is_latest_attempt=True).order_by('-submitted_at').first()
+        sub = scoped_submissions.filter(student=request.user.student_profile, is_latest_attempt=True).order_by('-submitted_at').first()
         if sub:
             latest_submission_id = sub.id
 
     if not latest_submission_id:
-        recent_sub = Submission.objects.filter(assignment=assignment, is_latest_attempt=True).order_by('-submitted_at').first()
+        recent_sub = scoped_submissions.filter(is_latest_attempt=True).order_by('-submitted_at').first()
         if recent_sub and (timezone.now() - recent_sub.submitted_at).total_seconds() < 600:
             latest_submission_id = recent_sub.id
 
     dup_info = None
     if latest_submission_id:
         try:
-            latest_submission = Submission.objects.get(pk=latest_submission_id, assignment=assignment)
+            latest_submission = scoped_submissions.get(pk=latest_submission_id)
             if latest_submission.has_used_student_ai_check_for_assignment():
                 can_student_ai_check = False
                 ai_check_already_used = True
             elif assignment.allow_student_ai_check:
                 can_student_ai_check = True
 
-            dup_info = check_submission_duplicates(latest_submission)
+            dup_info = scope_duplicate_info(request, check_submission_duplicates(latest_submission))
             if dup_info and dup_info.get('is_duplicate') and not duplicate_warning:
                 duplicate_warning = dup_info.get('warning_message')
                 duplicate_type = dup_info.get('type')
@@ -3054,7 +3068,7 @@ def student_ai_self_check(request, submission_id):
         job = enqueue_submission_job(submission, 'student_check')
     except SelfCheckUnavailable as exc:
         return JsonResponse({'error': str(exc)}, status=exc.http_status)
-    return job_response(job)
+    return job_response(job, request=request)
 
 
 def _evaluate_student_submission(submission):
@@ -3306,7 +3320,7 @@ def submission_detail(request, submission_id):
         else:
             can_student_ai_check = True
 
-    dup_info = check_submission_duplicates(submission)
+    dup_info = scope_duplicate_info(request, check_submission_duplicates(submission))
 
     is_teacher = request.user.is_authenticated and can_manage_submission(request, submission)
 
@@ -4573,7 +4587,7 @@ def assignment_ai_understanding(request, pk):
             result['is_teacher'] = is_teacher
             return JsonResponse(result)
         job = enqueue_understanding_job(assignment, request.user if is_teacher else None, force_refresh)
-        return job_response(job, is_teacher=is_teacher)
+        return job_response(job, is_teacher=is_teacher, request=request)
     except Exception as e:
         return JsonResponse({
             'status': 'error',
@@ -7225,8 +7239,8 @@ def api_students_autocomplete(request):
         return JsonResponse({'error': 'Некоректний ID класу.'}, status=400)
     query = request.GET.get('query', '').strip().lower()
 
-    students_qs = Student.objects.filter(integration_active=True, class_group__integration_active=True)
-    submissions = Submission.objects.all()
+    students_qs = scope_students(request, Student.objects.filter(integration_active=True, class_group__integration_active=True))
+    submissions = scope_submissions(request, Submission.objects.all())
     if class_group_id:
         students_qs = students_qs.filter(class_group_id=class_group_id)
         submissions = submissions.filter(class_group_id=class_group_id)
@@ -8405,7 +8419,7 @@ def ai_check_single_submission(request, submission_id):
         })
     except SelfCheckUnavailable as exc:
         return JsonResponse({'status': 'error', 'error': str(exc)}, status=exc.http_status)
-    return job_response(job)
+    return job_response(job, request=request)
 
 
 @teacher_required
@@ -8462,11 +8476,12 @@ def teacher_generate_assignment_criteria(request):
 
 
 
-@teacher_required
 def api_classes_list(request):
-    """Повертає список усіх класів школи для випадаючих списків та модальних вікон."""
+    """Повертає класи вчителя або класи, дозволені публічним посиланням."""
+    if not get_teacher_or_none(request) and not link_for(request):
+        return redirect('teacher_login')
     from .models import ClassGroup
-    classes = teaching_classes(ClassGroup.objects.all()).order_by('grade', 'letter', 'name')
+    classes = scope_classes(request, teaching_classes(ClassGroup.objects.all())).order_by('grade', 'letter', 'name')
     return JsonResponse({
         'status': 'ok',
         'classes': [{'id': c.id, 'name': c.name, 'grade': c.grade, 'letter': c.letter} for c in classes]
@@ -8615,7 +8630,7 @@ def api_ai_process_item(request, submission_id):
         })
     except SelfCheckUnavailable as exc:
         return JsonResponse({'status': 'error', 'error': str(exc)}, status=exc.http_status)
-    return job_response(job)
+    return job_response(job, request=request)
 
 
 @teacher_required
@@ -9279,8 +9294,8 @@ def ai_job_status(request, job_id):
         if not is_teacher and not (assignment.allow_student_ai_understanding and
                 assignment.status in (Assignment.STATUS_PUBLISHED, Assignment.STATUS_ARCHIVED)):
             return JsonResponse({'error': 'Немає доступу'}, status=403)
-        return job_response(job, is_teacher=is_teacher)
+        return job_response(job, is_teacher=is_teacher, request=request)
     if job.kind != 'student_check':
         if not request.user.is_authenticated or not job.submission or not can_manage_submission(request, job.submission):
             return JsonResponse({'error': 'Немає доступу'}, status=403)
-    return job_response(job)
+    return job_response(job, request=request)

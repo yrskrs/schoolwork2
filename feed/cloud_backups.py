@@ -24,7 +24,8 @@ from .models import Assignment, Submission, Teacher, SystemNotification
 # Transient processes and external access credentials are reconfigured after
 # recovery; do not accidentally resume a code runner or export cloud passwords.
 EXCLUDE = {'teachercloudstorage', 'cloudimport', 'aijob', 'journalapikey',
-           'submissionnotification', 'onlineclient', 'systemnotification', 'studentaicheckreservation'}
+           'submissionnotification', 'onlineclient', 'systemnotification', 'studentaicheckreservation',
+           'tailscaleconnection', 'accesslink', 'accessvisitor', 'accesslinkevent'}
 
 
 class BackupJSONEncoder(DjangoJSONEncoder):

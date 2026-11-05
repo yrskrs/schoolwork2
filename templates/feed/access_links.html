@@ -1,0 +1,32 @@
+{% extends 'base.html' %}{% load static %}
+{% block title %}Посилання доступу{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'css/access_links.css' %}">{% endblock %}
+{% block content %}
+<div class="page-wrapper"><div class="feed-layout">
+{% include 'feed/components/teacher_sidebar.html' %}
+<main class="feed-main-content access-page">
+<header class="access-heading"><div><h1>Посилання доступу</h1><p>Доступ учнів без логіна й пароля. Кожне посилання має власні налаштування.</p></div><a class="btn btn-secondary" href="{% url 'tailscale_settings' %}">Налаштувати Tailscale</a></header>
+{% if not connection.enabled %}<div class="access-notice" role="status">Tailscale не підключено. Посилання можна підготувати заздалегідь; зовнішній доступ з’явиться після підключення та запуску Funnel. Локальний сайт працює у звичному режимі.</div>{% endif %}
+<div class="access-grid">
+<section class="form-card"><h2>{% if editing %}Змінити посилання{% else %}Нове посилання{% endif %}</h2>
+<form method="post" id="access-link-form">{% csrf_token %}<input type="hidden" name="action" value="save">{% if editing %}<input type="hidden" name="link_id" value="{{ editing.pk }}">{% endif %}
+{{ form.non_field_errors }}
+{% for field in form %}<div class="form-group" data-link-field="{{ field.name }}"><label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}{{ field.errors }}</div>{% endfor %}
+<p class="access-kind-help" id="access-kind-help"></p>
+<button class="btn btn-primary" type="submit">{% if editing %}Зберегти зміни{% else %}Створити посилання{% endif %}</button>{% if editing %} <a class="btn btn-secondary" href="{% url 'access_links' %}">Скасувати редагування</a>{% endif %}
+</form></section>
+<section aria-label="Створені посилання" class="access-list">
+{% for link in links %}<article class="form-card access-link-card">
+<div class="access-heading"><h2>{{ link.name }}</h2><span class="access-state {% if link.active %}is-active{% endif %}">{% if link.revoked_at %}Скасоване{% elif link.active %}Активне{% else %}Доступ завершено{% endif %}</span></div>
+<p>{{ link.get_kind_display }}{% if link.class_group %} · {{ link.class_group }}{% endif %}{% if link.student %} · {{ link.student }}{% endif %}{% if link.assignment %} · {{ link.assignment.title }}{% endif %}</p>
+<dl class="access-stats"><div><dt>Переходи</dt><dd>{{ link.visits }}</dd></div><div><dt>Унікальні браузери</dt><dd>{{ link.browser_count }}</dd></div><div><dt>Останній вхід</dt><dd>{{ link.last_used_at|date:'d.m.Y H:i'|default:'—' }}</dd></div><div><dt>Діє до</dt><dd>{{ link.expires_at|date:'d.m.Y H:i'|default:'До скасування' }}</dd></div></dl>
+{% if link.public_address %}<label class="form-label" for="link-{{ link.pk }}">Адреса доступу</label><div class="access-copy"><input id="link-{{ link.pk }}" class="form-input" readonly value="{{ link.public_address }}"><button type="button" class="btn btn-secondary" data-copy="link-{{ link.pk }}">Копіювати</button></div>
+<details class="access-qr"><summary>Показати QR-код</summary><img loading="lazy" width="240" height="240" src="{% url 'access_qr' link.pk %}" alt="QR-код доступу: {{ link.name }}"></details>{% else %}<p>Збережіть публічну адресу в налаштуваннях Tailscale, щоб скопіювати посилання.</p>{% endif %}
+<div class="access-actions"><a class="btn btn-secondary" href="?edit={{ link.pk }}">Налаштувати</a>{% if not link.revoked_at %}<form method="post">{% csrf_token %}<input type="hidden" name="link_id" value="{{ link.pk }}"><button name="action" value="revoke" class="btn btn-danger" type="submit">Скасувати доступ</button></form>{% endif %}</div>
+</article>{% empty %}<div class="form-card"><h2>Посилань ще немає</h2><p>Створіть перше посилання та надішліть учням його адресу або QR-код.</p></div>{% endfor %}
+</section></div>
+<p class="access-footnote">Переходи — підтверджені відкриття кнопкою «Відкрити сайт», без попередніх переглядів у месенджерах. Унікальні браузери — приблизна кількість пристроїв, а не учнів. Посилання можна переслати іншій людині. Після скасування наступний запит припинить доступ; завантажені файли залишаться на пристроях.</p>
+<div id="access-copy-status" role="status" aria-live="polite"></div>
+</main></div></div>
+{% endblock %}
+{% block extra_scripts %}<script src="{% static 'js/access_links.js' %}"></script>{% endblock %}

@@ -6,12 +6,16 @@ from . import journal_api
 from . import school_api_v2
 from . import views_updates
 from . import python_runner
-from . import views_cloud, views_backups
+from . import views_cloud, views_backups, access_views
 from .views_dialogs import ui_dialog
 from .submission_notifications import submission_notifications
 from school_sync import django_backend as roster_views
 
 urlpatterns = [
+    path('teacher/access-links/', access_views.access_links, name='access_links'),
+    path('teacher/access-links/<int:pk>/qr/', access_views.access_qr, name='access_qr'),
+    path('teacher/settings/tailscale/', access_views.tailscale_settings, name='tailscale_settings'),
+    path('access/<str:token>/', access_views.access_enter, name='access_enter'),
     path('teacher/backups', views_backups.backups, name='cloud_backups'),
     path('teacher/backups/', views_backups.backups),
     path('teacher/backups/status', views_backups.status, name='backup_status'),

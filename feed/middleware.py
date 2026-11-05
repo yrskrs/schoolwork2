@@ -14,6 +14,8 @@ from urllib.parse import parse_qsl, urlencode
 
 def safe_request_path(request):
     """Never retain legacy query credentials in logs or online-client metadata."""
+    if request.path.startswith('/access/'):
+        return '/access/***/'
     query = request.META.get('QUERY_STRING', '')
     try:
         pairs = parse_qsl(query, keep_blank_values=True, max_num_fields=1000)

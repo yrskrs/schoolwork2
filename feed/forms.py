@@ -826,6 +826,8 @@ class SubmissionForm(forms.Form):
             raw_coauthors = self.data.get('coauthors', [])
             if isinstance(raw_coauthors, str):
                 raw_coauthors = [raw_coauthors]
+        if getattr(self, 'public_personal_access', False):
+            raw_coauthors = []
         cleaned_coauthors = []
         full_name_input = (cleaned_data.get('full_name') or '').strip().lower()
         seen_co = set()

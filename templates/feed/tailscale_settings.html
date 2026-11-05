@@ -1,0 +1,27 @@
+{% extends 'base.html' %}{% load static %}
+{% block title %}Підключення Tailscale{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'css/access_links.css' %}">{% endblock %}
+{% block content %}<div class="page-wrapper teacher-settings-page"><div class="feed-layout">
+{% include 'feed/components/settings_sidebar.html' %}
+<main class="feed-main-content access-page">
+<header class="access-heading"><div><h1>Tailscale</h1><p>Необов’язковий доступ до сайту через інтернет.</p></div><a class="btn btn-secondary" href="{% url 'access_links' %}">Посилання доступу</a></header>
+<div class="access-notice">{% if connection.enabled %}Підключення увімкнено. Учням через тунель потрібне посилання від учителя.{% else %}Не підключено. Сайт може працювати без Tailscale; встановлювати його не обов’язково.{% endif %}</div>
+{% if error %}<div class="access-error" role="alert">{{ error }}</div>{% endif %}
+<section class="form-card"><h2>Підключення сервісу</h2>
+{% if user.is_superuser %}<form method="post">{% csrf_token %}<input type="hidden" name="action" value="save">{{ form.as_p }}<button class="btn btn-primary" type="submit">Зберегти підключення</button></form>
+<p>Вимкнення підключення закриває доступ учнів через тунель, зберігає посилання та статистику. Щоб прибрати саму публікацію, окремо зупиніть Funnel.</p>
+{% else %}<p>Змінювати підключення сервера може адміністратор. Учитель керує власними посиланнями.</p>{% endif %}</section>
+{% if user.is_superuser %}<section class="form-card"><h2>Керування Funnel</h2>
+<p>Після першого входу в Tailscale на сервері можна перевіряти службу й керувати публікацією тут. Інші сервіси та їхні порти не скидаються.</p>
+<form method="post" class="access-actions">{% csrf_token %}<button class="btn btn-secondary" name="action" value="status">Перевірити службу</button><button class="btn btn-primary" name="action" value="start" {% if not connection.enabled %}disabled{% endif %}>Запустити Funnel</button><button class="btn btn-secondary" name="action" value="stop" {% if not connection.public_url %}disabled{% endif %}>Зупинити Funnel</button></form>
+{% if state %}<dl><dt>Стан служби</dt><dd>{{ state.backend }}</dd><dt>Вузол</dt><dd>{{ state.dns_name|default:'—' }}</dd><dt>Публікації Funnel на вузлі</dt><dd>{% if state.funnel %}Є{% else %}Немає{% endif %}</dd></dl>{% endif %}
+</section>{% endif %}
+<section class="form-card"><h2>Перше підключення</h2><ol>
+<li>Адміністратор установлює Tailscale на сервері та виконує <code>sudo tailscale up</code>. Вхід у свій акаунт відбувається на сторінці Tailscale.</li>
+<li>Увімкніть MagicDNS, HTTPS та дозвіл Funnel в акаунті Tailscale. Скопіюйте DNS-ім’я сервера зі сторінки пристроїв.</li>
+<li>Укажіть тут адресу <code>https://назва.tail….ts.net</code> (за потреби порт 8443 або 10000), увімкніть підключення та збережіть.</li>
+<li>Для кнопок керування вебпроцесу потрібні локальний CLI та права оператора Tailscale. Адміністратор задає шлях CLI у <code>SCHOOLNET_TAILSCALE_BINARY</code> і порт сайту на вузлі Tailscale у <code>SCHOOLNET_TAILSCALE_TARGET_PORT</code>. Налаштований локальний порт — {{ tailscale_target_port }}. У Docker потрібне окреме налаштування доступу до служби хоста.</li>
+<li>Натисніть «Запустити Funnel» або виконайте на сервері <code>tailscale funnel --bg --https=443 --set-path=/ http://127.0.0.1:{{ tailscale_target_port }}</code>, підставивши ваші порти. Потім створіть учнівські посилання.</li>
+</ol><p>Перевірте публічну адресу в приватному вікні: без посилання завдання мають бути закриті. Учням Tailscale не потрібен. Локальний доступ залишається звичним.</p>
+<p><a href="https://tailscale.com/docs/features/tailscale-funnel" target="_blank" rel="noopener noreferrer">Інструкція Tailscale Funnel</a> · <a href="https://login.tailscale.com/admin/machines" target="_blank" rel="noopener noreferrer">Пристрої Tailscale</a></p></section>
+</main></div></div>{% endblock %}
