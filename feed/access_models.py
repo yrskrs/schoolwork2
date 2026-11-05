@@ -12,6 +12,7 @@ class TailscaleConnection(models.Model):
     # Singleton; absent row means the optional integration has never been used.
     enabled = models.BooleanField(default=False)
     public_url = models.URLField(blank=True)
+    allow_without_link = models.BooleanField('Не вимагати посилання доступу', default=False)
     updated_at = models.DateTimeField(auto_now=True)
 
     def save(self, *args, **kwargs):

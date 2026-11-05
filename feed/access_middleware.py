@@ -13,15 +13,17 @@ class PublicAccessMiddleware:
     def __call__(self, request):
         request.access_link = None
         request.public_access = False
+        request.public_open_access = False
         if not request.path_info.startswith('/static/'):
             connection = TailscaleConnection.objects.filter(pk=1).first() or TailscaleConnection()
             request.tailscale_connection = connection
             request.public_access = is_external(request, connection)
+            request.public_open_access = bool(request.public_access and connection.enabled and connection.allow_without_link)
             if request.META.get('HTTP_TAILSCALE_FUNNEL_REQUEST') == '?1':
                 request.META['wsgi.url_scheme'] = 'https'
             if request.public_access and not is_teacher(request):
                 pk = grant_from_cookie(request)
-                if pk and connection.enabled:
+                if pk and connection.enabled and not request.public_open_access:
                     link = AccessLink.objects.select_related('class_group', 'student__class_group', 'assignment').filter(pk=pk).first()
                     if link and link.active:
                         request.access_link = link
@@ -43,7 +45,7 @@ class PublicAccessMiddleware:
         if name in ('access_enter', 'teacher_login', 'teacher_logout'):
             return None
         connection = request.tailscale_connection
-        if not connection.enabled or not request.access_link:
+        if not connection.enabled or (not request.public_open_access and not request.access_link):
             return render(request, 'feed/access_required.html', {
                 'disabled': not connection.enabled,
             }, status=403)
@@ -75,7 +77,7 @@ class PublicAccessMiddleware:
                 raise Http404
         if 'submission_id' in kwargs:
             get_object_or_404(scope_submissions(request, Submission.objects.filter(assignment__status__in=['published', 'archived'])), pk=kwargs['submission_id'])
-        if link.restricted_class_id:
+        if link and link.restricted_class_id:
             for key in ('class', 'class_id', 'class_group_id'):
                 value = request.GET.get(key)
                 if value and value not in ('all', str(link.restricted_class_id)):

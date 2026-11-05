@@ -7,6 +7,16 @@
 <main class="feed-main-content access-page">
 <header class="access-heading"><div><h1>Посилання доступу</h1><p>Доступ учнів без логіна й пароля. Кожне посилання має власні налаштування.</p></div><a class="btn btn-secondary" href="{% url 'tailscale_settings' %}">Налаштувати Tailscale</a></header>
 {% if not connection.enabled %}<div class="access-notice" role="status">Tailscale не підключено. Посилання можна підготувати заздалегідь; зовнішній доступ з’явиться після підключення та запуску Funnel. Локальний сайт працює у звичному режимі.</div>{% endif %}
+<section class="form-card" aria-labelledby="public-access-mode">
+<h2 id="public-access-mode">Доступ за звичайною адресою</h2>
+{% if user.is_superuser %}<form method="post" id="public-access-mode-form">{% csrf_token %}<input type="hidden" name="action" value="access_mode">
+{{ mode_form.non_field_errors }}
+<label class="access-mode-switch" for="{{ mode_form.allow_without_link.id_for_label }}">{{ mode_form.allow_without_link }}<strong>{{ mode_form.allow_without_link.label }}</strong></label>
+<p class="access-kind-help">{{ mode_form.allow_without_link.help_text }}</p>{{ mode_form.allow_without_link.errors }}<button class="btn btn-primary" type="submit">Зберегти режим доступу</button></form>
+{% else %}<p>Загальний режим доступу змінює адміністратор.</p>{% endif %}
+{% if connection.allow_without_link and connection.enabled %}<p class="access-notice" role="status">Відкритий доступ: учням достатньо звичайної адреси сайту. Скасування окремого посилання не закриває відкритий доступ. Щоб знову вимагати посилання, зніміть прапорець і збережіть.</p>{% else %}<p>Захищений режим: через інтернет потрібне чинне посилання вчителя.</p>{% endif %}
+{% if connection.public_url %}<p>Звичайна адреса: <a href="{{ connection.public_url }}" target="_blank" rel="noopener noreferrer">{{ connection.public_url }}</a></p>{% endif %}
+</section>
 <div class="access-grid">
 <section class="form-card"><h2>{% if editing %}Змінити посилання{% else %}Нове посилання{% endif %}</h2>
 <form method="post" id="access-link-form">{% csrf_token %}<input type="hidden" name="action" value="save">{% if editing %}<input type="hidden" name="link_id" value="{{ editing.pk }}">{% endif %}

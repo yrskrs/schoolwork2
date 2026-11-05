@@ -13,7 +13,7 @@ from django.utils import timezone
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_http_methods, require_GET
 from .models import TailscaleConnection, AccessLink, AccessVisitor, AccessLinkEvent
-from .access_forms import AccessLinkForm, ConnectionForm
+from .access_forms import AccessLinkForm, ConnectionForm, PublicAccessModeForm
 from .access_control import COOKIE, SALT
 from .views import teacher_required
 from . import tailscale_service
@@ -30,6 +30,21 @@ def owned_links(request):
 @require_http_methods(['GET', 'POST'])
 def access_links(request):
     teacher = request.user.teacher_profile
+    connection = TailscaleConnection.objects.filter(pk=1).first() or TailscaleConnection()
+    mode_form = PublicAccessModeForm(instance=connection)
+    if request.method == 'POST' and request.POST.get('action') == 'access_mode':
+        if not request.user.is_superuser:
+            return HttpResponseForbidden('Загальний режим доступу змінює адміністратор.')
+        mode_form = PublicAccessModeForm(request.POST, instance=connection)
+        if mode_form.is_valid():
+            # Update only this switch; do not overwrite a concurrently saved connection.
+            if connection.pk:
+                TailscaleConnection.objects.filter(pk=1).update(allow_without_link=mode_form.cleaned_data['allow_without_link'], updated_at=timezone.now())
+            else:
+                mode_form.save()
+            AccessLinkEvent.objects.create(actor=request.user, action='public_open' if connection.allow_without_link else 'public_protected')
+            messages.success(request, 'Режим доступу збережено.')
+            return redirect('access_links')
     edit_id = request.POST.get('link_id') if request.method == 'POST' else request.GET.get('edit')
     if edit_id and (not edit_id.isdigit() or len(edit_id) > 18):
         raise Http404
@@ -54,12 +69,11 @@ def access_links(request):
                 AccessLinkEvent.objects.create(link=link, actor=request.user, action='edit' if instance else 'create')
                 messages.success(request, 'Посилання збережено.')
                 return redirect('access_links')
-    connection = TailscaleConnection.objects.filter(pk=1).first() or TailscaleConnection()
     links = owned_links(request).select_related('class_group', 'student__class_group', 'assignment').annotate(browser_count=Count('browsers')).order_by('-created_at', '-pk')
     for link in links:
         link.public_address = connection.public_url + reverse('access_enter', args=[link.token]) if connection.public_url else ''
     return render(request, 'feed/access_links.html', {'teacher': teacher, 'form': form,
-        'editing': instance, 'links': links, 'connection': connection})
+        'editing': instance, 'links': links, 'connection': connection, 'mode_form': mode_form})
 
 
 @teacher_required
@@ -78,7 +92,10 @@ def tailscale_settings(request):
             if action == 'save':
                 form = ConnectionForm(request.POST, instance=connection)
                 if form.is_valid():
-                    form.save()
+                    if connection.pk:
+                        TailscaleConnection.objects.filter(pk=1).update(**form.cleaned_data, updated_at=timezone.now())
+                    else:
+                        form.save()
                     AccessLinkEvent.objects.create(actor=request.user, action='tailscale_save')
                     messages.success(request, 'Налаштування збережено. Публікація тунелю керується окремими кнопками.')
                     return redirect('tailscale_settings')

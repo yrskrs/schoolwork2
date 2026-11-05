@@ -1,6 +1,7 @@
 """Explicit optional CLI adapter. Never install software, use a shell or reset other routes."""
 import json
 import subprocess
+import shutil
 from urllib.parse import urlsplit
 from django.conf import settings
 
@@ -10,7 +11,7 @@ class TailscaleError(Exception):
 
 
 def run(*arguments):
-    binary = getattr(settings, 'SCHOOLNET_TAILSCALE_BINARY', '')
+    binary = getattr(settings, 'SCHOOLNET_TAILSCALE_BINARY', '') or shutil.which('tailscale')
     if not binary:
         raise TailscaleError('Керування Tailscale із сайту не підключено. Дивіться інструкцію нижче.')
     try:

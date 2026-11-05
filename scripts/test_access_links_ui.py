@@ -139,6 +139,14 @@ def main():
             assert cdp.evaluate('document.documentElement.scrollWidth<=document.documentElement.clientWidth+1'), 'Mobile horizontal overflow'
             screenshot('access-links-mobile.png')
             cdp.call('Emulation.setDeviceMetricsOverride', {'width': 1440, 'height': 1100, 'deviceScaleFactor': 1, 'mobile': False})
+            cdp.evaluate("document.querySelector('#id_allow_without_link').checked=true;document.querySelector('#public-access-mode-form button').click()")
+            cdp.until("document.querySelector('#id_allow_without_link')?.checked===true && document.body?.innerText.includes('Відкритий доступ')")
+            navigate(public + '/', "document.body?.innerText.includes('Навчальне завдання')")
+            assert 'schoolnet_public_access' not in cdp.evaluate('document.cookie')
+            navigate(local + '/teacher/access-links/', "!!document.querySelector('#public-access-mode-form')")
+            cdp.evaluate("document.querySelector('#id_allow_without_link').checked=false;document.querySelector('#public-access-mode-form button').click()")
+            cdp.until("document.querySelector('#id_allow_without_link')?.checked===false")
+            navigate(public + '/', "document.body?.innerText.includes('Потрібне посилання')")
             personal = AccessLink.objects.get(kind='student')
             navigate(public + '/', "document.body?.innerText.includes('Потрібне посилання')")
             navigate(public + reverse('access_enter', args=[personal.token]), "!!document.querySelector('.access-open')")
@@ -166,7 +174,7 @@ def main():
             screenshot('revoked-access.png')
             personal.refresh_from_db(); assert personal.revoked_at is not None
             result = {'passed': True, 'links_created': 4, 'real_browser_submission': saved.pk,
-                      'revocation': True, 'mobile_width': 390, 'screenshots': sorted(p.name for p in artifacts.glob('*.png')),
+                      'revocation': True, 'open_mode_on_off': True, 'mobile_width': 390, 'screenshots': sorted(p.name for p in artifacts.glob('*.png')),
                       'js_errors': cdp.errors}
             (artifacts / 'result.json').write_text(json.dumps(result, ensure_ascii=False, indent=2))
             print(json.dumps(result, ensure_ascii=False))

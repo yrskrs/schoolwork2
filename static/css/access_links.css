@@ -44,3 +44,6 @@
 
 .access-copy input{flex:1}
 .access-copy button{flex-shrink:0;white-space:nowrap}
+
+.access-mode-switch{display:flex;align-items:center;gap:10px;margin:16px 0 8px;cursor:pointer}
+.access-mode-switch input{width:20px;height:20px;flex-shrink:0;accent-color:var(--color-primary,#176c78)}

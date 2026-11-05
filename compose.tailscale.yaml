@@ -1,0 +1,9 @@
+# Optional host Tailscale control for the web admin. Select explicitly; not part of the default stack.
+services:
+  app:
+    environment:
+      SCHOOLNET_TAILSCALE_BINARY: /usr/local/bin/tailscale
+      SCHOOLNET_TAILSCALE_TARGET_PORT: '${APP_PORT:-8000}'
+    volumes:
+      - /usr/bin/tailscale:/usr/local/bin/tailscale:ro
+      - /var/run/tailscale:/var/run/tailscale:ro

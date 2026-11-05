@@ -61,3 +61,16 @@ class AccessLinkForm(forms.ModelForm):
         if data.get('expires_at') and data['expires_at'] <= timezone.now():
             self.add_error('expires_at', 'Час завершення має бути в майбутньому.')
         return data
+
+
+class PublicAccessModeForm(forms.ModelForm):
+    class Meta:
+        model = TailscaleConnection
+        fields = ['allow_without_link']
+        help_texts = {'allow_without_link': 'Учні зможуть відкривати звичайну адресу сайту без секретного посилання. Вхід учителя залишається обов’язковим.'}
+
+    def clean_allow_without_link(self):
+        value = self.cleaned_data['allow_without_link']
+        if value and not self.instance.enabled:
+            raise forms.ValidationError('Спочатку увімкніть підключення Tailscale в налаштуваннях.')
+        return value

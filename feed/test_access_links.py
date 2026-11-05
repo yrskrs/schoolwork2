@@ -365,10 +365,66 @@ class PublicAccessTests(TestCase):
         self.assertNotIn('Іваненко', response.content.decode())
         self.assertTrue(response.json()['duplicate_info']['is_duplicate'])
 
+    def test_open_mode_allows_plain_urls_but_not_teacher_or_private_resources(self):
+        TailscaleConnection.objects.update(allow_without_link=True)
+        self.assertEqual(self.get('/').status_code, 200)
+        self.assertEqual(self.get('/api/classes/').status_code, 200)
+        self.assertEqual(self.get('/api/students-autocomplete/').status_code, 200)
+        self.assertEqual(self.get(reverse('assignment_detail', args=[self.one.pk])).status_code, 200)
+        self.assertEqual(self.get(reverse('assignment_detail', args=[self.draft.pk])).status_code, 404)
+        for url in ['/teacher/access-links/', '/api/server-stats/', '/setup/', '/media/private.txt']:
+            self.assertEqual(self.get(url).status_code, 404, url)
+        self.assertEqual(self.get('/teacher/login/').status_code, 200)
+        material = AssignmentFile.objects.create(assignment=self.one,
+            file=SimpleUploadedFile('open.txt', b'public material'), original_name='open.txt')
+        response = self.get(material.file.url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(b''.join(response.streaming_content), b'public material')
+
+    def test_turning_open_mode_off_immediately_restores_protection(self):
+        link = self.link('class', class_group=self.a)
+        self.enter(link)
+        link.revoked_at = timezone.now(); link.save()
+        TailscaleConnection.objects.update(allow_without_link=True)
+        self.assertEqual(self.get('/').status_code, 200)
+        self.assertEqual(self.get(reverse('assignment_detail', args=[self.two.pk])).status_code, 200)
+        TailscaleConnection.objects.update(allow_without_link=False)
+        self.assertEqual(self.get('/').status_code, 403)
+        self.assertEqual(Client().get('/', **PUBLIC).status_code, 403)
+
+    def test_disabled_connection_always_closes_public_access_even_in_open_mode(self):
+        TailscaleConnection.objects.update(enabled=False, allow_without_link=True)
+        self.assertEqual(self.get('/').status_code, 403)
+        self.assertEqual(self.client.get('/', **LAN).status_code, 200)
+
+    def test_only_admin_can_save_global_access_mode_and_connection_is_preserved(self):
+        self.client.force_login(self.other_user)
+        response = self.client.post(reverse('access_links'), {'action': 'access_mode', 'allow_without_link': 'on'}, **LAN)
+        self.assertEqual(response.status_code, 403)
+        self.client.force_login(self.user)
+        response = self.client.post(reverse('access_links'), {'action': 'access_mode', 'allow_without_link': 'on', 'enabled': '', 'public_url': 'https://other.ts.net'}, **LAN)
+        self.assertEqual(response.status_code, 302)
+        connection = TailscaleConnection.objects.get(pk=1)
+        self.assertTrue(connection.enabled); self.assertTrue(connection.allow_without_link)
+        self.assertEqual(connection.public_url, 'https://' + HOST)
+        self.assertContains(self.client.get(reverse('access_links'), **LAN), 'Відкритий доступ')
+        self.client.post(reverse('access_links'), {'action': 'access_mode'}, **LAN)
+        connection.refresh_from_db(); self.assertFalse(connection.allow_without_link)
+        self.assertEqual(AccessLinkEvent.objects.filter(action__in=['public_open', 'public_protected']).count(), 2)
+
+    def test_open_mode_requires_enabled_connection_and_csrf(self):
+        self.client.force_login(self.user)
+        TailscaleConnection.objects.update(enabled=False)
+        response = self.client.post(reverse('access_links'), {'action': 'access_mode', 'allow_without_link': 'on'}, **LAN)
+        self.assertContains(response, 'Спочатку увімкніть підключення Tailscale')
+        self.assertFalse(TailscaleConnection.objects.get(pk=1).allow_without_link)
+        client = Client(enforce_csrf_checks=True); client.force_login(self.user)
+        self.assertEqual(client.post(reverse('access_links'), {'action': 'access_mode', 'allow_without_link': 'on'}, **LAN).status_code, 403)
+
 
 class TailscaleAdapterTests(TestCase):
     def test_cli_not_configured_is_optional_and_never_invoked(self):
-        with override_settings(SCHOOLNET_TAILSCALE_BINARY=''), patch('feed.tailscale_service.subprocess.run') as run:
+        with override_settings(SCHOOLNET_TAILSCALE_BINARY=''), patch('feed.tailscale_service.shutil.which', return_value=None), patch('feed.tailscale_service.subprocess.run') as run:
             with self.assertRaises(tailscale_service.TailscaleError):
                 tailscale_service.status()
             run.assert_not_called()
@@ -397,6 +453,13 @@ class TailscaleAdapterTests(TestCase):
                 with self.assertRaises(tailscale_service.TailscaleError):
                     tailscale_service.set_funnel(connection, True)
                 run.assert_not_called()
+
+    @override_settings(SCHOOLNET_TAILSCALE_BINARY='')
+    def test_existing_cli_is_detected_without_explicit_binary_setting(self):
+        with patch('feed.tailscale_service.shutil.which', return_value='/usr/local/bin/tailscale'), patch('feed.tailscale_service.subprocess.run') as run:
+            run.return_value.returncode = 0; run.return_value.stdout = '{}'
+            tailscale_service.run('status', '--json')
+            self.assertEqual(run.call_args.args[0], ['/usr/local/bin/tailscale', 'status', '--json'])
 
 
 class AccessLoggingTests(TestCase):

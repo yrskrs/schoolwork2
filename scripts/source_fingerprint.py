@@ -3,7 +3,7 @@ import hashlib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-ROOT_FILES = ('Dockerfile', 'compose.yaml', 'compose.integration.yaml', 'VERSION',
+ROOT_FILES = ('Dockerfile', 'compose.yaml', 'compose.integration.yaml', 'compose.tailscale.yaml', 'VERSION',
               'requirements.txt', 'requirements-docker.txt', 'requirements-docker.lock', 'gunicorn.conf.py', 'manage.py')
 SOURCE_ROOTS = ('cloud_backup', 'feed', 'schoolnet', 'school_sync', 'runner', 'static', 'templates', 'scripts')
 EXTENSIONS = {'.py','.html','.js','.css','.ttf','.txt'}

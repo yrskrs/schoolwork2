@@ -8478,7 +8478,7 @@ def teacher_generate_assignment_criteria(request):
 
 def api_classes_list(request):
     """Повертає класи вчителя або класи, дозволені публічним посиланням."""
-    if not get_teacher_or_none(request) and not link_for(request):
+    if not get_teacher_or_none(request) and not link_for(request) and not getattr(request, 'public_open_access', False):
         return redirect('teacher_login')
     from .models import ClassGroup
     classes = scope_classes(request, teaching_classes(ClassGroup.objects.all())).order_by('grade', 'letter', 'name')
