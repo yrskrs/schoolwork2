@@ -108,6 +108,14 @@ def main():
                 image = cdp.call('Page.captureScreenshot', {'format': 'png', 'captureBeyondViewport': False})
                 (artifacts / name).write_bytes(base64.b64decode(image['data']))
 
+            def check_student_dialogs(mode):
+                for kind, marker in [('guide', 'guide-tab-btn-teacher'), ('changelog', 'changelog-pane-teacher')]:
+                    cdp.evaluate(f"document.querySelector('[data-school-menu]').open=true;document.querySelector('#site-{kind}-btn').click()")
+                    cdp.until(f"document.querySelector('#{kind}-modal')?.style.display==='flex'")
+                    assert cdp.evaluate(f"!document.getElementById('{marker}')"), 'Teacher-only content leaked to pupil'
+                    screenshot(f'{mode}-{kind}.png')
+                    cdp.evaluate('closeGuideModal()' if kind == 'guide' else 'closeChangelogModal()')
+
             navigate(local + '/teacher/settings/tailscale/', "document.querySelector('h1')?.textContent==='Tailscale'")
             assert cdp.evaluate("document.body?.innerText.includes('Не підключено')")
             cdp.evaluate("document.querySelector('#id_enabled').checked=true;document.querySelector('#id_public_url').value='https://school.tail123.ts.net';document.querySelector('#id_public_url').form.querySelector('button[type=submit]').click()")
@@ -143,6 +151,7 @@ def main():
             cdp.until("document.querySelector('#id_allow_without_link')?.checked===true && document.body?.innerText.includes('Відкритий доступ')")
             navigate(public + '/', "document.body?.innerText.includes('Навчальне завдання')")
             assert 'schoolnet_public_access' not in cdp.evaluate('document.cookie')
+            check_student_dialogs('open-mode')
             navigate(local + '/teacher/access-links/', "!!document.querySelector('#public-access-mode-form')")
             cdp.evaluate("document.querySelector('#id_allow_without_link').checked=false;document.querySelector('#public-access-mode-form button').click()")
             cdp.until("document.querySelector('#id_allow_without_link')?.checked===false")
@@ -154,6 +163,7 @@ def main():
             cdp.evaluate("document.querySelector('.access-open').click()")
             cdp.until("location.pathname==='/' && document.body?.innerText.includes('Навчальне завдання')")
             screenshot('student-feed.png')
+            check_student_dialogs('link-mode')
             navigate(public + reverse('submit_assignment', args=[assignment.pk]), "!!document.querySelector('#id_full_name')")
             cdp.until("document.readyState==='complete'")
             assert cdp.evaluate("document.querySelector('#id_full_name').disabled && document.querySelector('#id_full_name').value==='Петренко Олена'")
@@ -174,7 +184,7 @@ def main():
             screenshot('revoked-access.png')
             personal.refresh_from_db(); assert personal.revoked_at is not None
             result = {'passed': True, 'links_created': 4, 'real_browser_submission': saved.pk,
-                      'revocation': True, 'open_mode_on_off': True, 'mobile_width': 390, 'screenshots': sorted(p.name for p in artifacts.glob('*.png')),
+                      'revocation': True, 'open_mode_on_off': True, 'pupil_dialogs_open_and_link_modes': True, 'mobile_width': 390, 'screenshots': sorted(p.name for p in artifacts.glob('*.png')),
                       'js_errors': cdp.errors}
             (artifacts / 'result.json').write_text(json.dumps(result, ensure_ascii=False, indent=2))
             print(json.dumps(result, ensure_ascii=False))

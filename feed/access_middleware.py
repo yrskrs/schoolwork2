@@ -55,7 +55,7 @@ class PublicAccessMiddleware:
                 raise Http404
             return None
         public_names = {'index', 'feed_fragment', 'calendar_fragment', 'feed_check_updates',
-            'clear_class_filter', 'api_classes_list', 'submission_notifications', 'api_students_autocomplete',
+            'clear_class_filter', 'api_classes_list', 'ui_dialog', 'submission_notifications', 'api_students_autocomplete',
             'assignment_detail', 'submit_assignment', 'submit_success', 'submission_detail',
             'student_submissions_portal', 'my_submissions', 'ai_job_status', 'file_preview', 'file_view', 'file_download',
             'assignment_ai_understanding_student', 'student_ai_self_check', 'client_heartbeat', 'client_disconnect'}

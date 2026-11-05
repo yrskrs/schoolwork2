@@ -421,6 +421,38 @@ class PublicAccessTests(TestCase):
         client = Client(enforce_csrf_checks=True); client.force_login(self.user)
         self.assertEqual(client.post(reverse('access_links'), {'action': 'access_mode', 'allow_without_link': 'on'}, **LAN).status_code, 403)
 
+    def assert_student_dialogs(self, client=None):
+        client = client or self.client
+        for kind, teacher_marker in [('guide', 'guide-tab-btn-teacher'), ('changelog', 'changelog-pane-teacher')]:
+            response = client.get(reverse('ui_dialog', args=[kind]), **PUBLIC)
+            self.assertContains(response, f'id="{kind}-modal"')
+            self.assertNotContains(response, teacher_marker)
+            self.assertIn('no-store', response['Cache-Control'])
+        self.assertEqual(client.get(reverse('ui_dialog', args=['invalid']), **PUBLIC).status_code, 404)
+        self.assertEqual(client.post(reverse('ui_dialog', args=['guide']), **PUBLIC).status_code, 405)
+
+    def test_public_help_and_changelog_work_in_open_mode_without_grant(self):
+        TailscaleConnection.objects.update(allow_without_link=True)
+        self.assert_student_dialogs()
+
+    def test_public_help_and_changelog_work_for_every_link_scope(self):
+        for kind, target in [('site', {}), ('class', {'class_group': self.a}),
+                             ('student', {'student': self.pupil}), ('assignment', {'assignment': self.one})]:
+            with self.subTest(kind=kind):
+                client = Client()
+                self.enter(self.link(kind, **target), client)
+                self.assert_student_dialogs(client)
+
+    def test_public_dialogs_still_require_access_in_protected_mode(self):
+        for kind in ('guide', 'changelog'):
+            url = reverse('ui_dialog', args=[kind])
+            self.assertEqual(self.get(url).status_code, 403)
+        link = self.link()
+        self.enter(link)
+        link.revoked_at = timezone.now(); link.save()
+        for kind in ('guide', 'changelog'):
+            self.assertEqual(self.get(reverse('ui_dialog', args=[kind])).status_code, 403)
+
 
 class TailscaleAdapterTests(TestCase):
     def test_cli_not_configured_is_optional_and_never_invoked(self):
