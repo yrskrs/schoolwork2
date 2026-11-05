@@ -113,7 +113,7 @@ def access_enter(request, token):
         browser = str(uuid.uuid4())
     with transaction.atomic():
         # Serialize revocation/edit with the exchange and count accepted exchanges only.
-        link = AccessLink.objects.select_for_update().select_related('class_group', 'student__class_group', 'assignment').get(pk=link.pk)
+        link = AccessLink.objects.select_for_update(of=('self',)).select_related('class_group', 'student__class_group', 'assignment').get(pk=link.pk)
         if not link.active:
             return render(request, 'feed/access_required.html', status=403)
         AccessVisitor.objects.get_or_create(link=link, browser_hash=hashlib.sha256(browser.encode()).hexdigest())
