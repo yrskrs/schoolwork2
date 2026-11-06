@@ -72,8 +72,11 @@ def access_links(request):
     links = owned_links(request).select_related('class_group', 'student__class_group', 'assignment').annotate(browser_count=Count('browsers')).order_by('-created_at', '-pk')
     for link in links:
         link.public_address = connection.public_url + reverse('access_enter', args=[link.token]) if connection.public_url else ''
+    active_count = sum(1 for link in links if link.active)
+    inactive_count = len(links) - active_count
     return render(request, 'feed/access_links.html', {'teacher': teacher, 'form': form,
-        'editing': instance, 'links': links, 'connection': connection, 'mode_form': mode_form})
+        'editing': instance, 'links': links, 'connection': connection, 'mode_form': mode_form,
+        'active_count': active_count, 'inactive_count': inactive_count})
 
 
 @teacher_required
