@@ -116,6 +116,11 @@ STATIC_URL = '/static/'
 STATICFILES_DIRS = [BASE_DIR / 'static']
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 WHITENOISE_USE_FINDERS = True
+# Precompress public assets during the existing collectstatic step; keep URLs stable.
+STORAGES = {
+    'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
+    'staticfiles': {'BACKEND': 'whitenoise.storage.CompressedStaticFilesStorage'},
+}
 
 # ─── Медіа-файли (завантажені вчителем) ────────────────────────────────────────
 MEDIA_URL = '/media/'

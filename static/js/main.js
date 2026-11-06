@@ -28,6 +28,50 @@ window.mountDeferredDialog = async function (id) {
     return loading;
 };
 
+
+// Load optional dialog programs only after the user asks to open them.
+const dialogScriptLoads = new Map();
+window.registerLazyDialog = function (url, names) {
+    for (const name of names) {
+        if (typeof window[name] === 'function') continue;
+        const lazyOpen = async function (...args) {
+            const opener = document.activeElement;
+            try {
+                if (!dialogScriptLoads.has(url)) {
+                    const ready = new Promise((resolve, reject) => {
+                        const script = document.createElement('script');
+                        script.src = url;
+                        script.onload = resolve;
+                        script.onerror = () => { script.remove(); reject(new Error('dialog script unavailable')); };
+                        document.head.appendChild(script);
+                    });
+                    dialogScriptLoads.set(url, ready);
+                }
+                opener?.setAttribute('aria-busy', 'true');
+                await dialogScriptLoads.get(url);
+                if (window[name] === lazyOpen) throw new Error('dialog opener unavailable');
+                return await window[name].apply(this, args);
+            } catch (_) {
+                dialogScriptLoads.delete(url);
+                const notice = document.createElement('div');
+                notice.className = 'alert alert-error';
+                notice.setAttribute('role', 'alert');
+                notice.style.cssText = 'position:fixed;bottom:16px;right:16px;z-index:10000;max-width:90vw;';
+                notice.textContent = 'Не вдалося завантажити вікно. Перевірте з’єднання та повторіть спробу.';
+                document.body.appendChild(notice);
+                setTimeout(() => notice.remove(), 6000);
+            } finally {
+                opener?.removeAttribute('aria-busy');
+            }
+        };
+        window[name] = lazyOpen;
+    }
+};
+// Some page-specific dialogs are rendered before this base script.
+const pendingDialogPrograms = window.schoolDialogQueue || [];
+window.schoolDialogQueue = {push(entry) { window.registerLazyDialog(entry.url, entry.names); }};
+pendingDialogPrograms.forEach(entry => window.schoolDialogQueue.push(entry));
+
 /**
  * SchoolNet — Головний JavaScript (Vanilla JS, без CDN)
  * Функції: перемикач теми, модальне вікно, фільтри, форми
