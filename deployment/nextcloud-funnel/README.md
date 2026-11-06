@@ -43,10 +43,44 @@ the secret or a full private Nextcloud configuration.
 On 2026-11-06, a disposable DOCX was created, edited, saved and reopened with its
 text intact, then moved to normal Trash. The original root directory retained
 four files and five folders. Healthcheck, editor API and exact SDK path returned
-200 with certificate validation enabled. Photos “On this day” still returned 404
-for DAV SEARCH, and EuroOffice font administration returned 500; these additional
-features are unresolved and are not concealed by the proxy.
+200 with certificate validation enabled. The additional Photos and font-manager
+issues found during that audit were resolved in the follow-up below.
 
 Office rollback: restore its three previous address fields from the owner's
 private configuration, then remove the two Office locations and reload nginx.
 The Viewer proxy rollback described above is independent of document data.
+
+
+## Follow-up: Photos and font manager, 2026-11-06
+
+Photos defaults to the user's `/Photos` source folder. That folder was absent
+for the audited owner account, so authenticated DAV SEARCH returned 404.
+Creating the normal empty `Photos` folder through Files restored SEARCH to 207;
+“On this day” now correctly displays an empty state without a new Photos error.
+Existing files were not moved. Other users with intentionally different photo
+sources should keep them; verify their configured paths rather than changing
+all accounts or suppressing 404 responses globally.
+
+The document-server font API returned 502 because Supervisor's `adminpanel`
+program was stopped with `autostart=false`. The connector correctly reported
+that the service must be enabled. The host backup is
+`/home/yrsadmin/euro-office/ds-adminpanel.before-font-fix.conf`.
+Setting that program's `autostart=true`, rereading and updating the program
+restored it without restarting document editing services. The helper
+`enable-font-manager.sh` reproduces this change and makes a private backup.
+This configuration survives restart of the existing container. When replacing
+or recreating the document-server container, set its supported environment
+variable `ADMINPANEL_ENABLED=true`; otherwise a fresh image defaults to disabled.
+No global Docker privileges or Nextcloud file permissions were changed.
+
+The public `/office/admin` and `/office/admin/` routes return 404. The font API
+remains available to Nextcloud via its internal document-server URL; direct
+requests without a JWT return 401. Nextcloud admin checks and the existing
+short-lived service JWT remain enforced. No bootstrap credentials are published.
+
+Verified: font list 200, regeneration accepted 202, status polling 200, final
+`status=done` with `error=null` (39 seconds). The UI reported “Font regeneration
+completed successfully.” No fonts were uploaded or deleted, and no documents
+were changed for this follow-up. `nginx -t` and the helper's `sh -n` passed.
+Rollback of the font-service change: restore the backed-up Supervisor program
+file, reread and update only `adminpanel`. Retain the public admin-route block.
