@@ -52,7 +52,7 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
 from django.contrib import messages
-from django.http import JsonResponse, HttpResponse, FileResponse, Http404
+from django.http import JsonResponse, HttpResponse, HttpResponseForbidden, FileResponse, Http404
 from django.utils import timezone
 from django.db.models import Q, Sum, Count
 from django.db import transaction
@@ -5617,7 +5617,12 @@ def teacher_students(request):
         submissions_by_class[cid].append(sub)
 
     from .student_matcher import is_same_student_identity
+    profile_class_ids = set(teacher.classes.values_list('pk', flat=True)) if teacher else set()
     for st in students_list:
+        st.profile_url = (
+            reverse('student_detail', kwargs={'student_name': st.get_full_name()}) + f'?student_id={st.pk}'
+            if request.user.is_superuser or st.class_group_id in profile_class_ids else ''
+        )
         c_subs = submissions_by_class.get(st.class_group_id, [])
         from .roster_identity import has_stable_class_roster
         allow_names = not has_stable_class_roster(st.class_group) and not Student.objects.filter(

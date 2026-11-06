@@ -26,6 +26,10 @@ load_dotenv(BASE_DIR / '.env')
 SECRET_KEY = os.environ.get('SECRET_KEY', 'schoolnet-local-secret-key-change-in-production-2026')
 DEBUG = os.environ.get('DEBUG', 'True') == 'True'
 ALLOWED_HOSTS = ['*']  # Локальна мережа — дозволяємо всі хости
+# Enable only behind a trusted HTTPS reverse proxy such as the local Funnel.
+if os.environ.get('SCHOOLNET_TRUST_PROXY_HTTPS', '').lower() in ('1', 'true'):
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in os.environ.get('CSRF_TRUSTED_ORIGINS', '').split(',') if origin.strip()]
 
 # ─── Застосунки ────────────────────────────────────────────────────────────────
 INSTALLED_APPS = [
