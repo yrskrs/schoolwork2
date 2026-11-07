@@ -149,7 +149,7 @@
           {% for link in links %}
           <tr class="access-table-row access-kind-{{ link.kind }} {% if link.active %}is-active{% else %}is-inactive{% endif %}"
               data-kind="{{ link.kind }}"
-              data-status="{% if link.active %}active{% else %}inactive{% endif %}"
+              data-status="{% if link.active %}active{% else %}inactive{% endif %}">
             <td class="col-type">
               <span class="access-kind-badge kind-{{ link.kind }}">
                 {% if link.kind == 'site' %}🌐 Весь сайт

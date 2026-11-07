@@ -38,6 +38,9 @@ class AccessLinkListTests(TestCase):
         self.assertEqual(len(tree.xpath('//details[contains(@class,"access-link-card")]')),15)
         self.assertTrue(all(not image.get('src') and image.get('data-src') for image in tree.xpath('//img[@data-src]')))
         self.assertIn('no-store',response.headers['Cache-Control'])
+        rows=tree.xpath('//tr[contains(@class,"access-table-row")]')
+        self.assertEqual(len(rows),15)
+        self.assertTrue(all(len(row.xpath('./td')) == 7 for row in rows), 'Each link must align with all seven table headings')
 
     def test_search_finds_old_link_beyond_first_page_and_empty_results_keep_form(self):
         response=self.page(q='Link 000')
