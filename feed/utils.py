@@ -146,7 +146,7 @@ def _cache_doc_conversion(prefix: str):
             shared_key = None
             try:
                 from .ai_context import file_cache_key, evidence_cache
-                purpose = 'html-' + prefix + ('-assets-v1' if preview_assets else '') + ('-reading-v1' if reading_mode else '')
+                purpose = 'html-' + prefix + ('-sheet-formulas-v1' if prefix in ('xlsx', 'ods') else '') + ('-assets-v1' if preview_assets else '') + ('-reading-v1' if reading_mode else '')
                 shared_key = file_cache_key(file_path, purpose, repr((args, kwargs)))
                 cached = evidence_cache().get(shared_key)
                 from .review_preview import assets_available
@@ -507,7 +507,7 @@ def _convert_xlsx_openpyxl_to_html(file_path: str, max_rows: int = 100) -> Tuple
                     
                     formula = ""
                     if cell_formula.data_type == 'f':
-                        formula = f"={cell_formula.value}"
+                        formula = str(cell_formula.value)
                     elif value != "":
                         formula = str(value)
                         

@@ -121,3 +121,24 @@ class ReviewWorkbenchTests(TestCase):
             with self.assertRaises(RuntimeError):
                 self.client.post(reverse('grade_submission',args=[self.sub.pk]),{'grade':'9','comment_text':'Відгук'})
         self.sub.refresh_from_db(); self.assertIsNone(self.sub.grade)
+
+    def test_safe_spreadsheet_preview_keeps_formula_without_executable_handlers(self):
+        import tempfile
+        from pathlib import Path
+        from openpyxl import Workbook
+        from .utils import convert_xlsx_to_html
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / 'formulas.xlsx'
+            book = Workbook(); book.active['A1'] = 4; book.active['B1'] = '=A1*2'; book.save(path)
+            content, error = convert_xlsx_to_html(str(path),preview_assets=True)
+        self.assertIsNone(error)
+        page = html.fromstring(content)
+        self.assertEqual(page.xpath('//td[@data-formula="=A1*2"]/@data-formula'),['=A1*2'])
+        self.assertEqual(page.xpath('//td[@data-formula="4"]/@data-formula'),['4'])
+        self.assertFalse(page.xpath('//*[@onclick]'))
+
+    def test_formula_attribute_is_inert_text_and_does_not_keep_scripts(self):
+        from .document_html import safe_document_html
+        page = html.fromstring(safe_document_html('<table class="excel-table"><tr><td data-formula="=SUM(A1:A2)" onclick="alert(1)">3<script>alert(2)</script></td></tr></table>'))
+        self.assertEqual(page.xpath('//td/@data-formula'),['=SUM(A1:A2)'])
+        self.assertFalse(page.xpath('//script | //*[@onclick]'))

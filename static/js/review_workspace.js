@@ -105,6 +105,12 @@
             const mobileNav = document.querySelector('.platform-teacher-mobile-nav'); if (mobileNav) observer.observe(mobileNav);
         }
         if (window.MutationObserver) new MutationObserver(fitViewport).observe(document.documentElement, {attributes:true,attributeFilter:['style','data-font-scale']});
+        // Sanitized and asynchronously inserted spreadsheets use trusted delegated events.
+        // Formula strings are displayed as text; they are never evaluated.
+        documentPane.addEventListener('click', event => {
+            const cell = event.target.closest('.excel-table td');
+            if (cell && !cell.classList.contains('row-header') && window.showFormula) window.showFormula(cell);
+        });
         window.selectReviewPanel = select;
         window.updateReviewCommentCount = function () {
             const count = document.querySelectorAll('#fv-comments-container .fv-comment-card').length;
