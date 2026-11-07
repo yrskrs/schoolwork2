@@ -1,0 +1,94 @@
+{
+  "backup": "/home/yrsadmin/school-deployments/review-workspace-trial-20261108-003927",
+  "records": {
+    "candidate-test-results.json": [
+      [
+        "schoolwork2",
+        0,
+        [
+          "Ran 957 tests in 87.134s",
+          "OK (skipped=2)"
+        ]
+      ]
+    ],
+    "candidate-updater-test-results.json": {
+      "schoolwork2": {
+        "returncode": 0,
+        "summary": [
+          "Ran 35 tests in 1.900s",
+          "OK (skipped=1)"
+        ]
+      }
+    },
+    "deployment-results.json": {
+      "schoolwork2": {
+        "image": "schoolwork2-app:4.8.11-fedb699",
+        "revision": "fedb6994ada63555b86e2db891d266b0a289ee63",
+        "runtime_checks": [
+          {
+            "container": "/schoolnet_app",
+            "healthy": true,
+            "mounts_unchanged": true,
+            "networks_unchanged": true,
+            "ports_unchanged": true,
+            "command_unchanged": true,
+            "environment_changed_keys": [
+              "SCHOOLWORK_IMAGE"
+            ],
+            "revision": "fedb6994ada63555b86e2db891d266b0a289ee63",
+            "version": "4.8.11",
+            "image": "schoolwork2-app:4.8.11-fedb699"
+          },
+          {
+            "container": "/schoolnet_ai_worker",
+            "healthy": true,
+            "mounts_unchanged": true,
+            "networks_unchanged": true,
+            "ports_unchanged": true,
+            "command_unchanged": true,
+            "environment_changed_keys": [
+              "SCHOOLWORK_IMAGE"
+            ],
+            "revision": "fedb6994ada63555b86e2db891d266b0a289ee63",
+            "version": "4.8.11",
+            "image": "schoolwork2-app:4.8.11-fedb699"
+          }
+        ],
+        "http_checks": [
+          "http://127.0.0.1:8080/healthz/",
+          "https://localwork.tail9ec47d.ts.net/"
+        ],
+        "database_tables": 50,
+        "changed_tables": [
+          "django_session",
+          "feed_rosterstate"
+        ],
+        "status": "deployed"
+      }
+    },
+    "image-retention-results.json": {
+      "total": 6,
+      "removed": [
+        "schoolwork2-app:4.8.7-184c781"
+      ],
+      "errors": [],
+      "protected_overflow": false,
+      "remaining_images": 5,
+      "approx_filesystem_bytes_reclaimed": 469671936
+    },
+    "sync-state-verification.json": {
+      "schoolwork2": {
+        "table": "feed_rosterstate",
+        "rows_before": 1,
+        "rows_after": 1,
+        "unchanged_except_peer_service_fields": true,
+        "changed_field_paths": [
+          "data.peers.0.last_success",
+          "data.peers.0.next_retry",
+          "data.peers.1.last_success",
+          "data.peers.1.next_retry"
+        ]
+      }
+    }
+  }
+}
