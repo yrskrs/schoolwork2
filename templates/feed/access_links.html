@@ -44,8 +44,8 @@
   <input type="hidden" name="status" value="{{ selected_status }}">
   <div class="access-search-box">
     <span class="access-search-icon" aria-hidden="true">🔍</span>
-    <input type="search" id="access-search-input" name="q" value="{{ query }}" maxlength="160" class="form-input access-search" placeholder="Пошук за назвою, класом, учнем чи завданням..." aria-label="Пошук посилань">
-    <button type="button" id="access-search-clear" class="access-search-clear" title="Очистити пошук" {% if not query %}hidden{% endif %} aria-label="Очистити пошук">✕</button>
+    <input type="search" id="access-search-input" name="q" value="{{ access_query }}" maxlength="160" class="form-input access-search" placeholder="Пошук за назвою, класом, учнем чи завданням..." aria-label="Пошук посилань">
+    <button type="button" id="access-search-clear" class="access-search-clear" title="Очистити пошук" {% if not access_query %}hidden{% endif %} aria-label="Очистити пошук">✕</button>
   </div>
   <div class="access-toolbar-actions">
     <button type="submit" class="btn btn-primary btn-sm">Шукати</button>

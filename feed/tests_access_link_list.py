@@ -42,6 +42,9 @@ class AccessLinkListTests(TestCase):
     def test_search_finds_old_link_beyond_first_page_and_empty_results_keep_form(self):
         response=self.page(q='Link 000')
         self.assertEqual([link.name for link in response.context['links']],['Link 000'])
+        tree=html.fromstring(response.content)
+        self.assertEqual(tree.xpath('//*[@id="access-search-input"]/@value'), ['Link 000'])
+        self.assertEqual(tree.xpath('//*[@id="navbar-search"]/@value'), [''])
         response=self.page(q='not-existing')
         self.assertEqual(len(response.context['links']),0)
         self.assertContains(response,'id="access-filter-form"')

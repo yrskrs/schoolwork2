@@ -1,6 +1,7 @@
 import hashlib
 import io
 import uuid
+from urllib.parse import urlencode
 from django.conf import settings
 from django.contrib import messages
 from django.core import signing
@@ -98,14 +99,13 @@ def access_links(request):
     page_obj = paginator.get_page(request.GET.get('page'))
     for link in page_obj.object_list:
         link.public_address = connection.public_url + reverse('access_enter', args=[link.token]) if connection.public_url else ''
-    from urllib.parse import urlencode
     list_query = urlencode({'q': query, 'status': status, 'per_page': per_page})
     return render(request, 'feed/access_links.html', {
         'teacher': teacher, 'form': form, 'editing': instance, 'links': page_obj.object_list,
         'connection': connection, 'mode_form': mode_form,
         'total_count': counts['total'], 'active_count': counts['active'],
         'inactive_count': counts['total'] - counts['active'],
-        'query': query, 'selected_status': status, 'per_page': per_page,
+        'access_query': query, 'selected_status': status, 'per_page': per_page,
         'page_obj': page_obj, 'list_query': list_query,
         'page_numbers': paginator.get_elided_page_range(page_obj.number, on_each_side=1, on_ends=1),
     })
