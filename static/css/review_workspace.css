@@ -141,3 +141,36 @@ body .page-wrapper.fv-review-page{max-width:1920px!important;padding:12px 24px 1
 }
 
 .fv-revision-grade .fv-grade-number{width:142px;min-height:58px}.fv-revision-grade .fv-grade-number #grade-input{font-size:12px;width:100%}.fv-revision-grade .fv-grade-number>span:last-child{display:none}
+
+/* Reading colours belong to the document subtree, including late office previews.
+   They do not recolour screenshots, images or embedded PDF/HTML originals. */
+#fv-document-card .fv-viewer-body[data-reader-theme="sepia"] {
+    --fv-reading-paper:#fbf2de; --fv-reading-stage:#e9dfca; --fv-reading-ink:#513f2c;
+    --fv-reading-muted:#74634d; --fv-reading-line:#d3c5a9; --fv-reading-head:#eee2c8;
+}
+#fv-document-card .fv-viewer-body[data-reader-theme="dark"] {
+    --fv-reading-paper:#24343e; --fv-reading-stage:#14242d; --fv-reading-ink:#e2edf0;
+    --fv-reading-muted:#b1c4cb; --fv-reading-line:#4b626b; --fv-reading-head:#304852;
+}
+#fv-document-card .fv-viewer-body:is([data-reader-theme="sepia"],[data-reader-theme="dark"]) {
+    --color-surface:var(--fv-reading-paper); --color-bg-secondary:var(--fv-reading-head);
+    --color-text-primary:var(--fv-reading-ink); --color-text-secondary:var(--fv-reading-muted);
+    --color-text-muted:var(--fv-reading-muted); --color-border:var(--fv-reading-line);
+    background:var(--fv-reading-stage)!important; color:var(--fv-reading-ink)!important;
+}
+#fv-document-card .fv-viewer-body:is([data-reader-theme="sepia"],[data-reader-theme="dark"]) :is(.document-page,.fv-text-paper,.excel-sheet) {
+    background:var(--fv-reading-paper)!important; color:var(--fv-reading-ink)!important;
+    border-color:var(--fv-reading-line)!important;
+}
+#fv-document-card .fv-viewer-body:is([data-reader-theme="sepia"],[data-reader-theme="dark"]) :is(.document-page,.fv-text-paper) :is(p,span,div,li,h1,h2,h3,h4,h5,h6,td,th,pre,code,strong,em,b,i) {
+    color:var(--fv-reading-ink)!important; background-color:transparent!important;
+}
+#fv-document-card .fv-viewer-body:is([data-reader-theme="sepia"],[data-reader-theme="dark"]) :is(.document-page,.fv-text-paper) :is(table,td,th) {
+    background:var(--fv-reading-paper)!important; border-color:var(--fv-reading-line)!important;
+}
+#fv-document-card .fv-viewer-body:is([data-reader-theme="sepia"],[data-reader-theme="dark"]) :is(.document-page,.fv-text-paper) :is(thead th,.row-header) {
+    background:var(--fv-reading-head)!important;
+}
+.fv-reading-tools [data-reader-theme-option][aria-pressed="true"] {
+    outline:2px solid var(--color-primary); outline-offset:1px;
+}
