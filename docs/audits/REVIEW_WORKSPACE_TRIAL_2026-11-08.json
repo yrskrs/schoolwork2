@@ -6,7 +6,7 @@
         "schoolwork2",
         0,
         [
-          "Ran 959 tests in 87.600s",
+          "Ran 959 tests in 86.634s",
           "OK (skipped=2)"
         ]
       ]
@@ -15,15 +15,15 @@
       "schoolwork2": {
         "returncode": 0,
         "summary": [
-          "Ran 35 tests in 1.904s",
+          "Ran 35 tests in 1.891s",
           "OK (skipped=1)"
         ]
       }
     },
     "deployment-results.json": {
       "schoolwork2": {
-        "image": "schoolwork2-app:4.8.11-530f5b4",
-        "revision": "530f5b4fb1a30ebbdbe5adc4772a60f3462f3ab4",
+        "image": "schoolwork2-app:4.8.11-5e7a628",
+        "revision": "5e7a628ae18ca0abe7707209adea0645a0a91bfb",
         "runtime_checks": [
           {
             "container": "/schoolnet_app",
@@ -35,9 +35,9 @@
             "environment_changed_keys": [
               "SCHOOLWORK_IMAGE"
             ],
-            "revision": "530f5b4fb1a30ebbdbe5adc4772a60f3462f3ab4",
+            "revision": "5e7a628ae18ca0abe7707209adea0645a0a91bfb",
             "version": "4.8.11",
-            "image": "schoolwork2-app:4.8.11-530f5b4"
+            "image": "schoolwork2-app:4.8.11-5e7a628"
           },
           {
             "container": "/schoolnet_ai_worker",
@@ -49,9 +49,9 @@
             "environment_changed_keys": [
               "SCHOOLWORK_IMAGE"
             ],
-            "revision": "530f5b4fb1a30ebbdbe5adc4772a60f3462f3ab4",
+            "revision": "5e7a628ae18ca0abe7707209adea0645a0a91bfb",
             "version": "4.8.11",
-            "image": "schoolwork2-app:4.8.11-530f5b4"
+            "image": "schoolwork2-app:4.8.11-5e7a628"
           }
         ],
         "http_checks": [
@@ -69,7 +69,7 @@
     "image-retention-results.json": {
       "total": 6,
       "removed": [
-        "schoolwork2-app:4.8.8-cfc3188"
+        "schoolwork2-app:4.8.9-4d3bedf"
       ],
       "errors": [],
       "protected_overflow": false,
@@ -94,13 +94,13 @@
     "containers": [
       {
         "name": "schoolnet_app",
-        "image": "schoolwork2-app:4.8.11-530f5b4",
+        "image": "schoolwork2-app:4.8.11-5e7a628",
         "health": "healthy",
         "restart_count": 0
       },
       {
         "name": "schoolnet_ai_worker",
-        "image": "schoolwork2-app:4.8.11-530f5b4",
+        "image": "schoolwork2-app:4.8.11-5e7a628",
         "health": "healthy",
         "restart_count": 0
       }
@@ -136,6 +136,54 @@
     "mobile_has_no_horizontal_overflow": true,
     "mobile_footer_visible": true,
     "browser_console_errors": 0,
-    "light_and_dark_themes_checked": true
+    "light_and_dark_themes_checked": true,
+    "reading_themes": {
+      "modes": {
+        "default": {
+          "cell": "rgba(0, 0, 0, 0)",
+          "mode": "default",
+          "paper": "rgb(255, 255, 255)",
+          "selected": [
+            "default"
+          ],
+          "sidebar": "rgb(255, 255, 255)",
+          "site": "light",
+          "text": "rgb(25, 46, 59)"
+        },
+        "sepia": {
+          "cell": "rgb(251, 242, 222)",
+          "mode": "sepia",
+          "paper": "rgb(251, 242, 222)",
+          "selected": [
+            "sepia"
+          ],
+          "sidebar": "rgb(255, 255, 255)",
+          "site": "light",
+          "text": "rgb(81, 63, 44)"
+        },
+        "dark": {
+          "cell": "rgb(36, 52, 62)",
+          "mode": "dark",
+          "paper": "rgb(36, 52, 62)",
+          "selected": [
+            "dark"
+          ],
+          "sidebar": "rgb(255, 255, 255)",
+          "site": "light",
+          "text": "rgb(226, 237, 240)"
+        }
+      },
+      "persisted_after_reload": "dark",
+      "mobile": {
+        "body": 390,
+        "paper": "rgb(251, 242, 222)",
+        "theme": "sepia",
+        "width": 390
+      },
+      "main_theme_unchanged": true,
+      "sidebar_unchanged": true,
+      "grade_and_feedback_unchanged": true,
+      "console_errors": 0
+    }
   }
 }
