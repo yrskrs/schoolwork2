@@ -6,7 +6,7 @@
         "schoolwork2",
         0,
         [
-          "Ran 957 tests in 87.134s",
+          "Ran 959 tests in 87.600s",
           "OK (skipped=2)"
         ]
       ]
@@ -15,15 +15,15 @@
       "schoolwork2": {
         "returncode": 0,
         "summary": [
-          "Ran 35 tests in 1.900s",
+          "Ran 35 tests in 1.904s",
           "OK (skipped=1)"
         ]
       }
     },
     "deployment-results.json": {
       "schoolwork2": {
-        "image": "schoolwork2-app:4.8.11-fedb699",
-        "revision": "fedb6994ada63555b86e2db891d266b0a289ee63",
+        "image": "schoolwork2-app:4.8.11-530f5b4",
+        "revision": "530f5b4fb1a30ebbdbe5adc4772a60f3462f3ab4",
         "runtime_checks": [
           {
             "container": "/schoolnet_app",
@@ -35,9 +35,9 @@
             "environment_changed_keys": [
               "SCHOOLWORK_IMAGE"
             ],
-            "revision": "fedb6994ada63555b86e2db891d266b0a289ee63",
+            "revision": "530f5b4fb1a30ebbdbe5adc4772a60f3462f3ab4",
             "version": "4.8.11",
-            "image": "schoolwork2-app:4.8.11-fedb699"
+            "image": "schoolwork2-app:4.8.11-530f5b4"
           },
           {
             "container": "/schoolnet_ai_worker",
@@ -49,9 +49,9 @@
             "environment_changed_keys": [
               "SCHOOLWORK_IMAGE"
             ],
-            "revision": "fedb6994ada63555b86e2db891d266b0a289ee63",
+            "revision": "530f5b4fb1a30ebbdbe5adc4772a60f3462f3ab4",
             "version": "4.8.11",
-            "image": "schoolwork2-app:4.8.11-fedb699"
+            "image": "schoolwork2-app:4.8.11-530f5b4"
           }
         ],
         "http_checks": [
@@ -69,12 +69,11 @@
     "image-retention-results.json": {
       "total": 6,
       "removed": [
-        "schoolwork2-app:4.8.7-184c781"
+        "schoolwork2-app:4.8.8-cfc3188"
       ],
       "errors": [],
       "protected_overflow": false,
-      "remaining_images": 5,
-      "approx_filesystem_bytes_reclaimed": 469671936
+      "remaining_images": 5
     },
     "sync-state-verification.json": {
       "schoolwork2": {
@@ -90,5 +89,53 @@
         ]
       }
     }
+  },
+  "runtime_checks": {
+    "containers": [
+      {
+        "name": "schoolnet_app",
+        "image": "schoolwork2-app:4.8.11-530f5b4",
+        "health": "healthy",
+        "restart_count": 0
+      },
+      {
+        "name": "schoolnet_ai_worker",
+        "image": "schoolwork2-app:4.8.11-530f5b4",
+        "health": "healthy",
+        "restart_count": 0
+      }
+    ],
+    "assets": [
+      {
+        "path": "css/review_workspace.css",
+        "status": 200,
+        "matches_source": true
+      },
+      {
+        "path": "js/review_workspace.js",
+        "status": 200,
+        "matches_source": true
+      }
+    ],
+    "old_image_available": true,
+    "funnel_unchanged": true,
+    "rollback_script_ready": true
+  },
+  "ui_checks": {
+    "normal_teacher_login": true,
+    "preserved_functional_links": 34,
+    "missing_functional_links": [],
+    "preserved_form_actions": true,
+    "grading_fields_unchanged": true,
+    "saved_grade_unchanged": true,
+    "real_xlsx_opened": true,
+    "real_docx_material_document_and_text_opened": true,
+    "production_grade_comment_and_coauthor_writes": false,
+    "real_spreadsheet_cell_value_verified": "0.4",
+    "mobile_width": 320,
+    "mobile_has_no_horizontal_overflow": true,
+    "mobile_footer_visible": true,
+    "browser_console_errors": 0,
+    "light_and_dark_themes_checked": true
   }
 }
