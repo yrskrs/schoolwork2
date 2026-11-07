@@ -97,11 +97,6 @@
 <h1 id="assignment-topic">{{ assignment.title }}</h1>
 <div class="assignment-detail-overview-meta">
     <span class="meta-item"><span class="meta-icon">👤</span> <span>Вчитель: <strong>{{ assignment.teacher.full_name }}</strong></span></span>
-    {% if assignment.due_date %}
-    <span class="meta-item"><span class="meta-icon">⏰</span> <span>Здати до <strong>{{ assignment.due_date|date:"d.m.Y" }}</strong></span></span>
-    {% elif not assignment.no_submission_required %}
-    <span class="meta-item"><span class="meta-icon">⏳</span> <span>Без обмежень за часом</span></span>
-    {% endif %}
 </div>
 {% if is_archived or assignment.is_archived %}
 <p class="assignment-detail-status" role="status">🔒 Прийом робіт закрито. Завдання можна переглядати. Якщо потрібно здати роботу, звернися до вчителя.</p>

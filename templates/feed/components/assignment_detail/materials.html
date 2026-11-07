@@ -1,8 +1,7 @@
 {% if has_assignment_materials %}
 <section class="assignment-detail-materials" id="assignment-materials-section" aria-labelledby="assignment-materials-title">
-<p class="assignment-detail-kicker">Крок 2 · Матеріали вчителя</p>
-<h2 id="assignment-materials-title">Файли й посилання до завдання</h2>
-<p class="assignment-detail-section-help">Це файли від учителя. Переглянь їх тут або завантаж на комп’ютер. Свою виконану роботу прикріпиш на наступній сторінці.</p>
+<h2 id="assignment-materials-title">Матеріали від учителя</h2>
+<p class="assignment-detail-section-help">Переглядай тут або завантаж на комп’ютер. Свою виконану роботу додаси під час здачі.</p>
                     <!-- Єдиний блок посилань на одному рівні -->
                     {% if assignment.link_url or assignment.additional_links.all %}
                     <div class="assignment-links-card">
@@ -43,7 +42,7 @@
         <div class="assignment-file-box">
             <div class="assignment-detail-file-header" style="padding:14px 16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
                 <div class="assignment-detail-file-identity" style="display:flex;align-items:center;gap:12px;min-width:0;">
-                    <span aria-hidden="true" style="font-size:28px;">{{ f.icon }}</span>
+                    <span class="assignment-file-type" aria-hidden="true">{{ f.extension|upper }}</span>
                     <div>
                         <strong class="assignment-detail-filename">{{ f.original_name }}</strong>
                         <div class="form-hint">{{ f.extension|upper }} · {{ f.size_display }}</div>

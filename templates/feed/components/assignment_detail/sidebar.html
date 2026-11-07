@@ -1,4 +1,11 @@
 <aside class="assignment-detail-sidebar" id="detail-sidebar" aria-label="Допомога та інформація про завдання">
+{% if not is_teacher %}{% include 'feed/components/assignment_detail/completion.html' %}
+{% include 'feed/components/assignment_detail/student_actions.html' %}{% endif %}
+{% if is_teacher %}
+<details class="assignment-detail-info"><summary>Розділи завдання</summary>
+{% include 'feed/components/assignment_detail/navigation.html' %}
+</details>
+{% endif %}
             {% if can_edit %}
             <div class="sidebar-card" style="padding:16px;background:var(--color-bg-secondary);border:1px solid var(--color-border);border-left:4px solid #f59e0b;">
                 <div class="page-hero-kicker" style="margin-bottom:6px;color:var(--color-warning);">Режим вчителя</div>
@@ -195,7 +202,7 @@
 
                 </div>
             </details>
-{% if not is_teacher %}{% include 'feed/components/assignment_detail/student_actions.html' %}{% endif %}
+
 
 
 <details class="assignment-detail-info" {% if is_teacher %}open{% endif %}>

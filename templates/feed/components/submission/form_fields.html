@@ -9,7 +9,8 @@
     <div id="form-validation-alert-text" style="margin-top:2px;font-size:11.5px;color:var(--color-text-primary);line-height:1.35;"></div>
 </div>
 
-<h2 class="school-submission-step"><span class="school-step-number">1</span> {% if form.public_personal_access %}Твій персональний доступ{% else %}Обери клас і своє ім’я{% endif %}</h2>
+<section class="submission-form-card" aria-labelledby="submission-identity-title">
+<h2 id="submission-identity-title" class="school-submission-step"><span class="school-step-number">1</span> {% if form.public_personal_access %}Твій персональний доступ{% else %}Хто здає{% endif %}</h2>
 <p class="school-form-help">{% if form.public_personal_access %}Ім’я та клас уже задані посиланням учителя. Додай свою відповідь і надішли роботу.{% else %}Реєстрація не потрібна. Спочатку обери клас — тоді з’явиться список учнів.{% endif %}</p>
 <!-- Рядок особистих даних учня (Прізвище + Клас в 2 колонки поруч) -->
 <div class="submission-identification-grid">
@@ -93,8 +94,10 @@
     </div>
 </div>
 
-<h2 class="school-submission-step"><span class="school-step-number">2</span> Додай свою виконану роботу</h2>
-<p class="school-form-help">Тут потрібно прикріпити твій результат, а не матеріали вчителя.</p>
+</section>
+<section class="submission-form-card" aria-labelledby="submission-work-title">
+<h2 id="submission-work-title" class="school-submission-step"><span class="school-step-number">2</span> Твоя виконана робота</h2>
+<p class="school-form-help">Прикріпи свій результат, а не матеріали вчителя. Підходять Word, Excel, Access, PDF, фото та архіви.</p>
 <!-- Блок завантаження файлів (Компактна зона Drag-and-Drop) -->
 <div class="form-group" style="margin:0;">
     <label class="form-label" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
@@ -106,12 +109,13 @@
         <span style="font-size:26px;flex-shrink:0;">📁</span>
         <div style="text-align:left;">
             <div style="font-weight:800;font-size:13px;color:var(--color-text-primary);" id="file-drop-label">
-                Натисніть або перетягніть файли сюди
+                Натисни або перетягни файли сюди
             </div>
             <div style="font-size:11px;color:var(--color-text-muted);">
-                Документи Word/Excel/Access, фото зошита, код або архіви
+                Можна кілька файлів одразу
             </div>
         </div>
+        <span class="btn btn-secondary submission-file-picker" aria-hidden="true">Вибрати файли</span>
         <div style="display:none;">
             {{ form.files }}
         </div>
@@ -179,3 +183,5 @@
 
     </div>
 </details>
+
+</section>

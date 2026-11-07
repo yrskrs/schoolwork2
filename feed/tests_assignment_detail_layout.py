@@ -47,9 +47,15 @@ class AssignmentDetailLayoutTests(TestCase):
         instruction = article.get_element_by_id('assignment-desc-content')
         self.assertEqual(instruction.xpath('.//li/text()'), ['Виконай вправу 6.', 'Збережи результат.'])
         section_ids = article.xpath('./section/@id')
-        self.assertEqual(section_ids, ['assignment-instructions-card', 'assignment-materials-section', 'assignment-submit-section'])
+        self.assertEqual(section_ids, ['assignment-instructions-card', 'assignment-materials-section'])
         layout = article.getparent()
         self.assertEqual([child.tag for child in layout], ['article', 'aside'])
+        sidebar = page.get_element_by_id('detail-sidebar')
+        self.assertEqual(sidebar[0].get('id'), 'assignment-submit-section')
+        self.assertTrue(sidebar[0].xpath('.//a[@class="btn btn-primary btn-submit-work"]'))
+        self.assertFalse(page.xpath('//*[contains(@onclick,"copyAssignmentDescription")]'))
+        self.assertNotIn('Реєстрація не потрібна', sidebar[0].text_content())
+        self.assertFalse(page.xpath('//*[contains(@class,"assignment-detail-sticky-tools")]'))
         self.assertEqual(len(layout.xpath('.//button[@onclick="openCriteriaModal()"]')), 1)
         dialog = page.get_element_by_id('assignment-file-modal')
         self.assertEqual(dialog.tag, 'dialog')
@@ -121,11 +127,13 @@ class AssignmentDetailLayoutTests(TestCase):
 
     def test_web_links_and_video_are_grouped_with_files(self):
         AssignmentLink.objects.create(assignment=self.assignment, url='https://example.org/material', label='Довідка до вправи')
+        self.assignment.link_url = 'https://example.org/main-material'
         self.assignment.youtube_url = 'https://youtu.be/abcdefghijk'
-        self.assignment.save(update_fields=['youtube_url'])
+        self.assignment.save(update_fields=['youtube_url', 'link_url'])
         page = self.page(self.client.get(self.url))
         materials = page.get_element_by_id('assignment-materials-section')
         self.assertTrue(materials.xpath('.//a[@href="https://example.org/material"]'))
+        self.assertTrue(materials.xpath('.//a[@href="https://example.org/main-material"]'))
         self.assertTrue(materials.xpath('.//iframe[contains(@src,"youtube.com/embed/abcdefghijk")]'))
         self.assertTrue(materials.xpath('.//*[@id="assignment-files-section"]'))
 

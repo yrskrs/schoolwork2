@@ -5,29 +5,21 @@
 {% block meta_description %}{{ assignment.description|striptags|truncatechars:150|default:assignment.title }}{% endblock %}
 
 {% block extra_head %}
-<link rel="stylesheet" href="{% static 'css/assignment_detail.css' %}">
+<link rel="stylesheet" href="{% static 'css/assignment_detail.css' %}?ui=20261107-r2">
 <link rel="stylesheet" href="{% static 'css/material_preview.css' %}?ui=20261018-r4">
 <!-- Prism.js для підсвічування синтаксису коду -->
 <link href="{% static 'vendor/prism/prism-tomorrow.min.css' %}" rel="stylesheet" />
+<link rel="stylesheet" href="{% static 'css/assignment_workspace.css' %}?ui=20261107-r2">
 {% endblock %}
 
 {% block content %}
-<div class="page-wrapper assignment-detail-page">
+<div class="page-wrapper assignment-detail-page assignment-workspace">
 {% include 'feed/components/assignment_detail/overview.html' %}
-<div class="assignment-detail-sticky-tools" aria-label="Навігація та здавання завдання">
-{% include 'feed/components/assignment_detail/navigation.html' %}
-{% if not is_teacher and not assignment.no_submission_required and not is_archived and not assignment.is_archived %}
-<div class="assignment-detail-send-bar">
-<a href="{{ assignment_submit_url }}" class="btn btn-primary">📤 Здати роботу</a>
-</div>
-{% endif %}
-</div>
 <div class="assignment-detail-layout">
 <article class="assignment-detail-main" aria-labelledby="assignment-topic">
 {% include 'feed/components/assignment_detail/instructions.html' %}
 {% include 'feed/components/assignment_detail/teacher_ai.html' %}
 {% include 'feed/components/assignment_detail/materials.html' %}
-{% if not is_teacher %}{% include 'feed/components/assignment_detail/completion.html' %}{% endif %}
 </article>
 {% include 'feed/components/assignment_detail/sidebar.html' %}
 </div>
@@ -45,57 +37,7 @@
 <script src="{% static 'vendor/prism/prism-markup.min.js' %}"></script>
 <script src="{% static 'vendor/prism/prism-json.min.js' %}"></script>
 
-<script>
-function copyAssignmentDescription(btn) {
-    var descEl = document.getElementById('assignment-desc-content');
-    if (!descEl) return;
-    var text = descEl.innerText || descEl.textContent || '';
-    if (!text.trim()) return;
 
-    var btnEl = btn || document.getElementById('copy-desc-btn') || document.querySelector('.btn-copy-desc');
-    var textEl = btnEl ? (btnEl.querySelector('.copy-label') || document.getElementById('copy-desc-text')) : null;
-    var iconEl = btnEl ? (btnEl.querySelector('.copy-icon') || document.getElementById('copy-desc-icon')) : null;
-
-    function showCopiedFeedback() {
-        if (textEl && iconEl && btnEl) {
-            var origText = textEl.textContent;
-            var origIcon = iconEl.textContent;
-            textEl.textContent = 'Скопійовано!';
-            iconEl.textContent = '✅';
-            btnEl.classList.add('copied');
-            setTimeout(function() {
-                textEl.textContent = origText;
-                iconEl.textContent = origIcon;
-                btnEl.classList.remove('copied');
-            }, 2000);
-        }
-    }
-
-    if (navigator.clipboard && window.isSecureContext) {
-        navigator.clipboard.writeText(text.trim()).then(showCopiedFeedback).catch(function() {
-            fallbackCopy();
-        });
-    } else {
-        fallbackCopy();
-    }
-
-    function fallbackCopy() {
-        try {
-            var textarea = document.createElement('textarea');
-            textarea.value = text.trim();
-            textarea.style.position = 'fixed';
-            textarea.style.opacity = '0';
-            document.body.appendChild(textarea);
-            textarea.select();
-            document.execCommand('copy');
-            document.body.removeChild(textarea);
-            showCopiedFeedback();
-        } catch (e) {
-            console.error('Copy failed:', e);
-        }
-    }
-}
-</script>
 
 {% if is_teacher %}
 {% include 'feed/components/reschedule_modal.html' %}

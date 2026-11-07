@@ -5,11 +5,13 @@
 {% block meta_description %}Форма здачі роботи по завданню {{ assignment.title }}{% endblock %}
 
 {% block extra_head %}
-<link rel="stylesheet" href="{% static 'css/submission_layout.css' %}">
+<link rel="stylesheet" href="{% static 'css/submission_layout.css' %}?ui=20261107-r2">
+<link rel="stylesheet" href="{% static 'css/assignment_workspace.css' %}?ui=20261107-r2">
 {% endblock %}
 
 {% block content %}
-<div class="page-wrapper submission-page" id="submit-page-wrapper">
+<div class="page-wrapper submission-page submission-workspace" id="submit-page-wrapper">
+    <a class="submission-back-link" href="{% url 'assignment_detail' assignment.pk %}{% if selected_submission_class_id %}?class={{ selected_submission_class_id }}{% endif %}">← До сторінки завдання</a>
     <header class="submission-context" aria-labelledby="submission-topic">
         <div class="submission-context-main">
             <p class="submission-kicker">📤 Здача виконаної роботи</p>
@@ -20,16 +22,11 @@
                 {% if assignment.due_date %}<span>⏰ До {{ assignment.due_date|date:"d.m.Y" }}</span>{% endif %}
             </div>
         </div>
-        <div class="submission-class-check">
-            <span>Обраний клас</span>
-            <strong data-submission-class aria-live="polite">{{ selected_submission_class_name }}</strong>
-            {% if form.class_group.disabled %}<span>Клас задано посиланням</span>{% else %}<a href="#id_class_group">Перевірити / змінити</a>{% endif %}
-        </div>
     </header>
 
     <form method="POST" enctype="multipart/form-data" id="submit-form" novalidate>
         <div class="submission-page-layout">
-            <section class="submit-action-card submission-form-card" aria-label="Учень та матеріали роботи">
+            <div class="submission-form-main">
                 {% if form.non_field_errors %}
                 <div class="alert alert-error" role="alert">
                     {% for error in form.non_field_errors %}<p>{{ error }}</p>{% endfor %}
@@ -37,35 +34,36 @@
                 {% endif %}
                 {% include 'feed/components/submission/form_fields.html' %}
 
-            </section>
-            <aside class="submission-sidebar" aria-labelledby="submission-help-title">
-        <footer class="submission-send-bar">
-            <button type="submit" id="submission-send-button" class="btn btn-primary">📤 Надіслати виконану роботу</button>
-            <div data-upload-progress-slot class="submission-progress-slot"></div>
-        </footer>
-
-                <details class="submission-side-card submission-more-options" open>
-                    <summary id="submission-help-title">{% if form.public_personal_access %}Допомога{% else %}Допомога та групова робота{% endif %}</summary>
-                    <div class="submission-side-body">
-                        <div class="submission-side-actions">
-                            <button type="button" onclick="openCriteriaModal()" class="btn btn-secondary">📋 Критерії оцінювання</button>
-                            <button {% if form.public_personal_access %}hidden{% endif %} type="button" id="btn-add-coauthor" onclick="addCoauthorField()" class="btn btn-secondary" title="Для роботи, виконаної в парі чи групі">👥 Додати співавтора</button>
-                            <a href="{% url 'assignment_detail' assignment.pk %}" class="btn btn-secondary">← До сторінки завдання</a>
-                        </div>
-
-                        <details class="submission-side-disclosure">
-                            <summary>💡 Як здати роботу</summary>
-                            <p class="submission-help-text">Перевірте тему й клас, оберіть своє ім’я зі списку та прикріпіть файли. Посилання або відповідь можна додати в розділі «Посилання або коментар». Натисніть «Надіслати виконану роботу» й дочекайтеся підтвердження.</p>
-                        </details>
-                        <div class="submission-ai-info">{% include 'feed/components/submission/ai_info.html' %}</div>
+            </div>
+            <aside class="submission-sidebar" aria-label="Готовність та допомога">
+                <footer class="submission-send-bar" aria-labelledby="submission-readiness-title">
+                    <h2 id="submission-readiness-title">Готовність до здачі</h2>
+                    <dl class="submission-readiness" aria-live="polite">
+                        <div><dt>Клас</dt><dd>{% if not form.class_group.disabled %}<a href="#id_class_group" title="Перевірити або змінити клас">{% endif %}<strong data-submission-class>{{ selected_submission_class_name }}</strong>{% if not form.class_group.disabled %}</a>{% endif %}</dd></div>
+                        <div><dt>Прізвище та ім’я</dt><dd data-submission-name>{{ form.full_name.value|default:"Не обрано" }}</dd></div>
+                        <div><dt>Твоя робота</dt><dd data-submission-work>{% if form.link.value or form.comment_student.value %}Відповідь додано{% else %}Не додано{% endif %}</dd></div>
+                    </dl>
+                    {% if form.class_group.disabled %}<p class="submission-help-text">Клас задано посиланням учителя.</p>{% endif %}
+                    <button type="submit" id="submission-send-button" class="btn btn-primary">Надіслати виконану роботу</button>
+                    <div data-upload-progress-slot class="submission-progress-slot"></div>
+                </footer>
+                <div class="submission-side-card submission-tools-card">
+                    <div class="submission-side-actions">
+                        <button type="button" onclick="openCriteriaModal()" class="btn btn-secondary">Критерії оцінювання</button>
+                        <button {% if form.public_personal_access %}hidden{% endif %} type="button" id="btn-add-coauthor" onclick="addCoauthorField()" class="btn submission-coauthor-button" aria-controls="coauthors-wrapper" title="Для роботи, виконаної в парі чи групі"><span aria-hidden="true">👥 ＋</span><span>Додати співавтора<small>Для роботи в парі чи групі</small></span></button>
                     </div>
-                </details>
-                        <details class="submission-side-card submission-condition-card" id="submission-condition-details">
-                            <summary>Умова й матеріали вчителя</summary>
-                            <div class="submission-condition-body submission-side-body">
-                                {% include 'feed/components/submission/condition.html' %}
-                            </div>
-                        </details>
+                    <details class="submission-condition-card submission-side-disclosure" id="submission-condition-details">
+                        <summary>Умова й матеріали вчителя</summary>
+                        <div class="submission-condition-body">
+                            {% include 'feed/components/submission/condition.html' %}
+                        </div>
+                    </details>
+                    <details class="submission-side-disclosure">
+                        <summary>Як здати роботу</summary>
+                        <p class="submission-help-text">Перевірте тему й клас, оберіть своє ім’я зі списку та прикріпіть файли. Посилання або відповідь можна додати в розділі «Посилання, текстова відповідь або коментар». Натисніть «Надіслати виконану роботу» й дочекайтеся підтвердження.</p>
+                    </details>
+                </div>
+                <div class="submission-ai-info">{% include 'feed/components/submission/ai_info.html' %}</div>
             </aside>
         </div>
 
@@ -188,7 +186,7 @@
 {% endblock %}
 
 {% block extra_scripts %}
-<script src="{% static 'js/submission_layout.js' %}"></script>
+<script src="{% static 'js/submission_layout.js' %}?ui=20261107-r2"></script>
 <script>
 // ── Множинне завантаження файлів з Drag-and-Drop та списком ──────────────────
 const dropZone = document.getElementById('file-drop-zone');
@@ -226,6 +224,7 @@ function formatFileSize(bytes) {
 function updateFilesUI() {
     if (!filesInput) return;
     filesInput.files = fileStore.files;
+    filesInput.dispatchEvent(new Event('submission:files-updated', { bubbles: true }));
 
     if (fileStore.files.length === 0) {
         if (filesContainer) filesContainer.style.display = 'none';

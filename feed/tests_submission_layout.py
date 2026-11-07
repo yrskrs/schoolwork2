@@ -9,7 +9,7 @@ from django.utils import timezone
 from lxml import html
 
 from .middleware import set_has_admin
-from .models import Assignment, ClassGroup, Submission, Subject, Teacher
+from .models import Assignment, AssignmentFile, AssignmentLink, ClassGroup, Submission, Subject, Teacher
 
 
 class StudentSubmissionLayoutTests(TestCase):
@@ -53,6 +53,12 @@ class StudentSubmissionLayoutTests(TestCase):
         self.assertFalse(form.xpath('.//form'))
         self.assertTrue(form.xpath('.//aside//button[@id="btn-add-coauthor" and @type="button"]'))
         self.assertTrue(form.xpath('.//aside//button[@onclick="openCriteriaModal()"]'))
+        self.assertTrue(form.xpath('.//aside//button[@id="btn-add-coauthor" and contains(@class,"submission-coauthor-button")]'))
+        self.assertEqual(form.xpath('.//section[contains(@class,"submission-form-card")]/@aria-labelledby'), ['submission-identity-title', 'submission-work-title'])
+        self.assertTrue(form.xpath('.//a[@href="#id_class_group"]'))
+        self.assertTrue(form.xpath('.//*[@data-submission-name]'))
+        self.assertTrue(form.xpath('.//*[@data-submission-work]'))
+        self.assertTrue(page.xpath('//a[@href=$url]', url=reverse('assignment_detail', args=[self.assignment.pk]) + f'?class={self.classes[1].pk}'))
         self.assertTrue(form.xpath('.//footer//button[@type="submit" and @id="submission-send-button"]'))
         for name in ['full_name', 'class_group', 'files', 'link', 'comment_student', 'csrfmiddlewaretoken']:
             self.assertTrue(form.xpath('.//*[@name=$name]', name=name), name)
@@ -137,3 +143,27 @@ class StudentSubmissionLayoutTests(TestCase):
         response = self.client.get(self.url)
         self.assertContains(response, 'Самостійна робота:')
         self.assertNotContains(response, 'Використання ШІ дозволено:')
+
+    def test_all_teacher_material_destinations_remain_in_condition_disclosure(self):
+        material = AssignmentFile.objects.create(
+            assignment=self.assignment, file=SimpleUploadedFile('instructions.txt', b'Teacher instructions'),
+            original_name='Інструкція.txt',
+        )
+        self.assignment.link_url = 'https://example.org/primary-material'
+        self.assignment.youtube_url = 'https://youtu.be/abcdefghijk'
+        self.assignment.save(update_fields=['link_url', 'youtube_url'])
+        AssignmentLink.objects.create(assignment=self.assignment, url='https://example.org/extra-material')
+        page = self.page(self.client.get(self.url))
+        condition = page.get_element_by_id('submission-condition-details')
+        destinations = condition.xpath('.//a/@href')
+        for target in [reverse('file_download', args=[material.pk]), 'https://example.org/primary-material',
+                       'https://example.org/extra-material', 'https://www.youtube.com/watch?v=abcdefghijk']:
+            self.assertIn(target, destinations)
+        self.assertIn(self.assignment.description, condition.text_content())
+
+    def test_readiness_does_not_require_files_when_text_or_link_is_supplied(self):
+        for field, value in [('comment_student', 'Готова текстова відповідь'), ('link', 'https://example.org/answer')]:
+            with self.subTest(field=field):
+                page = self.page(self.client.post(self.url, self.data(full_name='', **{field: value})))
+                self.assertEqual(page.xpath('//*[@data-submission-work]/text()'), ['Відповідь додано'])
+                self.assertTrue(page.get_element_by_id('submission-send-button').getparent().xpath('.//*[@data-submission-work]'))
