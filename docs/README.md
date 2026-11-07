@@ -12,6 +12,7 @@
 
 ## Аудити, перевірки й історичні встановлення
 
+- [Форматування критеріїв 4.8.10](audits/CRITERIA_FORMATTING_2026-11-07.md)
 - [Сторінка завдання та здача роботи 4.8.9](audits/ASSIGNMENT_WORKSPACE_2026-11-07.md)
 - [Очищення образів і структура проєкту](audits/RETENTION_AND_ORGANIZATION_2026-11-07.md)
 - [ACCESS_TABLE_2026-11-07](audits/ACCESS_TABLE_2026-11-07.md)

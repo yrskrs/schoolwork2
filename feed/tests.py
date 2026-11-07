@@ -4521,6 +4521,7 @@ class AICriteriaGeneratorTests(TestCase):
         self.assertIn("Фізика", sent_prompt)
         self.assertIn("Хочу повний розв'язок 3 задач", sent_prompt)
         self.assertIn("12-БАЛЬНОЮ ШКАЛОЮ", sent_prompt)
+        self.assertIn("Оформлюй відповідь у Markdown", sent_prompt)
 
     def test_generate_criteria_service_when_disabled(self):
         """Перевіряємо коректну помилку, коли модуль ШІ вимкнено."""

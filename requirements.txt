@@ -42,3 +42,6 @@ defusedxml>=0.7.1,<1
 
 # Local QR generation; secret access URLs never leave the server.
 qrcode==8.2
+
+# Safe rendering of teacher criteria (Markdown tables, lists and headings).
+markdown-it-py==4.2.0

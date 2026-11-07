@@ -1318,6 +1318,11 @@ class Assignment(models.Model):
         return res
 
 
+    def get_formatted_custom_criteria(self):
+        """Presentation only: keep stored criteria intact for editing and AI grading."""
+        from .criteria_rendering import render_criteria
+        return render_criteria(self.custom_criteria)
+
     def get_formatted_description(self):
         """Повертає безпечний санітизований HTML опис завдання для відображення."""
         if not self.description:
