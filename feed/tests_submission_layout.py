@@ -58,6 +58,7 @@ class StudentSubmissionLayoutTests(TestCase):
         self.assertTrue(form.xpath('.//a[@href="#id_class_group"]'))
         self.assertTrue(form.xpath('.//*[@data-submission-name]'))
         self.assertTrue(form.xpath('.//*[@data-submission-work]'))
+        self.assertTrue(form.xpath('.//*[@data-submission-coauthors-row and @hidden]//*[@data-submission-coauthors]'))
         self.assertTrue(page.xpath('//a[@href=$url]', url=reverse('assignment_detail', args=[self.assignment.pk]) + f'?class={self.classes[1].pk}'))
         self.assertTrue(form.xpath('.//footer//button[@type="submit" and @id="submission-send-button"]'))
         for name in ['full_name', 'class_group', 'files', 'link', 'comment_student', 'csrfmiddlewaretoken']:

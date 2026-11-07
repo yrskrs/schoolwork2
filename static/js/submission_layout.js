@@ -20,6 +20,17 @@
             summary('[data-submission-class]', label, Boolean(classSelect.value));
             const name = nameInput ? nameInput.value.trim() : '';
             summary('[data-submission-name]', name || 'Не обрано', Boolean(name));
+            const coauthorRows = Array.from(form.querySelectorAll('.coauthor-row'));
+            const coauthors = coauthorRows.map(function (row) {
+                const input = row.querySelector('.coauthor-input');
+                return input ? input.value.trim() : '';
+            }).filter(Boolean);
+            const missingCoauthors = coauthorRows.length - coauthors.length;
+            const coauthorLabels = coauthors.slice();
+            if (missingCoauthors) coauthorLabels.push('Ще не обрано: ' + missingCoauthors);
+            summary('[data-submission-coauthors]', coauthorLabels.join('\n'), missingCoauthors === 0);
+            const coauthorsSummary = form.querySelector('[data-submission-coauthors-row]');
+            if (coauthorsSummary) coauthorsSummary.hidden = coauthorRows.length === 0;
             const count = filesInput && filesInput.files ? filesInput.files.length : 0;
             const hasLink = Boolean(linkInput && linkInput.value.trim());
             const hasText = Boolean(commentInput && commentInput.value.trim());
@@ -35,6 +46,11 @@
         window.addEventListener('pageshow', syncReadiness);
         form.addEventListener('submit', syncReadiness, true);
         syncReadiness();
+        const coauthorsList = document.getElementById('coauthors-list-container');
+        if (coauthorsList) {
+            // Row removal and async roster refreshes do not always emit input/change.
+            new MutationObserver(syncReadiness).observe(coauthorsList, {childList: true, subtree: true});
+        }
 
         const optionalFields = document.getElementById('submission-optional-fields');
         if (optionalFields) {

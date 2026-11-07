@@ -106,3 +106,6 @@ body .submission-workspace :is(a, button, summary, [role="button"]):focus-visibl
     body .submission-workspace .school-submission-step { font-size: 19px; }
     body .submission-workspace #submit-form .file-drop-zone { padding: 22px 12px !important; }
 }
+
+body .submission-workspace .submission-readiness > div[hidden] { display: none; }
+body .submission-workspace [data-submission-coauthors] { white-space: pre-line; }

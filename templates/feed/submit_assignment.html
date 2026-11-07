@@ -6,7 +6,7 @@
 
 {% block extra_head %}
 <link rel="stylesheet" href="{% static 'css/submission_layout.css' %}?ui=20261107-r2">
-<link rel="stylesheet" href="{% static 'css/assignment_workspace.css' %}?ui=20261107-r2">
+<link rel="stylesheet" href="{% static 'css/assignment_workspace.css' %}?ui=20261107-r3">
 {% endblock %}
 
 {% block content %}
@@ -41,6 +41,7 @@
                     <dl class="submission-readiness" aria-live="polite">
                         <div><dt>Клас</dt><dd>{% if not form.class_group.disabled %}<a href="#id_class_group" title="Перевірити або змінити клас">{% endif %}<strong data-submission-class>{{ selected_submission_class_name }}</strong>{% if not form.class_group.disabled %}</a>{% endif %}</dd></div>
                         <div><dt>Прізвище та ім’я</dt><dd data-submission-name>{{ form.full_name.value|default:"Не обрано" }}</dd></div>
+                        <div data-submission-coauthors-row hidden><dt>Співавтори</dt><dd data-submission-coauthors></dd></div>
                         <div><dt>Твоя робота</dt><dd data-submission-work>{% if form.link.value or form.comment_student.value %}Відповідь додано{% else %}Не додано{% endif %}</dd></div>
                     </dl>
                     {% if form.class_group.disabled %}<p class="submission-help-text">Клас задано посиланням учителя.</p>{% endif %}
@@ -186,7 +187,7 @@
 {% endblock %}
 
 {% block extra_scripts %}
-<script src="{% static 'js/submission_layout.js' %}?ui=20261107-r2"></script>
+<script src="{% static 'js/submission_layout.js' %}?ui=20261107-r3"></script>
 <script>
 // ── Множинне завантаження файлів з Drag-and-Drop та списком ──────────────────
 const dropZone = document.getElementById('file-drop-zone');
