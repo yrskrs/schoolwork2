@@ -21,13 +21,10 @@ WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-# Копіюємо requirements-docker.txt та requirements.txt
-COPY requirements.txt requirements-docker.txt requirements-docker.lock /app/
+# Копіюємо залежності локального запуску та фіксований серверний lock-файл
+COPY requirements.txt requirements-docker.lock /app/
 
-# Встановлюємо залежності
-# (pyqt6 ми залишаємо в оригінальному файлі, але для докера краще б його виключити,
-# якщо він не компілюється. python:3.12-slim може не мати qt-залежностей. 
-# Ми встановлюємо всі пакети)
+# Сервер використовує фіксовані залежності без необов’язкового Qt для ПК.
 RUN pip install --no-cache-dir -r requirements-docker.lock && pip check
 
 # Копіюємо решту коду
@@ -37,7 +34,7 @@ COPY . /app/
 RUN mkdir -p /app/media /app/staticfiles /app/logs
 RUN chmod -R 755 /app/media /app/staticfiles /app/logs
 ARG VCS_REF=local
-ARG APP_VERSION=4.8.7
+ARG APP_VERSION=4.8.8
 ARG SOURCE_DIGEST=unknown
 RUN python -c 'import json,os,pathlib; pathlib.Path("/app/build-info.json").write_text(json.dumps({"revision":os.environ.get("VCS_REF","local"),"source_digest":os.environ.get("SOURCE_DIGEST","unknown")}))'
 

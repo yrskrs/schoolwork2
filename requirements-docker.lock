@@ -1,8 +1,5 @@
 # Validated runtime for Python 3.12; update deliberately and run PostgreSQL/UI checks.
 Django==6.1.2
-PyQt6==6.11.0
-PyQt6-Qt6==6.11.2
-PyQt6_sip==13.13.0
 asgiref==3.12.1
 backports.zstd==1.7.0
 brotli==1.2.0

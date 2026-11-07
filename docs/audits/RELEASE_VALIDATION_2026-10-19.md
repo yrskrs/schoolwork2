@@ -1,7 +1,7 @@
 # Перевірка релізу 4.5.7 — 19.10.2026
 
 Зміна: запуск Python у вікні перевірки. Опис та обмеження:
-[docs/PYTHON_RUNNER.md](docs/PYTHON_RUNNER.md).
+[docs/PYTHON_RUNNER.md](../PYTHON_RUNNER.md).
 
 ## Перевірки коду
 

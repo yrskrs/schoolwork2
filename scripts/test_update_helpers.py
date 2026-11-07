@@ -1,5 +1,7 @@
 """Check Internet-fetch routing and safe image selection using disposable files."""
 import importlib.util
+import json
+import shutil
 import os
 from pathlib import Path
 import subprocess
@@ -54,6 +56,39 @@ class UpdateHelpers(unittest.TestCase):
             result = subprocess.run([sys.executable, str(SCRIPTS / 'select_release_image.py'), 'schooltest5'], cwd=root, capture_output=True)
             self.assertNotEqual(result.returncode, 0)
             self.assertEqual((root / '.env').read_text(), pinned)
+
+
+
+# Optional launchers must resolve the repository root after relocation.
+ROOT = Path(__file__).resolve().parents[1]
+SCHOOLTEST = (ROOT / 'app').is_dir()
+
+
+@unittest.skipUnless((ROOT / 'desktop').exists(), 'Optional PC tools are excluded from the server image')
+class DesktopLauncherPaths(unittest.TestCase):
+    def test_linux_launchers_keep_venv_and_working_directory_at_project_root(self):
+        launchers = [('start_linux.sh', 'desktop/run_gui.py'), ('start_register.sh', 'desktop/run_register.py')] if SCHOOLTEST else [
+            ('start.sh', 'desktop/launcher.py'), ('start_register.sh', 'desktop/user_manager.py')]
+        with tempfile.TemporaryDirectory(prefix='desktop paths ') as temporary:
+            root = Path(temporary) / 'project with spaces'
+            desktop = root / 'desktop';desktop.mkdir(parents=True)
+            fake_bin = root / 'fake-bin';fake_bin.mkdir()
+            fake_python = fake_bin / 'python3'
+            fake_python.write_text('#!' + sys.executable + '\nimport os,sys,json\nprint(json.dumps({"cwd":os.getcwd(),"args":sys.argv[1:]}))\n')
+            fake_python.chmod(0o755)
+            (root / 'venv/bin').mkdir(parents=True)
+            shutil.copy2(fake_python, root / 'venv/bin/python')
+            (root / 'venv/bin/activate').write_text('')
+            for name, target in launchers:
+                shutil.copy2(ROOT / 'desktop' / name, desktop / name)
+                (root / target).write_text('# no GUI execution during path tests')
+                env = dict(os.environ, PATH=str(fake_bin) + os.pathsep + os.environ['PATH'])
+                result = subprocess.run(['bash', str(desktop / name)], cwd=temporary, env=env,
+                                        capture_output=True, text=True, check=True)
+                record = json.loads(result.stdout.strip())
+                self.assertEqual(record['cwd'], str(root))
+                self.assertIn(target, ' '.join(record['args']))
+                self.assertFalse((desktop / 'venv').exists())
 
 
 if __name__ == '__main__':

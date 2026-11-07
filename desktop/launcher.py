@@ -33,8 +33,10 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QProcess, QTimer, QTime, QSettings, QUrl, qInstallMessageHandler
 from PyQt6.QtGui import QTextCursor, QColor, QTextCharFormat, QAction, QDesktopServices
 
-BASE_DIR = Path(__file__).resolve().parent
+BASE_DIR = Path(__file__).resolve().parents[1]
 LOGS_DIR = BASE_DIR / 'logs'
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
 
 
 def qt_suppress_handler(mode, context, message):

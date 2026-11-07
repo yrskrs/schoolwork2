@@ -1,18 +1,10 @@
 #!/usr/bin/env bash
 # -*- coding: utf-8 -*-
-# Скрипт запуску графічного інтерфейсу реєстрації та керування користувачами SchoolNet (Linux / macOS)
+# Скрипт запуску SchoolNet для Linux / macOS
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LAUNCHER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$LAUNCHER_DIR/.." && pwd)"
 cd "$SCRIPT_DIR"
-
-if [ -f ".env" ]; then
-    # Завантажуємо змінні з .env
-    set -a
-    source .env
-    set +a
-    # Замінюємо хост postgres на localhost:5433 для локального підключення (уникаючи конфліктів)
-    export DATABASE_URL="${DATABASE_URL/@postgres:5432/@localhost:5433}"
-fi
 
 # Вимикаємо попередження пісочниці Qt/Chromium та Wayland у Linux
 export QTWEBENGINE_DISABLE_SANDBOX=1
@@ -34,7 +26,7 @@ fi
 # 2. Перевірка та створення venv
 if [ ! -f "$SCRIPT_DIR/venv/bin/python" ]; then
     echo "========================================================"
-    echo "   SchoolNet — Реєстрація користувачів (Налаштування)"
+    echo "   Шкільні Завдання (SchoolNet) — Первинне налаштування"
     echo "========================================================"
     echo ""
     echo "📦 [1/3] Створення віртуального середовища (venv)..."
@@ -46,7 +38,7 @@ if [ ! -f "$SCRIPT_DIR/venv/bin/python" ]; then
     echo "✅ Віртуальне середовище створено."
     echo ""
 
-    echo "📥 [2/3] Встановлення бібліотек (PyQt6, Django тощо)..."
+    echo "📥 [2/3] Встановлення бібліотек (Django, PyQt6 тощо)..."
     "$SCRIPT_DIR/venv/bin/python" -m pip install --upgrade pip --quiet
     "$SCRIPT_DIR/venv/bin/pip" install -r "$SCRIPT_DIR/requirements.txt"
     echo "✅ Всі бібліотеки успішно встановлено."
@@ -56,5 +48,5 @@ if [ ! -f "$SCRIPT_DIR/venv/bin/python" ]; then
     "$SCRIPT_DIR/venv/bin/python" "$SCRIPT_DIR/manage.py" migrate --no-input >/dev/null 2>&1 || true
 fi
 
-# 3. Запуск графічного інтерфейсу реєстрації користувачів
-exec "$SCRIPT_DIR/venv/bin/python" "$SCRIPT_DIR/user_manager.py" "$@"
+# 3. Запуск графічного інтерфейсу лаунчера
+exec "$SCRIPT_DIR/venv/bin/python" "$SCRIPT_DIR/desktop/launcher.py" "$@"

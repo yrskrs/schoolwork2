@@ -1,4 +1,4 @@
-> Історичний звіт 4.7.1. З версії 4.7.2 резервування Google Drive вимкнене; поточні налаштування описані в [CLOUD_BACKUPS.md](CLOUD_BACKUPS.md).
+> Історичний звіт 4.7.1. З версії 4.7.2 резервування Google Drive вимкнене; поточні налаштування описані в [docs/guides/CLOUD_BACKUPS.md](../guides/CLOUD_BACKUPS.md).
 
 # Google Drive та перевірка відновлення — SchoolWork 4.7.1, 01.11.2026
 

@@ -21,7 +21,7 @@
 
 Публічні файли можна завантажувати за посиланням без OAuth. HTML-парсинг залишено лише як запасний спосіб перегляду публічних папок без налаштованого API, із повідомленням про його обмеження. Для приватних матеріалів потрібне одноразове налаштування OAuth у Google Cloud та згода користувача; приватні параметри в чат передавати не потрібно.
 
-Налаштування й обмеження: [docs/CLOUD_STORAGE.md](docs/CLOUD_STORAGE.md). Офіційні джерела: [дозволи Drive](https://developers.google.com/workspace/drive/api/guides/api-specific-auth), [завантаження й експорт](https://developers.google.com/workspace/drive/api/guides/manage-downloads).
+Налаштування й обмеження: [docs/CLOUD_STORAGE.md](../CLOUD_STORAGE.md). Офіційні джерела: [дозволи Drive](https://developers.google.com/workspace/drive/api/guides/api-specific-auth), [завантаження й експорт](https://developers.google.com/workspace/drive/api/guides/manage-downloads).
 
 ## Закриті проблеми аудиту
 
@@ -65,4 +65,4 @@ HTML сторінки входу скоротився з 352 021 до 34 879 б�
 
 Облікові значення, приватні хмарні папки та робочі журнали не переглядалися. Перевірки передачі використовували синтетичні облікові записи й файли. Справжній OAuth-вхід конкретного вчителя та імпорт його приватного файла не перевірялися. Багатоденна стабільність і відновлення саме цієї робочої копії не моделювалися.
 
-Машинозчитувані результати: [docs/audits/2026-10-19-cloud-fixes-results.json](docs/audits/2026-10-19-cloud-fixes-results.json). Сценарій повторення: [scripts/test_cloud_import_ui.py](scripts/test_cloud_import_ui.py).
+Машинозчитувані результати: [docs/audits/2026-10-19-cloud-fixes-results.json](2026-10-19-cloud-fixes-results.json). Сценарій повторення: [scripts/test_cloud_import_ui.py](../../scripts/test_cloud_import_ui.py).

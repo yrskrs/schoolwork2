@@ -41,6 +41,9 @@ python3 "$SCRIPT_DIR/configure_integration_network.py"
 docker compose exec -T app python manage.py check
 docker compose exec -T app python manage.py migrate --check
 python3 "$SCRIPT_DIR/verify_release.py"
+retention_args=()
+if [ -n "${IMAGE_ID:-}" ]; then retention_args+=(--protect "$IMAGE_ID"); fi
+python3 "$SCRIPT_DIR/image_retention.py" --project schoolwork2 "${retention_args[@]}" --apply || printf 'Попередження: очищення образів не завершено; оновлення працездатне.\n' >&2
 printf 'Оновлення завершене: вебсервіс і ШІ-воркер здорові.\n'
 }
 update_main "$@"
