@@ -84,3 +84,8 @@ completed successfully.” No fonts were uploaded or deleted, and no documents
 were changed for this follow-up. `nginx -t` and the helper's `sh -n` passed.
 Rollback of the font-service change: restore the backed-up Supervisor program
 file, reread and update only `adminpanel`. Retain the public admin-route block.
+
+
+## Документи в окремій вкладці
+
+У Nextcloud → Адміністрування → Euro-Office вимкніть «Відкривати файл у тій саме вкладці» (`sameTab=false`). Це штатне налаштування застосунку; проксі не повинен переписувати JavaScript для зміни вкладок. Перевірено 2026-11-07 після перезапуску сервера: створений тимчасовий DOCX відкрився в новій вкладці з повністю завантаженим редактором через HTTPS Funnel і через локальний HTTP Nextcloud; початкові вкладки файлів залишилися відкритими. Тимчасовий файл переміщено до кошика. Локальний Nextcloud використовує той самий HTTPS-редактор, тому доступ до нього з браузера потрібен і в локальній мережі.

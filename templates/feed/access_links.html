@@ -1,6 +1,6 @@
 {% extends 'base.html' %}{% load static %}
 {% block title %}Посилання доступу{% endblock %}
-{% block extra_head %}<link rel="stylesheet" href="{% static 'css/access_links.css' %}">{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'css/access_links.css' %}?v=20261107">{% endblock %}
 {% block content %}
 <div class="page-wrapper"><div class="feed-layout">
 {% include 'feed/components/teacher_sidebar.html' %}
@@ -19,7 +19,7 @@
 </section>
 
 <div class="access-grid" id="access-grid-container">
-<details class="form-card access-form-section" id="access-form-details" data-is-editing="{% if editing %}true{% else %}false{% endif %}" {% if editing %}open{% else %}open{% endif %}>
+<details class="form-card access-form-section" id="access-form-details" data-keep-open="{% if editing or form.errors %}true{% else %}false{% endif %}" data-is-editing="{% if editing %}true{% else %}false{% endif %}" {% if editing %}open{% else %}open{% endif %}>
   <summary class="access-form-summary">
     <span class="access-form-title">{% if editing %}✏️ Змінити посилання{% else %}➕ Нове посилання{% endif %}</span>
     <span class="access-form-hint">
@@ -39,34 +39,41 @@
 </details>
 
 <section aria-label="Створені посилання" class="access-list-section">
-{% if links %}
-<div class="access-toolbar" role="region" aria-label="Панель керування списком">
+{% if total_count %}
+<form method="get" id="access-filter-form" class="access-toolbar" role="search" aria-label="Пошук і фільтри посилань">
+  <input type="hidden" name="status" value="{{ selected_status }}">
   <div class="access-search-box">
     <span class="access-search-icon" aria-hidden="true">🔍</span>
-    <input type="search" id="access-search-input" class="form-input access-search" placeholder="Пошук за назвою, класом, учнем чи завданням..." aria-label="Пошук посилань">
-    <button type="button" id="access-search-clear" class="access-search-clear" title="Очистити пошук" hidden aria-label="Очистити пошук">✕</button>
+    <input type="search" id="access-search-input" name="q" value="{{ query }}" maxlength="160" class="form-input access-search" placeholder="Пошук за назвою, класом, учнем чи завданням..." aria-label="Пошук посилань">
+    <button type="button" id="access-search-clear" class="access-search-clear" title="Очистити пошук" {% if not query %}hidden{% endif %} aria-label="Очистити пошук">✕</button>
   </div>
   <div class="access-toolbar-actions">
+    <button type="submit" class="btn btn-primary btn-sm">Шукати</button>
+    <label for="access-per-page">На сторінці</label><select id="access-per-page" name="per_page" class="form-input"><option value="15" {% if per_page == 15 %}selected{% endif %}>15</option><option value="30" {% if per_page == 30 %}selected{% endif %}>30</option><option value="50" {% if per_page == 50 %}selected{% endif %}>50</option></select>
     <div class="access-filter-tabs" role="tablist" aria-label="Фільтр за статусом">
-      <button type="button" class="access-tab-btn is-active" data-filter="all" role="tab" aria-selected="true">Всі <span class="access-badge-count" id="count-all">{{ links|length }}</span></button>
-      <button type="button" class="access-tab-btn" data-filter="active" role="tab" aria-selected="false">🟢 Активні <span class="access-badge-count" id="count-active">{{ active_count }}</span></button>
-      <button type="button" class="access-tab-btn" data-filter="inactive" role="tab" aria-selected="false">⚪ Неактивні <span class="access-badge-count" id="count-inactive">{{ inactive_count }}</span></button>
+      <button type="submit" name="status" value="all" class="access-tab-btn {% if selected_status == 'all' %}is-active{% endif %}" data-filter="all" role="tab" aria-selected="{% if selected_status == 'all' %}true{% else %}false{% endif %}">Всі <span class="access-badge-count" id="count-all">{{ total_count }}</span></button>
+      <button type="submit" name="status" value="active" class="access-tab-btn {% if selected_status == 'active' %}is-active{% endif %}" data-filter="active" role="tab" aria-selected="{% if selected_status == 'active' %}true{% else %}false{% endif %}">🟢 Активні <span class="access-badge-count" id="count-active">{{ active_count }}</span></button>
+      <button type="submit" name="status" value="inactive" class="access-tab-btn {% if selected_status == 'inactive' %}is-active{% endif %}" data-filter="inactive" role="tab" aria-selected="{% if selected_status == 'inactive' %}true{% else %}false{% endif %}">⚪ Неактивні <span class="access-badge-count" id="count-inactive">{{ inactive_count }}</span></button>
     </div>
     <div class="access-view-switch" role="group" aria-label="Режим відображення">
       <button type="button" id="view-mode-cards" class="btn btn-secondary btn-sm is-active" title="Вигляд карток" aria-pressed="true">🗂️ Картки</button>
       <button type="button" id="view-mode-table" class="btn btn-secondary btn-sm" title="Табличний вигляд" aria-pressed="false">📋 Таблиця</button>
     </div>
-    <button type="button" id="toggle-collapse-all" class="btn btn-secondary btn-sm access-collapse-toggle" title="Згорнути або розгорнути всі">↕️ Згорнути всі</button>
+    <button type="button" id="toggle-collapse-all" class="btn btn-secondary btn-sm access-collapse-toggle" title="Згорнути або розгорнути видимі картки">↕️ Розгорнути всі</button>
   </div>
-</div>
-
+</form>
+<nav class="access-pagination" aria-label="Сторінки посилань">
+  <span>Показано {{ page_obj.start_index }}–{{ page_obj.end_index }} із {{ page_obj.paginator.count }}</span>
+  {% if page_obj.has_previous %}<a class="btn btn-secondary btn-sm" href="?{{ list_query }}&amp;page={{ page_obj.previous_page_number }}">← Попередня</a>{% endif %}
+  {% for number in page_numbers %}{% if number == page_obj.paginator.ELLIPSIS %}<span>{{ number }}</span>{% elif number == page_obj.number %}<span aria-current="page">{{ number }}</span>{% else %}<a href="?{{ list_query }}&amp;page={{ number }}" class="btn btn-secondary btn-sm">{{ number }}</a>{% endif %}{% endfor %}
+  {% if page_obj.has_next %}<a class="btn btn-secondary btn-sm" href="?{{ list_query }}&amp;page={{ page_obj.next_page_number }}">Наступна →</a>{% endif %}
+</nav>
 <div class="access-view-container">
   <div id="access-cards-list" class="access-cards-list access-view-pane is-anim-in">
   {% for link in links %}
   <details class="form-card access-link-card access-kind-{{ link.kind }} {% if link.active %}is-active{% else %}is-inactive{% endif %}"
            data-kind="{{ link.kind }}"
            data-status="{% if link.active %}active{% else %}inactive{% endif %}"
-           data-search="{{ link.name|lower }} {{ link.get_kind_display|lower }} {% if link.class_group %}{{ link.class_group.name|lower }}{% endif %} {% if link.student %}{{ link.student.full_name|lower }}{% endif %} {% if link.assignment %}{{ link.assignment.title|lower }}{% endif %}"
            {% if link.active %}open{% endif %}>
     <summary class="access-card-summary">
       <div class="access-summary-title">
@@ -103,7 +110,8 @@
         </div>
         <details class="access-qr">
           <summary>Показати QR-код</summary>
-          <img loading="lazy" width="240" height="240" src="{% url 'access_qr' link.pk %}" alt="QR-код доступу: {{ link.name }}">
+          <img loading="lazy" width="240" height="240" data-src="{% url 'access_qr' link.pk %}" alt="QR-код доступу: {{ link.name }}">
+        <noscript><a href="{% url 'access_qr' link.pk %}">Відкрити QR-код</a></noscript>
         </details>
       {% else %}
         <p>Збережіть публічну адресу в налаштуваннях Tailscale, щоб скопіювати посилання.</p>
@@ -142,7 +150,6 @@
           <tr class="access-table-row access-kind-{{ link.kind }} {% if link.active %}is-active{% else %}is-inactive{% endif %}"
               data-kind="{{ link.kind }}"
               data-status="{% if link.active %}active{% else %}inactive{% endif %}"
-              data-search="{{ link.name|lower }} {{ link.get_kind_display|lower }} {% if link.class_group %}{{ link.class_group.name|lower }}{% endif %} {% if link.student %}{{ link.student.full_name|lower }}{% endif %} {% if link.assignment %}{{ link.assignment.title|lower }}{% endif %}">
             <td class="col-type">
               <span class="access-kind-badge kind-{{ link.kind }}">
                 {% if link.kind == 'site' %}🌐 Весь сайт
@@ -187,7 +194,7 @@
                     <span class="btn-label">QR</span>
                   </summary>
                   <div class="access-table-qr-popover">
-                    <img loading="lazy" width="180" height="180" src="{% url 'access_qr' link.pk %}" alt="QR: {{ link.name }}">
+                    <img loading="lazy" width="180" height="180" data-src="{% url 'access_qr' link.pk %}" alt="QR: {{ link.name }}">
                   </div>
                 </details>
               </div>
@@ -215,7 +222,7 @@
   </div>
 </div>
 
-<div id="access-no-results" class="form-card access-no-results" hidden>
+<div id="access-no-results" class="form-card access-no-results" {% if links %}hidden{% endif %}>
   <h2>Нічого не знайдено</h2>
   <p>За вибраним фільтром або пошуковим запитом немає посилань.</p>
 </div>
@@ -233,4 +240,4 @@
 <div id="access-copy-status" role="status" aria-live="polite"></div>
 </main></div></div>
 {% endblock %}
-{% block extra_scripts %}<script src="{% static 'js/access_links.js' %}"></script>{% endblock %}
+{% block extra_scripts %}<script src="{% static 'js/access_links.js' %}?v=20261107"></script>{% endblock %}

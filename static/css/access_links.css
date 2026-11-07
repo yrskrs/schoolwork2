@@ -98,7 +98,7 @@ body[data-theme="dark"] {
 
 /* Форма у табличному режимі: компактна панель зверху без стрибків */
 .access-grid.is-table-mode {
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
 }
 .access-grid.is-table-mode .access-form-section {
@@ -298,7 +298,7 @@ details[open] > .access-card-summary .access-collapse-icon { transform: rotate(1
 
 .access-table {
   width: 100%;
-  min-width: 950px;
+  min-width: 1220px;
   table-layout: fixed;
   border-collapse: separate;
   border-spacing: 0;
@@ -336,13 +336,13 @@ details[open] > .access-card-summary .access-collapse-icon { transform: rotate(1
 .access-table-row.is-inactive { opacity: 0.8; }
 
 /* Колонки таблиці із гарантованими ширинами (фіксований макет запобігає зминанню) */
-.access-table .col-type { width: 90px; }
+.access-table .col-type { width: 110px; }
 .access-table .col-name { width: auto; min-width: 160px; }
-.access-table .col-status { width: 105px; }
-.access-table .col-stats { width: 140px; }
+.access-table .col-status { width: 150px; }
+.access-table .col-stats { width: 135px; }
 .access-table .col-expires { width: 120px; }
 .access-table .col-address { width: 210px; }
-.access-table .col-actions { width: 120px; text-align: right; }
+.access-table .col-actions { width: 185px; text-align: right; }
 
 .access-table-name {
   font-size: 0.95rem;
@@ -449,7 +449,7 @@ details[open] > .access-card-summary .access-collapse-icon { transform: rotate(1
 
 /* ─── Адаптивність (Mobile / Tablets) ─────────────────────────────────────── */
 @media (max-width: 1100px) {
-  .access-grid { grid-template-columns: 1fr; }
+  .access-grid { grid-template-columns: minmax(0, 1fr); }
 }
 
 @media (max-width: 600px) {
@@ -465,3 +465,10 @@ details[open] > .access-card-summary .access-collapse-icon { transform: rotate(1
 /* ─── Перемикач відкритого режиму ─────────────────────────────────────────── */
 .access-mode-switch { display: flex; align-items: center; gap: 10px; margin: 16px 0 8px; cursor: pointer; }
 .access-mode-switch input { width: 20px; height: 20px; flex-shrink: 0; accent-color: var(--color-primary, #176c78); }
+
+.access-pagination { display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin:12px 0; }
+.access-pagination [aria-current] { padding:6px 10px; font-weight:800; }
+.access-toolbar #access-per-page { width:auto; }
+@media(prefers-reduced-motion:reduce) { .access-view-pane { animation:none!important; transition:none!important; transform:none!important; } }
+
+.access-grid > *, .access-list-section, .access-view-pane { min-width: 0; max-width: 100%; }

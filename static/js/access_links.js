@@ -79,103 +79,21 @@
     });
   });
 
-  // ─── 3. Фільтрація за статусом та швидкий пошук ───────────────────────────
+  // Search and filters cover all pages, including with JavaScript disabled.
+  const searchForm = document.getElementById('access-filter-form');
   const searchInput = document.getElementById('access-search-input');
   const searchClear = document.getElementById('access-search-clear');
-  const filterTabs = document.querySelectorAll('.access-tab-btn');
   const cards = document.querySelectorAll('.access-link-card');
-  const tableRows = document.querySelectorAll('.access-table-row');
-  const noResults = document.getElementById('access-no-results');
-  const countAll = document.getElementById('count-all');
-  const countActive = document.getElementById('count-active');
-  const countInactive = document.getElementById('count-inactive');
-
-  let currentFilter = 'all'; // 'all', 'active', 'inactive'
-  let currentSearch = '';
-
-  function applyFilter() {
-    let visibleCount = 0;
-    const query = currentSearch.trim().toLowerCase();
-
-    if (searchClear) {
-      searchClear.hidden = query.length === 0;
-    }
-
-    // Фільтрація карток
-    cards.forEach(card => {
-      const status = card.dataset.status;
-      const searchText = (card.dataset.search || '').toLowerCase();
-      const matchesFilter = (currentFilter === 'all') || (status === currentFilter);
-      const matchesSearch = !query || searchText.includes(query);
-
-      if (matchesFilter && matchesSearch) {
-        card.style.display = '';
-        visibleCount++;
-      } else {
-        card.style.display = 'none';
-      }
-    });
-
-    // Фільтрація рядків таблиці
-    tableRows.forEach(row => {
-      const status = row.dataset.status;
-      const searchText = (row.dataset.search || '').toLowerCase();
-      const matchesFilter = (currentFilter === 'all') || (status === currentFilter);
-      const matchesSearch = !query || searchText.includes(query);
-
-      if (matchesFilter && matchesSearch) {
-        row.style.display = '';
-      } else {
-        row.style.display = 'none';
-      }
-    });
-
-    if (noResults) {
-      noResults.hidden = (visibleCount > 0 || cards.length === 0);
-    }
-  }
-
-  // Оновлення лічильників
-  if (cards.length > 0) {
-    let active = 0;
-    let inactive = 0;
-    cards.forEach(card => {
-      if (card.dataset.status === 'active') active++;
-      else inactive++;
-    });
-    if (countAll) countAll.textContent = cards.length;
-    if (countActive) countActive.textContent = active;
-    if (countInactive) countInactive.textContent = inactive;
-  }
-
-  filterTabs.forEach(tab => {
-    tab.addEventListener('click', () => {
-      filterTabs.forEach(t => {
-        t.classList.remove('is-active');
-        t.setAttribute('aria-selected', 'false');
-      });
-      tab.classList.add('is-active');
-      tab.setAttribute('aria-selected', 'true');
-      currentFilter = tab.dataset.filter || 'all';
-      applyFilter();
+  if (searchInput) searchInput.addEventListener('input', () => { searchClear.hidden = !searchInput.value; });
+  if (searchClear) searchClear.addEventListener('click', () => { searchInput.value = ''; searchForm.requestSubmit(); });
+  document.getElementById('access-per-page')?.addEventListener('change', () => searchForm.requestSubmit());
+  // A closed QR section never starts a QR request, even on long lists.
+  document.querySelectorAll('.access-qr, .access-table-qr').forEach(section => {
+    section.addEventListener('toggle', () => {
+      const image = section.querySelector('img[data-src]');
+      if (section.open && image && !image.hasAttribute('src')) image.src = image.dataset.src;
     });
   });
-
-  if (searchInput) {
-    searchInput.addEventListener('input', (e) => {
-      currentSearch = e.target.value;
-      applyFilter();
-    });
-  }
-
-  if (searchClear) {
-    searchClear.addEventListener('click', () => {
-      searchInput.value = '';
-      currentSearch = '';
-      applyFilter();
-      searchInput.focus();
-    });
-  }
 
   // ─── 4. Плавне анімоване перемикання (Картки ↔ Таблиця) ───────────────────
   const btnCards = document.getElementById('view-mode-cards');
@@ -187,8 +105,10 @@
   const formDetails = document.getElementById('access-form-details');
   const toolbar = document.querySelector('.access-toolbar');
 
-  const isEditing = formDetails && formDetails.dataset.isEditing === 'true';
+  const isEditing = formDetails && (formDetails.dataset.isEditing === 'true' || formDetails.dataset.keepOpen === 'true');
   let isSwitching = false;
+  let currentViewMode = 'cards';
+  let pendingViewMode = null;
 
   function syncFormAndGrid(targetMode) {
     if (gridContainer) {
@@ -204,8 +124,11 @@
   }
 
   function setViewMode(mode, immediate = false) {
-    if (isSwitching && !immediate) return;
     const targetMode = (mode === 'table') ? 'table' : 'cards';
+    if (isSwitching && !immediate) { pendingViewMode = targetMode; return; }
+    if (targetMode === currentViewMode && !immediate) return;
+    currentViewMode = targetMode;
+    immediate = immediate || window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     // Збереження вертикального якоря панелі, щоб уникнути будь-яких стрибків
     const prevToolbarTop = toolbar ? toolbar.getBoundingClientRect().top : null;
@@ -278,6 +201,7 @@
 
       setTimeout(() => {
         isSwitching = false;
+        if (pendingViewMode) { const next = pendingViewMode; pendingViewMode = null; setViewMode(next); }
       }, 240);
     }, 130);
   }
@@ -293,25 +217,18 @@
     }
   } catch (_) {}
 
-  // ─── 5. Масове згортання / розгортання карток ─────────────────────────────
-  if (collapseAllBtn) {
-    let allExpanded = false;
-    collapseAllBtn.addEventListener('click', () => {
-      const visibleCards = Array.from(cards).filter(c => c.style.display !== 'none');
-      if (allExpanded) {
-        // Згортаємо неактивні, повертаючи охайний вигляд
-        visibleCards.forEach(c => {
-          if (c.dataset.status === 'inactive') {
-            c.removeAttribute('open');
-          }
-        });
-        collapseAllBtn.textContent = '↕️ Згорнути всі';
-        allExpanded = false;
-      } else {
-        visibleCards.forEach(c => c.setAttribute('open', ''));
-        collapseAllBtn.textContent = '↕️ Згорнути неактивні';
-        allExpanded = true;
-      }
-    });
+  // Collapse and expand all visible cards; the label describes the next action.
+  function updateCollapseLabel() {
+    const visible = Array.from(cards).filter(card => !card.hidden && card.style.display !== 'none');
+    const expanded = visible.length > 0 && visible.every(card => card.open);
+    if (collapseAllBtn) collapseAllBtn.textContent = expanded ? '↕️ Згорнути всі' : '↕️ Розгорнути всі';
   }
+  if (collapseAllBtn) collapseAllBtn.addEventListener('click', () => {
+    const visible = Array.from(cards).filter(card => !card.hidden && card.style.display !== 'none');
+    const collapse = visible.length > 0 && visible.every(card => card.open);
+    visible.forEach(card => { card.open = !collapse; });
+    updateCollapseLabel();
+  });
+  cards.forEach(card => card.addEventListener('toggle', updateCollapseLabel));
+  updateCollapseLabel();
 })();

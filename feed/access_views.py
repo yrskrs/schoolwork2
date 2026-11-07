@@ -4,8 +4,9 @@ import uuid
 from django.conf import settings
 from django.contrib import messages
 from django.core import signing
+from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Count, F
+from django.db.models import Count, F, Q
 from django.http import HttpResponse, HttpResponseForbidden, Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -69,14 +70,45 @@ def access_links(request):
                 AccessLinkEvent.objects.create(link=link, actor=request.user, action='edit' if instance else 'create')
                 messages.success(request, 'Посилання збережено.')
                 return redirect('access_links')
-    links = owned_links(request).select_related('class_group', 'student__class_group', 'assignment').annotate(browser_count=Count('browsers')).order_by('-created_at', '-pk')
-    for link in links:
+    now = timezone.now()
+    active_target = (Q(kind='site') | Q(kind='assignment', assignment__isnull=False)
+                     | Q(kind='class', class_group__integration_active=True)
+                     | Q(kind='student', student__integration_active=True,
+                         student__class_group__integration_active=True))
+    active = Q(revoked_at__isnull=True) & (Q(expires_at__isnull=True) | Q(expires_at__gt=now)) & active_target
+    owned = owned_links(request)
+    counts = owned.aggregate(total=Count('pk'), active=Count('pk', filter=active))
+    query = request.GET.get('q', '').strip()[:160]
+    status = request.GET.get('status', 'all')
+    if status not in ('all', 'active', 'inactive'):
+        status = 'all'
+    per_page = request.GET.get('per_page', '15')
+    per_page = int(per_page) if per_page in ('15', '30', '50') else 15
+    links = owned.select_related('class_group', 'student__class_group', 'assignment').annotate(browser_count=Count('browsers'))
+    if status == 'active':
+        links = links.filter(active)
+    elif status == 'inactive':
+        links = links.exclude(active)
+    for term in query.split()[:12]:
+        links = links.filter(Q(name__icontains=term) | Q(class_group__name__icontains=term)
+                             | Q(student__first_name__icontains=term) | Q(student__last_name__icontains=term)
+                             | Q(student__middle_name__icontains=term) | Q(student__class_group__name__icontains=term)
+                             | Q(assignment__title__icontains=term))
+    paginator = Paginator(links.order_by('-created_at', '-pk'), per_page)
+    page_obj = paginator.get_page(request.GET.get('page'))
+    for link in page_obj.object_list:
         link.public_address = connection.public_url + reverse('access_enter', args=[link.token]) if connection.public_url else ''
-    active_count = sum(1 for link in links if link.active)
-    inactive_count = len(links) - active_count
-    return render(request, 'feed/access_links.html', {'teacher': teacher, 'form': form,
-        'editing': instance, 'links': links, 'connection': connection, 'mode_form': mode_form,
-        'active_count': active_count, 'inactive_count': inactive_count})
+    from urllib.parse import urlencode
+    list_query = urlencode({'q': query, 'status': status, 'per_page': per_page})
+    return render(request, 'feed/access_links.html', {
+        'teacher': teacher, 'form': form, 'editing': instance, 'links': page_obj.object_list,
+        'connection': connection, 'mode_form': mode_form,
+        'total_count': counts['total'], 'active_count': counts['active'],
+        'inactive_count': counts['total'] - counts['active'],
+        'query': query, 'selected_status': status, 'per_page': per_page,
+        'page_obj': page_obj, 'list_query': list_query,
+        'page_numbers': paginator.get_elided_page_range(page_obj.number, on_each_side=1, on_ends=1),
+    })
 
 
 @teacher_required
