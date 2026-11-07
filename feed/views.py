@@ -8805,7 +8805,7 @@ def reschedule_assignment(request, pk):
             orig_date = existing_target.target_date
             orig_slot = existing_target.bell_slot
         else:
-            orig_date = assignment.published_at.date() if assignment.published_at else timezone.now().date()
+            orig_date = timezone.localdate(assignment.published_at) if assignment.published_at else timezone.localdate()
             orig_slot = None
 
         # Фіксуємо перенесення в базі даних

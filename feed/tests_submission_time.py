@@ -76,3 +76,13 @@ class SubmissionTimeTests(MergeAndCoauthorsTests):
         generate_teacher_report_pdf(buffer, {'title':'Synthetic','teacher_name':'Synthetic'}, [sub], mode='detailed')
         text = '\n'.join(p.extract_text() for p in PdfReader(io.BytesIO(buffer.getvalue())).pages)
         self.assertIn('23.10.2026 14:27', text)
+
+
+    def test_reschedule_original_date_uses_kyiv_calendar_after_midnight(self):
+        from .models import Assignment,AssignmentRescheduleLog
+        published=datetime(2026,11,6,22,30,tzinfo=dt_timezone.utc)
+        self.assignment.schedule_targets.all().delete()
+        Assignment.objects.filter(pk=self.assignment.pk).update(published_at=published)
+        response=self.client.post(reverse('reschedule_assignment',args=[self.assignment.pk]),{'new_date':'2026-11-08','class_group':self.group.pk,'is_ajax':'1'})
+        self.assertEqual(response.status_code,200)
+        self.assertEqual(AssignmentRescheduleLog.objects.get(assignment=self.assignment).original_date,datetime(2026,11,7).date())
