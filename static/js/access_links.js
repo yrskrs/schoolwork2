@@ -177,42 +177,119 @@
     });
   }
 
-  // ─── 4. Перемикач режимів показу (Картки / Таблиця) ────────────────────────
+  // ─── 4. Плавне анімоване перемикання (Картки ↔ Таблиця) ───────────────────
   const btnCards = document.getElementById('view-mode-cards');
   const btnTable = document.getElementById('view-mode-table');
   const cardsList = document.getElementById('access-cards-list');
   const tableWrapper = document.getElementById('access-table-wrapper');
-  const grid = document.querySelector('.access-grid');
   const collapseAllBtn = document.getElementById('toggle-collapse-all');
+  const gridContainer = document.getElementById('access-grid-container');
+  const formDetails = document.getElementById('access-form-details');
+  const toolbar = document.querySelector('.access-toolbar');
 
-  function setViewMode(mode) {
-    if (mode === 'table') {
-      if (btnCards) { btnCards.classList.remove('is-active'); btnCards.setAttribute('aria-pressed', 'false'); }
-      if (btnTable) { btnTable.classList.add('is-active'); btnTable.setAttribute('aria-pressed', 'true'); }
-      if (cardsList) cardsList.hidden = true;
-      if (tableWrapper) tableWrapper.hidden = false;
-      if (grid) grid.classList.add('is-table-mode');
-      if (collapseAllBtn) collapseAllBtn.style.display = 'none';
-      try { localStorage.setItem('access_links_view_mode', 'table'); } catch (_) {}
-    } else {
-      if (btnCards) { btnCards.classList.add('is-active'); btnCards.setAttribute('aria-pressed', 'true'); }
-      if (btnTable) { btnTable.classList.remove('is-active'); btnTable.setAttribute('aria-pressed', 'false'); }
-      if (cardsList) cardsList.hidden = false;
-      if (tableWrapper) tableWrapper.hidden = true;
-      if (grid) grid.classList.remove('is-table-mode');
-      if (collapseAllBtn) collapseAllBtn.style.display = '';
-      try { localStorage.setItem('access_links_view_mode', 'cards'); } catch (_) {}
+  const isEditing = formDetails && formDetails.dataset.isEditing === 'true';
+  let isSwitching = false;
+
+  function syncFormAndGrid(targetMode) {
+    if (gridContainer) {
+      gridContainer.classList.toggle('is-table-mode', targetMode === 'table');
     }
+    if (formDetails) {
+      if (targetMode === 'cards') {
+        formDetails.open = true;
+      } else if (!isEditing) {
+        formDetails.open = false;
+      }
+    }
+  }
+
+  function setViewMode(mode, immediate = false) {
+    if (isSwitching && !immediate) return;
+    const targetMode = (mode === 'table') ? 'table' : 'cards';
+
+    // Збереження вертикального якоря панелі, щоб уникнути будь-яких стрибків
+    const prevToolbarTop = toolbar ? toolbar.getBoundingClientRect().top : null;
+
+    if (btnCards) {
+      btnCards.classList.toggle('is-active', targetMode === 'cards');
+      btnCards.setAttribute('aria-pressed', targetMode === 'cards' ? 'true' : 'false');
+    }
+    if (btnTable) {
+      btnTable.classList.toggle('is-active', targetMode === 'table');
+      btnTable.setAttribute('aria-pressed', targetMode === 'table' ? 'true' : 'false');
+    }
+    if (collapseAllBtn) {
+      collapseAllBtn.style.display = (targetMode === 'cards') ? '' : 'none';
+    }
+
+    try { localStorage.setItem('access_links_view_mode', targetMode); } catch (_) {}
+
+    const oldPane = (targetMode === 'table') ? cardsList : tableWrapper;
+    const newPane = (targetMode === 'table') ? tableWrapper : cardsList;
+
+    if (immediate) {
+      syncFormAndGrid(targetMode);
+      if (oldPane) {
+        oldPane.classList.add('is-hidden');
+        oldPane.classList.remove('is-anim-in', 'is-anim-out');
+        oldPane.hidden = true;
+      }
+      if (newPane) {
+        newPane.classList.remove('is-hidden', 'is-anim-out');
+        newPane.classList.add('is-anim-in');
+        newPane.hidden = false;
+      }
+      return;
+    }
+
+    if (!oldPane || !newPane) return;
+
+    // Плавний кросфейд без стрибків висоти чи зміщення позиції
+    isSwitching = true;
+    oldPane.classList.remove('is-anim-in');
+    oldPane.classList.add('is-anim-out');
+
+    setTimeout(() => {
+      oldPane.classList.add('is-hidden');
+      oldPane.classList.remove('is-anim-out');
+      oldPane.hidden = true;
+
+      // Оновлюємо сітку та форму під вибраний режим
+      syncFormAndGrid(targetMode);
+
+      newPane.hidden = false;
+      newPane.classList.remove('is-hidden');
+      newPane.classList.add('is-anim-out');
+
+      // Примусовий reflow перед анімацією появи
+      void newPane.offsetHeight;
+
+      newPane.classList.remove('is-anim-out');
+      newPane.classList.add('is-anim-in');
+
+      // Якщо положення панелі змістилося, миттєво стабілізуємо скрол
+      if (toolbar && prevToolbarTop !== null) {
+        const currentToolbarTop = toolbar.getBoundingClientRect().top;
+        const diff = currentToolbarTop - prevToolbarTop;
+        if (Math.abs(diff) > 2) {
+          window.scrollBy({ top: diff, behavior: 'instant' });
+        }
+      }
+
+      setTimeout(() => {
+        isSwitching = false;
+      }, 240);
+    }, 130);
   }
 
   if (btnCards) btnCards.addEventListener('click', () => setViewMode('cards'));
   if (btnTable) btnTable.addEventListener('click', () => setViewMode('table'));
 
-  // Відновлення збереженого режиму
+  // Відновлення збереженого режиму без анімації при завантаженні
   try {
     const savedMode = localStorage.getItem('access_links_view_mode');
     if (savedMode === 'table') {
-      setViewMode('table');
+      setViewMode('table', true);
     }
   } catch (_) {}
 

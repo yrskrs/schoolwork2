@@ -64,14 +64,110 @@ body[data-theme="dark"] {
 .access-error, .errorlist { color: var(--color-danger, #b91c1c); }
 .access-error { padding: 16px; border: 1px solid currentColor; margin-bottom: 20px; border-radius: 12px; }
 
-/* ─── Сітка сторінки ───────────────────────────────────────────────────────── */
-.access-grid { display: grid; grid-template-columns: minmax(280px, 0.85fr) minmax(320px, 1.35fr); gap: 24px; align-items: start; transition: grid-template-columns 0.2s ease; }
-.access-grid.is-table-mode { grid-template-columns: 1fr; }
+/* ─── Сітка сторінки та керування формою ─────────────────────────────────── */
+.access-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.85fr) minmax(320px, 1.35fr);
+  gap: 24px;
+  align-items: start;
+  transition: grid-template-columns 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
 .access-page .form-card { padding: 24px; margin-bottom: 20px; }
 .access-page .form-group { margin-bottom: 16px; }
 .access-page small { display: block; margin-top: 6px; color: var(--color-text-muted, #64748b); }
 .access-page input[type=url] { width: 100%; max-width: 600px; padding: 10px; }
 .access-kind-help { font-size: 0.9rem; line-height: 1.6; color: var(--color-text-muted, #64748b); }
+
+/* Форма як <details> у звичайному режимі (Картки) */
+.access-grid:not(.is-table-mode) .access-form-section summary {
+  list-style: none;
+  cursor: default;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.access-grid:not(.is-table-mode) .access-form-section summary::-webkit-details-marker { display: none; }
+.access-grid:not(.is-table-mode) .access-form-section .access-form-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--color-text-primary, #0f172a);
+}
+.access-grid:not(.is-table-mode) .access-form-section .access-form-hint { display: none; }
+
+/* Форма у табличному режимі: компактна панель зверху без стрибків */
+.access-grid.is-table-mode {
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+.access-grid.is-table-mode .access-form-section {
+  padding: 0 !important;
+  margin-bottom: 16px;
+  border-radius: var(--radius-md, 12px);
+  overflow: hidden;
+  border: 1px solid var(--color-border, #e2e8f0);
+  background: var(--color-surface, #fff);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+.access-grid.is-table-mode .access-form-section summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 13px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--color-surface, #fff);
+  user-select: none;
+  transition: background 0.15s ease;
+}
+.access-grid.is-table-mode .access-form-section summary::-webkit-details-marker { display: none; }
+.access-grid.is-table-mode .access-form-section summary:hover {
+  background: var(--color-bg-secondary, #f8fafc);
+}
+.access-grid.is-table-mode .access-form-section .access-form-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--color-primary, #176c78);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.access-grid.is-table-mode .access-form-section .access-form-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.82rem;
+  color: var(--color-text-muted, #64748b);
+}
+.access-grid.is-table-mode .access-form-section .hint-label-expanded { display: none; }
+.access-grid.is-table-mode .access-form-section[open] .hint-label-collapsed { display: none; }
+.access-grid.is-table-mode .access-form-section[open] .hint-label-expanded { display: inline; }
+.access-grid.is-table-mode .access-form-section .access-form-arrow {
+  display: inline-block;
+  transition: transform 0.2s ease;
+}
+.access-grid.is-table-mode .access-form-section[open] summary {
+  border-bottom: 1px solid var(--color-border, #e2e8f0);
+}
+.access-grid.is-table-mode .access-form-section[open] .access-form-arrow {
+  transform: rotate(180deg);
+}
+.access-grid.is-table-mode .access-form-section .access-form-body {
+  padding: 20px 24px;
+}
+
+[data-theme="dark"] .access-grid.is-table-mode .access-form-section {
+  border-color: var(--color-border, #334155);
+  background: var(--color-surface, #1e293b);
+}
+[data-theme="dark"] .access-grid.is-table-mode .access-form-section summary {
+  background: var(--color-surface, #1e293b);
+  color: var(--color-text-primary, #f1f5f9);
+}
+[data-theme="dark"] .access-grid.is-table-mode .access-form-section summary:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
 
 /* ─── Панель інструментів (Пошук, фільтри, перемикач) ─────────────────────── */
 .access-toolbar { display: flex; flex-direction: column; gap: 14px; margin-bottom: 20px; }
@@ -96,8 +192,38 @@ body[data-theme="dark"] {
 .access-view-switch .btn.is-active { background: var(--color-primary, #4f46e5); color: #fff; }
 .access-collapse-toggle { font-size: 0.82rem; }
 
+/* ─── Анімація перемикання Картки ↔ Таблиця ───────────────────────────────── */
+.access-view-container {
+  position: relative;
+  width: 100%;
+  min-height: 160px;
+}
+
+.access-view-pane {
+  transition: opacity 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+              transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: opacity, transform;
+}
+
+.access-view-pane.is-hidden {
+  display: none !important;
+  opacity: 0;
+  transform: translateY(8px) scale(0.995);
+}
+
+.access-view-pane.is-anim-out {
+  opacity: 0 !important;
+  transform: translateY(-8px) scale(0.995) !important;
+  pointer-events: none;
+}
+
+.access-view-pane.is-anim-in {
+  opacity: 1 !important;
+  transform: translateY(0) scale(1) !important;
+}
+
 /* ─── Бейджі типів карток ─────────────────────────────────────────────────── */
-.access-kind-badge { display: inline-flex; align-items: center; gap: 4px; font-size: 0.78rem; font-weight: 600; padding: 3px 8px; border-radius: 6px; line-height: 1.3; white-space: nowrap; flex-shrink: 0; }
+.access-kind-badge { display: inline-flex; align-items: center; gap: 4px; font-size: 0.78rem; font-weight: 600; padding: 3px 8px; border-radius: 6px; line-height: 1.3; white-space: nowrap !important; word-break: normal !important; flex-shrink: 0; }
 .access-kind-badge.kind-site { background: var(--kind-site-bg); color: var(--kind-site-text); border: 1px solid var(--kind-site-border); }
 .access-kind-badge.kind-class { background: var(--kind-class-bg); color: var(--kind-class-text); border: 1px solid var(--kind-class-border); }
 .access-kind-badge.kind-student { background: var(--kind-student-bg); color: var(--kind-student-text); border: 1px solid var(--kind-student-border); }
@@ -137,7 +263,7 @@ details[open] > .access-card-summary .access-collapse-icon { transform: rotate(1
 .access-stats dd { margin: 4px 0 0; font-weight: 600; font-size: 1rem; }
 
 /* Статуси */
-.access-state { font-size: 0.75rem; font-weight: 600; padding: 4px 10px; border-radius: 20px; display: inline-flex; align-items: center; white-space: nowrap; }
+.access-state { font-size: 0.75rem; font-weight: 600; padding: 4px 10px; border-radius: 20px; display: inline-flex; align-items: center; white-space: nowrap !important; word-break: normal !important; }
 .access-state.is-active { color: #047857; background: #d1fae5; }
 .access-state.is-revoked { color: #b91c1c; background: #fee2e2; }
 .access-state.is-expired { color: #64748b; background: #f1f5f9; }
@@ -145,7 +271,7 @@ details[open] > .access-card-summary .access-collapse-icon { transform: rotate(1
 [data-theme="dark"] .access-state.is-revoked { color: #f87171; background: rgba(239, 68, 68, 0.2); }
 [data-theme="dark"] .access-state.is-expired { color: #94a3b8; background: rgba(148, 163, 184, 0.16); }
 
-/* Копіювання та QR */
+/* Копіювання та QR в картках */
 .access-copy { display: flex; gap: 8px; margin-top: 6px; }
 .access-copy input { min-width: 0; flex: 1; }
 .access-copy button { flex-shrink: 0; white-space: nowrap; }
@@ -154,12 +280,51 @@ details[open] > .access-card-summary .access-collapse-icon { transform: rotate(1
 .access-qr summary { cursor: pointer; color: var(--color-text-secondary, #475569); font-size: 0.9rem; }
 .access-qr img { display: block; background: #fff; max-width: 100%; margin-top: 12px; border-radius: 8px; padding: 8px; border: 1px solid var(--color-border, #e2e8f0); }
 
-/* ─── Табличний вигляд ────────────────────────────────────────────────────── */
-.access-table-wrapper { padding: 0 !important; overflow: hidden; border-radius: var(--radius-md, 12px); border: 1px solid var(--color-border, #e2e8f0); }
-.table-responsive { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
-.access-table { width: 100%; border-collapse: collapse; text-align: left; font-size: 0.9rem; }
-.access-table th { padding: 14px 16px; background: var(--color-bg-secondary, #f8fafc); border-bottom: 1px solid var(--color-border, #e2e8f0); font-weight: 600; color: var(--color-text-secondary, #475569); white-space: nowrap; }
-.access-table td { padding: 14px 16px; border-bottom: 1px solid var(--color-border, #e2e8f0); vertical-align: middle; }
+/* ─── Табличний вигляд (Без розриву літер та зі стабільними колонками) ────── */
+.access-table-wrapper {
+  padding: 0 !important;
+  overflow: hidden;
+  border-radius: var(--radius-md, 12px);
+  border: 1px solid var(--color-border, #e2e8f0);
+  background: var(--color-surface, #fff);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.access-table {
+  width: 100%;
+  min-width: 950px;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+  text-align: left;
+  font-size: 0.9rem;
+}
+
+.access-table th,
+.access-table td {
+  padding: 12px 12px;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--color-border, #e2e8f0);
+}
+
+.access-table th {
+  background: var(--color-bg-secondary, #f8fafc);
+  font-weight: 600;
+  color: var(--color-text-secondary, #475569);
+  white-space: nowrap !important;
+  user-select: none;
+}
+[data-theme="dark"] .access-table th {
+  background: rgba(30, 41, 59, 0.7);
+  color: var(--color-text-primary, #e2e8f0);
+}
+
 .access-table-row:hover { background: var(--color-surface-hover, rgba(0,0,0,0.02)); }
 [data-theme="dark"] .access-table-row:hover { background: var(--color-surface-hover, rgba(255,255,255,0.03)); }
 
@@ -169,23 +334,114 @@ details[open] > .access-card-summary .access-collapse-icon { transform: rotate(1
 .access-table-row.access-kind-assignment td:first-child { border-left: 4px solid var(--kind-assignment-accent); }
 
 .access-table-row.is-inactive { opacity: 0.8; }
-.access-table-name { font-size: 0.95rem; color: var(--color-text-primary, #0f172a); }
-.access-table-sub { font-size: 0.8rem; color: var(--color-text-muted, #64748b); margin-top: 3px; }
-.access-table-stats { font-size: 0.82rem; line-height: 1.4; white-space: nowrap; }
-.access-table-muted { color: var(--color-text-muted, #64748b); }
-.access-table-expires { font-size: 0.85rem; white-space: nowrap; }
-.access-table-address { display: inline-flex; align-items: center; gap: 6px; position: relative; }
-.access-table-actions { display: inline-flex; align-items: center; gap: 6px; }
-.access-inline-form { display: inline; margin: 0; padding: 0; }
 
-.btn-xs { font-size: 0.78rem; padding: 4px 8px; border-radius: 6px; line-height: 1.25; cursor: pointer; }
+/* Колонки таблиці із гарантованими ширинами (фіксований макет запобігає зминанню) */
+.access-table .col-type { width: 90px; }
+.access-table .col-name { width: auto; min-width: 160px; }
+.access-table .col-status { width: 105px; }
+.access-table .col-stats { width: 140px; }
+.access-table .col-expires { width: 120px; }
+.access-table .col-address { width: 210px; }
+.access-table .col-actions { width: 120px; text-align: right; }
+
+.access-table-name {
+  font-size: 0.95rem;
+  color: var(--color-text-primary, #0f172a);
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+.access-table-sub {
+  font-size: 0.8rem;
+  color: var(--color-text-muted, #64748b);
+  margin-top: 3px;
+  overflow-wrap: break-word;
+}
+.access-table-stats { font-size: 0.82rem; line-height: 1.45; white-space: nowrap !important; }
+.access-table-muted { color: var(--color-text-muted, #64748b); }
+.access-table-expires { font-size: 0.85rem; white-space: nowrap !important; }
+
+/* Захист від розриву літер для кнопок та дій у таблиці */
+.access-table .btn,
+.access-table button,
+.access-table a.btn,
+.access-table summary,
+.access-table .access-kind-badge,
+.access-table .access-state {
+  white-space: nowrap !important;
+  word-break: keep-all !important;
+  overflow-wrap: normal !important;
+  hyphens: none !important;
+}
+
+.access-table-address {
+  display: inline-flex !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  gap: 6px !important;
+  white-space: nowrap !important;
+}
+
+.access-table-actions {
+  display: inline-flex !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  gap: 6px !important;
+  white-space: nowrap !important;
+  width: 100%;
+}
+
+.access-inline-form { display: inline !important; margin: 0 !important; padding: 0 !important; }
+
+.access-table .btn-xs {
+  font-size: 0.8rem !important;
+  padding: 5px 10px !important;
+  border-radius: 6px !important;
+  line-height: 1.25 !important;
+  cursor: pointer !important;
+  white-space: nowrap !important;
+  word-break: keep-all !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  flex-shrink: 0 !important;
+  transition: transform 0.1s ease, background 0.15s ease;
+}
+.access-table .btn-xs .btn-label {
+  white-space: nowrap !important;
+  word-break: keep-all !important;
+}
+.access-table .btn-xs:hover {
+  transform: translateY(-1px);
+}
 
 /* QR Popover у таблиці */
-.access-table-qr { position: relative; display: inline-block; }
-.access-table-qr summary { list-style: none; cursor: pointer; }
+.access-table-qr { position: relative; display: inline-block; white-space: nowrap !important; }
+.access-table-qr summary { list-style: none; cursor: pointer; white-space: nowrap !important; }
 .access-table-qr summary::-webkit-details-marker { display: none; }
-.access-table-qr-popover { position: absolute; right: 0; top: calc(100% + 6px); z-index: 50; background: var(--color-surface, #fff); padding: 10px; border-radius: 10px; box-shadow: 0 10px 25px rgba(0,0,0,0.15); border: 1px solid var(--color-border, #cbd5e1); }
-[data-theme="dark"] .access-table-qr-popover { background: var(--color-surface, #1e293b); box-shadow: 0 10px 25px rgba(0,0,0,0.4); }
+.access-table-qr-popover {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 50;
+  background: var(--color-surface, #fff);
+  padding: 10px;
+  border-radius: 10px;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+  border: 1px solid var(--color-border, #cbd5e1);
+}
+.access-table-qr-popover img {
+  display: block;
+  background: #ffffff !important;
+  border-radius: 6px;
+  padding: 6px;
+}
+[data-theme="dark"] .access-table-qr-popover {
+  background: var(--color-surface, #1e293b);
+  box-shadow: 0 10px 25px rgba(0,0,0,0.4);
+}
 
 /* ─── Відсутність результатів ─────────────────────────────────────────────── */
 .access-no-results { text-align: center; padding: 40px 20px; color: var(--color-text-muted, #64748b); }
