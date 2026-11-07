@@ -280,168 +280,48 @@ details[open] > .access-card-summary .access-collapse-icon { transform: rotate(1
 .access-qr summary { cursor: pointer; color: var(--color-text-secondary, #475569); font-size: 0.9rem; }
 .access-qr img { display: block; background: #fff; max-width: 100%; margin-top: 12px; border-radius: 8px; padding: 8px; border: 1px solid var(--color-border, #e2e8f0); }
 
-/* ─── Табличний вигляд (Без розриву літер та зі стабільними колонками) ────── */
-.access-table-wrapper {
-  padding: 0 !important;
-  overflow: hidden;
-  border-radius: var(--radius-md, 12px);
-  border: 1px solid var(--color-border, #e2e8f0);
-  background: var(--color-surface, #fff);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-}
+/* Compact four-column table: related details share one cell. */
+.access-table-wrapper { padding:0!important; overflow:hidden; border-radius:12px; border:1px solid var(--color-border,#e2e8f0); background:var(--color-surface,#fff); }
+.access-table-wrapper .table-responsive { width:100%; overflow-x:auto; -webkit-overflow-scrolling:touch; }
+.access-table { width:100%; min-width:720px; table-layout:fixed; border-collapse:separate; border-spacing:0; text-align:left; font-size:.86rem; }
+.access-table th,.access-table td { padding:12px 10px; vertical-align:middle; border-bottom:1px solid var(--color-border,#e2e8f0); }
+.access-table th { background:var(--color-bg-secondary,#f8fafc); font-weight:600; color:var(--color-text-secondary,#475569); white-space:nowrap; }
+.access-table tbody tr:last-child td { border-bottom:0; }
+.access-table .col-name { width:auto; }
+.access-table .col-status { width:150px; }
+.access-table .col-stats { width:140px; }
+.access-table .col-actions { width:210px; }
+.access-table-name { display:block; font-size:.95rem; color:var(--color-text-primary,#0f172a); overflow-wrap:anywhere; word-break:normal; }
+.access-table-audience { display:flex; flex-wrap:wrap; align-items:center; gap:5px 8px; margin-top:7px; color:var(--color-text-muted,#64748b); font-size:.8rem; overflow-wrap:anywhere; }
+.access-table-audience > span { min-width:0; }
+.access-table-expiry { margin-top:7px; color:var(--color-text-muted,#64748b); font-size:.78rem; line-height:1.45; }
+.access-table-metric { white-space:nowrap; font-size:.8rem; line-height:1.6; }
+.access-table-muted { color:var(--color-text-muted,#64748b); font-size:.74rem; line-height:1.45; }
+.access-table .access-state { max-width:100%; white-space:normal!important; }
+.access-table-row.access-kind-site td:first-child { border-left:4px solid var(--kind-site-accent); }
+.access-table-row.access-kind-class td:first-child { border-left:4px solid var(--kind-class-accent); }
+.access-table-row.access-kind-student td:first-child { border-left:4px solid var(--kind-student-accent); }
+.access-table-row.access-kind-assignment td:first-child { border-left:4px solid var(--kind-assignment-accent); }
+.access-table-row:hover { background:var(--color-surface-hover,rgba(0,0,0,.02)); }
+.access-table-actions { display:flex; flex-direction:column; align-items:flex-start; gap:6px; }
+.access-table-action-row { display:flex; align-items:center; flex-wrap:wrap; gap:6px; }
+.access-inline-form { display:inline; margin:0!important; padding:0!important; }
+.access-table .btn-xs { display:inline-flex!important; align-items:center; justify-content:center; gap:4px; width:auto!important; min-height:32px; padding:5px 9px!important; font-size:.8rem!important; line-height:1.25!important; border-radius:6px!important; white-space:nowrap!important; word-break:normal!important; flex-shrink:0; }
+[data-theme="dark"] .access-table th { background:rgba(30,41,59,.7); color:var(--color-text-primary,#e2e8f0); }
 
-.table-responsive {
-  width: 100%;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-}
-
-.access-table {
-  width: 100%;
-  min-width: 1220px;
-  table-layout: fixed;
-  border-collapse: separate;
-  border-spacing: 0;
-  text-align: left;
-  font-size: 0.9rem;
-}
-
-.access-table th,
-.access-table td {
-  padding: 12px 12px;
-  vertical-align: middle;
-  border-bottom: 1px solid var(--color-border, #e2e8f0);
-}
-
-.access-table th {
-  background: var(--color-bg-secondary, #f8fafc);
-  font-weight: 600;
-  color: var(--color-text-secondary, #475569);
-  white-space: nowrap !important;
-  user-select: none;
-}
-[data-theme="dark"] .access-table th {
-  background: rgba(30, 41, 59, 0.7);
-  color: var(--color-text-primary, #e2e8f0);
-}
-
-.access-table-row:hover { background: var(--color-surface-hover, rgba(0,0,0,0.02)); }
-[data-theme="dark"] .access-table-row:hover { background: var(--color-surface-hover, rgba(255,255,255,0.03)); }
-
-.access-table-row.access-kind-site td:first-child { border-left: 4px solid var(--kind-site-accent); }
-.access-table-row.access-kind-class td:first-child { border-left: 4px solid var(--kind-class-accent); }
-.access-table-row.access-kind-student td:first-child { border-left: 4px solid var(--kind-student-accent); }
-.access-table-row.access-kind-assignment td:first-child { border-left: 4px solid var(--kind-assignment-accent); }
-
-.access-table-row.is-inactive { opacity: 0.8; }
-
-/* Колонки таблиці із гарантованими ширинами (фіксований макет запобігає зминанню) */
-.access-table .col-type { width: 120px; }
-.access-table .col-name { width: auto; min-width: 160px; }
-.access-table .col-status { width: 160px; }
-.access-table .col-stats { width: 135px; }
-.access-table .col-expires { width: 125px; }
-.access-table .col-address { width: 250px; }
-.access-table .col-actions { width: 200px; text-align: right; }
-
-.access-table-name {
-  font-size: 0.95rem;
-  color: var(--color-text-primary, #0f172a);
-  overflow-wrap: break-word;
-  word-break: break-word;
-}
-.access-table-sub {
-  font-size: 0.8rem;
-  color: var(--color-text-muted, #64748b);
-  margin-top: 3px;
-  overflow-wrap: break-word;
-}
-.access-table-stats { font-size: 0.82rem; line-height: 1.45; white-space: nowrap !important; }
-.access-table-muted { color: var(--color-text-muted, #64748b); }
-.access-table-expires { font-size: 0.85rem; white-space: nowrap !important; }
-
-/* Захист від розриву літер для кнопок та дій у таблиці */
-.access-table .btn,
-.access-table button,
-.access-table a.btn,
-.access-table summary,
-.access-table .access-kind-badge,
-.access-table .access-state {
-  white-space: nowrap !important;
-  word-break: keep-all !important;
-  overflow-wrap: normal !important;
-  hyphens: none !important;
-}
-
-.access-table-address {
-  display: inline-flex !important;
-  flex-direction: row !important;
-  flex-wrap: nowrap !important;
-  align-items: center !important;
-  gap: 6px !important;
-  white-space: nowrap !important;
-}
-
-.access-table-actions {
-  display: inline-flex !important;
-  flex-direction: row !important;
-  flex-wrap: nowrap !important;
-  align-items: center !important;
-  justify-content: flex-end !important;
-  gap: 6px !important;
-  white-space: nowrap !important;
-  width: 100%;
-}
-
-.access-inline-form { display: inline !important; margin: 0 !important; padding: 0 !important; }
-
-.access-table .btn-xs {
-  font-size: 0.8rem !important;
-  padding: 5px 10px !important;
-  border-radius: 6px !important;
-  line-height: 1.25 !important;
-  cursor: pointer !important;
-  white-space: nowrap !important;
-  word-break: keep-all !important;
-  display: inline-flex !important;
-  align-items: center !important;
-  gap: 4px !important;
-  flex-shrink: 0 !important;
-  transition: transform 0.1s ease, background 0.15s ease;
-}
-.access-table .btn-xs .btn-label {
-  white-space: nowrap !important;
-  word-break: keep-all !important;
-}
-.access-table .btn-xs:hover {
-  transform: translateY(-1px);
-}
-
-/* QR Popover у таблиці */
-.access-table-qr { position: relative; display: inline-block; white-space: nowrap !important; }
-.access-table-qr summary { list-style: none; cursor: pointer; white-space: nowrap !important; }
-.access-table-qr summary::-webkit-details-marker { display: none; }
-.access-table-qr-popover {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 6px);
-  z-index: 50;
-  background: var(--color-surface, #fff);
-  padding: 10px;
-  border-radius: 10px;
-  box-shadow: 0 10px 25px rgba(0,0,0,0.15);
-  border: 1px solid var(--color-border, #cbd5e1);
-}
-.access-table-qr-popover img {
-  display: block;
-  background: #ffffff !important;
-  border-radius: 6px;
-  padding: 6px;
-}
-[data-theme="dark"] .access-table-qr-popover {
-  background: var(--color-surface, #1e293b);
-  box-shadow: 0 10px 25px rgba(0,0,0,0.4);
-}
+/* Native modal uses the browser top layer, outside table clipping/stacking. */
+.access-qr-dialog { box-sizing:border-box; width:min(440px,calc(100vw - 24px)); max-height:calc(100dvh - 24px); margin:auto; padding:20px; border:1px solid var(--color-border,#cbd5e1); border-radius:16px; background:var(--color-surface,#fff); color:var(--color-text-primary,#0f172a); overflow:auto; box-shadow:0 24px 80px #0005; }
+.access-qr-dialog::backdrop { background:rgba(15,23,42,.65); }
+.access-qr-dialog-header { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.access-qr-dialog-header h2 { margin:0; font-size:1.15rem; }
+.access-qr-dialog-header form { margin:0; }
+.access-qr-dialog-header button { min-width:40px; min-height:40px; }
+.access-qr-dialog-name { margin:10px 0 16px; overflow-wrap:anywhere; color:var(--color-text-muted,#64748b); }
+#access-qr-image { display:block; box-sizing:border-box; width:360px; max-width:100%; height:auto; aspect-ratio:1; margin:0 auto; padding:12px; background:#fff; border-radius:8px; }
+#access-qr-image[hidden],.access-qr-load-status[hidden] { display:none!important; }
+.access-qr-load-status { padding:24px 0; text-align:center; }
+.access-qr-dialog-hint { color:var(--color-text-muted,#64748b); font-size:.85rem; text-align:center; margin:12px 0 18px; }
+.access-qr-dialog > .btn { display:flex; justify-content:center; }
 
 /* ─── Відсутність результатів ─────────────────────────────────────────────── */
 .access-no-results { text-align: center; padding: 40px 20px; color: var(--color-text-muted, #64748b); }

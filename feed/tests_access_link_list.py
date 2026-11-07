@@ -40,7 +40,7 @@ class AccessLinkListTests(TestCase):
         self.assertIn('no-store',response.headers['Cache-Control'])
         rows=tree.xpath('//tr[contains(@class,"access-table-row")]')
         self.assertEqual(len(rows),15)
-        self.assertTrue(all(len(row.xpath('./td')) == 7 for row in rows), 'Each link must align with all seven table headings')
+        self.assertTrue(all(len(row.xpath('./td')) == 4 for row in rows), 'Each link must align with all four table headings')
 
     def test_search_finds_old_link_beyond_first_page_and_empty_results_keep_form(self):
         response=self.page(q='Link 000')
@@ -80,3 +80,20 @@ class AccessLinkListTests(TestCase):
         self.assertEqual(response.status_code,200)
         self.assertTrue(response.context['form'].errors)
         self.assertContains(response,'data-keep-open="true"')
+
+    def test_table_groups_all_actions_and_qr_uses_one_unloaded_modal(self):
+        tree=html.fromstring(self.page().content)
+        self.assertEqual(len(tree.xpath('//table[@class="access-table"]/thead/tr/th')),4)
+        for row in tree.xpath('//tr[contains(@class,"access-table-row")]'):
+            self.assertEqual(len(row.xpath('./td')),4)
+            self.assertTrue(row.xpath('./td[contains(@class,"col-name")]//*[contains(@class,"access-kind-badge")]'))
+            actions=row.xpath('./td[contains(@class,"col-actions")]')[0]
+            self.assertEqual(len(actions.xpath('.//*[@data-copy-val]')),1)
+            self.assertEqual(len(actions.xpath('.//a[@data-qr-url and @href=@data-qr-url]')),1)
+            self.assertEqual(len(actions.xpath('.//a[contains(@href,"edit=")]')),1)
+        dialog=tree.xpath('//dialog[@id="access-qr-dialog"]')
+        self.assertEqual(len(dialog),1)
+        self.assertFalse(dialog[0].xpath('.//img/@src'))
+        self.assertEqual(dialog[0].xpath('.//img/@width'),['360'])
+        self.assertEqual(len(dialog[0].xpath('.//form[@method="dialog" and @data-no-progress]')),1)
+        self.assertFalse(tree.xpath('//details[contains(@class,"access-table-qr")]'))

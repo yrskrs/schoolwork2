@@ -1,6 +1,6 @@
 {% extends 'base.html' %}{% load static %}
 {% block title %}Посилання доступу{% endblock %}
-{% block extra_head %}<link rel="stylesheet" href="{% static 'css/access_links.css' %}?v=20261107b">{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'css/access_links.css' %}?v=20261107c">{% endblock %}
 {% block content %}
 <div class="page-wrapper"><div class="feed-layout">
 {% include 'feed/components/teacher_sidebar.html' %}
@@ -134,88 +134,61 @@
   <div id="access-table-wrapper" class="form-card access-table-wrapper access-view-pane is-hidden" hidden>
     <div class="table-responsive">
       <table class="access-table" aria-label="Таблиця посилань доступу">
-        <thead>
-          <tr>
-            <th scope="col" class="col-type">Тип</th>
-            <th scope="col" class="col-name">Назва та аудиторія</th>
-            <th scope="col" class="col-status">Статус</th>
-            <th scope="col" class="col-stats">Статистика</th>
-            <th scope="col" class="col-expires">Діє до</th>
-            <th scope="col" class="col-address">Адреса та QR</th>
-            <th scope="col" class="col-actions">Дії</th>
-          </tr>
-        </thead>
+        <thead><tr>
+          <th scope="col" class="col-name">Посилання та аудиторія</th>
+          <th scope="col" class="col-status">Стан і строк</th>
+          <th scope="col" class="col-stats">Статистика</th>
+          <th scope="col" class="col-actions">Дії</th>
+        </tr></thead>
         <tbody>
-          {% for link in links %}
+        {% for link in links %}
           <tr class="access-table-row access-kind-{{ link.kind }} {% if link.active %}is-active{% else %}is-inactive{% endif %}"
-              data-kind="{{ link.kind }}"
-              data-status="{% if link.active %}active{% else %}inactive{% endif %}">
-            <td class="col-type">
-              <span class="access-kind-badge kind-{{ link.kind }}">
-                {% if link.kind == 'site' %}🌐 Весь сайт
-                {% elif link.kind == 'class' %}👥 Клас
-                {% elif link.kind == 'student' %}👤 Учень
-                {% elif link.kind == 'assignment' %}📝 Завдання
-                {% endif %}
-              </span>
-            </td>
+              data-kind="{{ link.kind }}" data-status="{% if link.active %}active{% else %}inactive{% endif %}">
             <td class="col-name">
               <strong class="access-table-name">{{ link.name }}</strong>
-              <div class="access-table-sub">
-                {{ link.get_kind_display }}
-                {% if link.class_group %} · {{ link.class_group }}{% endif %}
-                {% if link.student %} · {{ link.student }}{% endif %}
-                {% if link.assignment %} · {{ link.assignment.title }}{% endif %}
+              <div class="access-table-audience">
+                <span class="access-kind-badge kind-{{ link.kind }}" title="{{ link.get_kind_display }}">
+                  {% if link.kind == 'site' %}🌐 Весь сайт{% elif link.kind == 'class' %}👥 Клас{% elif link.kind == 'student' %}👤 Учень{% elif link.kind == 'assignment' %}📝 Завдання{% endif %}
+                </span>
+                {% if link.class_group %}<span>{{ link.class_group }}</span>{% endif %}
+                {% if link.student %}<span>{{ link.student }}</span>{% endif %}
+                {% if link.assignment %}<span>{{ link.assignment.title }}</span>{% endif %}
               </div>
             </td>
             <td class="col-status">
               <span class="access-state {% if link.active %}is-active{% elif link.revoked_at %}is-revoked{% else %}is-expired{% endif %}">
                 {% if link.revoked_at %}Скасоване{% elif link.active %}Активне{% else %}Доступ завершено{% endif %}
               </span>
+              <div class="access-table-expiry">
+                {% if link.expires_at %}До {{ link.expires_at|date:'d.m.Y' }}<br>{{ link.expires_at|date:'H:i' }}{% else %}Без обмеження строку{% endif %}
+              </div>
             </td>
             <td class="col-stats">
-              <div>👁️ {{ link.visits }} переглядів</div>
-              <div>💻 {{ link.browser_count }} пристроїв</div>
-              <small class="access-table-muted">{{ link.last_used_at|date:'d.m.Y H:i'|default:'—' }}</small>
-            </td>
-            <td class="col-expires">
-              {{ link.expires_at|date:'d.m.Y H:i'|default:'До скасування' }}
-            </td>
-            <td class="col-address">
-              {% if link.public_address %}
-              <div class="access-table-address">
-                <button type="button" class="btn btn-secondary btn-xs btn-copy-address" data-copy-val="{{ link.public_address }}" title="Скопіювати посилання">
-                  <span class="btn-icon" aria-hidden="true">📋</span>
-                  <span class="btn-label">Скопіювати</span>
-                </button>
-                <details class="access-table-qr">
-                  <summary class="btn btn-secondary btn-xs btn-qr-summary" title="Показати QR-код">
-                    <span class="btn-icon" aria-hidden="true">📱</span>
-                    <span class="btn-label">QR</span>
-                  </summary>
-                  <div class="access-table-qr-popover">
-                    <img loading="lazy" width="180" height="180" data-src="{% url 'access_qr' link.pk %}" alt="QR: {{ link.name }}">
-                  </div>
-                </details>
-              </div>
-              {% else %}
-              <span class="access-table-muted">—</span>
-              {% endif %}
+              <div class="access-table-metric"><span aria-hidden="true">👁</span> Переходи: <strong>{{ link.visits }}</strong></div>
+              <div class="access-table-metric"><span aria-hidden="true">💻</span> Браузери: <strong>{{ link.browser_count }}</strong></div>
+              <small class="access-table-muted" title="Останній вхід, час Києва">{{ link.last_used_at|date:'d.m.Y H:i'|default:'Ще не відкривали' }}</small>
             </td>
             <td class="col-actions">
               <div class="access-table-actions">
-                <a class="btn btn-secondary btn-xs" href="?edit={{ link.pk }}">Змінити</a>
-                {% if not link.revoked_at %}
-                <form method="post" class="access-inline-form">
-                  {% csrf_token %}
-                  <input type="hidden" name="link_id" value="{{ link.pk }}">
-                  <button name="action" value="revoke" class="btn btn-danger btn-xs" type="submit" title="Скасувати доступ">Скасувати</button>
-                </form>
+                {% if link.public_address %}
+                <div class="access-table-action-row">
+                  <button type="button" class="btn btn-secondary btn-xs" data-copy-val="{{ link.public_address }}" title="Скопіювати посилання «{{ link.name }}»">📋 Копіювати</button>
+                  <a class="btn btn-secondary btn-xs" href="{% url 'access_qr' link.pk %}" target="_blank" rel="noopener" data-qr-url="{% url 'access_qr' link.pk %}" data-qr-name="{{ link.name }}" aria-haspopup="dialog" aria-label="Показати QR-код: {{ link.name }}">QR</a>
+                </div>
                 {% endif %}
+                <div class="access-table-action-row">
+                  <a class="btn btn-secondary btn-xs" href="?edit={{ link.pk }}">Змінити</a>
+                  {% if not link.revoked_at %}
+                  <form method="post" class="access-inline-form">
+                    {% csrf_token %}<input type="hidden" name="link_id" value="{{ link.pk }}">
+                    <button name="action" value="revoke" class="btn btn-danger btn-xs" type="submit" title="Скасувати доступ «{{ link.name }}»">Скасувати</button>
+                  </form>
+                  {% endif %}
+                </div>
               </div>
             </td>
           </tr>
-          {% endfor %}
+        {% endfor %}
         </tbody>
       </table>
     </div>
@@ -238,6 +211,17 @@
 
 <p class="access-footnote">Переходи — підтверджені відкриття кнопкою «Відкрити сайт», без попередніх переглядів у месенджерах. Унікальні браузери — приблизна кількість пристроїв, а не учнів. Посилання можна переслати іншій людині. Після скасування наступний запит припинить доступ; завантажені файли залишаться на пристроях.</p>
 <div id="access-copy-status" role="status" aria-live="polite"></div>
+<dialog id="access-qr-dialog" class="access-qr-dialog" aria-labelledby="access-qr-title" aria-describedby="access-qr-name">
+  <header class="access-qr-dialog-header">
+    <h2 id="access-qr-title">QR-код посилання</h2>
+    <form method="dialog" data-no-progress><button type="submit" class="btn btn-secondary" aria-label="Закрити QR-код" autofocus>✕</button></form>
+  </header>
+  <p id="access-qr-name" class="access-qr-dialog-name"></p>
+  <p id="access-qr-load-status" class="access-qr-load-status" role="status">Завантаження QR-коду…</p>
+  <img id="access-qr-image" width="360" height="360" alt="QR-код посилання" hidden>
+  <p class="access-qr-dialog-hint">Наведіть камеру телефона на код.</p>
+  <a id="access-qr-download" class="btn btn-secondary" download="access-qr.svg">Завантажити SVG</a>
+</dialog>
 </main></div></div>
 {% endblock %}
-{% block extra_scripts %}<script src="{% static 'js/access_links.js' %}?v=20261107"></script>{% endblock %}
+{% block extra_scripts %}<script src="{% static 'js/access_links.js' %}?v=20261107c"></script>{% endblock %}

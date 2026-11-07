@@ -88,12 +88,46 @@
   if (searchClear) searchClear.addEventListener('click', () => { searchInput.value = ''; searchForm.requestSubmit(); });
   document.getElementById('access-per-page')?.addEventListener('change', () => searchForm.requestSubmit());
   // A closed QR section never starts a QR request, even on long lists.
-  document.querySelectorAll('.access-qr, .access-table-qr').forEach(section => {
+  document.querySelectorAll('.access-qr').forEach(section => {
     section.addEventListener('toggle', () => {
       const image = section.querySelector('img[data-src]');
       if (section.open && image && !image.hasAttribute('src')) image.src = image.dataset.src;
     });
   });
+
+  // One large QR preview in the native top layer; no image request before opening.
+  const qrDialog = document.getElementById('access-qr-dialog');
+  const qrImage = document.getElementById('access-qr-image');
+  const qrStatus = document.getElementById('access-qr-load-status');
+  if (qrDialog && typeof qrDialog.showModal === 'function') {
+    document.querySelectorAll('[data-qr-url]').forEach(opener => {
+      opener.addEventListener('click', event => {
+        if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+        event.preventDefault();
+        const name = opener.dataset.qrName || 'Посилання';
+        document.getElementById('access-qr-name').textContent = name;
+        document.getElementById('access-qr-download').href = opener.dataset.qrUrl;
+        qrImage.alt = `QR-код: ${name}`;
+        qrImage.hidden = true;
+        qrStatus.hidden = false;
+        qrStatus.textContent = 'Завантаження QR-коду…';
+        qrImage.onload = () => { qrImage.hidden = false; qrStatus.hidden = true; };
+        qrImage.onerror = () => { qrImage.hidden = true; qrStatus.hidden = false; qrStatus.textContent = 'Не вдалося завантажити QR-код. Закрийте вікно та спробуйте ще раз.'; };
+        qrDialog.showModal();
+        qrImage.src = opener.dataset.qrUrl;
+      });
+    });
+    qrDialog.addEventListener('click', event => {
+      const box = qrDialog.getBoundingClientRect();
+      if (event.target === qrDialog && (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom)) qrDialog.close();
+    });
+    qrDialog.addEventListener('close', () => {
+      qrImage.onload = null;
+      qrImage.onerror = null;
+      qrImage.removeAttribute('src');
+      qrImage.hidden = true;
+    });
+  }
 
   // ─── 4. Плавне анімоване перемикання (Картки ↔ Таблиця) ───────────────────
   const btnCards = document.getElementById('view-mode-cards');
