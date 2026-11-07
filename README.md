@@ -1,8 +1,8 @@
-# SchoolNet 4.8.8
+# SchoolNet 4.8.9
 
 [Документація та аудити](docs/README.md) · [Необов’язковий запуск із ПК](desktop/README.md)
 
-Поточний випуск: **4.8.8** — автоочищення старих версій та легший серверний образ. [Зміни](CHANGELOG.md), [документація](docs/README.md), [очищення версій](docs/guides/IMAGE_RETENTION.md).
+Поточний випуск: **4.8.9** — зручніші сторінки завдання та здачі роботи. [Зміни](CHANGELOG.md), [перевірки інтерфейсу](docs/audits/ASSIGNMENT_WORKSPACE_2026-11-07.md), [документація](docs/README.md), [очищення версій](docs/guides/IMAGE_RETENTION.md).
 
 Розгортання 06.11.2026: **4.8.2 встановлено на сервері**. Виправлено учнівські «Інструкцію» та «Що нового» через Funnel. [Перевірки та встановлення](docs/STUDENT_DIALOGS_FUNNEL_4_8_2.md). Попередні встановлення: [4.8.1](docs/TAILSCALE_4_8_1_VALIDATION_2026-11-06.md), [4.8.0](docs/TAILSCALE_DEPLOYMENT_2026-11-06.md).
 

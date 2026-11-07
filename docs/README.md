@@ -12,6 +12,7 @@
 
 ## Аудити, перевірки й історичні встановлення
 
+- [Сторінка завдання та здача роботи 4.8.9](audits/ASSIGNMENT_WORKSPACE_2026-11-07.md)
 - [Очищення образів і структура проєкту](audits/RETENTION_AND_ORGANIZATION_2026-11-07.md)
 - [ACCESS_TABLE_2026-11-07](audits/ACCESS_TABLE_2026-11-07.md)
 - [API_REBUILD_CHECKS_2026-10-25](audits/API_REBUILD_CHECKS_2026-10-25.md)
