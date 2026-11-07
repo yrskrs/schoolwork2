@@ -448,3 +448,10 @@ html.sn-page-hidden body .ai-kid-panel[data-state] [class] { animation-play-stat
   body .assignment-detail-page section[id],body .assignment-detail-page #assignment-help-card { scroll-margin-top:calc(var(--school-tools-height,64px) + 12px); }
 }
 @media print { .navbar,.site-footer,.platform-teacher-mobile-nav,.school-more,.assignment-detail-sticky-tools,.school-animation-toggle { display:none!important; } body .page-wrapper { max-width:none!important; padding:0!important; } body { background:#fff!important; color:#111!important; } }
+
+/* Pasted editor colours must not create light patches in dark feed previews. */
+[data-theme="dark"] .home-page .card-description :is(p,span,strong,b,em,i,mark,[style]) {
+  color:inherit!important;
+  background:transparent!important;
+}
+[data-theme="dark"] .home-page .card-description a { text-decoration:underline; }

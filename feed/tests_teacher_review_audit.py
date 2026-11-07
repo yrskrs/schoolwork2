@@ -235,6 +235,19 @@ class DocxObjectsTests(SimpleTestCase):
         self.assertIn(ASSET_MARKER, content)
         self.assertTrue(assets_available(str(self.path), content))
 
+    def test_reading_mode_keeps_copyable_text_separate_from_cached_graphical_pages(self):
+        from .utils import convert_docx_to_html
+        self.make_document()
+        with patch('feed.review_preview.render_docx_graphics', return_value='<div class="fv-rendered-document"><img src="data:image/png;base64,AAAA"></div>') as render:
+            graphical, _ = convert_docx_to_html(str(self.path))
+            reading, _ = convert_docx_to_html(str(self.path), reading_mode=True)
+            graphical_again, _ = convert_docx_to_html(str(self.path))
+        self.assertIn('fv-rendered-document', graphical)
+        self.assertIn('Пояснення учня', reading)
+        self.assertNotIn('fv-rendered-document', reading)
+        self.assertEqual(graphical, graphical_again)
+        render.assert_called_once()
+
     def test_failed_graphic_preview_keeps_text_and_reports_missing_visual_objects(self):
         from .utils import convert_docx_to_html
         self.make_document()

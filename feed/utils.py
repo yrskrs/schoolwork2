@@ -139,13 +139,14 @@ def _cache_doc_conversion(prefix: str):
     def decorator(func):
         def wrapper(file_path: str, *args, **kwargs):
             preview_assets = kwargs.pop('preview_assets', False)
+            reading_mode = kwargs.pop('reading_mode', False)
             if not file_path or not os.path.exists(file_path):
                 return "", "Файл не знайдено на сервері"
             cache_key = None
             shared_key = None
             try:
                 from .ai_context import file_cache_key, evidence_cache
-                purpose = 'html-' + prefix + ('-assets-v1' if preview_assets else '')
+                purpose = 'html-' + prefix + ('-assets-v1' if preview_assets else '') + ('-reading-v1' if reading_mode else '')
                 shared_key = file_cache_key(file_path, purpose, repr((args, kwargs)))
                 cached = evidence_cache().get(shared_key)
                 from .review_preview import assets_available
@@ -161,7 +162,7 @@ def _cache_doc_conversion(prefix: str):
 
             res = func(file_path, *args, **kwargs)
             if res and res[0]:
-                if prefix == 'docx' and str(file_path).lower().endswith('.docx'):
+                if not reading_mode and prefix == 'docx' and str(file_path).lower().endswith('.docx'):
                     from .office_objects import docx_has_complex_graphics
                     if docx_has_complex_graphics(file_path):
                         try:

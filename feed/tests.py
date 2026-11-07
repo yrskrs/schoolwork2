@@ -4204,7 +4204,10 @@ class AICreativityAndCriteriaTests(TestCase):
         self.assertContains(resp, 'openCriteriaModal()')
         self.assertContains(resp, 'Критерії оцінювання')
         self.assertContains(resp, 'id="criteria-modal"')
-        self.assertContains(resp, '1. Теза (4 б.)')
+        from lxml import html
+        page = html.fromstring(resp.content.decode())
+        self.assertEqual(page.xpath('//div[contains(@class,"teacher-criteria-content")]//ol/li/text()'),
+                         ['Теза (4 б.)', 'Аргументи (4 б.)', 'Висновок (4 б.)'])
         self.assertContains(resp, 'ШІ Дозволено')
 
         # 2. Сторінка submit_assignment
@@ -4212,6 +4215,8 @@ class AICreativityAndCriteriaTests(TestCase):
         self.assertEqual(resp_sub.status_code, 200)
         self.assertContains(resp_sub, 'openCriteriaModal()')
         self.assertContains(resp_sub, 'id="criteria-modal"')
+        sub_page = html.fromstring(resp_sub.content.decode())
+        self.assertEqual(len(sub_page.xpath('//div[contains(@class,"teacher-criteria-content")]//ol/li')), 3)
 
 
 class TeacherMaterialsAITaskRecognitionTests(TestCase):

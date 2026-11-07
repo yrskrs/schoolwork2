@@ -75,6 +75,7 @@ class MaterialDialogTests(TestCase):
         self.material.file = SimpleUploadedFile('lesson.docx', b'fixture'); self.material.original_name = 'Урок.docx'; self.material.save()
         self.assertEqual(self.client.get(self.preview_url, {'mode': 'text'}).json()['type'], 'html')
         pdf.assert_not_called()
+        self.assertTrue(convert.call_args.kwargs['reading_mode'])
 
     def test_archive_listing_remains_available_in_the_dialog(self):
         buffer = io.BytesIO()

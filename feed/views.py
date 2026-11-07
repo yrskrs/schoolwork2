@@ -2685,7 +2685,7 @@ def file_preview(request, file_id):
     }
     if request.GET.get('mode') == 'text' and ext in reading_converters:
         try:
-            content, error = reading_converters[ext](file_obj.file.path)
+            content, error = reading_converters[ext](file_obj.file.path, reading_mode=True)
             if content:
                 from .document_html import safe_document_html
                 return JsonResponse({'type': 'html', 'content': safe_document_html(content)})
