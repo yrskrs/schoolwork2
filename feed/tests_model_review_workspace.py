@@ -174,7 +174,7 @@ class ModelAndReviewWorkspaceTests(TestCase):
         self.assertEqual([s['total_tokens'] for s in stats],[55,55])
         self.assertEqual([s['period_failed_reqs'] for s in stats],[5,5])
 
-    def test_viewer_grading_is_available_above_document_and_workbench(self):
+    def test_viewer_grading_and_feedback_share_panel_with_persistent_save(self):
         sub=Submission.objects.create(assignment=self.assignment,teacher=self.teacher,class_group=self.group,last_name='Учень',first_name='Тест',file=SimpleUploadedFile('a.txt',b'Answer'))
         Submission.objects.create(assignment=self.assignment,teacher=self.teacher,class_group=self.group,last_name='Інший',first_name='Тест',file=SimpleUploadedFile('b.txt',b'Answer'))
         response=self.client.get(reverse('view_file',args=[sub.pk]))
@@ -183,13 +183,14 @@ class ModelAndReviewWorkspaceTests(TestCase):
         toolbar=page.xpath('//*[@class="fv-workspace-toolbar"]')[0]
         self.assertTrue(toolbar.xpath('following-sibling::*[1][contains(@class,"fv-grid")]'))
         grade=page.get_element_by_id('fv-grading-card')
-        self.assertEqual(grade.getparent(),toolbar)
-        self.assertFalse(grade.xpath('ancestor::*[@role="tabpanel"]'))
+        self.assertEqual(grade.getparent().get('id'),'fv-panel-comments')
+        self.assertTrue(page.get_element_by_id('comment-textarea').xpath('ancestor::*[@id="fv-panel-comments"]'))
+        self.assertFalse(page.get_element_by_id('save-grade-btn').xpath('ancestor::*[@role="tabpanel"]'))
         self.assertEqual(len(page.xpath('//*[@id="grade-input"]')),1)
         self.assertIsNotNone(page.get_element_by_id('save-grade-next-btn'))
         self.assertEqual(page.get_element_by_id('grade-saved-msg').get('role'),'status')
         self.assertEqual(len(page.xpath('//*[@data-review-panel]')),4)
         self.assertFalse(page.get_element_by_id('fv-workbench').xpath('.//details[contains(@class,"fv-context-details") or contains(@class,"fv-ai-details")]'))
         self.assertFalse(page.get_element_by_id('assignment-file-modal').xpath('ancestor::aside'))
-        self.assertFalse(page.xpath('//footer/ancestor::*[contains(@class,"fv-container")]'))
+        self.assertFalse(page.xpath('//footer[contains(@class,"site-footer")]/ancestor::*[contains(@class,"fv-container")]'))
         self.assertContains(response,'review_workspace.css')

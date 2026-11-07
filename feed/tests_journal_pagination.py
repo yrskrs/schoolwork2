@@ -140,10 +140,11 @@ class JournalPaginationTests(TestCase):
         response = Client().get(reverse('submission_detail', args=[self.sub.pk]))
         self.assertContains(response, 'У роботі виявлено ознаки використання штучного інтелекту')
 
-    def test_compact_toolbar_keeps_navigation_grading_and_status_controls(self):
+    def test_review_keeps_navigation_and_persistent_grading_controls(self):
         response = self.client.get(reverse('view_file', args=[self.sub.pk]))
         page = html.fromstring(response.content)
         toolbar = page.xpath('//*[@class="fv-workspace-toolbar"]')[0]
         for element_id in ['grade-input', 'save-grade-btn', 'save-grade-next-btn', 'fv-current-grade', 'fv-quick-ai']:
-            self.assertTrue(toolbar.xpath('.//*[@id=$value]', value=element_id))
+            self.assertTrue(page.xpath('//*[@id=$value]', value=element_id))
+        self.assertFalse(page.get_element_by_id('save-grade-btn').xpath('ancestor::*[@role="tabpanel"]'))
         self.assertTrue(toolbar.xpath('.//nav[@aria-label="Потік робіт"]'))

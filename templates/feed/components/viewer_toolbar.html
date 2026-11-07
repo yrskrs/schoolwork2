@@ -1,5 +1,7 @@
 <div class="fv-workspace-toolbar" aria-label="Навігація перевірки">
-    <nav class="fv-flow-nav" aria-label="Потік робіт">                        {% if prev_submission %}
+<div class="fv-review-context"><a href="{{ back_url|default:'/teacher/submissions/' }}" class="fv-back-link">← {{ back_label|default:'До списку здач' }}</a>{% if submission.assignment %}<span>/</span><a href="{% url 'assignment_detail' submission.assignment.id %}" target="_blank" rel="noopener noreferrer" class="fv-assignment-context" title="{{ submission.assignment.title }}">{{ submission.assignment.title }}</a>{% endif %}<span class="fv-trial-label">Новий вигляд · пробна версія</span></div>
+<div class="fv-student-row"><div class="fv-student-identity"><div class="fv-student-title"><h1>{{ submission.get_student_full_name }}</h1><span class="fv-class-label">{{ submission.class_group.name }}</span><span id="fv-current-grade">{% if submission.grade %}Оцінка: {{ submission.grade }}{% else %}До перевірки{% endif %}</span></div><div class="fv-student-meta"><span>Робота №{{ submission.id }} · {{ submission.submitted_at|date:"d.m.Y H:i" }}</span><button type="button" onclick="openCoauthorsModal()">👥 {% if group_members|length > 1 %}{{ group_members|length }} учасники{% else %}Додати співавтора{% endif %}</button><button type="button" onclick="selectReviewPanel('info',true)">↻ Спроба {{ submission.resubmission_attempt|default:1 }}</button>{% if not submission.is_latest_attempt %}<button type="button" class="fv-old-attempt" onclick="selectReviewPanel('info',true)">⚠ Попередня версія</button>{% endif %}</div></div>
+<nav class="fv-flow-nav" aria-label="Потік робіт">                        {% if prev_submission %}
                         <a href="{% url 'view_file' prev_submission.id %}{% if nav_query_string %}?{{ nav_query_string }}{% endif %}"
                            class="btn btn-secondary btn-sm"
                            title="Попередня робота учня в потоці (Alt + ←)"
@@ -61,35 +63,4 @@
                         <button class="btn btn-secondary btn-sm" disabled style="opacity:0.35;" title="{% if is_filtered %}Всі роботи у вибраному фільтрі перевірено{% else %}Це остання робота в системі{% endif %}">Наступна »</button>
                         {% endif %}
 
-<div class="fv-flow-actions">                        {% if active_file %}
-                        <a href="{% url 'view_submission_raw_file' submission.id %}{% if active_file_id and active_file_id != 'link' %}?file_id={{ active_file_id }}{% endif %}" download class="btn btn-secondary btn-sm" style="margin-left:4px;" title="Завантажити активний файл">
-                            ⬇️ Завантажити
-                        </a>
-                        {% endif %}
-                        {% if submission.link %}
-                        <a href="{{ submission.link }}" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm" style="margin-left:4px;" title="Відкрити посилання учня у новій вкладці">
-                            🔗 Посилання ↗
-                        </a>
-                        {% elif not active_file %}<button type="button" class="btn btn-secondary btn-sm" disabled>⬇️ Немає файлу</button>{% endif %}
-
-</div></nav>
-    <div class="fv-identity-row">                    <!-- Навігація назад та назва поточного файлу -->
-                    <div class="fv-file-identity">
-                        <a href="{{ back_url|default:'/teacher/submissions/' }}" class="btn btn-secondary btn-sm fv-back-link" title="{{ back_label|default:'До списку здач' }}"><span aria-hidden="true">←</span><span class="fv-back-label">
-                            {{ back_label|default:'До списку здач' }}
-                        </span></a>
-
-
-
-
-                    </div>
-
-<details class="fv-reading-tools"><summary title="Вигляд та повний екран" aria-label="Налаштування вигляду">⚙️<span> Вигляд</span></summary>                        <!-- Режими читання та повний екран -->
-                        <div style="display:inline-flex;align-items:center;background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:2px;gap:2px;margin-left:4px;">
-                            <button type="button" onclick="setViewerTheme('default')" title="Звичайна тема" style="background:none;border:none;cursor:pointer;font-size:13px;padding:2px 6px;border-radius:3px;">☀️</button>
-                            <button type="button" onclick="setViewerTheme('sepia')" title="Тема Сепія для очей" style="background:none;border:none;cursor:pointer;font-size:13px;padding:2px 6px;border-radius:3px;">📜</button>
-                            <button type="button" onclick="setViewerTheme('dark')" title="Темна тема" style="background:none;border:none;cursor:pointer;font-size:13px;padding:2px 6px;border-radius:3px;">🌙</button>
-                            <button type="button" onclick="toggleViewerFullscreen()" title="На весь екран (F11 / Alt+F)" style="background:none;border:none;cursor:pointer;font-size:13px;padding:2px 6px;border-radius:3px;border-left:1px solid var(--color-border);">⛶</button>
-                        </div></details></div>
-{% include 'feed/components/viewer_grading.html' %}
-</div>
+</nav></div></div>

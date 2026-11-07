@@ -257,12 +257,12 @@
     transform: scale(1.05);
 }
 </style>
-<link href="{% static 'css/review_workspace.css' %}" rel="stylesheet">
+<link href="{% static 'css/review_workspace.css' %}?ui=20261108-r2" rel="stylesheet">
 <link href="{% static 'css/material_preview.css' %}?ui=20261018-r4" rel="stylesheet">
 {% endblock %}
 
 {% block content %}
-<div class="page-wrapper" style="padding-top: 12px;">
+<div class="page-wrapper fv-review-page" style="padding-top: 12px;">
 
     <div class="fv-container"{% if review_async %} data-review-async="true" data-review-fallback="{{ review_sync_url }}"{% if next_preview_url %} data-next-preview="{{ next_preview_url }}"{% endif %}{% endif %}>
 
@@ -271,7 +271,7 @@
 
             <!-- ════ ЛІВА КОЛОНКА: Робоча область переглядача ════════════════════ -->
             <main class="fv-main-card" id="fv-document-card" aria-label="Робота учня" tabindex="-1">
-                <header class="fv-document-heading"><div><strong>📄 Робота учня {% include 'feed/components/viewer_file_kind.html' %}</strong><span id="fv-file-title" class="fv-file-name" title="{{ file_name }}">{{ file_name }}</span></div><button type="button" class="btn btn-secondary btn-sm" id="fv-expand-document" aria-pressed="false">⤢ Розгорнути</button></header>
+                <header class="fv-document-heading"><div><strong>📄 Робота учня {% include 'feed/components/viewer_file_kind.html' %}</strong><span id="fv-file-title" class="fv-file-name" title="{{ file_name }}">{{ file_name }}</span></div><div class="fv-document-actions">{% if active_file %}<a href="{% url 'view_submission_raw_file' submission.id %}{% if active_file_id and active_file_id != 'link' %}?file_id={{ active_file_id }}{% endif %}" download class="btn btn-secondary btn-sm" title="Завантажити активний файл">↓ Завантажити</a>{% endif %}{% if submission.link %}<a href="{{ submission.link }}" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm">🔗 Посилання ↗</a>{% endif %}{% include 'feed/components/viewer_reading_tools.html' %}<button type="button" class="btn btn-secondary btn-sm" id="fv-expand-document" aria-pressed="false">⤢ Розгорнути</button></div></header>
                 {% include "feed/components/viewer_submission_files.html" %}
 
                 <!-- Рядок формул для Excel / ODS -->
@@ -684,22 +684,25 @@
             <aside class="fv-sidebar fv-workbench" id="fv-workbench" aria-label="Інструменти перевірки">
     <div class="fv-workbench-heading"><strong>Інструменти перевірки</strong><div class="fv-pane-actions"><button type="button" class="btn btn-secondary btn-sm" id="fv-expand-tools" aria-pressed="false">⤢ Розгорнути</button><button type="button" class="btn btn-secondary btn-sm" id="fv-collapse-tools" title="Згорнути інструменти й збільшити роботу учня">↤ Згорнути</button></div></div>
     <div class="fv-workbench-tabs" role="tablist" aria-label="Панелі перевірки">
-        <button type="button" role="tab" id="fv-tab-document" aria-controls="fv-document-card" aria-selected="false" tabindex="-1" class="fv-document-tab" data-review-tab="document" title="Робота учня"><span aria-hidden="true">📄</span><span class="fv-tab-label">Робота учня</span></button>
-        <button type="button" role="tab" id="fv-tab-task" aria-controls="fv-panel-task" aria-selected="true" data-review-tab="task" title="Умова й матеріали"><span aria-hidden="true">📋</span><span class="fv-tab-label">Умова й матеріали</span></button>
-        <button type="button" role="tab" id="fv-tab-ai" aria-controls="fv-panel-ai" aria-selected="false" tabindex="-1" data-review-tab="ai" title="ШІ-перевірка"><span aria-hidden="true">🤖</span><span class="fv-tab-label">ШІ-перевірка</span>{% if active_ai_job %}<span class="badge badge-warning" style="margin-left:4px;font-size:10px;padding:1px 5px;">⏳</span>{% endif %}</button>
-        <button type="button" role="tab" id="fv-tab-comments" aria-controls="fv-panel-comments" aria-selected="false" tabindex="-1" data-review-tab="comments" title="Відгук"><span aria-hidden="true">💬</span><span class="fv-tab-label">Відгук</span><span id="fv-comment-count" class="fv-comment-count" {% if not comments %}hidden{% endif %}>{{ comments|length }}</span></button>
-        <button type="button" role="tab" id="fv-tab-info" aria-controls="fv-panel-info" aria-selected="false" tabindex="-1" data-review-tab="info" title="Про роботу"><span aria-hidden="true">ℹ️</span><span class="fv-tab-label">Про роботу</span></button>
+        <button type="button" role="tab" id="fv-tab-document" aria-controls="fv-document-card" aria-selected="false" tabindex="-1" class="fv-document-tab" data-review-tab="document" title="Робота учня">📄<span class="fv-tab-label">Робота учня</span></button>
+        <button type="button" role="tab" id="fv-tab-comments" aria-controls="fv-panel-comments" aria-selected="true" data-review-tab="comments" title="Оцінка та відгук">✓<span class="fv-tab-label">Оцінити</span></button>
+        <button type="button" role="tab" id="fv-tab-task" aria-controls="fv-panel-task" aria-selected="false" tabindex="-1" data-review-tab="task" title="Умова й матеріали"><span class="fv-tab-label">Умова</span></button>
+        <button type="button" role="tab" id="fv-tab-ai" aria-controls="fv-panel-ai" aria-selected="false" tabindex="-1" data-review-tab="ai" title="ШІ-перевірка">✧<span class="fv-tab-label">ШІ</span>{% if active_ai_job %}<span class="badge badge-warning">⏳</span>{% endif %}</button>
+        <button type="button" role="tab" id="fv-tab-info" aria-controls="fv-panel-info" aria-selected="false" tabindex="-1" data-review-tab="info" aria-label="Історія та інформація про роботу" title="Історія та інформація про роботу">↻</button>
     </div>
     <div class="fv-panel-scroll" id="fv-panel-scroll">
-        <section class="fv-review-panel" id="fv-panel-task" role="tabpanel" aria-labelledby="fv-tab-task" data-review-panel="task" tabindex="0">{% include 'feed/components/viewer_task_panel.html' %}</section>
-        <section class="fv-review-panel" id="fv-panel-ai" role="tabpanel" aria-labelledby="fv-tab-ai" data-review-panel="ai" tabindex="0">{% include 'feed/components/viewer_ai_panel.html' %}</section>
-        <section class="fv-review-panel" id="fv-panel-comments" role="tabpanel" aria-labelledby="fv-tab-comments" data-review-panel="comments" tabindex="0">{% include 'feed/components/viewer_comments.html' %}</section>
-        <section class="fv-review-panel" id="fv-panel-info" role="tabpanel" aria-labelledby="fv-tab-info" data-review-panel="info" tabindex="0">{% include 'feed/components/viewer_submission_info.html' %}</section>
+        <section class="fv-review-panel" id="fv-panel-comments" role="tabpanel" aria-labelledby="fv-tab-comments" data-review-panel="comments" tabindex="0">{% include 'feed/components/viewer_grading.html' %}{% include 'feed/components/viewer_comments.html' %}</section>
+        <section class="fv-review-panel" id="fv-panel-task" role="tabpanel" aria-labelledby="fv-tab-task" data-review-panel="task" tabindex="0" hidden>{% include 'feed/components/viewer_task_panel.html' %}</section>
+        <section class="fv-review-panel" id="fv-panel-ai" role="tabpanel" aria-labelledby="fv-tab-ai" data-review-panel="ai" tabindex="0" hidden>{% include 'feed/components/viewer_ai_panel.html' %}</section>
+        <section class="fv-review-panel" id="fv-panel-info" role="tabpanel" aria-labelledby="fv-tab-info" data-review-panel="info" tabindex="0" hidden>{% include 'feed/components/viewer_submission_info.html' %}{% include 'feed/components/viewer_comment_history.html' %}</section>
     </div>
+    {% include 'feed/components/viewer_save_footer.html' %}
 </aside>
         </div>
-    </div>
 
+    <nav class="fv-mobile-navigation" aria-label="Робота та оцінювання"><button type="button" id="fv-mobile-document" onclick="selectReviewPanel('document')" aria-pressed="true">📄 Робота учня</button><button type="button" id="fv-mobile-tools" onclick="selectReviewPanel(window.reviewCurrentPanel || 'comments')" aria-pressed="false">✓ Перевірити</button></nav>
+    <button type="button" id="fv-restore-tools" onclick="selectReviewPanel('comments')" hidden>✓ Показати оцінювання</button>
+    </div>
     {% include 'feed/components/material_preview_dialog.html' %}
     {% include 'feed/components/viewer_coauthors_modal.html' %}
 
@@ -707,11 +710,13 @@
 {% endblock %}
 
 {% block extra_scripts %}
+{{ submission.ai_suggested_grade|json_script:"viewer-ai-draft-grade" }}
+{{ submission.ai_feedback|json_script:"viewer-ai-draft-feedback" }}
 {{ default_gr_codes|json_script:"assignment-default-grs" }}
 {{ viewer_gr_codes|json_script:"viewer-selected-grs" }}
 {{ default_preset.id|json_script:"assignment-default-preset" }}
 <script src="{% static 'js/ai_request_metadata.js' %}"></script>
-<script src="{% static 'js/review_workspace.js' %}" defer></script>
+<script src="{% static 'js/review_workspace.js' %}?ui=20261108-r2" defer></script>
 <script src="{% static 'js/review_loading.js' %}" defer></script>
 <script src="{% static 'js/python_runner.js' %}" defer></script>
 <script src="{% static 'js/material_preview.js' %}?ui=20261018-r4" defer></script>
@@ -757,27 +762,45 @@ function showFormula(cell) {
 
 // Explicit save; navigation only follows a successful response.
 let viewerGradeDirty = false;
-function markViewerGradeDirty() {
-    viewerGradeDirty = true;
-    const input = document.getElementById('grade-input');
-    document.querySelectorAll('.fv-preset-btn').forEach(button => {button.setAttribute('aria-pressed', String(button.dataset.gradePreset === input.value.trim()));});
-    const message = document.getElementById('grade-saved-msg'); message.textContent = 'Зміни ще не збережено'; message.style.color = 'var(--color-text-secondary)';
+function viewerHasUnsavedChanges() {
+    return viewerGradeDirty || !!document.getElementById('comment-textarea')?.value.trim();
 }
+function updateViewerDraftState() {
+    const dirty = viewerHasUnsavedChanges(), grade = document.getElementById('grade-input').value.trim();
+    document.getElementById('fv-draft-label').textContent = dirty ? 'Чернетка' : (grade ? 'Збережено' : 'Не виставлено');
+    document.getElementById('fv-grading-card').classList.toggle('fv-revision-grade', grade === 'Доопрацювати');
+    const n = Number(grade);
+    document.getElementById('fv-grade-level').textContent = grade === 'Доопрацювати' ? 'Доопрацювати' : (/^(?:[1-9]|1[0-2])$/.test(grade) ? (n >= 10 ? 'Високий рівень' : n >= 7 ? 'Достатній рівень' : n >= 4 ? 'Середній рівень' : 'Початковий рівень') : 'Оберіть бал');
+    document.querySelectorAll('.fv-preset-btn').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.gradePreset === grade)));
+    const message = document.getElementById('grade-saved-msg');
+    message.textContent = dirty ? 'Є незбережені зміни' : (grade ? '✓ Оцінку збережено' : 'Оцінка ще не збережена');
+    message.style.color = 'var(--color-text-secondary)';
+}
+function markViewerGradeDirty() { viewerGradeDirty = true; updateViewerDraftState(); }
 function rememberViewerGrade(grade) {
     viewerGradeDirty = false;
+    document.getElementById('grade-input').value = grade || '';
     document.getElementById('fv-current-grade').textContent = 'Оцінка: ' + (grade || '—');
+    updateViewerDraftState();
+}
+function appendViewerComment(c) {
+    const container = document.getElementById('fv-comments-container');
+    if (document.getElementById('comment-' + c.id)) return;
+    document.getElementById('no-comments-msg')?.remove();
+    container.insertAdjacentHTML('beforeend', '<div class="fv-comment-card" id="comment-' + Number(c.id) + '"><div class="fv-comment-meta"><strong>' + escapeHtmlForViewer(c.author) + '</strong><span>' + escapeHtmlForViewer(c.created_at) + '</span><button type="button" onclick="deleteViewerComment(' + Number(c.id) + ')" title="Видалити відгук" aria-label="Видалити відгук">✕</button></div><div style="white-space:pre-wrap">' + escapeHtmlForViewer(c.text) + '</div></div>');
+    window.updateReviewCommentCount?.();
 }
 async function saveViewerGrade(goNext) {
     const input = document.getElementById('grade-input'), grade = input.value.trim();
     const message = document.getElementById('grade-saved-msg'), button = document.getElementById('save-grade-btn');
-    if (button.disabled) return;
-    const controls = Array.from(document.querySelectorAll('#fv-grading-card input, #fv-grading-card button'));
-    const nextButton = document.getElementById('save-grade-next-btn');
-    const nextLink = document.getElementById('next-sub-btn');
-    const params = new URLSearchParams({grade});
+    if (button.disabled || document.getElementById('send-comment-btn').disabled) return;
+    const controls = Array.from(document.querySelectorAll('#fv-grading-card input, #fv-grading-card button, .fv-save-footer button, #comment-textarea, #send-comment-btn'));
+    const nextButton = document.getElementById('save-grade-next-btn'), nextLink = document.getElementById('next-sub-btn');
+    const textarea = document.getElementById('comment-textarea'), feedback = textarea.value.trim();
+    const params = new URLSearchParams({grade, comment_text: feedback});
     document.querySelectorAll('.member-grade-input').forEach(member => params.append('member_grade_' + member.dataset.memberId, member.value.trim()));
     controls.forEach(control => {control.disabled = true;}); button.setAttribute('aria-busy','true');
-    message.textContent = '⏳ Збереження…'; message.style.color = 'var(--color-text-secondary)';
+    message.textContent = 'Зберігаємо оцінку' + (feedback ? ' й відгук…' : '…'); message.style.color = 'var(--color-text-secondary)';
     const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 20000);
     try {
         const response = await fetch('/teacher/submission/' + SUBMISSION_ID + '/grade/', {
@@ -785,74 +808,39 @@ async function saveViewerGrade(goNext) {
         });
         const data = await response.json();
         if (!response.ok || data.status !== 'success') throw new Error(data.message || 'Помилка збереження (HTTP ' + response.status + ')');
-        rememberViewerGrade(grade);
-        message.textContent = data.graded_members && data.graded_members.length ? '✓ Збережено: ' + data.graded_members.join(', ') : '✓ Оцінку збережено';
+        if (data.comment) { appendViewerComment(data.comment); textarea.value = ''; }
+        rememberViewerGrade(data.grade);
+        message.textContent = data.graded_members && data.graded_members.length ? '✓ Збережено: ' + data.graded_members.join(', ') : '✓ Збережено';
         message.style.color = 'var(--color-success)';
         if (goNext && nextLink) window.location.assign(nextLink.href);
-    } catch(error) {message.textContent = '⚠️ ' + (error.name === 'AbortError' ? 'Час очікування минув' : error.message) + '. Збереження не підтверджено; перевірте або повторіть спробу.'; message.style.color = 'var(--color-danger)';}
+    } catch(error) {message.textContent = '⚠ ' + (error.name === 'AbortError' ? 'Час очікування минув' : error.message) + '. Збереження не підтверджено; чернетку залишено.'; message.style.color = 'var(--color-danger)';}
     finally {clearTimeout(timer); controls.forEach(control => {control.disabled = false;}); nextButton.disabled = !nextLink; button.removeAttribute('aria-busy');}
 }
-window.addEventListener('beforeunload', event => {if (viewerGradeDirty) {event.preventDefault(); event.returnValue = '';}});
-document.addEventListener('keydown', event => {if (!document.getElementById('assignment-file-modal')?.open && (event.ctrlKey || event.metaKey) && event.key === 'Enter' && !event.isComposing) {event.preventDefault(); saveViewerGrade();}});
+window.addEventListener('beforeunload', event => {if (viewerHasUnsavedChanges()) {event.preventDefault(); event.returnValue = '';}});
+document.addEventListener('keydown', event => {if (!document.getElementById('assignment-file-modal')?.open && !document.querySelector('#coauthors-modal[style*="display: flex"]') && event.key === 'Enter' && !event.isComposing && (event.ctrlKey || event.metaKey || event.altKey)) {event.preventDefault(); saveViewerGrade(event.altKey);}});
 document.addEventListener('DOMContentLoaded', function () {
-    const container = document.querySelector('.fv-container'), toolbar = document.querySelector('.fv-workspace-toolbar');
     const nextLink = document.getElementById('next-sub-btn'); document.getElementById('save-grade-next-btn').disabled = !nextLink;
-    document.getElementById('save-grade-next-btn').title = nextLink ? 'Зберегти оцінку та перейти до наступної роботи у потоці' : 'Наступної роботи у потоці немає';
-    if (window.ResizeObserver) new ResizeObserver(() => container.style.setProperty('--fv-tools-height', toolbar.getBoundingClientRect().height + 'px')).observe(toolbar);
+    document.getElementById('save-grade-next-btn').title = nextLink ? 'Зберегти оцінку й відгук та перейти до наступної роботи' : 'Наступної роботи у потоці немає';
+    updateViewerDraftState();
 });
 
-// Додавання коментаря (AJAX)
-function sendViewerComment() {
-    const textarea = document.getElementById('comment-textarea');
-    const text = textarea.value.trim();
+// Independent feedback uses the existing endpoint; failures keep the draft.
+async function sendViewerComment() {
+    const textarea = document.getElementById('comment-textarea'), text = textarea.value.trim();
     const btn = document.getElementById('send-comment-btn');
-    const container = document.getElementById('fv-comments-container');
-    const noMsg = document.getElementById('no-comments-msg');
-
-    if (!text) return;
-
-    btn.disabled = true;
-    btn.textContent = '⏳ Відправляємо...';
-
-    fetch('/teacher/submission/' + SUBMISSION_ID + '/comment/', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-            'X-CSRFToken': CSRF_TOKEN,
-            'X-Requested-With': 'XMLHttpRequest'
-        },
-        body: 'text=' + encodeURIComponent(text)
-    })
-    .then(r => r.json())
-    .then(data => {
-        btn.disabled = false;
-        btn.textContent = '💬 Надіслати відгук';
-
-        if (data.status === 'success') {
-            if (noMsg) noMsg.remove();
-            const c = data.comment;
-            const cardHTML = `
-                <div class="fv-comment-card" id="comment-${c.id}">
-                    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px;">
-                        <span style="font-weight:700;color:var(--color-primary);">${escapeHtmlForViewer(c.author)}</span>
-                        <div style="display:flex;align-items:center;gap:6px;">
-                            <span style="font-size:11px;color:var(--color-text-muted);">${escapeHtmlForViewer(c.created_at)}</span>
-                            <button type="button" onclick="deleteViewerComment(${c.id})" style="background:none;border:none;color:var(--color-danger);cursor:pointer;padding:0;font-size:12px;">✕</button>
-                        </div>
-                    </div>
-                    <div style="white-space:pre-wrap;line-height:1.5;">${escapeHtmlForViewer(c.text)}</div>
-                </div>`;
-            container.insertAdjacentHTML('beforeend', cardHTML);
-            container.scrollTop = container.scrollHeight;
-            textarea.value = '';
-            window.updateReviewCommentCount?.();
-        }
-    })
-    .catch(() => {
-        btn.disabled = false;
-        btn.textContent = '💬 Надіслати відгук';
-        alert('Помилка надсилання коментаря');
-    });
+    if (!text || btn.disabled || document.getElementById('save-grade-btn').disabled) return;
+    btn.disabled = true; textarea.disabled = true; btn.textContent = 'Надсилаємо…';
+    const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 20000);
+    try {
+        const response = await fetch('/teacher/submission/' + SUBMISSION_ID + '/comment/', {
+            method:'POST', signal:controller.signal, headers:{'Content-Type':'application/x-www-form-urlencoded','X-CSRFToken':CSRF_TOKEN,'X-Requested-With':'XMLHttpRequest'}, body:new URLSearchParams({text}).toString()
+        });
+        const data = await response.json();
+        if (!response.ok || data.status !== 'success') throw new Error(data.message || 'Не вдалося надіслати відгук');
+        appendViewerComment(data.comment); textarea.value = ''; updateViewerDraftState();
+        const message = document.getElementById('grade-saved-msg'); message.textContent = viewerGradeDirty ? '✓ Відгук надіслано. Оцінка ще не збережена.' : '✓ Відгук надіслано';
+    } catch(error) {const message = document.getElementById('grade-saved-msg'); message.textContent = '⚠ Відгук не підтверджено. Чернетку залишено: ' + error.message; message.style.color = 'var(--color-danger)';}
+    finally {clearTimeout(timer); btn.disabled = false; textarea.disabled = false; btn.textContent = 'Надіслати окремо ↗';}
 }
 
 // Видалення коментаря (AJAX)
@@ -964,12 +952,13 @@ function toggleAssignmentCondition() {
 
 function insertCommentSnippet(text) {
     var textarea = document.getElementById('comment-textarea');
-    if (!textarea) return;
+    if (!textarea || textarea.disabled) return;
     if (textarea.value.trim()) {
         textarea.value += ' ' + text;
     } else {
         textarea.value = text;
     }
+    updateViewerDraftState();
     textarea.focus();
 }
 
@@ -1020,7 +1009,16 @@ var VIEWER_PRESETS_DATA = [
     {% endfor %}
 ];
 
-var windowLastAICleanFeedback = '';
+var windowLastAICleanFeedback = JSON.parse(document.getElementById('viewer-ai-draft-feedback').textContent) || '';
+var viewerLastAIGrade = JSON.parse(document.getElementById('viewer-ai-draft-grade').textContent) || '';
+function takeViewerAIToDraft() {
+    if (document.getElementById('comment-textarea').disabled) return;
+    if (!viewerLastAIGrade && !windowLastAICleanFeedback) return;
+    if (document.getElementById('comment-textarea').value.trim() && !confirm('Замінити чернетку відгуку рекомендацією ШІ?')) return;
+    setPresetGrade(viewerLastAIGrade);
+    document.getElementById('comment-textarea').value = windowLastAICleanFeedback;
+    updateViewerDraftState(); selectReviewPanel('comments', true);
+}
 
 function renderViewerGrCheckboxes(presetObj, defaultGrCodes) {
     var container = document.getElementById('viewer-gr-selector');
@@ -1176,7 +1174,7 @@ function runSingleAICheck(subId) {
             btn.innerHTML = '<span style="font-size:16px;">⚡</span> <span>Перевірити роботу ШІ</span>';
         }
         if (data.status === 'success') {
-            windowLastAICleanFeedback = rawFeedback;
+            windowLastAICleanFeedback = rawFeedback; viewerLastAIGrade = data.suggested_grade || '';
             window.updateReviewAIStatus?.(data);
             var gradeVal = data.suggested_grade || 'Оцінено';
             var gradeBadge = '';
@@ -1258,6 +1256,7 @@ function runSingleAICheck(subId) {
                 aiDetectionBanner +
                 feedbackSectionHtml +
             '</div>' +
+            '<button type="button" class="btn btn-secondary btn-sm" onclick="takeViewerAIToDraft()" style="width:100%;margin-bottom:8px">Взяти оцінку й відгук у чернетку</button>' +
             '<button type="button" class="btn btn-primary btn-sm" onclick="applyAIEvaluation(' + subId + ')" style="width:100%;font-size:12px;font-weight:700;padding:6px;">✓ Прийняти оцінку та відгук ШІ</button>';
         } else {
             box.innerHTML = '<div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);border-radius:var(--radius-sm);padding:8px 10px;font-size:12px;color:var(--color-danger);">' +

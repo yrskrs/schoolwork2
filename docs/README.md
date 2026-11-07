@@ -12,6 +12,8 @@
 
 ## Аудити, перевірки й історичні встановлення
 
+- [Пробна сторінка перевірки робіт 4.8.11](audits/REVIEW_WORKSPACE_TRIAL_2026-11-08.md)
+
 - [Форматування критеріїв 4.8.10](audits/CRITERIA_FORMATTING_2026-11-07.md)
 - [Сторінка завдання та здача роботи 4.8.9](audits/ASSIGNMENT_WORKSPACE_2026-11-07.md)
 - [Очищення образів і структура проєкту](audits/RETENTION_AND_ORGANIZATION_2026-11-07.md)

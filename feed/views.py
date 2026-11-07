@@ -5049,6 +5049,16 @@ def grade_submission(request, sub_id):
             update_f.append('graded_at')
         m.save(update_fields=update_f)
 
+    saved_comment = None
+    feedback = request.POST.get('comment_text', '').strip()
+    if feedback:
+        comment = SubmissionComment.objects.create(submission=submission, author=request.user, text=feedback)
+        log_submission_activity(request.user, 'comment', f"Коментар до роботи {submission.get_student_full_name()}: {feedback[:50]}", submission=submission)
+        saved_comment = {
+            'id': comment.id, 'author': comment.get_author_name(), 'text': comment.text,
+            'created_at': timezone.localtime(comment.created_at).strftime('%d.%m.%Y %H:%M'),
+        }
+
     submission.refresh_from_db()
 
     coauthors_graded = []
@@ -5090,6 +5100,7 @@ def grade_submission(request, sub_id):
     return JsonResponse({
         'status': 'success',
         'grade': submission.grade or '',
+        'comment': saved_comment,
         'is_graded': bool(submission.grade),
         'graded_members': graded_members,
         'coauthors_graded': coauthors_graded,

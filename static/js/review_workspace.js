@@ -1,4 +1,4 @@
-/* Panel changes and width controls preserve the file DOM and unfinished work. */
+/* Moving between panels never replaces the file DOM or unfinished editor state. */
 (function () {
     'use strict';
     document.addEventListener('DOMContentLoaded', function () {
@@ -6,93 +6,82 @@
         const workbench = document.getElementById('fv-workbench');
         const documentPane = document.getElementById('fv-document-card');
         const scroller = document.getElementById('fv-panel-scroll');
-        const expand = document.getElementById('fv-expand-tools');
-        const collapse = document.getElementById('fv-collapse-tools');
-        const expandDocument = document.getElementById('fv-expand-document');
-        if (!container || !workbench || !documentPane || !scroller || !expand) return;
+        if (!container || !workbench || !documentPane || !scroller) return;
         const tabs = Array.from(workbench.querySelectorAll('[data-review-tab]'));
         const panels = Array.from(workbench.querySelectorAll('[data-review-panel]'));
-        const mobile = matchMedia('(max-width:1100px)');
-        const positions = Object.create(null);
-        const valid = new Set(panels.map(panel => panel.dataset.reviewPanel));
-        let current = 'task', documentOnly = false, layout = 'split', mobilePanel = 'document';
+        const mobile = matchMedia('(max-width:800px)');
+        const positions = Object.create(null), valid = new Set(panels.map(p => p.dataset.reviewPanel));
+        const expand = document.getElementById('fv-expand-tools'), collapse = document.getElementById('fv-collapse-tools');
+        const expandDocument = document.getElementById('fv-expand-document'), restore = document.getElementById('fv-restore-tools');
+        const mobileDocument = document.getElementById('fv-mobile-document'), mobileTools = document.getElementById('fv-mobile-tools');
+        let current = 'comments', layout = 'split', mobilePanel = 'document';
+        function remember(key, value) { try { sessionStorage.setItem('schoolnet.review.v2.' + key, value); } catch (error) {} }
         try {
-            const saved = sessionStorage.getItem('schoolnet.review.panel');
+            const saved = sessionStorage.getItem('schoolnet.review.v2.panel');
             if (valid.has(saved)) current = saved;
-            const savedLayout = sessionStorage.getItem('schoolnet.review.layout');
-            if (['split','tools','document'].includes(savedLayout)) layout = savedLayout;
-            else if (sessionStorage.getItem('schoolnet.review.expanded') === 'true') layout = 'tools';
-            const savedMobile = sessionStorage.getItem('schoolnet.review.mobilePanel');
-            if (savedMobile === 'document' || valid.has(savedMobile)) mobilePanel = savedMobile;
-        } catch (error) { /* Storage may be unavailable. */ }
+            const savedLayout = sessionStorage.getItem('schoolnet.review.v2.layout');
+            if (['split', 'tools', 'document'].includes(savedLayout)) layout = savedLayout;
+            const savedMobile = sessionStorage.getItem('schoolnet.review.v2.mobile');
+            if (savedMobile === 'document' || savedMobile === 'tools') mobilePanel = savedMobile;
+        } catch (error) {}
+        function fitViewport() {
+            const zoom = parseFloat(getComputedStyle(document.documentElement).zoom) || 1;
+            const top = Math.max(0, container.getBoundingClientRect().top) / zoom;
+            container.style.setProperty('--fv-top', top + 'px');
+            container.style.setProperty('--fv-viewport-height', (window.innerHeight / zoom) + 'px');
+        }
         function render() {
-            const showDocumentOnly = mobile.matches ? documentOnly : layout === 'document';
-            const showToolsOnly = !mobile.matches && layout === 'tools';
-            documentPane.hidden = mobile.matches ? !showDocumentOnly : showToolsOnly;
-            container.classList.toggle('fv-tools-expanded', showToolsOnly);
-            container.classList.toggle('fv-document-expanded', !mobile.matches && showDocumentOnly);
-            container.classList.toggle('fv-mobile-document', mobile.matches && showDocumentOnly);
-            scroller.hidden = showDocumentOnly;
-            workbench.querySelector('.fv-workbench-heading').hidden = showDocumentOnly;
-            panels.forEach(panel => { panel.hidden = panel.dataset.reviewPanel !== current; });
-            const selected = showDocumentOnly ? 'document' : current;
+            const documentOnly = mobile.matches ? mobilePanel === 'document' : layout === 'document';
+            const toolsOnly = mobile.matches ? !documentOnly : layout === 'tools';
+            documentPane.hidden = toolsOnly;
+            workbench.hidden = documentOnly;
+            restore.hidden = mobile.matches || !documentOnly;
+            container.classList.toggle('fv-tools-expanded', !mobile.matches && toolsOnly);
+            container.classList.toggle('fv-document-expanded', !mobile.matches && documentOnly);
+            panels.forEach(panel => {panel.hidden = panel.dataset.reviewPanel !== current;});
             tabs.forEach(tab => {
-                const active = tab.dataset.reviewTab === selected;
+                const active = tab.dataset.reviewTab === current;
                 tab.setAttribute('aria-selected', String(active)); tab.tabIndex = active ? 0 : -1;
             });
-            documentPane.setAttribute('role', mobile.matches ? 'tabpanel' : 'region');
-            documentPane.setAttribute('aria-labelledby', mobile.matches ? 'fv-tab-document' : 'fv-file-title');
-            expand.setAttribute('aria-pressed', String(showToolsOnly));
-            expand.textContent = showToolsOnly ? '↔ Робота поруч' : '⤢ Розгорнути';
-            expandDocument.textContent = mobile.matches ? (document.fullscreenElement === documentPane ? '↙ Вийти' : '⛶ На весь екран') : (showDocumentOnly ? '↔ Поруч' : '⤢ Розгорнути');
-            expandDocument.hidden = mobile.matches && !documentPane.requestFullscreen;
-            const webToggle = document.getElementById('btn-web-toggle-width');
-            if (webToggle) {
-                webToggle.setAttribute('aria-pressed', String(showDocumentOnly));
-                webToggle.textContent = showDocumentOnly ? '↔ Поруч' : '⤢ На всю ширину';
-                webToggle.title = showDocumentOnly ? 'Повернути бічну панель оцінювання поруч' : 'Розгорнути перегляд на всю ширину екрана';
-            }
-            const htmlToggle = document.getElementById('btn-html-toggle-width');
-            if (htmlToggle) {
-                htmlToggle.setAttribute('aria-pressed', String(showDocumentOnly));
-                htmlToggle.textContent = showDocumentOnly ? '↔ Поруч' : '⤢ На всю ширину';
-                htmlToggle.title = showDocumentOnly ? 'Повернути бічну панель оцінювання поруч' : 'Розгорнути перегляд на всю ширину екрана';
-            }
+            mobileDocument.setAttribute('aria-pressed', String(documentOnly));
+            mobileTools.setAttribute('aria-pressed', String(!documentOnly));
+            expand.setAttribute('aria-pressed', String(toolsOnly));
+            expand.textContent = toolsOnly ? '↔ Робота поруч' : '⤢ Розгорнути';
+            expandDocument.setAttribute('aria-pressed', String(documentOnly));
+            expandDocument.textContent = documentOnly && !mobile.matches ? '↔ Поруч' : '⤢ Розгорнути';
+            expandDocument.setAttribute('aria-label', mobile.matches ? 'Робота на весь екран' : documentOnly ? 'Повернути оцінювання поруч' : 'Розгорнути роботу учня');
+            ['btn-web-toggle-width', 'btn-html-toggle-width'].forEach(id => {
+                const toggle = document.getElementById(id);
+                if (!toggle) return;
+                toggle.setAttribute('aria-pressed', String(documentOnly));
+                toggle.textContent = documentOnly && !mobile.matches ? '↔ Поруч' : '⤢ На всю ширину';
+            });
+            window.reviewCurrentPanel = current;
+            fitViewport();
         }
-        function setLayout(next) {
-            if (!scroller.hidden) positions[current] = scroller.scrollTop;
-            layout = next;
-            try { sessionStorage.setItem('schoolnet.review.layout', layout); } catch (error) {}
-            render();
-            if (!scroller.hidden) scroller.scrollTop = positions[current] || 0;
-        }
+        function setLayout(next) { layout = next; remember('layout', layout); render(); }
         function select(name, focusPanel) {
+            if (name !== 'document' && !valid.has(name)) return;
+            positions[current] = scroller.scrollTop;
             if (name === 'document') {
-                positions[current] = scroller.scrollTop;
-                documentOnly = true;
-                if (!mobile.matches) setLayout('document');
-            } else if (valid.has(name)) {
-                if (!scroller.hidden) positions[current] = scroller.scrollTop;
-                current = name; documentOnly = false;
+                if (mobile.matches) { mobilePanel = 'document'; remember('mobile', mobilePanel); }
+                else setLayout('document');
+            } else {
+                current = name; remember('panel', current);
+                mobilePanel = 'tools'; remember('mobile', mobilePanel);
                 if (layout === 'document') setLayout('split');
-                try { sessionStorage.setItem('schoolnet.review.panel', current); } catch (error) {}
-            } else return;
-            if (mobile.matches) {
-                mobilePanel = name;
-                try { sessionStorage.setItem('schoolnet.review.mobilePanel', name); } catch (error) {}
             }
             render(); scroller.scrollTop = positions[current] || 0;
-            if (focusPanel) (name === 'document' ? documentPane : panels.find(panel => panel.dataset.reviewPanel === current)).focus({preventScroll:true});
+            if (focusPanel) (name === 'document' ? documentPane : panels.find(p => p.dataset.reviewPanel === current)).focus({preventScroll:true});
         }
         tabs.forEach(tab => {
             tab.addEventListener('click', () => select(tab.dataset.reviewTab));
             tab.addEventListener('keydown', event => {
                 if (event.altKey || event.ctrlKey || event.metaKey) return;
-                const visible = tabs.filter(item => getComputedStyle(item).display !== 'none');
-                const index = visible.indexOf(tab);
-                let next;
-                if (event.key === 'ArrowRight' || event.key === 'ArrowDown') next = (index + 1) % visible.length;
-                else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') next = (index + visible.length - 1) % visible.length;
+                const visible = tabs.filter(t => getComputedStyle(t).display !== 'none');
+                const index = visible.indexOf(tab); let next;
+                if (['ArrowRight', 'ArrowDown'].includes(event.key)) next = (index + 1) % visible.length;
+                else if (['ArrowLeft', 'ArrowUp'].includes(event.key)) next = (index + visible.length - 1) % visible.length;
                 else if (event.key === 'Home') next = 0;
                 else if (event.key === 'End') next = visible.length - 1;
                 else return;
@@ -100,21 +89,28 @@
             });
         });
         expand.addEventListener('click', () => setLayout(layout === 'tools' ? 'split' : 'tools'));
-        collapse.addEventListener('click', () => { positions[current] = scroller.scrollTop; setLayout('document'); expandDocument.focus({preventScroll:true}); });
+        collapse.addEventListener('click', () => {setLayout('document'); restore.focus({preventScroll:true});});
         expandDocument.addEventListener('click', () => {
             if (mobile.matches) {
-                if (document.fullscreenElement === documentPane) document.exitFullscreen();
-                else documentPane.requestFullscreen().catch(() => { expandDocument.textContent = 'Повний екран недоступний'; });
+                if (document.fullscreenElement) document.exitFullscreen();
+                else documentPane.requestFullscreen?.().catch(() => {});
             } else setLayout(layout === 'document' ? 'split' : 'document');
         });
-        mobile.addEventListener('change', () => { documentOnly = mobilePanel === 'document'; render(); });
-        document.addEventListener('fullscreenchange', render);
+        mobile.addEventListener('change', render);
+        window.addEventListener('resize', fitViewport);
+        if (window.ResizeObserver) {
+            const observer = new ResizeObserver(fitViewport);
+            observer.observe(document.querySelector('.fv-workspace-toolbar'));
+            const navbar = document.querySelector('.navbar'); if (navbar) observer.observe(navbar);
+            const mobileNav = document.querySelector('.platform-teacher-mobile-nav'); if (mobileNav) observer.observe(mobileNav);
+        }
+        if (window.MutationObserver) new MutationObserver(fitViewport).observe(document.documentElement, {attributes:true,attributeFilter:['style','data-font-scale']});
         window.selectReviewPanel = select;
         window.updateReviewCommentCount = function () {
             const count = document.querySelectorAll('#fv-comments-container .fv-comment-card').length;
             const badge = document.getElementById('fv-comment-count');
             badge.textContent = count; badge.hidden = !count;
-            document.getElementById('fv-tab-comments').setAttribute('aria-label', 'Відгук' + (count ? '. Відгуків: ' + count : '. Відгуків ще немає'));
+            badge.parentElement.setAttribute('aria-label', 'Історія відгуків. Відгуків: ' + count);
             if (!count && !document.getElementById('no-comments-msg')) {
                 const empty = document.createElement('p'); empty.id = 'no-comments-msg'; empty.className = 'text-muted';
                 empty.textContent = 'Коментарів до роботи ще немає.';
@@ -125,10 +121,9 @@
             const badge = document.getElementById('fv-quick-ai');
             badge.classList.toggle('fv-status-warning', !!data.ai_generated_detected);
             badge.textContent = data.ai_generated_detected ? '🤖 Ознаки ШІ' : '🤖 Авторство: невідоме';
-            badge.title = data.ai_generated_details || (data.ai_generated_detected ? 'ШІ-перевірка виявила ознаки генерації. Подробиці у рекомендаціях.' : 'Виразних ознак ШІ не знайдено. Це не підтверджує самостійність роботи.');
+            badge.title = data.ai_generated_details || 'Результат ШІ не підтверджує самостійність роботи.';
         };
         window.updateReviewCommentCount();
-        container.classList.add('fv-workspace-ready');
-        documentOnly = mobile.matches && mobilePanel === 'document'; render();
+        container.classList.add('fv-workspace-ready'); render();
     });
 }());

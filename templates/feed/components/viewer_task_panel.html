@@ -38,3 +38,5 @@
         {% if not submission.assignment.files.all and not submission.assignment.link_url and not submission.assignment.additional_links.all and not submission.assignment.all_youtube_videos %}<p class="text-muted">Додаткових матеріалів немає.</p>{% endif %}
     </div>
 </section>
+
+{% if submission.assignment.custom_criteria %}<section class="fv-task-section"><h3>Власні критерії вчителя</h3><div class="criteria-rich-text">{{ submission.assignment.get_formatted_custom_criteria|safe }}</div></section>{% endif %}

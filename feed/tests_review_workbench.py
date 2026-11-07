@@ -8,7 +8,7 @@ from django.test import TestCase
 from django.urls import reverse
 from lxml import html
 from .middleware import set_has_admin
-from .models import Assignment, AssignmentFile, AssignmentLink, ClassGroup, School, Submission, SubmissionFile, Teacher
+from .models import SubmissionComment, Assignment, AssignmentFile, AssignmentLink, ClassGroup, School, Submission, SubmissionFile, Teacher
 
 
 class ReviewWorkbenchTests(TestCase):
@@ -78,7 +78,46 @@ class ReviewWorkbenchTests(TestCase):
         page = self.page()
         grade = page.get_element_by_id('fv-grading-card')
         self.assertIsNotNone(grade.get_element_by_id('member_grade_' + str(member.pk)))
-        self.assertFalse(grade.get_element_by_id('save-grade-btn').xpath('ancestor::details'))
-        self.assertFalse(grade.get_element_by_id('save-grade-next-btn').xpath('ancestor::details'))
+        self.assertEqual(page.get_element_by_id('fv-panel-task').getparent().get('id'),'fv-panel-scroll')
+        self.assertEqual(page.get_element_by_id('save-grade-btn').getparent().getparent().getparent().get('id'),'fv-workbench')
+        self.assertFalse(page.get_element_by_id('save-grade-btn').xpath('ancestor::details'))
+        self.assertFalse(page.get_element_by_id('save-grade-next-btn').xpath('ancestor::details'))
         self.assertIsNotNone(page.get_element_by_id('fv-panel-comments').get_element_by_id('comment-textarea'))
         self.assertFalse(page.get_element_by_id('assignment-file-modal').xpath('ancestor::*[@data-review-panel]'))
+
+    def test_grade_and_feedback_save_together_without_changing_files(self):
+        original = self.sub.file.name
+        self.sub.is_group_work = True; self.sub.save()
+        member = Submission.objects.create(assignment=self.assignment,teacher=self.teacher,class_group=self.group,first_name='Другий',last_name='Учень',primary_submission=self.sub)
+        response = self.client.post(reverse('grade_submission',args=[self.sub.pk]), {'grade':'9', 'member_grade_'+str(member.pk):'10','comment_text':'Зверни увагу на формули.'})
+        self.assertEqual(response.status_code,200)
+        self.assertEqual(response.json()['comment']['text'],'Зверни увагу на формули.')
+        self.sub.refresh_from_db(); member.refresh_from_db()
+        self.assertEqual((self.sub.grade,member.grade),('9','10'))
+        self.assertEqual(self.sub.file.name,original)
+        self.assertEqual(SubmissionComment.objects.filter(submission=self.sub).count(),1)
+
+    def test_invalid_member_grade_saves_neither_grade_nor_feedback(self):
+        self.sub.is_group_work = True; self.sub.save()
+        member = Submission.objects.create(assignment=self.assignment,teacher=self.teacher,class_group=self.group,first_name='Другий',last_name='Учень',primary_submission=self.sub)
+        response = self.client.post(reverse('grade_submission',args=[self.sub.pk]), {'grade':'9','member_grade_'+str(member.pk):'99','comment_text':'Не має зберегтися.'})
+        self.assertEqual(response.status_code,400)
+        self.sub.refresh_from_db(); member.refresh_from_db()
+        self.assertIsNone(self.sub.grade); self.assertIsNone(member.grade)
+        self.assertFalse(SubmissionComment.objects.filter(submission=self.sub).exists())
+
+    def test_other_teacher_cannot_save_grade_or_feedback(self):
+        other = User.objects.create_user('other_review_teacher')
+        Teacher.objects.create(user=other,full_name='Інший учитель')
+        self.client.force_login(other)
+        response = self.client.post(reverse('grade_submission',args=[self.sub.pk]),{'grade':'9','comment_text':'Недозволений відгук'})
+        self.assertEqual(response.status_code,403)
+        self.sub.refresh_from_db(); self.assertIsNone(self.sub.grade)
+        self.assertFalse(SubmissionComment.objects.filter(submission=self.sub).exists())
+
+    def test_comment_failure_rolls_back_grade_transaction(self):
+        from unittest.mock import patch
+        with patch('feed.views.SubmissionComment.objects.create',side_effect=RuntimeError('storage failure')):
+            with self.assertRaises(RuntimeError):
+                self.client.post(reverse('grade_submission',args=[self.sub.pk]),{'grade':'9','comment_text':'Відгук'})
+        self.sub.refresh_from_db(); self.assertIsNone(self.sub.grade)
