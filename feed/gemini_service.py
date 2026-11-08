@@ -153,8 +153,7 @@ def _http_post_json(url, payload_dict, headers=None, timeout=30):
                 raise
             finally:
                 resp.release_conn()
-            from .ai_transport import capture_quota_headers
-            capture_quota_headers(getattr(resp, 'headers', {}), status)
+            _capture_quota_headers(getattr(resp, 'headers', {}), status)
             try:
                 data = json.loads(body_text)
                 if status == 429:
@@ -176,8 +175,7 @@ def _http_post_json(url, payload_dict, headers=None, timeout=30):
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             status = resp.getcode()
-            from .ai_transport import capture_quota_headers
-            capture_quota_headers(getattr(resp, 'headers', {}), status)
+            _capture_quota_headers(getattr(resp, 'headers', {}), status)
             body_bytes = _read_api_body(resp, deadline)
             body_text = body_bytes.decode('utf-8', errors='replace')
             try:
@@ -189,8 +187,7 @@ def _http_post_json(url, payload_dict, headers=None, timeout=30):
                 return status, None, body_text
     except urllib.error.HTTPError as e:
         status = e.code
-        from .ai_transport import capture_quota_headers
-        capture_quota_headers(e.headers, status)
+        _capture_quota_headers(e.headers, status)
         err_bytes = _read_api_body(e, deadline)
         err_text = err_bytes.decode('utf-8', errors='replace')
         try:
@@ -320,6 +317,15 @@ def log_ai_request_metric(model_name, provider='gemini', action='evaluation', st
         )
     except Exception:
         pass
+
+
+def _capture_quota_headers(headers, status):
+    """Optional quota metadata hook; must not break an assessment."""
+    try:
+        from .ai_transport import capture_quota_headers
+        capture_quota_headers(headers, status)
+    except (ImportError, AttributeError):
+        return
 
 
 def _raw_call_ai_api(prompt_text, system_prompt="", inline_media=None, provider="gemini", api_key="", model_name="", custom_url="", temperature=0.2, max_output_tokens=3500, timeout=35, json_mode=False, thinking_budget=None, seed=None):
@@ -3252,6 +3258,11 @@ def parse_teacher_specific_task_numbers(description: str) -> list[int]:
     # Дозволяємо: пробіли, коми, «та», «і», «й», «та й», «і», «and», «№»
     SEP_PAT = re.compile(r'(?:\s*(?:,|та|і|й|and)\s*|\s+)(?:№\s*)?', re.IGNORECASE)
     NUM_PAT = re.compile(r'\d+')
+    # «завдання 4 бали» means four points, not task number four. Do not let
+    # score/percentage/time units become an assigned task number.
+    NUMBER_UNIT_PAT = re.compile(
+        r'\s*(?:бал(?:ів|и|а|ами|ах)?|очк(?:ів|и|а)?|%|відсотк\w*|хв(?:илин\w*)?|'
+        r'год(?:ин\w*)?|стор(?:ін\w*|\.)?|клас(?:у|ів)?|грн|грив\w*|б\.)', re.IGNORECASE)
 
     # Потім шукаємо всі входження ключового слова та числа після нього
     for kw_match in KEYWORD_PAT.finditer(text):
@@ -3268,8 +3279,9 @@ def parse_teacher_specific_task_numbers(description: str) -> list[int]:
             if not num_m:
                 break
             n = int(num_m.group(0))
-            if 1 <= n <= 50:
-                found_nums.add(n)
+            if not NUMBER_UNIT_PAT.match(text, num_m.end()):
+                if 1 <= n <= 50:
+                    found_nums.add(n)
             pos = num_m.end()
 
     # Якщо вчитель вжив конструкцію «всі N завдань» — це ЗАГАЛЬНА кількість, не конкретні номери
@@ -7463,6 +7475,56 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                         summary, weaknesses, feedback_comment = sanitize_unassigned_task_mentions(
                             summary, weaknesses, feedback_comment, allowed_task_nums=allowed_nums
                         )
+
+                    # Evidence-aware completion check: the model may describe
+                    # a RANK/COUNTIF formula that is not in the student's file.
+                    from .ai_context import (clear_false_format_warning,
+                                             downgrade_unsupported_task_claims,
+                                             task_completion_grade_cap)
+                    result_json = downgrade_unsupported_task_claims(result_json, student_combined_text)
+                    result_json = clear_false_format_warning(result_json, submission)
+                    format_warning = str(result_json.get('format_warning') or '').strip()
+                    if format_warning.lower() in ['none', 'null', 'false', 'ok', 'none.', 'null.']:
+                        format_warning = ''
+
+                    # Do not award 10-12 when only one of several assigned tasks
+                    # was actually completed. This is a cap, not a replacement
+                    # for the teacher's final decision.
+                    completion_cap = task_completion_grade_cap(
+                        result_json.get('tasks_total_count'), result_json.get('tasks_completed_count'))
+                    if completion_cap is not None and str(suggested_grade) != 'Доопрацювати':
+                        try:
+                            current_grade = int(float(str(suggested_grade).replace(',', '.')))
+                        except (TypeError, ValueError):
+                            current_grade = None
+                        if current_grade is not None and current_grade > completion_cap:
+                            suggested_grade = str(completion_cap)
+                            result_json['suggested_grade'] = suggested_grade
+                            result_json['_grade_cap_reason'] = (
+                                f'Виконано {result_json.get("tasks_completed_count", 0)} '
+                                f'з {result_json.get("tasks_total_count", 0)} завдань.')
+                            if completion_cap <= 3:
+                                result_json['level'] = 'Початковий (1-3)'
+                            elif completion_cap <= 6:
+                                result_json['level'] = 'Середній (4-6)'
+                            elif completion_cap <= 9:
+                                result_json['level'] = 'Достатній (7-9)'
+                            for row in result_json.get('gr_results') or []:
+                                if isinstance(row, dict):
+                                    try:
+                                        if int(float(str(row.get('grade')).replace(',', '.'))) > completion_cap:
+                                            row['grade'] = str(completion_cap)
+                                    except (TypeError, ValueError):
+                                        pass
+                            note = ('Бал обмежено, бо виконано лише частину завдань: '
+                                    f'{result_json.get("tasks_completed_count", 0)} '
+                                    f'з {result_json.get("tasks_total_count", 0)}.')
+                            if note not in weaknesses:
+                                weaknesses.append(note)
+                            if note not in feedback_comment:
+                                feedback_comment = (feedback_comment + ' ' + note).strip()
+                            result_json['feedback_comment'] = feedback_comment
+                            result_json['weaknesses'] = weaknesses
 
                     # Нормалізуємо evaluation_plan
                     eval_plan = result_json.get('evaluation_plan')

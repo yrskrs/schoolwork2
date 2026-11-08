@@ -569,6 +569,103 @@ def partial_grade_from_gr_results(raw_gr_results, active_grs, threshold=0.5):
     return None
 
 
+VALID_SUBMISSION_EXTENSIONS = {
+    '.xlsx', '.xls', '.ods', '.csv', '.docx', '.doc', '.odt', '.pdf',
+    '.pptx', '.ppt', '.odp', '.py', '.js', '.html', '.css', '.cpp', '.c',
+    '.java', '.sb3', '.zip', '.png', '.jpg', '.jpeg', '.webp', '.txt',
+}
+
+
+def clear_false_format_warning(result, submission):
+    """A real .xlsx file must not be called “wrong/missing extension”."""
+    warning = str(result.get('format_warning') or '').strip()
+    if not warning:
+        return result
+    try:
+        names = [str(getattr(f, 'original_name', '') or getattr(getattr(f, 'file', None), 'name', ''))
+                 for f in submission.get_files()]
+    except Exception:
+        names = []
+    if not names:
+        return result
+    extensions = [Path(name).suffix.lower() for name in names if name]
+    if not extensions or not all(extensions):
+        return result
+    low = warning.casefold()
+    technical = ('без розширення', 'без належного розширення', 'невідповідний формат',
+                 'не той формат', 'неправильний формат', 'wrong format')
+    if any(term in low for term in technical) and all(ext in VALID_SUBMISSION_EXTENSIONS for ext in extensions):
+        result['format_warning'] = ''
+        result['_format_warning_cleared'] = warning
+    return result
+
+
+def task_completion_grade_cap(total, completed):
+    """Conservative cap when only part of the assigned tasks is completed."""
+    try:
+        total = int(total or 0)
+        completed = max(0, int(completed or 0))
+    except (TypeError, ValueError):
+        return None
+    if total <= 1 or completed >= total:
+        return None
+    return max(1, min(12, math.ceil(12 * completed / total)))
+
+
+def downgrade_unsupported_task_claims(result, student_text):
+    """Remove full-credit claims for functions absent from the student's file.
+
+    The model may describe a formula it expected rather than one actually in
+    the workbook. This is a narrow evidence check: only explicit spreadsheet
+    function claims are tested; no page or evidence is deleted.
+    """
+    text = str(student_text or '').casefold()
+    aliases = {
+        'rank': ('rank', 'ранг', 'ранжуван'),
+        'countif': ('countif', 'счётif', 'рахувати якщо'),
+        'sumif': ('sumif', 'сумміф'),
+        'mod': ('mod', 'остача', 'залишок за модулем'),
+    }
+    changed = []
+
+    def missing_function(claim):
+        low = str(claim or '').casefold()
+        for function, names in aliases.items():
+            if any(name in low for name in names):
+                if not any(name in text for name in names):
+                    return function
+        return None
+
+    for task in result.get('tasks_evaluated') or []:
+        if not isinstance(task, dict) or task.get('status') != 'completed':
+            continue
+        claim = ' '.join(str(task.get(k) or '') for k in ('task_title', 'comment'))
+        absent = missing_function(claim)
+        if absent:
+            task['status'] = 'not_completed'
+            task['comment'] = (str(task.get('comment') or '') +
+                               f' У роботі немає підтвердження функції {absent.upper()}.')
+            changed.append(f'task:{absent}')
+
+    for row in result.get('criteria_results') or []:
+        if not isinstance(row, dict) or row.get('status') != 'completed':
+            continue
+        claim = ' '.join(str(row.get(k) or '') for k in ('criterion', 'evidence'))
+        absent = missing_function(claim)
+        if absent:
+            row['status'] = 'unverifiable'
+            row['evidence'] = f'У роботі не знайдено підтвердження функції {absent.upper()}.'
+            changed.append(f'criterion:{absent}')
+
+    if changed and result.get('tasks_evaluated'):
+        result['tasks_completed_count'] = sum(
+            1 for task in result['tasks_evaluated']
+            if isinstance(task, dict) and task.get('status') == 'completed')
+    if changed:
+        result['_unsupported_claims'] = sorted(set(changed))
+    return result
+
+
 def feedback_evidence_sections(result, include_criteria=True):
     """Persist useful reasoning so it survives reload and the single student attempt."""
     sections = []
