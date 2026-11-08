@@ -1,0 +1,38 @@
+{
+  "version": "4.8.13",
+  "image": "schoolwork2-app:4.8.13-27d014467939",
+  "source_digest": "27d0144679393a59c2ec4333cde6842b132aea1d011ffc31e75e034830415bec",
+  "deployed_healthy": true,
+  "final_tests": {
+    "total": 1004,
+    "passed": 1002,
+    "skipped": 2,
+    "failures": 0
+  },
+  "classes": 10,
+  "assignments": 10,
+  "distinct_topic_titles": 9,
+  "checked": 10,
+  "recommendations": 8,
+  "blocked_unreadable": 2,
+  "final_batch_seconds": 385.866,
+  "initial_batch_seconds": 428.446,
+  "peak_parallel_jobs": 2,
+  "successful_jobs_active_seconds": {
+    "min": 7.443,
+    "median": 77.301,
+    "max": 228.808
+  },
+  "blocked_jobs_ai_calls": {
+    "433": 0,
+    "418": 0
+  },
+  "all_production_fingerprints_preserved": true,
+  "quality_fully_validated": false,
+  "quality_findings": [
+    "450: screenshot shows folders but does not show required file; maximum AI score not confirmed by manual review",
+    "602,450,427,347: repeated grades differ; model recommendations need teacher calibration",
+    "Only one readable sample has an existing teacher grade, insufficient accuracy ground truth"
+  ],
+  "final_resources_oom": false
+}

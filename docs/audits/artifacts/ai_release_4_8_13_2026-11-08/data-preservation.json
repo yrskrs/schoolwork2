@@ -1,0 +1,18 @@
+{
+  "after_deployment": {
+    "all_submissions": true,
+    "selected_submissions": true,
+    "assignments": true,
+    "student_reservations": true,
+    "ai_settings_existing_fields_sha256": true,
+    "active_ai_jobs": true
+  },
+  "after_final_tests": {
+    "all_submissions": true,
+    "selected_submissions": true,
+    "assignments": true,
+    "student_reservations": true,
+    "ai_settings_existing_fields_sha256": true,
+    "active_ai_jobs": true
+  }
+}

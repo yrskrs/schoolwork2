@@ -1096,6 +1096,11 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 
+window.addEventListener('pageshow', function() {
+    var checkbox = document.getElementById('ignore-strict-privacy-checkbox');
+    if (checkbox) checkbox.checked = false;
+});
+
 function runSingleAICheck(subId) {
     var btn = document.getElementById('btn-run-ai-check');
     var box = document.getElementById('ai-evaluation-box');
@@ -1144,6 +1149,11 @@ function runSingleAICheck(subId) {
         formData.append('selected_gr_codes', JSON.stringify(checkedGrCodes));
     }
     formData.append('force_thinking', isThinking ? '1' : '0');
+    var privacyOverride = document.getElementById('ignore-strict-privacy-checkbox');
+    if (privacyOverride && privacyOverride.checked) {
+        formData.append('ignore_strict_privacy', '1');
+        privacyOverride.checked = false;
+    }
 
     SchoolNetAI.fetch('/teacher/ai/check/' + subId + '/?format=json', {
         method: 'POST',
@@ -1227,7 +1237,7 @@ function runSingleAICheck(subId) {
                 var borderStyle = isAllowed ? '#10b981' : '#ef4444';
                 var titleColor = isAllowed ? 'var(--color-success)' : 'var(--color-danger)';
                 var pctText = (data.ai_generated_percent !== null && data.ai_generated_percent !== undefined) ? ': ' + data.ai_generated_percent + '%' : '';
-                var noteText = isAllowed ? '💡 Дозволено вчителем для цього завдання.' : '⚠️ Не дозволено вчителем (самостійна робота). Перевищено допустимий поріг ШІ. Оцінку знижено або робота потребує доопрацювання.';
+                var noteText = isAllowed ? '💡 Дозволено вчителем для цього завдання.' : '⚠️ ШІ не дозволено вчителем. Ознаки походження потребують уточнення; вони не означають автоматичного зниження змістового бала.';
                 var detailsHtml = data.ai_generated_details ? '<div style="color:var(--color-text-secondary);line-height:1.35;margin-bottom:3px;">' + data.ai_generated_details.replace(/\n/g, '<br>') + '</div>' : '';
 
                 aiDetectionBanner = '<div style="background:' + bgStyle + ';border:1px solid ' + borderStyle + ';border-radius:6px;padding:8px 10px;margin-bottom:8px;font-size:11.5px;">' +

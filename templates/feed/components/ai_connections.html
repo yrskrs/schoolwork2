@@ -8,6 +8,17 @@
             <input type="hidden" name="action" value="save_ai_connection">
             <input type="hidden" name="connection_id" value="{{ connection.id }}">
             <input type="hidden" name="connection_provider" value="{{ connection.provider }}">
+            <details><summary>Квоти та паралельна перевірка</summary>
+                <p class="form-hint">Укажіть квоти зі свого кабінету провайдера. 0 означає, що квоту не задано. Підключення зі спільною квотою повинні мати однакову групу; порожня група об’єднує підключення одного провайдера. Для спільної групи діє найменший заданий ліміт.</p>
+                <label class="form-label">Група спільної квоти<input class="form-input" name="quota_group" maxlength="80" value="{{ connection.quota_group }}" placeholder="Типово — провайдер"></label>
+                <label class="form-label">Одночасних запитів<input class="form-input" type="number" name="quota_concurrency" min="1" max="8" value="{{ connection.quota_limits.concurrency|default:1 }}"></label>
+                <label class="form-label">Запитів за хвилину<input class="form-input" type="number" name="quota_rpm" min="0" value="{{ connection.quota_limits.rpm|default:0 }}"></label>
+                <label class="form-label">Запитів за добу<input class="form-input" type="number" name="quota_rpd" min="0" value="{{ connection.quota_limits.rpd|default:0 }}"></label>
+                <label class="form-label">Токенів за хвилину<input class="form-input" type="number" name="quota_tpm" min="0" value="{{ connection.quota_limits.tpm|default:0 }}"></label>
+                <label class="form-label">Токенів за добу<input class="form-input" type="number" name="quota_tpd" min="0" value="{{ connection.quota_limits.tpd|default:0 }}"></label>
+                <label class="form-label">Вхідних токенів за хвилину<input class="form-input" type="number" name="quota_itpm" min="0" value="{{ connection.quota_limits.itpm|default:0 }}"></label>
+                <label class="form-label">Вихідних токенів за хвилину<input class="form-input" type="number" name="quota_otpm" min="0" value="{{ connection.quota_limits.otpm|default:0 }}"></label>
+            </details>
             <div><label class="form-label" for="connection-label-{{ connection.id }}">Назва підключення</label><input id="connection-label-{{ connection.id }}" class="form-input" name="connection_label" maxlength="80" value="{{ connection.label }}" required></div>
             <div><label class="form-label" for="connection-key-{{ connection.id }}">API ключ</label><input id="connection-key-{{ connection.id }}" class="form-input" name="connection_key" type="password" maxlength="4096" autocomplete="new-password" placeholder="{% if connection.has_key %}Ключ збережено; залиште порожнім, щоб зберегти його{% else %}Вставте API ключ{% endif %}"></div>
             {% if connection.provider == 'custom' or connection.provider == 'cloudflare' %}<div><label class="form-label" for="connection-url-{{ connection.id }}">{% if connection.provider == 'cloudflare' %}Cloudflare Account ID або Base URL{% else %}Base URL{% endif %}</label><input id="connection-url-{{ connection.id }}" class="form-input" name="connection_url" type="text" maxlength="255" value="{{ connection.custom_url }}" required placeholder="{% if connection.provider == 'cloudflare' %}Account ID або повний URL{% else %}http://localhost:11434/v1{% endif %}"></div>{% else %}<input type="hidden" name="connection_url" value="{{ connection.custom_url }}">{% endif %}

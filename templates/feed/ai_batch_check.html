@@ -121,7 +121,14 @@
                     </div>
                 </div>
 
-                <!-- Чекбокси умов та пауза -->
+                <div style="padding:12px 16px;background:var(--color-bg-secondary);border-radius:var(--radius-md);margin-bottom:16px;">
+                    <label for="batch-ignore-strict-privacy" style="display:flex;align-items:flex-start;gap:8px;font-size:13px;cursor:pointer;">
+                        <input type="checkbox" id="batch-ignore-strict-privacy" autocomplete="off" aria-describedby="batch-privacy-override-hint" style="margin-top:3px;flex-shrink:0;">
+                        <span>Ігнорувати суворий режим для цього пакета робіт</span>
+                    </label>
+                    <p id="batch-privacy-override-hint" class="form-hint">Фото та PDF можуть передавати ШІ видимі особисті дані. Очищення тексту зберігається; загальні налаштування та учнівська самоперевірка не змінюються.</p>
+                </div>
+                <!-- Чекбокси умов -->
                 <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:center;padding:12px 16px;background:var(--color-bg-secondary);border-radius:var(--radius-md);margin-bottom:20px;">
                     <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:600;margin:0;">
                         <input type="checkbox" id="filter-only-ungraded" checked onchange="loadQueuePreview()" style="width:16px;height:16px;accent-color:var(--color-primary);">
@@ -491,139 +498,100 @@ function renderQueueTable() {
     renderPagination();
 }
 
-function startBatchProcessing() {
-    if (!currentQueue.length) {
-        alert('Черга робіт для обробки порожня.');
-        return;
+let activeBatchId = null;
+let pendingBatchRequestId = null;
+let batchPollTimer = null;
+
+async function batchRequest(url, options) {
+    const response = await fetch(url, options);
+    if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.error || 'Не вдалося отримати стан пакета.');
     }
+    return response.json();
+}
 
-    isProcessing = true;
-    shouldStop = false;
-    processedCount = 0;
-    successCount = 0;
-    errorCount = 0;
-
-    document.getElementById('btn-start-batch').style.display = 'none';
-    document.getElementById('btn-stop-batch').style.display = 'inline-block';
+function applyBatchSnapshot(data) {
+    if (!data.batch_id) return;
+    activeBatchId = data.batch_id;
+    currentQueue = data.items || [];
+    isProcessing = data.pending > 0;
+    shouldStop = Boolean(data.cancelled);
+    successCount = currentQueue.filter(item => item.job_status === 'succeeded').length;
+    errorCount = currentQueue.filter(item => item.job_status === 'failed').length;
+    processedCount = currentQueue.filter(item => !['queued', 'running'].includes(item.job_status)).length;
     document.getElementById('progress-container').style.display = 'block';
-
+    document.getElementById('btn-start-batch').style.display = isProcessing ? 'none' : 'inline-block';
+    document.getElementById('btn-stop-batch').style.display = isProcessing && !shouldStop ? 'inline-block' : 'none';
     document.getElementById('stat-total').textContent = currentQueue.length;
-    document.getElementById('stat-success').textContent = '0';
-    document.getElementById('stat-errors').textContent = '0';
-
-    processQueueIndex(0);
-}
-
-function stopBatchProcessing() {
-    shouldStop = true;
-    document.getElementById('progress-status-text').textContent = 'Зупинка процесу...';
-}
-
-function processQueueIndex(idx) {
-    if (shouldStop || idx >= currentQueue.length) {
+    document.getElementById('queue-count').textContent = currentQueue.length;
+    renderQueueTable();
+    updateProgressUI();
+    if (!isProcessing) {
+        pendingBatchRequestId = null;
         finishBatchProcessing();
-        return;
+    } else if (shouldStop) {
+        document.getElementById('progress-status-text').textContent = 'Нерозпочаті перевірки скасовано. Очікую завершення вже запущених.';
     }
+    clearTimeout(batchPollTimer);
+    if (isProcessing) batchPollTimer = setTimeout(pollBatch, document.hidden ? 5000 : 1000);
+}
 
-    var item = currentQueue[idx];
-    item.ai_status = 'processing';
-
-    // Якщо оброблюваний учень на іншій сторінці, автоматично перемикаємо сторінку
-    var targetPage = Math.floor(idx / PAGE_SIZE) + 1;
-    if (targetPage !== currentPage) {
-        currentPage = targetPage;
-        renderQueueTable();
-    } else {
-        var row = document.getElementById('queue-row-' + item.id);
-        var gradeCell = document.getElementById('cell-grade-' + item.id);
-        if (row) row.style.background = 'rgba(99,102,241,0.06)';
-        if (gradeCell) gradeCell.innerHTML = '<span style="font-size:12px;color:var(--color-primary);font-weight:700;">⏳ Аналіз...</span>';
+async function pollBatch() {
+    if (!activeBatchId) return;
+    try {
+        applyBatchSnapshot(await batchRequest('/api/ai/batches/' + activeBatchId + '/'));
+    } catch (error) {
+        document.getElementById('progress-status-text').textContent = 'Зв’язок перервано. Пакет продовжує працювати на сервері; повторюю отримання стану.';
+        batchPollTimer = setTimeout(pollBatch, 3000);
     }
+}
 
-    var delayMs = parseInt(document.getElementById('batch-delay').value, 10);
-    if (isNaN(delayMs)) delayMs = 4000;
-
-    var formData = new FormData();
-    formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
-    var presetEl = document.getElementById('filter-preset');
-    if (presetEl && presetEl.value) {
-        formData.append('preset_id', presetEl.value);
+async function startBatchProcessing() {
+    if (!currentQueue.length || isProcessing) return;
+    isProcessing = true;
+    document.getElementById('btn-start-batch').disabled = true;
+    const form = new FormData();
+    form.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+    pendingBatchRequestId = pendingBatchRequestId || (crypto.randomUUID ? crypto.randomUUID() :
+        '10000000-1000-4000-8000-100000000000'.replace(/[018]/g, c =>
+            (Number(c) ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> Number(c) / 4).toString(16)));
+    form.append('request_id', pendingBatchRequestId);
+    currentQueue.forEach(item => form.append('submission_ids', item.id));
+    const preset = document.getElementById('filter-preset');
+    if (preset && preset.value) form.append('preset_id', preset.value);
+    const codes = Array.from(document.querySelectorAll('#batch-gr-checkboxes input:checked')).map(input => input.value);
+    if (codes.length) form.append('selected_gr_codes', JSON.stringify(codes));
+    const privacyOverride = document.getElementById('batch-ignore-strict-privacy');
+    if (privacyOverride && privacyOverride.checked) {
+        form.append('ignore_strict_privacy', '1');
+        privacyOverride.checked = false;
     }
-
-    // Збираємо обрані вчителем прапорці ГР
-    var checkedGrCodes = [];
-    document.querySelectorAll('#batch-gr-checkboxes input[type="checkbox"]:checked').forEach(function(cb) {
-        checkedGrCodes.push(cb.value);
-    });
-    if (checkedGrCodes.length > 0) {
-        formData.append('selected_gr_codes', JSON.stringify(checkedGrCodes));
+    try {
+        applyBatchSnapshot(await batchRequest('/api/ai/batches/', {method: 'POST', body: form}));
+    } catch (error) {
+        isProcessing = false;
+        document.getElementById('progress-container').style.display = 'block';
+        document.getElementById('progress-status-text').textContent = error.message;
+    } finally {
+        document.getElementById('btn-start-batch').disabled = false;
     }
+}
 
-    SchoolNetAI.fetch('/api/ai/process-item/' + item.id + '/', {
-        method: 'POST',
-        body: formData,
-        headers: {
-            'X-Requested-With': 'XMLHttpRequest',
-            'Accept': 'application/json'
-        }
-    }, {anchor: document.getElementById('progress-container')})
-    .then(function(r) { return r.json(); })
-    .then(function(res) {
-        processedCount++;
-        item.ai_status = res.status;
-        item.ai_grade = res.suggested_grade || '—';
-        item.ai_feedback = res.feedback || '';
-        item.gr_results = res.gr_results || [];
-        item.has_format_warning = Boolean(res.format_warning || (res.feedback && res.feedback.indexOf('Зауваження до формату файлу') !== -1));
-        item.ai_error = res.error || '';
-        item.request_metadata = res.request_metadata;
-        item.ai_generated_detected = Boolean(res.ai_generated_detected);
-        item.ai_generated_percent = res.ai_generated_percent;
-        item.ai_generated_confidence = res.ai_generated_confidence || '';
-        item.ai_generated_details = res.ai_generated_details || '';
-        if (res.is_ai_allowed !== undefined) {
-            item.is_ai_allowed = res.is_ai_allowed;
-        }
-
-        if (res.status === 'success') {
-            successCount++;
-        } else {
-            errorCount++;
-        }
-
-        renderQueueTable();
-        updateProgressUI();
-
-        // Затримка перед наступним запитом
-        if (delayMs > 0 && idx + 1 < currentQueue.length) {
-            document.getElementById('progress-status-text').textContent = 'Очікування паузи ' + (delayMs / 1000) + ' сек... (' + (idx + 1) + '/' + currentQueue.length + ')';
-            setTimeout(function() {
-                processQueueIndex(idx + 1);
-            }, delayMs);
-        } else {
-            processQueueIndex(idx + 1);
-        }
-    })
-    .catch(function(err) {
-        processedCount++;
-        errorCount++;
-        item.ai_status = 'failed';
-        item.ai_error = String(err);
-
-        renderQueueTable();
-        updateProgressUI();
-
-        if (delayMs > 0 && idx + 1 < currentQueue.length) {
-            setTimeout(function() { processQueueIndex(idx + 1); }, delayMs);
-        } else {
-            processQueueIndex(idx + 1);
-        }
-    });
+async function stopBatchProcessing() {
+    if (!activeBatchId) return;
+    const form = new FormData();
+    form.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+    try {
+        applyBatchSnapshot(await batchRequest('/api/ai/batches/' + activeBatchId + '/cancel/', {method: 'POST', body: form}));
+    } catch (error) {
+        document.getElementById('progress-status-text').textContent = error.message;
+    }
 }
 
 function updateProgressUI() {
     var total = currentQueue.length;
-    var pct = Math.round((processedCount / total) * 100);
+    var pct = total ? Math.round((processedCount / total) * 100) : 0;
 
     document.getElementById('progress-bar-fill').style.width = pct + '%';
     document.getElementById('progress-percent-text').textContent = pct + '%';
@@ -636,7 +604,7 @@ function finishBatchProcessing() {
     isProcessing = false;
     document.getElementById('btn-start-batch').style.display = 'inline-block';
     document.getElementById('btn-stop-batch').style.display = 'none';
-    document.getElementById('progress-status-text').textContent = shouldStop ? '⏹ Обробку зупинено користувачем.' : '🎉 Пакетну перевірку ШІ успішно завершено!';
+    document.getElementById('progress-status-text').textContent = shouldStop ? 'Нерозпочаті перевірки скасовано; запущені завершено.' : (errorCount ? 'Пакет завершено. Частина робіт потребує повторної перевірки; перегляньте причини.' : 'Пакетну перевірку завершено.');
 }
 
 function openAiMetadataModal(subId) {
@@ -708,7 +676,10 @@ document.addEventListener('keydown', function(e) {
 
 document.addEventListener('DOMContentLoaded', function() {
     onBatchPresetChanged();
-    loadQueuePreview();
+    batchRequest('/api/ai/batches/latest/').then(function(data) {
+        if (data.batch_id) applyBatchSnapshot(data);
+        else loadQueuePreview();
+    }).catch(function() { loadQueuePreview(); });
 });
 </script>
 {% endblock %}

@@ -149,7 +149,7 @@ class AIDetectionFormatsTests(TestCase):
         res = normalize_authorship(gemini_result, False)
         self.assertTrue(res['ai_generated_detected'], "Detection must NOT be wiped when evidence exists")
         self.assertEqual(res['ai_generated_percent'], 85)
-        self.assertEqual(res['ai_generated_confidence'], 'high')
+        self.assertEqual(res['ai_generated_confidence'], 'low')
         self.assertIn('Слайд 2', res['ai_generated_details'])
 
     def test_batch_queue_api_includes_ai_detection_fields(self):

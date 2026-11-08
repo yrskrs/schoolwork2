@@ -1,0 +1,11 @@
+{
+  "single_batch_submission": true,
+  "reload_restores_batch": true,
+  "cancellation_works": true,
+  "student_text_escaped": true,
+  "javascript_errors": [],
+  "screenshots": [
+    "batch-wide.png",
+    "batch-mobile.png"
+  ]
+}

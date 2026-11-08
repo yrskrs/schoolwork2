@@ -17,6 +17,7 @@ import html
 from html.parser import HTMLParser
 import re
 import time
+import random
 import zipfile
 import tarfile
 import xml.etree.ElementTree as ET
@@ -436,23 +437,62 @@ def _raw_call_ai_api(prompt_text, system_prompt="", inline_media=None, provider=
         try:
             status_code, data, text = _http_post_json(url, payload, headers=headers, timeout=gemini_timeout)
 
-            # Каскадне відновлення при 400 (Invalid argument):
-            # 1. Повтор без thinkingConfig, якщо він заданий
-            if status_code == 400 and "thinkingConfig" in payload.get("generationConfig", {}) and any(word in (text or "").lower() for word in ("thinkingconfig", "thinkingbudget", "thinking_budget", "thinking")):
+            # Каскадне відновлення при 400 (Invalid argument).
+            # Gemini часто повертає загальне "Request contains an invalid argument."
+            # без назви поля, або скаржиться на конкретну опцію ("thinkingConfig is
+            # not supported"). У таких випадках має сенс прибрати необов'язкові
+            # опції (thinkingConfig / responseMimeType / systemInstruction).
+            # Але помилки, що стосуються самої моделі, ключа чи квоти (invalid model,
+            # not found, permission, api key, quota, billing, location), НЕ пов'язані
+            # з формою запиту — повтор із видозміненим payload лише марнує квоту й
+            # час, тому їх не чіпаємо.
+            _err_lower = (text or "").lower()
+
+            def _recoverable_400(err_text):
+                """True, якщо 400 можна спробувати виправити зміною опцій запиту."""
+                low = (err_text or "").lower()
+                # Помилки про модель/ключ/квоту — не лікуються зміною опцій.
+                if any(w in low for w in (
+                    "invalid model", "model not found", "model_not_found",
+                    "does not exist", "permission", "forbidden", "api key",
+                    "api_key", "unauthenticated", "quota", "billing",
+                    "location", "unsupported model", "deprecated",
+                )):
+                    return False
+                # Порожнє або загальне повідомлення — пробуємо відновлення.
+                if not low.strip():
+                    return True
+                # Явна скарга на опцію запиту — пробуємо відновлення.
+                if any(w in low for w in (
+                    "invalid argument", "invalid_argument", "bad request",
+                    "invalid request", "malformed", "not supported",
+                    "unsupported", "unknown field", "unknown name",
+                    "thinkingconfig", "responsemimetype", "systeminstruction",
+                )):
+                    return True
+                return False
+
+            _generic_invalid = status_code == 400 and _recoverable_400(text)
+
+            # 1. Повтор без thinkingConfig (thinkingBudget=0 часто відхиляється
+            #    моделями, що вимагають мінімальний бюджет міркувань).
+            if _generic_invalid and "thinkingConfig" in payload.get("generationConfig", {}):
                 _log_gemini_400(text, payload)
                 api_options.remember("thinkingConfig", payload["generationConfig"]["thinkingConfig"])
                 del payload["generationConfig"]["thinkingConfig"]
                 status_code, data, text = _http_post_json(url, payload, headers=headers, timeout=gemini_timeout)
+                _generic_invalid = status_code == 400 and _recoverable_400(text)
 
             # 2. Повтор без responseMimeType, якщо модель не підтримує JSON mode
-            if status_code == 400 and "responseMimeType" in payload.get("generationConfig", {}) and any(word in (text or "").lower() for word in ("responsemimetype", "response_mime_type", "json mode")):
+            if _generic_invalid and "responseMimeType" in payload.get("generationConfig", {}):
                 _log_gemini_400(text, payload)
                 api_options.remember("responseMimeType", payload["generationConfig"]["responseMimeType"])
                 del payload["generationConfig"]["responseMimeType"]
                 status_code, data, text = _http_post_json(url, payload, headers=headers, timeout=gemini_timeout)
+                _generic_invalid = status_code == 400 and _recoverable_400(text)
 
             # 3. Повтор без окремого systemInstruction (вбудовуємо в user prompt)
-            if status_code == 400 and "systemInstruction" in payload and any(word in (text or "").lower() for word in ("systeminstruction", "system instruction")):
+            if _generic_invalid and "systemInstruction" in payload:
                 _log_gemini_400(text, payload)
                 api_options.remember("systemInstruction", None)
                 sys_text = payload.pop("systemInstruction", {}).get("parts", [{}])[0].get("text", "")
@@ -6822,6 +6862,8 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
             continue
 
         # 2.5 Перевірка кількості зображень (наприклад qwen3.8-27b підтримує до 3 зображень, текстові моделі 0)
+        # ВАЖЛИВО: якщо ліміт перевищено, запит НЕ відправляємо взагалі — навіть коли
+        # іншої моделі в черзі немає. Інакше провайдер повертає 400 "too many images".
         if max_images_allowed is not None and current_images_count > max_images_allowed:
             has_other_multimodal = any(
                 (get_model_capabilities(c['model'], c['provider']).get('max_images') is None or
@@ -6834,8 +6876,16 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                 emit_event('model_skipped', skip_msg, provider=c_provider, model=c_model, position=cfg_idx + 1, total=len(attempts_configs))
                 attempted_errors.append(f"[{c_provider}/{c_model} пропущено]: перевищено ліміт зображень ({current_images_count} > {max_images_allowed})")
                 continue
+            # Немає іншої моделі — блокуємо відправку, щоб не отримати 400 від провайдера.
+            block_msg = (f"{c_provider}/{c_model}: робота містить {current_images_count} зображень/PDF-сторінок, "
+                         f"а модель приймає щонайбільше {max_images_allowed}. Запит не відправлено; "
+                         f"додайте мультимодальну модель у чергу або зменште кількість сторінок.")
+            emit_event('model_skipped', block_msg, provider=c_provider, model=c_model, position=cfg_idx + 1, total=len(attempts_configs))
+            attempted_errors.append(f"[{c_provider}/{c_model} заблоковано]: перевищено ліміт зображень ({current_images_count} > {max_images_allowed})")
+            continue
 
-        # 3. Якщо у роботі є зображення/PDF, а модель суто текстова, і в черзі є мультимодальна модель — пропускаємо
+        # 3. Якщо у роботі є зображення/PDF, а модель суто текстова — НІКОЛИ не відправляємо зображення.
+        # Навіть якщо іншої моделі немає, краще чітко заблокувати, ніж отримати 400 "not a multimodal model".
         if requires_vision and not model_supports_vision:
             has_other_vision = any(
                 get_model_capabilities(c['model'], c['provider']).get('supports_vision', True)
@@ -6846,6 +6896,11 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                 emit_event('model_skipped', skip_msg, provider=c_provider, model=c_model, position=cfg_idx + 1, total=len(attempts_configs))
                 attempted_errors.append(f"[{c_provider}/{c_model} пропущено]: відсутня підтримка зображень/PDF")
                 continue
+            block_msg = (f"{c_provider}/{c_model}: модель не підтримує зображення/PDF, а робота містить візуальні матеріали. "
+                         f"Запит не відправлено; додайте мультимодальну модель у чергу.")
+            emit_event('model_skipped', block_msg, provider=c_provider, model=c_model, position=cfg_idx + 1, total=len(attempts_configs))
+            attempted_errors.append(f"[{c_provider}/{c_model} заблоковано]: відсутня підтримка зображень/PDF")
+            continue
 
         # 4. Якщо розрахунковий обсяг даних перевищує ліміт контексту моделі:
         if est_tokens > model_context_tokens:
@@ -6931,9 +6986,23 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                     retryable = True
                 if retryable and attempt < max_retries:
                     retry_reason = 'Порожня відповідь' if status_code == 200 else f'HTTP {status_code}'
-                    emit_event('retry', f'{c_provider}/{c_model}: {retry_reason}. Повторюю спробу.',
+                    # Експоненційна затримка з джитером для 429/503/5xx, щоб не
+                    # бити по перевантаженому провайдеру одночасно з іншими воркерами.
+                    # Якщо провайдер надіслав Retry-After — поважаємо його (у межах бюджету).
+                    base_delay = min(30.0, 1.5 * (2 ** attempt))
+                    jitter = random.uniform(0, base_delay * 0.3)
+                    delay = base_delay + jitter
+                    retry_after_hint = None
+                    if isinstance(raw_data, dict):
+                        retry_after_hint = raw_data.get('_schoolnet_retry_after')
+                    if retry_after_hint:
+                        try:
+                            delay = max(delay, min(60.0, float(retry_after_hint)))
+                        except (TypeError, ValueError):
+                            pass
+                    emit_event('retry', f'{c_provider}/{c_model}: {retry_reason}. Повторюю спробу через {delay:.1f} с.',
                                provider=c_provider, model=c_model, position=cfg_idx + 1, total=len(attempts_configs), status_code=status_code)
-                    time.sleep(1.5 * (attempt + 1))
+                    time.sleep(delay)
                     continue
 
                 if status_code != 200 or not raw_text:
@@ -7883,7 +7952,12 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                     # Усі проміжні перевірки вже виконано. Тут бал нормалізується
                     # рівно один раз, щоб уникнути нестабільності між повторами.
                     if not assessment_blocked and not is_rejected_submission:
-                        if not is_traditional and numeric_gr_grades and avg_gr_grade is not None:
+                        # Якщо вчитель задав власні бали (custom_criteria), підсумок
+                        # не можна підміняти середнім за ГР — інакше авторська
+                        # шкала втрачається. Це узгоджено з пропуском guardrail
+                        # вище (рядок ~7817), який теж поважає custom_criteria.
+                        if (not is_traditional and numeric_gr_grades and avg_gr_grade is not None
+                                and not custom_criteria.strip()):
                             # Для ГР підсумковий бал дорівнює середньому за ГР.
                             suggested_grade = str(avg_gr_grade)
                         elif suggested_grade and suggested_grade != 'Доопрацювати':

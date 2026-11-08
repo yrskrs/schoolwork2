@@ -918,8 +918,13 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
         }
         mock_http_post.return_value = (200, mock_data, json.dumps(mock_data))
 
+        AISettings.objects.update(privacy_mode='redact')
         # Завантажено валідний файл із розширенням .jpg
-        img_data = b"fake_jpg_content"
+        import io
+        from PIL import Image
+        buffer = io.BytesIO()
+        Image.new('RGB', (32, 32), 'red').save(buffer, format='JPEG')
+        img_data = buffer.getvalue()
         uploaded_file = SimpleUploadedFile("cat_photo.jpg", img_data, content_type="image/jpeg")
         sub = Submission.objects.create(
             assignment=self.assignment,
@@ -1250,8 +1255,9 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
         self.assertEqual(resp_restore.status_code, 200)
         self.assertTrue(AICriteriaPreset.objects.filter(name__icontains="Інформатична освітня галузь").exists())
 
+    @patch('feed.gemini_service.fetch_url_content', return_value=('Синтетична робота', 'Таблиця обліку товарів: формули SUM та AVERAGE.', None))
     @patch('feed.gemini_service._http_post_json')
-    def test_selected_gr_evaluation_and_average_calculation(self, mock_post):
+    def test_selected_gr_evaluation_and_average_calculation(self, mock_post, mock_fetch):
         """Тест вибору конкретних ГР прапорцями, розрахунку середнього балу та очищення коментарів учневі."""
         ai_set = AISettings.get_solo()
         ai_set.api_key = 'test-gemini-key'
@@ -1339,9 +1345,13 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
         self.assertEqual(sub.get_ai_gr_average_display(), '9')
         self.assertIsInstance(sub.get_ai_gr_average(), int)
 
+    @patch('feed.gemini_service.fetch_url_content', return_value=('Синтетична робота', 'Таблиця обліку товарів: формули SUM та AVERAGE.', None))
     @patch('feed.gemini_service._http_post_json')
-    def test_api_ai_process_item_with_selected_gr(self, mock_post):
+    def test_api_ai_process_item_with_selected_gr(self, mock_post, mock_fetch):
         """Тест пакетного ендпоінту api_ai_process_item із вибором конкретних ГР."""
+        ai_settings = AISettings.get_solo()
+        ai_settings.is_enabled = True
+        ai_settings.save(update_fields=['is_enabled'])
         ai_set = AISettings.get_solo()
         ai_set.api_key = 'test-gemini-key'
         ai_set.save()
@@ -3666,6 +3676,9 @@ class AssignmentFileAIAndCoauthorTests(TestCase):
     @patch('feed.gemini_service.evaluate_submission_with_gemini')
     def test_student_ai_self_check_unclear_task_json_and_template(self, mock_eval):
         """Тест endpoint student_ai_self_check повертає unclear_task=True та відповідні попередження."""
+        ai_settings = AISettings.get_solo()
+        ai_settings.is_enabled = True
+        ai_settings.save(update_fields=['is_enabled'])
         asg = Assignment.objects.create(
             teacher=self.teacher,
             subject=self.subject,
@@ -3722,6 +3735,9 @@ class AssignmentFileAIAndCoauthorTests(TestCase):
     @patch('feed.gemini_service.evaluate_submission_with_gemini')
     def test_student_ai_self_check_ai_detection_plagiarism_and_weaknesses(self, mock_eval):
         """Тест перевірки ШІ для учня: детекція ШІ, плагіат/дублікати, слабкі сторони та коментарі."""
+        ai_settings = AISettings.get_solo()
+        ai_settings.is_enabled = True
+        ai_settings.save(update_fields=['is_enabled'])
         asg = Assignment.objects.create(
             teacher=self.teacher,
             subject=self.subject,
@@ -4235,6 +4251,7 @@ class TeacherMaterialsAITaskRecognitionTests(TestCase):
         self.class_group, _ = ClassGroup.objects.get_or_create(name='9-Б')
 
         ai_settings = AISettings.get_solo()
+        ai_settings.privacy_mode = 'redact'
         ai_settings.api_key = 'test-key-teacher-mat'
         ai_settings.is_enabled = True
         ai_settings.save()
@@ -4358,7 +4375,8 @@ class TeacherMaterialsAITaskRecognitionTests(TestCase):
             user_text = payload['contents'][0]['parts'][0]['text']
 
             # Перевіряємо, що слайди з презентації передані в промт
-            self.assertIn('ecology_lesson.pptx', user_text)
+            self.assertNotIn('ecology_lesson.pptx', user_text)
+            self.assertIn('Матеріал_', user_text)
             self.assertIn('Практичне завдання', user_text)
             self.assertIn('Скласти список трьох факторів забруднення', user_text)
 
@@ -4402,7 +4420,9 @@ class TeacherMaterialsAITaskRecognitionTests(TestCase):
         )
 
         # Додаємо зображення вчителя (наприклад фото завдання)
-        img_bytes = b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15c4\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82'
+        import base64
+        from .tests_ai_payload import picture
+        img_bytes = base64.b64decode(picture()['data'])
         img_file = SimpleUploadedFile('task_photo.png', img_bytes, content_type='image/png')
         AssignmentFile.objects.create(
             assignment=asg,
@@ -4452,7 +4472,7 @@ class TeacherMaterialsAITaskRecognitionTests(TestCase):
         mime_types = [ip.get('mimeType') for ip in inline_parts]
 
         self.assertIn('application/pdf', mime_types)
-        self.assertIn('image/png', mime_types)
+        self.assertTrue(any(mime.startswith('image/') for mime in mime_types))
 
 
 class AICriteriaGeneratorTests(TestCase):
@@ -7207,12 +7227,12 @@ class IntelligentStudentEvaluationRequirementsTests(TestCase):
         }, ensure_ascii=False), None, {})
 
         result = evaluate_submission_with_gemini(submission)
-        self.assertEqual(result['suggested_grade'], 'Доопрацювати')
-        self.assertIn('inaccessible_materials', result['submission_evidence'])
-        self.assertEqual(len(result['submission_evidence']['inaccessible_materials']), 1)
-        # Помилка в коді видалена, зафіксовано технічну причину
-        self.assertFalse(any("помилка в коді" in str(w).lower() for w in result['weaknesses']))
-        self.assertTrue(any("технічна недоступність" in str(w).lower() or "недоступн" in str(w).lower() for w in result['weaknesses']))
+        self.assertEqual(result['status'], 'unsupported')
+        self.assertNotIn('suggested_grade', result)
+        self.assertIn('не вдалося прочитати', result['error'])
+        # Непрочитану роботу взагалі не надсилаємо моделі: технічна
+        # недоступність не є доведеною помилкою учня або оцінкою.
+        mock_ai.assert_not_called()
 
     @patch('feed.gemini_service.call_ai_api')
     def test_10_ai_total_and_qs_cannot_alter_tasks_total_count(self, mock_ai):
@@ -7275,7 +7295,12 @@ class IntelligentStudentEvaluationRequirementsTests(TestCase):
             description="Виконати аналіз даних за інструкцією.",
             status=Assignment.STATUS_PUBLISHED
         )
-        file = SimpleUploadedFile("analysis.docx", b"Mock docx data", content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+        import io, docx
+        stream = io.BytesIO()
+        document = docx.Document()
+        document.add_paragraph('Розраховано статистичні показники та наведено результати аналізу.')
+        document.save(stream)
+        file = SimpleUploadedFile('analysis.docx', stream.getvalue(), content_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document')
         submission = Submission.objects.create(
             assignment=assignment,
             first_name='Софія',

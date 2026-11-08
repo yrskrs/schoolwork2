@@ -31,41 +31,26 @@ def _model_cache_key(provider: str, model: str) -> str:
 # 1. Concurrency check & in-flight model locks
 # ─────────────────────────────────────────────────────────────────────────────
 
-def is_model_busy(provider: str, model: str) -> bool:
+def is_model_busy(provider: str, model: str, connection_id: str = '') -> bool:
     """Перевіряє, чи модель наразі використовується іншим паралельним запитом."""
-    cache = _get_cache()
-    key = INFLIGHT_PREFIX + _model_cache_key(provider, model)
-    try:
-        val = cache.get(key)
-        return bool(val)
-    except Exception:
-        return False
+    from .ai_scheduler import busy
+    return busy(provider, model, connection_id)
 
 
-def acquire_model_slot(provider: str, model: str, holder_id: str = 'active', timeout: int = 60) -> bool:
+def acquire_model_slot(provider: str, model: str, holder_id: str = 'active', timeout: int = 180, connection_id: str = '') -> bool:
     """
     Захоплює слот для моделі на час виконання перевірки.
     timeout=60 гарантує автоматичне зняття блокування, якщо процес перервано.
     Повертає True, якщо слот захоплено успішно, False — якщо зайнятий.
     """
-    cache = _get_cache()
-    key = INFLIGHT_PREFIX + _model_cache_key(provider, model)
-    try:
-        # cache.add є атомарною операцією (успішна лише якщо ключа ще немає)
-        acquired = cache.add(key, holder_id, timeout=timeout)
-        return bool(acquired)
-    except Exception:
-        return True
+    from .ai_scheduler import acquire
+    return acquire(provider, model, holder_id, timeout, connection_id)
 
 
-def release_model_slot(provider: str, model: str) -> None:
+def release_model_slot(provider: str, model: str, holder_id: str = 'active', connection_id: str = '') -> None:
     """Звільняє слот моделі після завершення запиту."""
-    cache = _get_cache()
-    key = INFLIGHT_PREFIX + _model_cache_key(provider, model)
-    try:
-        cache.delete(key)
-    except Exception:
-        pass
+    from .ai_scheduler import release
+    release(provider, model, holder_id, connection_id)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

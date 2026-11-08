@@ -656,28 +656,8 @@ def normalize_authorship(result, allowed, provenance=(), tolerance_percent=25):
     if details and not evidence and (legacy_detected or percent_exceeds):
         evidence = [{'observation': details, 'basis': 'text_analysis'}]
 
-    # Provenance metadata signals (e.g. diffusion parameters, Gamma/Canva app tag)
-    has_metadata_signal = any(item.get('basis') == 'metadata' for item in evidence)
-    if has_metadata_signal and (ai_percent is None or ai_percent < 80):
-        ai_percent = max(ai_percent or 0, 90)
-
-    # Content signals from slide inspection / visual
-    has_slide_signal = any(
-        item.get('basis') in {'slide_content', 'presentation'}
-        or any(word in str(item.get('location', '')).lower() for word in ('слайд', 'slide', 'презентац', 'notes', 'нотатк'))
-        or (item.get('basis') in {'text_analysis', 'visual'} and any(file.get('signals') for file in provenance))
-        for item in evidence
-    )
-    if has_slide_signal and any(file.get('signals') for file in provenance) and (ai_percent is None or ai_percent < 70):
-        ai_percent = max(ai_percent or 0, 80)
-
-    # Text markers in documents / provenance files (e.g. chatbot prompt artifacts)
-    has_text_marker_signal = any(
-        item.get('basis') == 'text_analysis' and any(file.get('signals') for file in provenance)
-        for item in evidence
-    )
-    if has_text_marker_signal and (ai_percent is None or ai_percent < 80):
-        ai_percent = max(ai_percent or 0, 90)
+    # Do not manufacture percentages from editable metadata or generic markers.
+    # Any returned percentage is an uncalibrated model estimate, not a verdict.
 
     # Determine detection against tolerance
     if ai_percent is not None:
@@ -698,19 +678,9 @@ def normalize_authorship(result, allowed, provenance=(), tolerance_percent=25):
         lines.insert(0, details)
 
     basis = {item.get('basis') for item in evidence}
-    raw_conf = str(result.get('ai_generated_confidence') or '').lower().strip()
-    if raw_conf in {'high', 'medium', 'low'}:
-        confidence = raw_conf if detected else 'none'
-    elif basis & {'metadata', 'self_disclosure'}:
-        confidence = 'high' if detected else 'none'
-    elif ai_percent is not None and ai_percent >= 70:
-        confidence = 'high' if detected else 'none'
-    elif ai_percent is not None and ai_percent >= 40:
-        confidence = 'medium' if detected else 'none'
-    elif detected:
-        confidence = 'low'
-    else:
-        confidence = 'none'
+    # Independent process evidence may support stronger confidence; style and
+    # editable metadata alone never justify "high" confidence.
+    confidence = 'medium' if detected and 'self_disclosure' in basis else ('low' if detected else 'none')
 
     note = ('ШІ дозволено вчителем: використання інструмента саме по собі не знижує бал.' if allowed else
             'ШІ не дозволено вчителем. Підозра потребує уточнення; самостійність оцінюється за критеріями завдання, без автоматичного штрафу за стиль чи метадані.')

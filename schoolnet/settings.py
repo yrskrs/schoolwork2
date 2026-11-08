@@ -101,6 +101,10 @@ DATABASES = {
         conn_health_checks=True,
     )
 }
+if DATABASES['default'].get('ENGINE') == 'django.db.backends.sqlite3':
+    # Acquire SQLite write transactions up front; deferred read-to-write
+    # upgrades can deadlock otherwise when several AI subprocesses commit.
+    DATABASES['default'].setdefault('OPTIONS', {}).update(timeout=20, transaction_mode='IMMEDIATE')
 
 # ─── Пароль ────────────────────────────────────────────────────────────────────
 AUTH_PASSWORD_VALIDATORS = []  # Спрощено для локального середовища
@@ -144,6 +148,12 @@ FILE_UPLOAD_MAX_MEMORY_SIZE = 2 * 1024 * 1024
 # Durable AI jobs; unit tests use the same executor without an external worker.
 AI_JOBS_EAGER = os.environ.get('AI_JOBS_EAGER', 'True' if 'test' in sys.argv else 'False') == 'True'
 AI_JOB_TIMEOUT = int(os.environ.get('AI_JOB_TIMEOUT', '600'))
+AI_WORKER_CONCURRENCY = max(1, min(8, int(os.environ.get('AI_WORKER_CONCURRENCY', '3'))))
+AI_STUDENT_RESERVED = max(0, min(AI_WORKER_CONCURRENCY - 1, int(os.environ.get('AI_STUDENT_RESERVED', '1'))))
+AI_PREP_CONCURRENCY = max(1, min(2, int(os.environ.get('AI_PREP_CONCURRENCY', '1'))))
+AI_REQUEST_DEADLINE = max(30, min(AI_JOB_TIMEOUT - 10, int(os.environ.get('AI_REQUEST_DEADLINE', '150'))))
+AI_PRIVACY_ALLOWED_PROVIDERS = [p.strip() for p in os.environ.get('AI_PRIVACY_ALLOWED_PROVIDERS',
+    'gemini,openai,deepseek,groq,openrouter,cloudflare,custom').split(',') if p.strip()]
 
 # Reversible viewer optimization; no database migrations or worker changes.
 REVIEW_ASYNC = os.environ.get('SCHOOLNET_REVIEW_ASYNC', 'True') == 'True'

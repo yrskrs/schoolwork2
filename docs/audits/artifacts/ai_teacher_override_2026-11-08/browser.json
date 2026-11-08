@@ -1,0 +1,15 @@
+{
+  "single_batch_submission": true,
+  "reload_restores_batch": true,
+  "cancellation_works": true,
+  "student_text_escaped": true,
+  "teacher_override_submitted": true,
+  "teacher_override_resets": true,
+  "javascript_errors": [],
+  "screenshots": [
+    "batch-wide.png",
+    "batch-mobile.png",
+    "teacher-override-wide.png",
+    "teacher-override-mobile.png"
+  ]
+}

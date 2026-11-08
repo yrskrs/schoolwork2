@@ -226,14 +226,19 @@ class TransportTests(TestCase):
 
     @patch('feed.gemini_service._http_post_json',return_value=(200,{'choices':[{'message':{'content':'OK'}}]},''))
     @patch('feed.ai_context.media_for_provider',side_effect=lambda items,provider: items)
-    def test_readable_reference_media_removed_before_conversion_but_required_sources_remain(self,convert,http):
+    def test_readable_text_never_silently_removes_teacher_visual_evidence(self,convert,http):
         student = picture()
         task = dict(picture('blue'),evidence_role='task',text_available=True)
         reference = dict(picture('green'),evidence_role='reference',text_available=True)
         unreadable = dict(picture('black'),evidence_role='reference',text_available=False)
         items=[student,task,reference,unreadable]
         _raw_call_ai_api('Full text',provider='openrouter',model_name='chosen',inline_media=items)
-        self.assertEqual(convert.call_args.args[0],[student,task,unreadable])
+        converted = convert.call_args.args[0]
+        self.assertEqual(len(converted), 4)
+        for actual, expected in zip(converted, [student, task, reference, unreadable]):
+            self.assertEqual(actual.get('evidence_role'), expected.get('evidence_role'))
+            self.assertEqual(image_signature(Image.open(io.BytesIO(base64.b64decode(actual['data'])))),
+                             image_signature(Image.open(io.BytesIO(base64.b64decode(expected['data'])))))
         self.assertEqual(len(items),4)
 
     @patch('feed.gemini_service._http_post_json',return_value=(200,{'choices':[{'message':{'content':'OK'}}]},''))

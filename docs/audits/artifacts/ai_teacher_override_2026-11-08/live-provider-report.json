@@ -1,0 +1,121 @@
+{
+  "scope": "real API calls, synthetic work only; temporary SQLite; production unchanged",
+  "results": [
+    {
+      "case": "correct",
+      "provider": "gemini",
+      "model": "gemini-3.1-flash-lite",
+      "status": "success",
+      "grade": "12",
+      "expected_grade": "12",
+      "rubric_matches": true,
+      "seconds": 6.114,
+      "error": "",
+      "usage": {
+        "provider": "gemini",
+        "model": "gemini-3.1-flash-lite",
+        "prompt_tokens": 2926,
+        "completion_tokens": 935,
+        "total_tokens": 3861
+      }
+    },
+    {
+      "case": "correct",
+      "provider": "groq",
+      "model": "qwen/qwen3.8-27b",
+      "status": "success",
+      "grade": "12",
+      "expected_grade": "12",
+      "rubric_matches": true,
+      "seconds": 3.475,
+      "error": "",
+      "usage": {
+        "provider": "groq",
+        "model": "qwen/qwen3.8-27b",
+        "prompt_tokens": 3050,
+        "completion_tokens": 1155,
+        "total_tokens": 4205
+      }
+    },
+    {
+      "case": "correct",
+      "provider": "openrouter",
+      "model": "openrouter/free",
+      "status": "failed",
+      "grade": "",
+      "expected_grade": "12",
+      "rubric_matches": false,
+      "seconds": 57.778,
+      "error": "[openrouter/openrouter/free]: MAX_TOKENS: відповідь неповна; оцінку не збережено. Модель nvidia/nemotron-3.5-lightning:free. Токени міркувань: 4180.",
+      "usage": {}
+    },
+    {
+      "case": "incorrect",
+      "provider": "gemini",
+      "model": "gemini-3.1-flash-lite",
+      "status": "success",
+      "grade": "6",
+      "expected_grade": "6",
+      "rubric_matches": true,
+      "seconds": 7.708,
+      "error": "",
+      "usage": {
+        "provider": "gemini",
+        "model": "gemini-3.1-flash-lite",
+        "prompt_tokens": 2926,
+        "completion_tokens": 979,
+        "total_tokens": 3905
+      }
+    },
+    {
+      "case": "incorrect",
+      "provider": "groq",
+      "model": "qwen/qwen3.8-27b",
+      "status": "success",
+      "grade": "6",
+      "expected_grade": "6",
+      "rubric_matches": true,
+      "seconds": 2.999,
+      "error": "",
+      "usage": {
+        "provider": "groq",
+        "model": "qwen/qwen3.8-27b",
+        "prompt_tokens": 3050,
+        "completion_tokens": 1180,
+        "total_tokens": 4230
+      }
+    },
+    {
+      "case": "incorrect",
+      "provider": "openrouter",
+      "model": "openrouter/free",
+      "status": "success",
+      "grade": "6",
+      "expected_grade": "6",
+      "rubric_matches": true,
+      "seconds": 37.545,
+      "error": "",
+      "usage": {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "prompt_tokens": 3306,
+        "completion_tokens": 2708,
+        "total_tokens": 6014
+      }
+    }
+  ],
+  "rounds": [
+    {
+      "case": "correct",
+      "wall_seconds": 57.789,
+      "sum_individual_seconds": 67.367
+    },
+    {
+      "case": "incorrect",
+      "wall_seconds": 37.548,
+      "sum_individual_seconds": 48.252
+    }
+  ],
+  "all_requests_succeeded": false,
+  "rubric_consistent": false
+}

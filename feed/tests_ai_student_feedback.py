@@ -57,9 +57,13 @@ class StudentFeedbackBoundaryTests(TestCase):
 
     def test_teacher_assessment_retained_but_student_check_is_short_and_grade_free(self):
         from .views import _perform_student_ai_check
+        # Активна ГР пресета має бути оцінена, інакше complete_result_groups
+        # позначить її як unverifiable і коректно заблокує числову оцінку.
         result,_=self.evaluate(self.result(summary='Зміст правильний. Оцінка 8 балів.',
             feedback_comment='Оцінка 8. Додай приклади.',
-            revision_advice=['Додай джерела.','Уточни висновок.','Перевір оформлення.']))
+            revision_advice=['Додай джерела.','Уточни висновок.','Перевір оформлення.'],
+            gr_results=[{'code':'ГР 1','name':'Зміст','grade':'8','level':'Достатній (7-9)',
+                         'status':'completed','comment':'Зміст виконано.'}]))
         with patch('feed.views.check_submission_duplicates',return_value={}):
             response=_perform_student_ai_check(self.sub,result)
         data=json.loads(response.content)

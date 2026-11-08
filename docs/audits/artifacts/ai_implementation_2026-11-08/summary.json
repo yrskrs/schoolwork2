@@ -1,0 +1,40 @@
+{
+  "status": "passed",
+  "tests_total": 987,
+  "passed": 985,
+  "skipped": 2,
+  "seconds": 106.823,
+  "skip_reason": "Two PostgreSQL concurrency tests require PostgreSQL; local suite uses SQLite.",
+  "new_synthetic_tests": 28,
+  "system_checks": "passed",
+  "migration_drift": "none",
+  "dependencies": "consistent",
+  "source_fingerprints_verified": 38,
+  "runtime": {
+    "jobs_succeeded": 9,
+    "http_requests": 10,
+    "peak_parallel_http": 2,
+    "received_429_recovered": true,
+    "models_used": [
+      "model-0",
+      "model-1",
+      "model-2"
+    ],
+    "known_identifiers_removed": true,
+    "elapsed_seconds": 5.927,
+    "scope": "synthetic loopback HTTP; temporary SQLite; real worker subprocesses; no production data"
+  },
+  "browser": {
+    "single_batch_submission": true,
+    "reload_restores_batch": true,
+    "cancellation_works": true,
+    "student_text_escaped": true,
+    "javascript_errors": [],
+    "screenshots": [
+      "batch-wide.png",
+      "batch-mobile.png"
+    ]
+  },
+  "real_models_tested": false,
+  "production_changed": false
+}

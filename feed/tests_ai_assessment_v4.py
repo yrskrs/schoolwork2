@@ -44,6 +44,7 @@ class AssessmentV4Tests(TestCase):
             class_group=self.group, first_name='Учень', last_name='Тестовий', grade='11',
             file=SimpleUploadedFile('work.txt', 'Безпечні паролі. Не відкривай підозрілих посилань.'.encode()))
         config = AISettings.get_solo()
+        config.is_enabled = True
         config.api_key = 'synthetic-key'
         config.save()
         self.configs = [{'provider': 'gemini', 'api_key': 'synthetic-key', 'model': 'synthetic-model',
@@ -109,7 +110,12 @@ class AssessmentV4Tests(TestCase):
         self.assertEqual(response['suggested_grade'], '8')
 
     def test_wrong_deliverable_preserves_content_credit_and_improvement_advice(self):
-        response, call = self.evaluate(self.result(format_warning='Формат презентації не відповідає завданню про бюлетень.'))
+        # Активна ГР пресета (ГР 1) має бути оцінена, інакше complete_result_groups
+        # позначить її як unverifiable і коректно заблокує числову оцінку.
+        response, call = self.evaluate(self.result(
+            format_warning='Формат презентації не відповідає завданню про бюлетень.',
+            gr_results=[{'code': 'ГР 1', 'name': 'Зміст', 'grade': '8', 'level': 'Достатній (7-9)',
+                         'status': 'completed', 'comment': 'Зміст виконано.'}]))
         self.assertEqual(response['suggested_grade'], '8')
         self.assertEqual(response['tasks_completed_count'], 0)
         self.assertIn('презентація замість бюлетеня', call.call_args.kwargs['system_prompt'].lower())

@@ -168,7 +168,12 @@ class AuditRegressionTests(TestCase):
 
 @override_settings(AI_JOBS_EAGER=False)
 class DurableAIQueueTests(TestCase):
-    setUp = AuditRegressionTests.setUp
+    def setUp(self):
+        AuditRegressionTests.setUp(self)
+        from .models import AISettings
+        settings = AISettings.get_solo()
+        settings.is_enabled = True
+        settings.save(update_fields=['is_enabled'])
 
     def enqueue(self, submission=None):
         return self.client.post(reverse('student_ai_self_check', args=[(submission or self.sub).pk]))

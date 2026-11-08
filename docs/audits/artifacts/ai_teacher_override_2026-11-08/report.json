@@ -1,0 +1,123 @@
+{
+  "image": "schoolwork2-ai-trial:67972e725b25",
+  "source_digest": "67972e725b25fb703263e2b068bf7c586cb4b822f77a013fecc4e6fe6be66c0e",
+  "stages": [
+    {
+      "stage": "build",
+      "returncode": 0,
+      "seconds": 321.078,
+      "summary": []
+    },
+    {
+      "stage": "sqlite-suite",
+      "returncode": 0,
+      "seconds": 103.872,
+      "summary": [
+        "System check identified no issues (0 silenced).",
+        "Ran 998 tests in 97.273s",
+        "OK (skipped=2)"
+      ]
+    },
+    {
+      "stage": "postgres-suite",
+      "returncode": 0,
+      "seconds": 140.992,
+      "summary": [
+        "System check identified no issues (0 silenced).",
+        "Ran 998 tests in 133.015s",
+        "OK"
+      ]
+    },
+    {
+      "stage": "worker-http",
+      "returncode": 0,
+      "seconds": 20.323,
+      "summary": []
+    },
+    {
+      "stage": "updater-suite",
+      "returncode": 0,
+      "seconds": 2.923,
+      "summary": [
+        "Ran 36 tests in 1.896s",
+        "OK (skipped=1)"
+      ]
+    }
+  ],
+  "production_before": {
+    "schoolnet_app": {
+      "id": "113cb34ec5c48317f1b0070df366c230132323204975ec23d2091acceb5c0b10",
+      "image": "sha256:81c89bbb5d83a02ec87cfd1833d2a7c7a1fd504e2b35cdcaff75b40c47809be6",
+      "restart_count": 0,
+      "status": "running",
+      "health": "healthy"
+    },
+    "schoolnet_ai_worker": {
+      "id": "0269001f7f9b031f4a52d6b88d1359ec350cde65d3055eca0234a04dfeffd655",
+      "image": "sha256:81c89bbb5d83a02ec87cfd1833d2a7c7a1fd504e2b35cdcaff75b40c47809be6",
+      "restart_count": 0,
+      "status": "running",
+      "health": "healthy"
+    },
+    "schoolnet_postgres": {
+      "id": "66d210afa9de93e9ac30d664e67983d3f036f71813a4fb375ae12452a743680e",
+      "image": "sha256:f1c3376c26f2609ab9f29f71f824103fe2fcd8ee0346485cb6122a4f93df6f94",
+      "restart_count": 0,
+      "status": "running",
+      "health": "healthy"
+    },
+    "schooljournal-web-1": {
+      "id": "4d4eeba536584b1067752e86c290fd5428ce4d012708109b9c1e360241b7dbf9",
+      "image": "sha256:883d4f7f21a2dc6e525ce258eda4d9f0a711988ff634b21679987dce6fa2f17d",
+      "restart_count": 0,
+      "status": "running",
+      "health": "healthy"
+    },
+    "school_test-app-1": {
+      "id": "062a5d3507a7ca82c0528a86f4151bc5df6458c7a4855e50076ef85d094fae6a",
+      "image": "sha256:d8295b48ae461e147bc01151390f94b6a8859d7ebc03466effdfa0c00952c1f3",
+      "restart_count": 0,
+      "status": "running",
+      "health": "healthy"
+    }
+  },
+  "status": "passed",
+  "production_after": {
+    "schoolnet_app": {
+      "id": "113cb34ec5c48317f1b0070df366c230132323204975ec23d2091acceb5c0b10",
+      "image": "sha256:81c89bbb5d83a02ec87cfd1833d2a7c7a1fd504e2b35cdcaff75b40c47809be6",
+      "restart_count": 0,
+      "status": "running",
+      "health": "healthy"
+    },
+    "schoolnet_ai_worker": {
+      "id": "0269001f7f9b031f4a52d6b88d1359ec350cde65d3055eca0234a04dfeffd655",
+      "image": "sha256:81c89bbb5d83a02ec87cfd1833d2a7c7a1fd504e2b35cdcaff75b40c47809be6",
+      "restart_count": 0,
+      "status": "running",
+      "health": "healthy"
+    },
+    "schoolnet_postgres": {
+      "id": "66d210afa9de93e9ac30d664e67983d3f036f71813a4fb375ae12452a743680e",
+      "image": "sha256:f1c3376c26f2609ab9f29f71f824103fe2fcd8ee0346485cb6122a4f93df6f94",
+      "restart_count": 0,
+      "status": "running",
+      "health": "healthy"
+    },
+    "schooljournal-web-1": {
+      "id": "4d4eeba536584b1067752e86c290fd5428ce4d012708109b9c1e360241b7dbf9",
+      "image": "sha256:883d4f7f21a2dc6e525ce258eda4d9f0a711988ff634b21679987dce6fa2f17d",
+      "restart_count": 0,
+      "status": "running",
+      "health": "healthy"
+    },
+    "school_test-app-1": {
+      "id": "062a5d3507a7ca82c0528a86f4151bc5df6458c7a4855e50076ef85d094fae6a",
+      "image": "sha256:d8295b48ae461e147bc01151390f94b6a8859d7ebc03466effdfa0c00952c1f3",
+      "restart_count": 0,
+      "status": "running",
+      "health": "healthy"
+    }
+  },
+  "production_unchanged": true
+}

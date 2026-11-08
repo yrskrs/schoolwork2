@@ -89,7 +89,7 @@ def enqueue_understanding_job(assignment, user=None, force_refresh=False, eager=
 
 
 def job_response(job, is_teacher=False, request=None):
-    if job.status in ('succeeded', 'failed'):
+    if job.status in ('succeeded', 'failed', 'cancelled'):
         result = dict(job.result)
         result['events'] = job.events
         result['job_id'] = str(job.pk)
@@ -112,13 +112,14 @@ def job_response(job, is_teacher=False, request=None):
         return JsonResponse(result, status=job.http_status)
     return JsonResponse({'status': job.status, 'job_id': str(job.pk),
                          'events': job.events,
+                         'retry_at': job.not_before.isoformat() if job.not_before else None,
                          'status_url': reverse('ai_job_status', args=[job.pk])}, status=202)
 
 
 def fail_job(job_id, message):
     with transaction.atomic():
         job = AIJob.objects.select_for_update().get(pk=job_id)
-        if job.status in ('succeeded', 'failed'):
+        if job.status in ('succeeded', 'failed', 'cancelled'):
             return
         from .ai_progress import emit_event
         emit_event('failed', message, job_id=job_id)
@@ -128,21 +129,97 @@ def fail_job(job_id, message):
         job.finished_at = timezone.now()
         job.save(update_fields=['status', 'result', 'http_status', 'finished_at'])
         job.reservations.filter(used=False).update(job=None)
+    from .ai_scheduler import release_job_resources
+    release_job_resources(job_id)
 
 
-def claim_next_job():
-    expired = timezone.now() - timedelta(seconds=settings.AI_JOB_TIMEOUT + 60)
+def claim_next_job(kinds=None):
+    from django.db.models import Q
+    from .ai_scheduler import state
+    now = timezone.now()
+    expired = now - timedelta(seconds=settings.AI_JOB_TIMEOUT + 60)
     for job_id in AIJob.objects.filter(status='running', started_at__lt=expired).values_list('pk', flat=True):
         fail_job(job_id, 'Перевірку перервано. Спробуйте ще раз; спробу самоперевірки не використано.')
-    with transaction.atomic():
-        jobs = AIJob.objects.filter(status='queued')
+    # One scheduling row serializes claims across all worker processes/containers.
+    with state('job-scheduling') as scheduling:
+        jobs = AIJob.objects.filter(status='queued').filter(Q(not_before__isnull=True) | Q(not_before__lte=now))
+        if kinds is not None:
+            jobs = jobs.filter(kind__in=kinds)
+        else:
+            jobs = jobs.exclude(kind='prepare')
+        running = AIJob.objects.filter(status='running')
+        if kinds == ('prepare',):
+            if running.filter(kind='prepare').count() >= settings.AI_PREP_CONCURRENCY:
+                return None
+        else:
+            running = running.exclude(kind='prepare')
+            if running.count() >= settings.AI_WORKER_CONCURRENCY:
+                return None
+            normal = jobs.exclude(kind='student_check')
+            student = jobs.filter(kind='student_check')
+            normal_capacity = max(1, settings.AI_WORKER_CONCURRENCY - settings.AI_STUDENT_RESERVED)
+            if running.exclude(kind='student_check').count() >= normal_capacity:
+                jobs = student
+            elif student.exists() and (scheduling.get('student_burst', 0) < 3 or not normal.exists()):
+                jobs = student
+            else:
+                jobs = normal
         jobs = jobs.select_for_update(skip_locked=True) if connection.features.has_select_for_update_skip_locked else jobs.select_for_update()
         job = jobs.first()
         if job:
+            scheduling['student_burst'] = scheduling.get('student_burst', 0) + 1 if job.kind == 'student_check' else 0
             job.status = 'running'
-            job.started_at = timezone.now()
-            job.save(update_fields=['status', 'started_at'])
+            job.started_at = now
+            job.not_before = None
+            metrics = dict(job.metrics or {})
+            metrics.setdefault('queue_wait_ms', []).append(round((now - job.created_at).total_seconds() * 1000, 3))
+            job.metrics = metrics
+            job.save(update_fields=['status', 'started_at', 'not_before', 'metrics'])
         return job
+
+
+def defer_job(job_id, seconds):
+    with transaction.atomic():
+        job = AIJob.objects.select_for_update().get(pk=job_id)
+        if job.status != 'running':
+            return
+        if job.batch_id and job.batch.cancelled_at:
+            job.status = 'cancelled'
+            job.finished_at = timezone.now()
+            job.result = {'status': 'cancelled', 'error': 'Пакет скасовано під час очікування квоти.'}
+            job.save(update_fields=['status', 'finished_at', 'result'])
+            return
+        job.status = 'queued'
+        job.not_before = timezone.now() + timedelta(seconds=max(1, min(86400, int(seconds))))
+        job.started_at = None
+        job.save(update_fields=['status', 'started_at', 'not_before'])
+        from .ai_progress import emit_event
+        emit_event('waiting_quota', 'Очікує доступної моделі або поновлення квоти; спробу не використано.', job_id=job_id)
+
+
+def enqueue_preparation(submission_id):
+    # No API call and no student reservation. Independent from the assessment's
+    # unique active-job constraint because this job has no submission FK.
+    if settings.AI_JOBS_EAGER:
+        return None
+    with transaction.atomic():
+        submission = Submission.objects.select_for_update().get(pk=submission_id)
+        current = AIJob.objects.filter(kind='prepare', status__in=['queued', 'running'],
+            parameters__prepare_submission_id=submission.pk).first()
+        return current or AIJob.objects.create(kind='prepare', parameters={'prepare_submission_id': submission.pk})
+
+
+def prepare_submission(submission):
+    from .gemini_service import extract_submission_content
+    from .ai_context import teacher_materials
+    from .ai_provenance import submission_provenance
+    from .ai_metrics import measure
+    with measure('prepare_submission'):
+        extract_submission_content(submission)
+        submission_provenance(submission)
+    with measure('prepare_assignment'):
+        teacher_materials(submission.assignment)
+
 
 
 def execute_job(job_id):
@@ -154,14 +231,29 @@ def execute_job(job_id):
 def _execute_job(job_id):
     with transaction.atomic():
         job = AIJob.objects.select_for_update().get(pk=job_id)
-        if job.status in ('succeeded', 'failed'):
+        if job.status in ('succeeded', 'failed', 'cancelled'):
             return
         if job.status == 'queued':
             job.status, job.started_at = 'running', timezone.now()
             job.save(update_fields=['status', 'started_at'])
     try:
         from .ai_progress import emit_event
+        if job.kind in ('student_check', 'teacher_check', 'batch_check'):
+            from .models import AISettings
+            if not AISettings.get_solo().is_enabled:
+                _finish_job(job_id, {'status': 'failed', 'error': 'Модуль ШІ вимкнено; спробу самоперевірки не використано.'}, 403)
+                return
         emit_event('preparing', 'Читаю завдання, критерії та всі матеріали роботи.')
+        if job.kind == 'prepare':
+            if job.parameters.get('prepare_submission_id'):
+                submission = Submission.objects.select_related('assignment').get(pk=job.parameters['prepare_submission_id'])
+                prepare_submission(submission)
+            else:
+                from .models import Assignment
+                from .ai_context import teacher_materials
+                teacher_materials(Assignment.objects.get(pk=job.parameters['prepare_assignment_id']))
+            _finish_job(job_id, {'status': 'success'}, 200)
+            return
         if job.kind == 'understanding':
             from .gemini_service import analyze_assignment_task_understanding
             result = analyze_assignment_task_understanding(job.assignment, **job.parameters)
@@ -174,6 +266,9 @@ def _execute_job(job_id):
             if not submission.assignment.allow_student_ai_check:
                 raise SelfCheckUnavailable('Самоперевірку вимкнено вчителем')
             evaluation = _evaluate_student_submission(submission)
+            if evaluation.get('status') == 'deferred':
+                defer_job(job_id, evaluation.get('retry_after', 2))
+                return
             # The successful result, quota and every group member commit together.
             with transaction.atomic():
                 response = _perform_student_ai_check(submission, evaluation)
@@ -191,6 +286,9 @@ def _execute_job(job_id):
                 return
             teacher = getattr(job.requested_by, 'teacher_profile', None)
             result = evaluate_submission_with_gemini(submission, teacher=teacher, **job.parameters)
+            if result.get('status') == 'deferred':
+                defer_job(job_id, result.get('retry_after', 2))
+                return
             status_code = 200
             if job.kind == 'batch_check':
                 submission.refresh_from_db()
@@ -198,7 +296,7 @@ def _execute_job(job_id):
                     'id': submission.pk,
                     'student_name': submission.get_student_full_name(),
                     'status': result.get('status'),
-                    'suggested_grade': submission.ai_suggested_grade or '—',
+                    'suggested_grade': (submission.ai_suggested_grade or '—') if result.get('status') == 'success' else '—',
                     'level': submission.ai_score_level or '',
                     'feedback': submission.get_formatted_ai_feedback() or '',
                     'clean_feedback': submission.get_clean_ai_feedback_for_student(),
@@ -212,15 +310,19 @@ def _execute_job(job_id):
                     'model_used': submission.ai_model_used,
                     'request_metadata': submission.get_ai_request_metadata(),
                     'format_warning': result.get('format_warning') or '',
-                    'error': submission.ai_error_reason or ''
+                    'error': result.get('error') or submission.ai_error_reason or ''
                 }
             _finish_job(job_id, result, status_code)
-    except Exception:
-        logger.exception('AI job %s failed', job_id)
+    except Exception as error:
+        logger.error('AI job %s failed (%s)', job_id, type(error).__name__)
         fail_job(job_id, 'ШІ тимчасово недоступний. Спробуйте ще раз.')
 
 
 def _finish_job(job_id, result, status_code):
+    import time
+    started = time.monotonic()
+    from .ai_metrics import record
+    record('result_success', int(status_code < 400 and (result.get('ok') is True or result.get('status') in ('success', 'ok'))))
     success = status_code < 400 and (result.get('ok') is True or result.get('status') in ('success', 'ok'))
     with transaction.atomic():
         job = AIJob.objects.select_for_update().get(pk=job_id)
@@ -235,3 +337,4 @@ def _finish_job(job_id, result, status_code):
             job.reservations.update(used=True)
         elif not success:
             job.reservations.filter(used=False).update(job=None)
+    record('persist_ms', (time.monotonic() - started) * 1000)

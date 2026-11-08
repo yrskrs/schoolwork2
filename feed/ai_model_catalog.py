@@ -60,10 +60,12 @@ PROVIDER_CATALOG = [
         'limits_url': 'https://developers.cloudflare.com/workers-ai/platform/limits/',
         'quota_note': 'ШІ-моделі на платформі Cloudflare Workers AI. Вкажіть API Token та Account ID.',
         'models': [
-            {'name': '@cf/meta/llama-3.3-70b-instruct', 'description': 'Потужна відкрита модель Meta LLaMA 3.3 на Cloudflare.', 'quota': 'Згідно з тарифом Cloudflare', 'supports_vision': False, 'context_tokens': 128000, 'context_display': '128 000 токенів (~128K, тільки текст)'},
-            {'name': '@cf/meta/llama-3.1-8b-instruct', 'description': 'Швидка та легка модель LLaMA 3.1 8B.', 'quota': 'Згідно з тарифом Cloudflare', 'supports_vision': False, 'context_tokens': 128000, 'context_display': '128 000 токенів (~128K, тільки текст)'},
-            {'name': '@cf/meta/llama-3.2-11b-vision-instruct', 'description': 'Мультимодальна модель Meta з підтримкою зображень.', 'quota': 'Згідно з тарифом Cloudflare', 'supports_vision': True, 'context_tokens': 128000, 'context_display': '128 000 токенів (~128K, текст і фото)'},
-            {'name': '@cf/deepseek-ai/deepseek-r1-distill-qwen-32b', 'description': 'Модель міркувань DeepSeek R1 на базі Qwen 32B.', 'quota': 'Згідно з тарифом Cloudflare', 'supports_vision': False, 'context_tokens': 32768, 'context_display': '32 768 токенів (~32K, тільки текст)'},
+            {'name': '@cf/meta/llama-3.3-70b-instruct', 'description': 'Потужна відкрита модель Meta LLaMA 3.3 на Cloudflare.', 'quota': 'Згідно з тарифом Cloudflare', 'supports_vision': False, 'context_tokens': 128000, 'context_display': '128 000 токенів (~128K, тільки текст)', 'max_images': 0},
+            {'name': '@cf/meta/llama-3.1-8b-instruct', 'description': 'Швидка та легка модель LLaMA 3.1 8B.', 'quota': 'Згідно з тарифом Cloudflare', 'supports_vision': False, 'context_tokens': 128000, 'context_display': '128 000 токенів (~128K, тільки текст)', 'max_images': 0},
+            {'name': '@cf/meta/llama-3.2-11b-vision-instruct', 'description': 'Мультимодальна модель Meta з підтримкою зображень (до 32 фото на запит).', 'quota': 'Згідно з тарифом Cloudflare', 'supports_vision': True, 'context_tokens': 128000, 'context_display': '128 000 токенів (~128K, текст і фото)', 'max_images': 32},
+            {'name': '@cf/deepseek-ai/deepseek-r1-distill-qwen-32b', 'description': 'Модель міркувань DeepSeek R1 на базі Qwen 32B.', 'quota': 'Згідно з тарифом Cloudflare', 'supports_vision': False, 'context_tokens': 32768, 'context_display': '32 768 токенів (~32K, тільки текст)', 'max_images': 0},
+            {'name': '@cf/zai-org/glm-4.7-flash', 'description': 'Швидка текстова модель GLM-4.7 Flash (без підтримки зображень).', 'quota': 'Згідно з тарифом Cloudflare', 'supports_vision': False, 'context_tokens': 128000, 'context_display': '128 000 токенів (~128K, тільки текст)', 'max_images': 0},
+            {'name': '@cf/qwen/qwen3.8-27b', 'description': 'Мультимодальна модель Qwen із підтримкою зображень (до 32 фото).', 'quota': 'Згідно з тарифом Cloudflare', 'supports_vision': True, 'context_tokens': 128000, 'context_display': '128 000 токенів (~128K, текст і фото)', 'max_images': 32},
         ]
     },
     {
@@ -119,10 +121,14 @@ def get_model_capabilities(model_name, provider=None):
         if prov == 'cloudflare' or name.startswith('@cf/'):
             has_vision = any(v in name for v in ('vision', 'vl', 'multimodal', '11b-vision'))
             ctx = 32768 if '32b' in name else 128000
+            # Cloudflare Workers AI rejects requests with more than 32 images
+            # ("too many images in request (max 32)"). Text-only models must
+            # never receive images at all, so cap them at zero.
             base_caps = {
                 'supports_vision': has_vision,
                 'context_tokens': ctx,
-                'context_display': f'{ctx} токенів ({"текст і фото" if has_vision else "тільки текст"})'
+                'context_display': f'{ctx} токенів ({"текст і фото" if has_vision else "тільки текст"})',
+                'max_images': 32 if has_vision else 0,
             }
         elif prov == 'gemini' or 'gemini' in name:
             base_caps = {'supports_vision': True, 'context_tokens': 1048576, 'context_display': '~1 000 000 токенів (~1M)'}

@@ -7,6 +7,7 @@ from . import school_api_v2
 from . import views_updates
 from . import python_runner
 from . import views_cloud, views_backups, access_views
+from . import ai_batches
 from .views_dialogs import ui_dialog
 from .submission_notifications import submission_notifications
 from school_sync import django_backend as roster_views
@@ -29,6 +30,10 @@ urlpatterns = [
     path('teacher/updates/api/status/', views_updates.updates_status_api_view, name='updates_status_api'),
     path('teacher/updates/api/rollback/', views_updates.updates_rollback_api_view, name='updates_rollback_api'),
     path("api/ai/jobs/<uuid:job_id>/", views.ai_job_status, name="ai_job_status"),
+    path('api/ai/batches/', ai_batches.create, name='ai_batch_create'),
+    path('api/ai/batches/latest/', ai_batches.latest, name='ai_batch_latest'),
+    path('api/ai/batches/<uuid:batch_id>/', ai_batches.status, name='ai_batch_status'),
+    path('api/ai/batches/<uuid:batch_id>/cancel/', ai_batches.cancel, name='ai_batch_cancel'),
     # ── Публічна частина ──────────────────────────────────────────────────────
     path('', views.index, name='index'),
     path('feed/fragment/', views.feed_fragment, name='feed_fragment'),

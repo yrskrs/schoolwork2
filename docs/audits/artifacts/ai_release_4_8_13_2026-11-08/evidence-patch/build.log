@@ -1,0 +1,60 @@
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 2.18kB done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/python:3.12-slim
+#2 DONE 0.5s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 823B done
+#3 DONE 0.0s
+
+#4 [internal] load build context
+#4 DONE 0.0s
+
+#5 [1/9] FROM docker.io/library/python:3.12-slim@sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb1b0fe13a4fa5b
+#5 resolve docker.io/library/python:3.12-slim@sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb1b0fe13a4fa5b 0.1s done
+#5 DONE 0.1s
+
+#4 [internal] load build context
+#4 transferring context: 570.33kB 0.0s done
+#4 DONE 0.1s
+
+#6 [2/9] RUN apt-get update && apt-get install -y --no-install-recommends     build-essential     libpq-dev     gcc     antiword     libreoffice-nogui     poppler-utils     mdbtools     fonts-dejavu-core     fonts-liberation     && rm -rf /var/lib/apt/lists/*
+#6 CACHED
+
+#7 [3/9] WORKDIR /app
+#7 CACHED
+
+#8 [4/9] COPY requirements.txt requirements-docker.lock /app/
+#8 CACHED
+
+#9 [5/9] RUN pip install --no-cache-dir -r requirements-docker.lock && pip check
+#9 CACHED
+
+#10 [6/9] COPY . /app/
+#10 DONE 0.2s
+
+#11 [7/9] RUN mkdir -p /app/media /app/staticfiles /app/logs
+#11 DONE 0.3s
+
+#12 [8/9] RUN chmod -R 755 /app/media /app/staticfiles /app/logs
+#12 DONE 0.3s
+
+#13 [9/9] RUN python -c 'import json,os,pathlib; pathlib.Path("/app/build-info.json").write_text(json.dumps({"revision":os.environ.get("VCS_REF","local"),"source_digest":os.environ.get("SOURCE_DIGEST","unknown")}))'
+#13 DONE 0.5s
+
+#14 exporting to image
+#14 exporting layers
+#14 exporting layers 0.7s done
+#14 exporting manifest sha256:8a7ad6ec7bed8ec9b670b0062c6c73d1a96739c77226d8019c53c11443cf6826 0.0s done
+#14 exporting config sha256:39e55a7af23063868c9ae6c21286173797f36d03dae0f9396cd004955a488ffd 0.0s done
+#14 exporting attestation manifest sha256:c5712bf95c0e4618946f932e4a786dcb6e39a50d18c06c0d33f3c5f0877fe40d 0.0s done
+#14 exporting manifest list sha256:9a7aa005179cc94c7476acc738058831474040e8e8cc7645d77ceef89b08ec18
+#14 exporting manifest list sha256:9a7aa005179cc94c7476acc738058831474040e8e8cc7645d77ceef89b08ec18 0.0s done
+#14 naming to docker.io/library/schoolwork2-app:4.8.13-27d014467939 done
+#14 unpacking to docker.io/library/schoolwork2-app:4.8.13-27d014467939
+#14 unpacking to docker.io/library/schoolwork2-app:4.8.13-27d014467939 0.3s done
+#14 DONE 1.2s

@@ -1,0 +1,56 @@
+{
+  "scope": "offline synthetic probes; no network; not Django integration tests",
+  "results": {
+    "standard": {
+      "profile_name_sent": false,
+      "coauthor_field_sent": false,
+      "file_name_sent": true,
+      "body_name_sent": true,
+      "comment_email_sent": true,
+      "private_teacher_note_sent": true,
+      "previous_feedback_sent": false,
+      "prompt_chars": 4146,
+      "system_chars": 5902
+    },
+    "compact": {
+      "profile_name_sent": false,
+      "coauthor_field_sent": false,
+      "file_name_sent": true,
+      "body_name_sent": true,
+      "comment_email_sent": true,
+      "private_teacher_note_sent": true,
+      "previous_feedback_sent": false,
+      "prompt_chars": 3839,
+      "system_chars": 2893
+    },
+    "gemini": {
+      "images_in": 5,
+      "images_sent": 5,
+      "source_filename_sent": true,
+      "body_name_sent": true
+    },
+    "openrouter": {
+      "images_in": 5,
+      "images_sent": 5,
+      "source_filename_sent": true,
+      "body_name_sent": true
+    },
+    "groq": {
+      "images_in": 5,
+      "images_sent": 3,
+      "source_filename_sent": true,
+      "body_name_sent": true
+    },
+    "batch_template": {
+      "reads_delay_element": true,
+      "declares_delay_element": false
+    },
+    "gemini_compatibility": {
+      "http_calls_for_one_adapter_call": 4
+    },
+    "authorship": {
+      "claim_without_provenance_flagged": true,
+      "confidence": "high"
+    }
+  }
+}

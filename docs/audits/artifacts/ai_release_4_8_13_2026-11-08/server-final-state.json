@@ -1,0 +1,56 @@
+{
+  "containers": {
+    "schoolnet_app": {
+      "image": "schoolwork2-app:4.8.13-27d014467939",
+      "image_id": "sha256:9a7aa005179cc94c7476acc738058831474040e8e8cc7645d77ceef89b08ec18",
+      "health": "healthy",
+      "restart_count": 0
+    },
+    "schoolnet_ai_worker": {
+      "image": "schoolwork2-app:4.8.13-27d014467939",
+      "image_id": "sha256:9a7aa005179cc94c7476acc738058831474040e8e8cc7645d77ceef89b08ec18",
+      "health": "healthy",
+      "restart_count": 0
+    },
+    "schoolnet_postgres": {
+      "image": "postgres:16",
+      "image_id": "sha256:f1c3376c26f2609ab9f29f71f824103fe2fcd8ee0346485cb6122a4f93df6f94",
+      "health": "healthy",
+      "restart_count": 0
+    },
+    "schooljournal-web-1": {
+      "image": "schooljournal-web:1.4.6-aa66358",
+      "image_id": "sha256:883d4f7f21a2dc6e525ce258eda4d9f0a711988ff634b21679987dce6fa2f17d",
+      "health": "healthy",
+      "restart_count": 0
+    },
+    "school_test-app-1": {
+      "image": "schooltest5-app:1.8.8-1f0f386",
+      "image_id": "sha256:d8295b48ae461e147bc01151390f94b6a8859d7ebc03466effdfa0c00952c1f3",
+      "health": "healthy",
+      "restart_count": 0
+    }
+  },
+  "health": {
+    "status": 200,
+    "body": {
+      "status": "ok",
+      "version": "4.8.13",
+      "revision": "c53924b-ai-4.8.13",
+      "source_digest": "27d0144679393a59c2ec4333cde6842b132aea1d011ffc31e75e034830415bec"
+    }
+  },
+  "expected_digest": "27d0144679393a59c2ec4333cde6842b132aea1d011ffc31e75e034830415bec",
+  "code_matches": true,
+  "temporary_resources": {
+    "schoolnet.ai-real-trial=true": {
+      "containers": [],
+      "networks": []
+    },
+    "schoolnet.ai-trial=true": {
+      "containers": [],
+      "networks": []
+    }
+  },
+  "backups_exist": true
+}

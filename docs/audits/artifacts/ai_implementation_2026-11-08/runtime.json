@@ -1,0 +1,14 @@
+{
+  "jobs_succeeded": 9,
+  "http_requests": 10,
+  "peak_parallel_http": 2,
+  "received_429_recovered": true,
+  "models_used": [
+    "model-0",
+    "model-1",
+    "model-2"
+  ],
+  "known_identifiers_removed": true,
+  "elapsed_seconds": 5.927,
+  "scope": "synthetic loopback HTTP; temporary SQLite; real worker subprocesses; no production data"
+}

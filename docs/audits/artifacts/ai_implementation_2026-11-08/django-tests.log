@@ -1,0 +1,1332 @@
+Creating test database for alias 'default'...
+.../tmp/schoolwork-ai-venv/lib/python3.12/site-packages/django/core/handlers/base.py:63: UserWarning: No directory at: /home/mlinux/schoolprjct/schoolwork2/staticfiles/
+  mw_instance = middleware(adapted_handler)
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /" 403
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /feed/fragment/" 403
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /api/classes/" 403
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /api/students-autocomplete/" 403
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /assignment/1/" 403
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /assignment/1/submit/" 403
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /media/private.txt" 403
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /setup/" 403
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /teacher/" 403
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /assignment/1/submit/" 403
+.Found 987 test(s).
+System check identified no issues (0 silenced).
+[КЛІЄНТ IP: 127.0.0.1] "POST /access/***/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /assignment/2/" 404
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /assignment/3/" 404
+[КЛІЄНТ IP: 127.0.0.1] "GET /" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /access/***/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /feed/fragment/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /api/classes/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /api/students-autocomplete/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /assignment/2/" 404
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /assignment/2/submit/" 404
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /submission/3/" 404
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /?class=2" 404
+[КЛІЄНТ IP: 127.0.0.1] "GET /feed/check-updates/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /access/***/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /assignment/1/submit/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /access/***/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "HEAD /access/***/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /access/***/" 403
+[КЛІЄНТ IP: 127.0.0.1] "GET /access/***/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /access/***/" 302 OK
+[КЛІЄНТ IP: 192.168.1.42] ⚠️ "POST /teacher/settings/tailscale/" 403
+.[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /" 403
+[КЛІЄНТ IP: 192.168.1.42] "GET /" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /access/***/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /submission/1/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /api/ai/jobs/5266a934-d409-4048-a369-5996f42ed961/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /access/***/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /media/assignments/2/other.txt" 404
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /assignment/file/2/download/" 404
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /media/assignments/1/allowed.txt" 403
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /assignment/file/1/download/" 403
+.[КЛІЄНТ IP: 192.168.1.42] "GET /" 200 OK
+[КЛІЄНТ IP: 8.8.8.8] "GET /" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /" 403
+.[КЛІЄНТ IP: 127.0.0.1] "POST /access/***/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /access/***/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /access/***/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /" 403
+[КЛІЄНТ IP: 127.0.0.1] "GET /" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /access/***/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /" 403
+[КЛІЄНТ IP: 192.168.1.42] "GET /" 200 OK
+.[КЛІЄНТ IP: 192.168.1.42] "POST /teacher/access-links/" 302 OK
+[КЛІЄНТ IP: 192.168.1.42] "POST /teacher/access-links/" 302 OK
+[КЛІЄНТ IP: 192.168.1.42] "POST /teacher/access-links/" 302 OK
+[КЛІЄНТ IP: 192.168.1.42] ❌ ВИНЯТОК на GET /teacher/access-links/?edit=nonsense: Http404
+[КЛІЄНТ IP: 192.168.1.42] ⚠️ "GET /teacher/access-links/?edit=nonsense" 404
+.[КЛІЄНТ IP: 192.168.1.42] ⚠️ "POST /teacher/access-links/" 403
+[КЛІЄНТ IP: 192.168.1.42] "POST /teacher/access-links/" 302 OK
+[КЛІЄНТ IP: 192.168.1.42] "GET /teacher/access-links/" 200 OK
+[КЛІЄНТ IP: 192.168.1.42] "POST /teacher/access-links/" 302 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /api/classes/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /api/students-autocomplete/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /assignment/3/" 404
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /teacher/access-links/" 404
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /setup/" 404
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /media/private.txt" 404
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/login/" 200 OK
+.[КЛІЄНТ IP: 192.168.1.42] "POST /teacher/access-links/" 200 OK
+[КЛІЄНТ IP: 192.168.1.42] ⚠️ "POST /teacher/access-links/" 403
+.[КЛІЄНТ IP: 192.168.1.42] ❌ ВИНЯТОК на GET /teacher/access-links/?edit=1: Http404
+[КЛІЄНТ IP: 192.168.1.42] ⚠️ "GET /teacher/access-links/?edit=1" 404
+[КЛІЄНТ IP: 192.168.1.42] ❌ ВИНЯТОК на POST /teacher/access-links/: Http404
+[КЛІЄНТ IP: 192.168.1.42] ⚠️ "POST /teacher/access-links/" 404
+[КЛІЄНТ IP: 192.168.1.42] ❌ ВИНЯТОК на GET /teacher/access-links/1/qr/: Http404
+[КЛІЄНТ IP: 192.168.1.42] ⚠️ "GET /teacher/access-links/1/qr/" 404
+[КЛІЄНТ IP: 192.168.1.42] ⚠️ "POST /teacher/settings/tailscale/" 403
+.[КЛІЄНТ IP: 127.0.0.1] "POST /access/***/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /media/submissions/08.11.2026/7-А/Іваненко_Іван/peer.txt" 404
+[КЛІЄНТ IP: 127.0.0.1] "GET /api/ai/jobs/2725d399-0356-43ad-9d2d-f6afed83f247/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /api/ai/jobs/1b2ed68c-f574-4d53-8fcb-61b992b15bfc/" 404
+.[КЛІЄНТ IP: 127.0.0.1] "POST /access/***/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /api/students-autocomplete/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /submission/1/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /submission/2/" 404
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /submission/3/" 404
+[КЛІЄНТ IP: 127.0.0.1] "GET /my-submissions/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /access/***/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /assignment/1/submit/" 302 OK
+.[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /ui/dialog/guide/" 403
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /ui/dialog/changelog/" 403
+[КЛІЄНТ IP: 127.0.0.1] "POST /access/***/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /ui/dialog/guide/" 403
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /ui/dialog/changelog/" 403
+.[КЛІЄНТ IP: 127.0.0.1] "POST /access/***/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /ui/dialog/guide/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /ui/dialog/changelog/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] ❌ ВИНЯТОК на GET /ui/dialog/invalid/: Http404
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /ui/dialog/invalid/" 404
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /ui/dialog/guide/" 405
+[КЛІЄНТ IP: 127.0.0.1] "POST /access/***/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /ui/dialog/guide/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /ui/dialog/changelog/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] ❌ ВИНЯТОК на GET /ui/dialog/invalid/: Http404
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /ui/dialog/invalid/" 404
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /ui/dialog/guide/" 405
+[КЛІЄНТ IP: 127.0.0.1] "POST /access/***/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /ui/dialog/guide/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /ui/dialog/changelog/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] ❌ ВИНЯТОК на GET /ui/dialog/invalid/: Http404
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /ui/dialog/invalid/" 404
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /ui/dialog/guide/" 405
+[КЛІЄНТ IP: 127.0.0.1] "POST /access/***/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /ui/dialog/guide/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /ui/dialog/changelog/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] ❌ ВИНЯТОК на GET /ui/dialog/invalid/: Http404
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /ui/dialog/invalid/" 404
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /ui/dialog/guide/" 405
+.[КЛІЄНТ IP: 127.0.0.1] "GET /ui/dialog/guide/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /ui/dialog/changelog/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] ❌ ВИНЯТОК на GET /ui/dialog/invalid/: Http404
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /ui/dialog/invalid/" 404
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /ui/dialog/guide/" 405
+.[КЛІЄНТ IP: 192.168.1.42] "GET /teacher/access-links/1/qr/" 200 OK
+[КЛІЄНТ IP: 192.168.1.42] "GET /teacher/access-links/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /access/***/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /access/***/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /access/***/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /access/***/" 302 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /access/***/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /" 403
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /access/***/" 403
+[КЛІЄНТ IP: 127.0.0.1] "POST /access/***/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /" 403
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /access/***/" 403
+.[КЛІЄНТ IP: 127.0.0.1] "POST /access/***/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/2/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /assignment/2/" 404
+[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /access/***/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /api/ai/jobs/fb0a89d5-35d0-4620-add6-3351c3a8bc85/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /api/ai/jobs/55d8d2b8-88f3-437a-b180-108b78cd7261/" 404
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /api/ai/jobs/fb0a89d5-35d0-4620-add6-3351c3a8bc85/" 404
+.[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /" 403
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /" 403
+[КЛІЄНТ IP: 8.8.8.8] ⚠️ "GET /" 403
+.[КЛІЄНТ IP: 127.0.0.1] "POST /access/***/" 302 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /access/***/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/submit/success/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /access/***/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /" 403
+.[КЛІЄНТ IP: 127.0.0.1] "POST /access/***/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /" 403
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/login/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/access-links/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/settings/tailscale/" 200 OK
+..[КЛІЄНТ IP: 127.0.0.1] "POST /access/***/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/2/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /" 403
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /" 403
+.[КЛІЄНТ IP: 127.0.0.1] "POST /access/***/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /media/private.txt" 404
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /teacher/access-links/" 404
+......[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/submit/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/assignment/create/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/assignment/1/duplicate/" 302 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/ai-settings/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/ai-settings/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/ai-settings/" 302 OK
+...[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/assignment/generate-criteria/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/assignment/generate-criteria/" 302 OK
+.......[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/assignment/create/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/assignment/1/edit/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/assignment/1/duplicate/" 302 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /assignment/1/submit/" 302 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /?date=2026-11-11" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /feed/fragment/?date=2026-11-11" 200 OK
+...[КЛІЄНТ IP: 127.0.0.1] "GET /" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /ui/dialog/guide/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/submit/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /ui/dialog/guide/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /ui/dialog/guide/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /submission/1/student-ai-check/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /submission/1/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/submit/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /submission/1/student-ai-check/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /submission/1/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/submit/success/" 200 OK
+..[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/submit/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /assignment/1/submit/" 302 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/" 200 OK
+.....[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/assignment/create/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/" 200 OK
+..[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/assignment/1/duplicate/" 302 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/submit/" 302 OK
+......................Gemini 400 Invalid Argument | Payload structure: {'contents_count': 1, 'parts_types': ['text'], 'has_system': True, 'gen_config': {'temperature': 0.2, 'maxOutputTokens': 4500, 'thinkingConfig': {'thinkingBudget': 0}, 'responseMimeType': 'application/json'}}
+Gemini 400 Invalid Argument | Payload structure: {'contents_count': 1, 'parts_types': ['text'], 'has_system': True, 'gen_config': {'temperature': 0.2, 'maxOutputTokens': 4500, 'thinkingConfig': {'thinkingBudget': 0}, 'responseMimeType': 'application/json'}}
+Gemini 400 Invalid Argument | Payload structure: {'contents_count': 1, 'parts_types': ['text'], 'has_system': True, 'gen_config': {'temperature': 0.2, 'maxOutputTokens': 4500, 'thinkingConfig': {'thinkingBudget': 0}, 'responseMimeType': 'application/json'}}
+Gemini 400 Invalid Argument | Payload structure: {'contents_count': 1, 'parts_types': ['text'], 'has_system': True, 'gen_config': {'temperature': 0.2, 'maxOutputTokens': 4500, 'thinkingConfig': {'thinkingBudget': 0}, 'responseMimeType': 'application/json'}}
+Gemini 400 Invalid Argument | Payload structure: {'contents_count': 1, 'parts_types': ['text'], 'has_system': True, 'gen_config': {'temperature': 0.2, 'maxOutputTokens': 4500, 'thinkingConfig': {'thinkingBudget': 0}, 'responseMimeType': 'application/json'}}
+...../tmp/schoolwork-ai-venv/lib/python3.12/site-packages/django/core/handlers/base.py:63: UserWarning: No directory at: /home/mlinux/schoolprjct/schoolwork2/staticfiles/
+  mw_instance = middleware(adapted_handler)
+[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/file/1/preview/?mode=text" 200 OK
+..../tmp/schoolwork-ai-venv/lib/python3.12/site-packages/django/core/handlers/base.py:63: UserWarning: No directory at: /home/mlinux/schoolprjct/schoolwork2/staticfiles/
+  mw_instance = middleware(adapted_handler)
+[КЛІЄНТ IP: 127.0.0.1] "GET /" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /ui/dialog/changelog/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /ui/dialog/changelog/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/submit/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /setup/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /setup/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/login/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /setup/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /setup/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /setup/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/login/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /setup/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/submit/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /assignment/1/submit/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/submit/success/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /submission/1/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /api/today-schedule/" 200 OK
+............Gemini 400 Invalid Argument | Payload structure: {'contents_count': 1, 'parts_types': ['text'], 'has_system': True, 'gen_config': {'temperature': 0.2, 'maxOutputTokens': 4500, 'thinkingConfig': {'thinkingBudget': 0}, 'responseMimeType': 'application/json'}}
+Gemini 400 Invalid Argument | Payload structure: {'contents_count': 1, 'parts_types': ['text'], 'has_system': True, 'gen_config': {'temperature': 0.2, 'maxOutputTokens': 4500, 'thinkingConfig': {'thinkingBudget': 0}, 'responseMimeType': 'application/json'}}
+Gemini 400 Invalid Argument | Payload structure: {'contents_count': 1, 'parts_types': ['text'], 'has_system': True, 'gen_config': {'temperature': 0.2, 'maxOutputTokens': 4500, 'thinkingConfig': {'thinkingBudget': 0}, 'responseMimeType': 'application/json'}}
+Gemini 400 Invalid Argument | Payload structure: {'contents_count': 1, 'parts_types': ['text'], 'has_system': True, 'gen_config': {'temperature': 0.2, 'maxOutputTokens': 4500, 'thinkingConfig': {'thinkingBudget': 0}, 'responseMimeType': 'application/json'}}
+Gemini 400 Invalid Argument | Payload structure: {'contents_count': 1, 'parts_types': ['text'], 'has_system': True, 'gen_config': {'temperature': 0.2, 'maxOutputTokens': 4500, 'thinkingConfig': {'thinkingBudget': 0}, 'responseMimeType': 'application/json'}}
+.Gemini 400 Invalid Argument | Payload structure: {'contents_count': 1, 'parts_types': ['text'], 'has_system': True, 'gen_config': {'temperature': 0.2, 'maxOutputTokens': 4500, 'thinkingConfig': {'thinkingBudget': 0}, 'responseMimeType': 'application/json'}}
+Gemini 400 Invalid Argument | Payload structure: {'contents_count': 1, 'parts_types': ['text'], 'has_system': True, 'gen_config': {'temperature': 0.2, 'maxOutputTokens': 4500, 'thinkingConfig': {'thinkingBudget': 0}, 'responseMimeType': 'application/json'}}
+Gemini 400 Invalid Argument | Payload structure: {'contents_count': 1, 'parts_types': ['text'], 'has_system': True, 'gen_config': {'temperature': 0.2, 'maxOutputTokens': 4500, 'thinkingConfig': {'thinkingBudget': 0}, 'responseMimeType': 'application/json'}}
+Gemini 400 Invalid Argument | Payload structure: {'contents_count': 1, 'parts_types': ['text'], 'has_system': True, 'gen_config': {'temperature': 0.2, 'maxOutputTokens': 4500, 'thinkingConfig': {'thinkingBudget': 0}, 'responseMimeType': 'application/json'}}
+Gemini 400 Invalid Argument | Payload structure: {'contents_count': 1, 'parts_types': ['text'], 'has_system': True, 'gen_config': {'temperature': 0.2, 'maxOutputTokens': 4500, 'thinkingConfig': {'thinkingBudget': 0}, 'responseMimeType': 'application/json'}}
+.../tmp/schoolwork-ai-venv/lib/python3.12/site-packages/django/core/handlers/base.py:63: UserWarning: No directory at: /home/mlinux/schoolprjct/schoolwork2/staticfiles/
+  mw_instance = middleware(adapted_handler)
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/settings/" 302 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/settings/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/settings/" 302 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /api/ai/test-connection/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/ai/apply/1/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/ai/apply/1/" 200 OK
+..Gemini 400 Invalid Argument | Payload structure: {'contents_count': 1, 'parts_types': ['text'], 'has_system': True, 'gen_config': {'temperature': 0.2, 'maxOutputTokens': 4500, 'thinkingConfig': {'thinkingBudget': 0}, 'responseMimeType': 'application/json'}}
+Gemini 400 Invalid Argument | Payload structure: {'contents_count': 1, 'parts_types': ['text'], 'has_system': True, 'gen_config': {'temperature': 0.2, 'maxOutputTokens': 4500, 'thinkingConfig': {'thinkingBudget': 0}, 'responseMimeType': 'application/json'}}
+Gemini 400 Invalid Argument | Payload structure: {'contents_count': 1, 'parts_types': ['text'], 'has_system': True, 'gen_config': {'temperature': 0.2, 'maxOutputTokens': 4500, 'thinkingConfig': {'thinkingBudget': 0}, 'responseMimeType': 'application/json'}}
+Gemini 400 Invalid Argument | Payload structure: {'contents_count': 1, 'parts_types': ['text'], 'has_system': True, 'gen_config': {'temperature': 0.2, 'maxOutputTokens': 4500, 'thinkingConfig': {'thinkingBudget': 0}, 'responseMimeType': 'application/json'}}
+Gemini 400 Invalid Argument | Payload structure: {'contents_count': 1, 'parts_types': ['text'], 'has_system': True, 'gen_config': {'temperature': 0.2, 'maxOutputTokens': 4500, 'thinkingConfig': {'thinkingBudget': 0}, 'responseMimeType': 'application/json'}}
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/assignment/2/ai-understanding/" 200 OK
+Gemini 400 Invalid Argument | Payload structure: {'contents_count': 1, 'parts_types': ['text'], 'has_system': True, 'gen_config': {'temperature': 0.2, 'maxOutputTokens': 4500, 'thinkingConfig': {'thinkingBudget': 0}, 'responseMimeType': 'application/json'}}
+Gemini 400 Invalid Argument | Payload structure: {'contents_count': 1, 'parts_types': ['text'], 'has_system': True, 'gen_config': {'temperature': 0.2, 'maxOutputTokens': 4500, 'thinkingConfig': {'thinkingBudget': 0}, 'responseMimeType': 'application/json'}}
+Gemini 400 Invalid Argument | Payload structure: {'contents_count': 1, 'parts_types': ['text'], 'has_system': True, 'gen_config': {'temperature': 0.2, 'maxOutputTokens': 4500, 'thinkingConfig': {'thinkingBudget': 0}, 'responseMimeType': 'application/json'}}
+Gemini 400 Invalid Argument | Payload structure: {'contents_count': 1, 'parts_types': ['text'], 'has_system': True, 'gen_config': {'temperature': 0.2, 'maxOutputTokens': 4500, 'thinkingConfig': {'thinkingBudget': 0}, 'responseMimeType': 'application/json'}}
+Gemini 400 Invalid Argument | Payload structure: {'contents_count': 1, 'parts_types': ['text'], 'has_system': True, 'gen_config': {'temperature': 0.2, 'maxOutputTokens': 4500, 'thinkingConfig': {'thinkingBudget': 0}, 'responseMimeType': 'application/json'}}
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/assignment/2/ai-understanding/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /teacher/assignment/2/ai-understanding/" 403
+..........................[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /teacher/assignment/1/ai-understanding/" 403
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /assignment/1/ai-understanding/" 403
+Gemini 400 Invalid Argument | Payload structure: {'contents_count': 1, 'parts_types': ['text'], 'has_system': True, 'gen_config': {'temperature': 0.2, 'maxOutputTokens': 4500, 'thinkingConfig': {'thinkingBudget': 0}, 'responseMimeType': 'application/json'}}
+Gemini 400 Invalid Argument | Payload structure: {'contents_count': 1, 'parts_types': ['text'], 'has_system': True, 'gen_config': {'temperature': 0.2, 'maxOutputTokens': 4500, 'thinkingConfig': {'thinkingBudget': 0}, 'responseMimeType': 'application/json'}}
+Gemini 400 Invalid Argument | Payload structure: {'contents_count': 1, 'parts_types': ['text'], 'has_system': True, 'gen_config': {'temperature': 0.2, 'maxOutputTokens': 4500, 'thinkingConfig': {'thinkingBudget': 0}, 'responseMimeType': 'application/json'}}
+Gemini 400 Invalid Argument | Payload structure: {'contents_count': 1, 'parts_types': ['text'], 'has_system': True, 'gen_config': {'temperature': 0.2, 'maxOutputTokens': 4500, 'thinkingConfig': {'thinkingBudget': 0}, 'responseMimeType': 'application/json'}}
+Gemini 400 Invalid Argument | Payload structure: {'contents_count': 1, 'parts_types': ['text'], 'has_system': True, 'gen_config': {'temperature': 0.2, 'maxOutputTokens': 4500, 'thinkingConfig': {'thinkingBudget': 0}, 'responseMimeType': 'application/json'}}
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/assignment/1/ai-understanding/" 200 OK
+Gemini 400 Invalid Argument | Payload structure: {'contents_count': 1, 'parts_types': ['text'], 'has_system': True, 'gen_config': {'temperature': 0.2, 'maxOutputTokens': 4500, 'thinkingConfig': {'thinkingBudget': 0}, 'responseMimeType': 'application/json'}}
+Gemini 400 Invalid Argument | Payload structure: {'contents_count': 1, 'parts_types': ['text'], 'has_system': True, 'gen_config': {'temperature': 0.2, 'maxOutputTokens': 4500, 'thinkingConfig': {'thinkingBudget': 0}, 'responseMimeType': 'application/json'}}
+Gemini 400 Invalid Argument | Payload structure: {'contents_count': 1, 'parts_types': ['text'], 'has_system': True, 'gen_config': {'temperature': 0.2, 'maxOutputTokens': 4500, 'thinkingConfig': {'thinkingBudget': 0}, 'responseMimeType': 'application/json'}}
+Gemini 400 Invalid Argument | Payload structure: {'contents_count': 1, 'parts_types': ['text'], 'has_system': True, 'gen_config': {'temperature': 0.2, 'maxOutputTokens': 4500, 'thinkingConfig': {'thinkingBudget': 0}, 'responseMimeType': 'application/json'}}
+Gemini 400 Invalid Argument | Payload structure: {'contents_count': 1, 'parts_types': ['text'], 'has_system': True, 'gen_config': {'temperature': 0.2, 'maxOutputTokens': 4500, 'thinkingConfig': {'thinkingBudget': 0}, 'responseMimeType': 'application/json'}}
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/assignment/1/ai-understanding/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /teacher/assignment/1/ai-understanding/" 403
+......[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/submission/1/grade/" 200 OK
+..[КЛІЄНТ IP: 127.0.0.1] "POST /api/ai/get-batch-queue/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/settings/?tab=ai" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/settings/?tab=ai&ai_section=criteria" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/settings/?tab=ai" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/settings/?tab=ai&ai_section=criteria" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/settings/?tab=ai" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/settings/?tab=ai&ai_section=criteria" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/assignment/create/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/2/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /submission/1/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/assignment/2/submissions/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/view-file/1/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /submission/1/" 200 OK
+....../tmp/schoolwork-ai-venv/lib/python3.12/site-packages/django/core/handlers/base.py:63: UserWarning: No directory at: /home/mlinux/schoolprjct/schoolwork2/staticfiles/
+  mw_instance = middleware(adapted_handler)
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/view-file/1/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /api/ai/get-batch-queue/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/view-file/1/" 200 OK
+...[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/settings/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/settings/?tab=ai&ai_section=models" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/settings/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/settings/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/settings/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/settings/?tab=ai&ai_section=models" 200 OK
+.incorrect startxref pointer(1)
+parsing for Object Streams
+..[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/ai-settings/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/ai-settings/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/settings/?tab=ai&ai_section=connection" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/ai-settings/" 302 OK
+..[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/assignment/create/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/profile/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/profiles/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/submissions/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/activity/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/gradebook/?view=all_grades" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/assignment/1/submissions/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /submission/1/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /api/ai/process-item/1/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/assignment/create/" 200 OK
+..[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/file/1/preview/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/file/1/preview/" 200 OK
+../tmp/schoolwork-ai-venv/lib/python3.12/site-packages/django/core/handlers/base.py:63: UserWarning: No directory at: /home/mlinux/schoolprjct/schoolwork2/staticfiles/
+  mw_instance = middleware(adapted_handler)
+[КЛІЄНТ IP: 127.0.0.1] "POST /assignment/1/submit/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /assignment/1/submit/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/view-file/2/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/submission/2/duplicates/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/view-file/1/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/submission/1/grade/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/submission/1/comment/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/view-file/1/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/students/" 200 OK
+..[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/ai/apply/1/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/gradebook/?class_group=1&view_mode=journal" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/gradebook/?class_group=1&view_mode=table" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/export/?class_group=1" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/gradebook/?class_group=1" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/gradebook/?class_group=1&view_mode=journal" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/gradebook/?class_group=1&single_date=2026-09-10" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/gradebook/?class_group=1&grade_filter=rework" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/gradebook/?class_group=1&grade_filter=10-12" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/gradebook/?class_group=1&view_mode=journal" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/gradebook/?view=all_grades" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/file/1/view/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/file/1/preview/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /assignment/1/submit/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/submission/1/file/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/view-file/1/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /submission/1/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/2/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/2/submit/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /assignment/1/submit/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/view-file/1/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/settings/?tab=ai" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/settings/?tab=ai&ai_section=criteria" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/settings/?tab=ai" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/settings/?tab=ai&ai_section=criteria" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /assignment/1/submit/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/submit/success/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/view-file/1/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/view-file/1/?file_id=2" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/submission/1/download-all/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/assignment/1/download-zip/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/assignment/1/submissions/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /assignment/1/submit/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/submit/success/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /assignment/1/submit/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/submit/success/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /submission/2/student-ai-check/" 403
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/view-file/2/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/view-file/1/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/assignment/1/submissions/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/submit/success/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /assignment/1/submit/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/submit/success/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /my-submissions/?q=%D0%9C%D0%B5%D0%BB%D1%8C%D0%BD%D0%B8%D0%BA+%D0%90%D0%BD%D0%B4%D1%80%D1%96%D0%B9&class=1" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/superadmin-mode/enter/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/profiles/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/school/settings/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/settings/?tab=environment" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /assignment/1/submit/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/view-file/1/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/ai/apply/1/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /api/students-autocomplete/?class_group_id=1&query=%C3%90%C2%9A%C3%90%C2%BE%C3%90%C2%B2%C3%90%C2%B0%C3%90%C2%BB" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/student/Кравченко_Денис/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/students/export/?class_group=1" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /api/students-autocomplete/?class_group_id=1&query=%C3%90%C2%97%C3%90%C2%B0%C3%90%C2%B4%C3%90%C2%BE%C3%91%C2%80%C3%90%C2%BE%C3%90%C2%B6" 200 OK
+..[КЛІЄНТ IP: 127.0.0.1] "GET /my-submissions/?search=%C3%90%C2%9A%C3%90%C2%BE%C3%90%C2%B2%C3%90%C2%B0%C3%90%C2%BB%C3%90%C2%B5%C3%90%C2%BD%C3%90%C2%BA%C3%90%C2%BE+%C3%90%C2%A2%C3%90%C2%B0%C3%91%C2%80%C3%90%C2%B0%C3%91%C2%81" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/students/1/edit/" 302 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/students/import/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/students/import/" 302 OK
+..[КЛІЄНТ IP: 127.0.0.1] "GET /my-submissions/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /my-submissions/?search=%C3%90%C2%9C%C3%90%C2%B5%C3%90%C2%BB%C3%91%C2%8C%C3%90%C2%BD%C3%90%C2%B8%C3%90%C2%BA" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /assignment/1/submit/" 302 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/submit/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/submit/success/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/settings/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/superadmin-mode/enter/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/profiles/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/superadmin-mode/exit/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/?class=2" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/?subject=2" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/?q=%C3%91%C2%82%C3%91%C2%80%C3%90%C2%B8%C3%90%C2%BA%C3%91%C2%83%C3%91%C2%82%C3%90%C2%BD%C3%90%C2%B8%C3%90%C2%BA%C3%90%C2%B8" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/?tab=published&page=1" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/?tab=published&page=2" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/students/?tab=schedule" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/students/?tab=schedule" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/settings/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/settings/?tab=profile" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/settings/?tab=environment" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/settings/?tab=ai" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/students/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/students/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/students/1/delete/" 302 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/submission/2/toggle-ignore-plagiarism/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/view-file/2/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/submission/2/duplicates/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/submission/2/toggle-ignore-plagiarism/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /submission/1/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/view-file/1/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/assignment/1/download-zip/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/database/backup/" 200 OK
+...........EOF marker not found
+EOF marker not found
+.../tmp/schoolwork-ai-venv/lib/python3.12/site-packages/django/core/handlers/base.py:63: UserWarning: No directory at: /home/mlinux/schoolprjct/schoolwork2/staticfiles/
+  mw_instance = middleware(adapted_handler)
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/access-links/?status=inactive" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/access-links/?q=%D0%9F%D0%B5%D1%80%D0%B5%D0%B2%D1%96%D1%80%D0%BA%D0%B0+%D0%9E%D0%BB%D0%B5%D0%BD%D0%B0" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/access-links/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/access-links/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/access-links/?q=Link+000" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/access-links/?q=not-existing" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/access-links/?status=active&per_page=30" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/access-links/?status=inactive&per_page=30" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/access-links/?per_page=1000000" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/access-links/?page=not-a-page" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/access-links/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/" 200 OK
+...[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/view-file/1/" 200 OK
+.............../tmp/schoolwork-ai-venv/lib/python3.12/site-packages/django/core/handlers/base.py:63: UserWarning: No directory at: /home/mlinux/schoolprjct/schoolwork2/staticfiles/
+  mw_instance = middleware(adapted_handler)
+[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/submit/success/" 200 OK
+........[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/ai/batch-check/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /api/ai/process-item/1/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /api/ai/get-batch-queue/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/settings/?tab=ai&ai_section=connection" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/settings/?tab=ai&ai_section=connection" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/settings/?tab=ai&ai_section=connection" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/settings/?tab=ai&ai_section=connection" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /api/ai/test-connection/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /api/ai/test-connection/" 400
+........[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/settings/?tab=ai&ai_section=connection" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/settings/?tab=ai&ai_section=connection" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/settings/?tab=ai&ai_section=connection" 302 OK
+...[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/view-file/1/" 200 OK
+.....................Gemini 400 Invalid Argument | Payload structure: {'contents_count': 1, 'parts_types': ['text'], 'has_system': False, 'gen_config': {'temperature': 0.2, 'maxOutputTokens': 3500, 'thinkingConfig': {'thinkingBudget': 1024}}}
+.......[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/settings/?tab=ai&ai_section=errors&errors_view=analysis" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/settings/?tab=ai&ai_section=errors&errors_view=analysis" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/settings/?tab=ai&ai_section=errors&errors_view=analysis&report_id=1" 200 OK
+..[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/settings/?tab=ai&ai_section=errors&errors_view=analysis&stats_days=7&report_page=2" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/settings/?tab=ai&ai_section=errors&errors_view=analysis&stats_days=7&report_page=2&report_id=1" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/settings/?tab=ai&ai_section=errors&errors_view=analysis&stats_days=7&report_id=1&report_download=markdown" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/settings/?tab=ai&ai_section=priority" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/settings/?tab=ai&ai_section=errors" 302 OK
+.[КЛІЄНТ IP: 127.0.0.1] ❌ ВИНЯТОК на GET /teacher/settings/?report_id=bad: Http404
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /teacher/settings/?report_id=bad" 404
+[КЛІЄНТ IP: 127.0.0.1] ❌ ВИНЯТОК на GET /teacher/settings/?report_id=0: Http404
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /teacher/settings/?report_id=0" 404
+[КЛІЄНТ IP: 127.0.0.1] ❌ ВИНЯТОК на GET /teacher/settings/?report_id=-1: Http404
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /teacher/settings/?report_id=-1" 404
+[КЛІЄНТ IP: 127.0.0.1] ❌ ВИНЯТОК на GET /teacher/settings/?report_id=2: Http404
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /teacher/settings/?report_id=2" 404
+[КЛІЄНТ IP: 127.0.0.1] ❌ ВИНЯТОК на GET /teacher/settings/?report_id=99999999999999999999999999999999999999999999999999: Http404
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /teacher/settings/?report_id=99999999999999999999999999999999999999999999999999" 404
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/settings/?tab=ai&ai_section=errors&errors_view=analysis" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/settings/?report_id=1&report_download=markdown" 302 OK
+....[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /teacher/ai/check/1/" 400
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /teacher/ai/check/1/" 400
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /teacher/ai/check/1/" 400
+.......[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/view-file/1/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/view-file/1/" 200 OK
+..[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/view-file/1/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/view-file/1/" 200 OK
+...[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /api/ai/batches/" 400
+[КЛІЄНТ IP: 127.0.0.1] "POST /api/ai/batches/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] ❌ ВИНЯТОК на GET /api/ai/batches/90d3909d-686a-4d4e-ba3c-645c529c3947/: Http404
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /api/ai/batches/90d3909d-686a-4d4e-ba3c-645c529c3947/" 404
+[КЛІЄНТ IP: 127.0.0.1] ❌ ВИНЯТОК на POST /api/ai/batches/90d3909d-686a-4d4e-ba3c-645c529c3947/cancel/: Http404
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /api/ai/batches/90d3909d-686a-4d4e-ba3c-645c529c3947/cancel/" 404
+.[КЛІЄНТ IP: 127.0.0.1] "POST /api/ai/batches/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /api/ai/batches/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /api/ai/batches/latest/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /api/ai/batches/2861f77c-36a1-4070-9b3e-ed7afd6dff46/cancel/" 200 OK
+.........Gemini 400 Invalid Argument | Payload structure: {'contents_count': 1, 'parts_types': ['text'], 'has_system': True, 'gen_config': {'temperature': 0.2, 'maxOutputTokens': 3500, 'thinkingConfig': {'thinkingBudget': 0}, 'responseMimeType': 'application/json'}}
+..........Gemini 400 Invalid Argument | Payload structure: {'contents_count': 1, 'parts_types': ['text'], 'has_system': False, 'gen_config': {'temperature': 0.2, 'maxOutputTokens': 3500, 'thinkingConfig': {'thinkingBudget': 0}}}
+..................................[КЛІЄНТ IP: 127.0.0.1] "GET /api/ai/jobs/89cb77b4-a0da-4460-8fe4-067a79d41520/" 202 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/view-file/1/" 200 OK
+..........[КЛІЄНТ IP: 127.0.0.1] "GET /api/ai/jobs/448a39b1-67a4-4b89-89a3-970c276aea74/" 202 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /api/ai/jobs/448a39b1-67a4-4b89-89a3-970c276aea74/" 202 OK
+..[КЛІЄНТ IP: 127.0.0.1] ❌ "GET /api/ai/jobs/f1527d1d-9fa7-4ba1-ad1c-f532bde87cd1/" 503
+.[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /api/ai/jobs/10fc9de7-613f-4a50-b27e-0d1ef3e05995/" 403
+[КЛІЄНТ IP: 127.0.0.1] "GET /submission/1/" 200 OK
+......[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/settings/?tab=ai&ai_section=models" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/settings/" 302 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/settings/?tab=ai" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/settings/?tab=ai" 302 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/settings/" 302 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/settings/?tab=ai" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/settings/?tab=ai&ai_section=unknown" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/settings/?tab=ai&ai_section=criteria&stats_days=14" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/settings/?tab=ai&ai_section=criteria&stats_days=14" 302 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/settings/?tab=ai&ai_section=connection&stats_days=14" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/settings/?tab=ai&ai_section=criteria&stats_days=14" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/settings/?tab=ai&ai_section=models&stats_days=14" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/settings/?tab=ai&ai_section=statistics&stats_days=14" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/settings/?tab=ai&ai_section=errors&stats_days=14" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/settings/?stats_days=invalid" 302 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/settings/?tab=ai&stats_days=30" 302 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/settings/?tab=ai" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /ui/dialog/changelog/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/settings/?tab=ai&ai_section=statistics&stats_days=all" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/ai/apply/1/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/settings/?tab=ai&ai_section=errors&stats_days=7" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/settings/?tab=ai&ai_section=errors&stats_days=all" 200 OK
+...../tmp/schoolwork-ai-venv/lib/python3.12/site-packages/django/core/handlers/base.py:63: UserWarning: No directory at: /home/mlinux/schoolprjct/schoolwork2/staticfiles/
+  mw_instance = middleware(adapted_handler)
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/settings/?tab=ai&stats_days=7" 200 OK
+../tmp/schoolwork-ai-venv/lib/python3.12/site-packages/django/core/handlers/base.py:63: UserWarning: No directory at: /home/mlinux/schoolprjct/schoolwork2/staticfiles/
+  mw_instance = middleware(adapted_handler)
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/settings/" 302 OK
+........../tmp/schoolwork-ai-venv/lib/python3.12/site-packages/django/core/handlers/base.py:63: UserWarning: No directory at: /home/mlinux/schoolprjct/schoolwork2/staticfiles/
+  mw_instance = middleware(adapted_handler)
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/settings/?tab=ai&ai_section=statistics&stats_days=7" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/settings/?tab=ai&ai_section=statistics" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/settings/?tab=ai&ai_section=statistics" 302 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/settings/?tab=ai&ai_section=statistics" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/assignments/export-day-zip/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/assignment/1/export-zip/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/assignments/export-day-zip/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/assignments/export-day-zip/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/assignments/export-day-zip/?date=2026-11-01" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/assignments/export-day-zip/?date=2026-10-12&date_to=2026-10-13&weekdays=1&weekdays=2" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/assignments/export-day-zip/?date=invalid" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/assignments/export-day-zip/?weekdays=2&lesson=2" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/assignments/export-day-zip/?date=2026-10-13" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/assignments/export-day-zip/?weekdays=2&lesson=3" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/assignments/export-day-zip/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/assignments/import-zip/" 302 OK
+.Assignment archive import failed: ["Значення 'wrong' не є дозволеним вибором."]
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/assignments/import-zip/" 302 OK
+...[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/assignments/export-day-zip/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/assignments/import-zip/" 302 OK
+..[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /teacher/assignments/export-day-zip/" 400
+.[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/assignments/export-day-zip/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /teacher/assignments/export-day-zip/" 400
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/assignments/export-day-zip/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/?class=1" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/?class=2" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /ui/dialog/guide/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/?class=3" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/" 200 OK
+.....[КЛІЄНТ IP: 127.0.0.1] "POST /api/ai/test-connection/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /my-submissions/" 200 OK
+..[КЛІЄНТ IP: 127.0.0.1] ❌ ВИНЯТОК на GET /media/school_archives/private.csv: Http404
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /media/school_archives/private.csv" 404
+[КЛІЄНТ IP: 127.0.0.1] ❌ ВИНЯТОК на GET /media/logs_archives/private.csv: Http404
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /media/logs_archives/private.csv" 404
+..[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /teacher/submission/1/grade/" 400
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /teacher/view-file/1/" 400
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /teacher/submissions/mass-grade/" 400
+.[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /media/submissions/08.11.2026/9-А/Тестовий_Учень/answer_9wqKVUY.txt" 416
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/submission/1/download-all/" 200 OK
+..[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /teacher/ai/check/1/" 403
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /api/ai/process-item/1/" 403
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /teacher/ai/apply/1/" 403
+[КЛІЄНТ IP: 127.0.0.1] "POST /api/ai/get-batch-queue/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /my-submissions/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /submission/1/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] ❌ ВИНЯТОК на GET /assignment/1/: Http404
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /assignment/1/" 404
+[КЛІЄНТ IP: 127.0.0.1] ❌ ВИНЯТОК на GET /assignment/file/1/view/: Http404
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /assignment/file/1/view/" 404
+[КЛІЄНТ IP: 127.0.0.1] ❌ ВИНЯТОК на GET /assignment/file/1/download/: Http404
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /assignment/file/1/download/" 404
+[КЛІЄНТ IP: 127.0.0.1] ❌ ВИНЯТОК на GET /assignment/file/1/preview/: Http404
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /assignment/file/1/preview/" 404
+[КЛІЄНТ IP: 127.0.0.1] ❌ ВИНЯТОК на GET /media/assignments/1/secret.txt: Http404
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /media/assignments/1/secret.txt" 404
+[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/file/1/download/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /submission/1/student-ai-check/" 202 OK
+[КЛІЄНТ IP: 127.0.0.1] ❌ "GET /api/ai/jobs/2069411e-def1-4fad-b0e3-5cb714eab713/" 503
+[КЛІЄНТ IP: 127.0.0.1] "POST /submission/1/student-ai-check/" 202 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /submission/1/student-ai-check/" 202 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /submission/2/student-ai-check/" 202 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /submission/1/student-ai-check/" 202 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /submission/1/student-ai-check/" 202 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /api/ai/jobs/00bac16d-9c03-4793-9d89-141134af0bfe/" 202 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /submission/1/" 200 OK
+..[КЛІЄНТ IP: 127.0.0.1] "POST /submission/1/student-ai-check/" 202 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /api/ai/jobs/d854b963-2531-4b4c-b835-aec5ab128e38/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /submission/1/student-ai-check/" 403
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /submission/2/student-ai-check/" 403
+.[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/ai/check/1/" 202 OK
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /api/ai/jobs/f90b7a6c-cce0-416b-be88-927da72a6bec/" 403
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /api/ai/jobs/f90b7a6c-cce0-416b-be88-927da72a6bec/" 403
+.[КЛІЄНТ IP: 127.0.0.1] "POST /submission/1/student-ai-check/" 202 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /submission/1/student-ai-check/" 202 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/assignment/1/ai-understanding/" 202 OK
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /api/ai/jobs/5b22e4e8-7ea9-43ef-9d0e-34ff0ac95331/" 403
+.[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/ai/check/1/" 202 OK
+..[КЛІЄНТ IP: 127.0.0.1] "GET /" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /" 200 OK
+....[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/backups" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/backups" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/backups" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/backups" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/backups" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/backups" 302 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/backups" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/backups/status" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/backups" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/backups" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/backups" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/backups" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/backups" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/backups" 302 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/backups" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /teacher/backups/google/callback?state=forged&code=fake" 404
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/backups" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/backups" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/backups/status" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/backups" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /teacher/backups" 403
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/backups" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/backups/status" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /teacher/backups?scope=server" 403
+[КЛІЄНТ IP: 127.0.0.1] ❌ ВИНЯТОК на GET /teacher/backups/download/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa: Http404
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /teacher/backups/download/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" 404
+.[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/assignment/create/" 302 OK
+..[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/cloud/test-google/" 200 OK
+...[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /teacher/cloud/imports/" 403
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/cloud/imports/" 302 OK
+.[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /teacher/cloud/imports/?ids=709545b4-185a-4223-a707-95248b47b4dc" 404
+....[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/assignment/1/edit/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/assignment/1/edit/" 302 OK
+..[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /teacher/assignment/create/" 422
+.[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/assignment/create/" 200 OK
+..........[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/assignment/create/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/assignment/create/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/cloud/browse/?drive=nextcloud" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/cloud/download/?drive=nextcloud&path=%C3%90%C2%A3%C3%91%C2%80%C3%90%C2%BE%C3%90%C2%BA+1.pdf" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/cloud/google/start/" 302 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/cloud/status/" 200 OK
+.....[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/cloud/save-google/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/cloud/save-google/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/cloud/save-nextcloud/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/cloud/save-nextcloud/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/cloud/test-nextcloud/" 200 OK
+..[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/students/?tab=lessons" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/students/?tab=lessons&search=%C3%91%C2%81%C3%90%C2%BE%C3%91%C2%80%C3%91%C2%82%C3%91%C2%83%C3%90%C2%B2%C3%90%C2%B0%C3%90%C2%BD%C3%90%C2%BD%C3%91%C2%8F" 200 OK
+....[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/settings/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /api/v2/journal/roster/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /api/v2/journal/roster/" 401
+..[КЛІЄНТ IP: 127.0.0.1] "GET /api/v2/journal/roster/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/settings/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/settings/?tab=api" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/assignment/create/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/assignment/create/" 302 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/assignment/create/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/assignment/create/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/assignment/create/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/assignment/create/?class=1" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/assignment/1/edit/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/assignment/1/edit/" 302 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/assignment/1/edit/" 200 OK
+..[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/assignment/create/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/assignment/create/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/settings/?tab=ai&ai_section=statistics" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/assignment/create/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/assignment/create/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/assignment/create/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/assignment/1/edit/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/assignment/1/duplicate/" 302 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/view-file/1/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/assignment/create/" 200 OK
+..Cannot scan school storage (OSError)
+...Cannot scan school storage (PermissionError)
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/settings/?tab=environment" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /ui/dialog/guide/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/settings/?tab=environment" 302 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/settings/?tab=environment" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /ui/dialog/guide/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/settings/?tab=environment" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /api/v1/journal/grades/" 403
+.[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /api/v1/journal/grades/" 403
+.[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /api/v1/journal/grades/" 401
+.[КЛІЄНТ IP: 127.0.0.1] "GET /api/v1/journal/grades/?class_name=10-%C3%90%C2%90" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /api/v1/journal/grades/?class_name=9-%C3%90%C2%91" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /api/v1/journal/grades/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /api/v1/journal/grades/?api_key=%2A%2A%2A" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /api/v1/journal/grades/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /api/v1/journal/grades/" 403
+.[КЛІЄНТ IP: 127.0.0.1] "GET /api/v1/journal/roster/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /api/v1/journal/roster/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /api/v1/journal/roster/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/settings/?tab=api" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/settings/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/settings/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/settings/" 302 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /api/students-autocomplete/?class_group_id=1&limit=100" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/gradebook/?class_group=1&journal_page=1" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/gradebook/?class_group=1&journal_page=2" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/gradebook/?class_group=1&journal_page=3" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/gradebook/?class_group=1" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/gradebook/?class_group=1" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/gradebook/?class_group=1" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/gradebook/?class_group=1&journal_page=bad" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/gradebook/?class_group=1&journal_page=9999" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/gradebook/?class_group=1&journal_page=0" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/gradebook/?class_group=1&journal_page=-1" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/gradebook/?class_group=1&date_from=2026-08-05&date_to=2026-08-21&grade_filter=7-9" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/gradebook/?class_group=1&journal_page=1" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/gradebook/?class_group=1" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/view-file/1/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/students/?tab=schedule" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /submission/1/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/submit/success/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /submission/1/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/gradebook/?class_group=1&view_mode=table&journal_page=1" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /api/next-lesson-slot/?class_id=1" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /api/next-lesson-slot/?class_id=1&subject_id=1" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/assignment/create/" 302 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/assignment/create/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/assignment/create/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/assignment/create/" 302 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/assignment/create/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/assignment/create/" 302 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/assignment/create/" 302 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/assignment/create/" 302 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/file/1/preview/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] ❌ ВИНЯТОК на GET /assignment/file/1/preview/?mode=text: Http404
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /assignment/file/1/preview/?mode=text" 404
+[КЛІЄНТ IP: 127.0.0.1] ❌ ВИНЯТОК на GET /assignment/file/1/preview/?mode=text: Http404
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /assignment/file/1/preview/?mode=text" 404
+[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/file/1/preview/?mode=text" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] ❌ ВИНЯТОК на GET /assignment/file/1/preview/?embedded=1: Http404
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /assignment/file/1/preview/?embedded=1" 404
+[КЛІЄНТ IP: 127.0.0.1] ❌ ВИНЯТОК на GET /assignment/file/1/preview/: Http404
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /assignment/file/1/preview/" 404
+.[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/file/1/preview/?embedded=1" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/file/1/preview/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/file/1/preview/?embedded=1&theme=dark" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/file/1/preview/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/file/1/preview/?embedded=1&theme=dark" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/file/1/preview/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/file/1/preview/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/file/1/preview/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/file/1/preview/?mode=text" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/file/1/preview/?mode=text" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/view-file/1/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/view-file/1/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/submission/1/duplicates/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/submission/1/duplicates/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/view-file/1/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/view-file/1/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/submission/1/coauthors/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/submission/1/coauthors/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /teacher/students/merge/" 400
+.[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/students/merge/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/settings/?tab=ai&ai_section=models&stats_days=30" 302 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /api/ai/test-connection/" 200 OK
+....[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/settings/?tab=ai&ai_section=models&stats_days=30" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/settings/?tab=ai&ai_section=models&stats_days=30" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/settings/?tab=ai&ai_section=models&stats_days=30" 302 OK
+..[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/settings/?tab=ai&ai_section=models&stats_days=30" 302 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/settings/?tab=ai&ai_section=models" 200 OK
+...[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/settings/?tab=ai&ai_section=statistics&stats_view=usage" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/settings/?tab=ai&ai_section=statistics&stats_view=models" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/settings/?tab=ai&ai_section=statistics&stats_view=overview" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/settings/?tab=ai&ai_section=statistics&stats_view=unknown" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /api/ai/test-connection/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /api/ai/test-connection/" 400
+.[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/settings/?tab=ai&ai_section=models&stats_days=30" 302 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/view-file/1/" 200 OK
+....[КЛІЄНТ IP: 127.0.0.1] "POST /api/v2/journal/roster/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /api/v2/journal/roster/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/outside-students/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /api/v2/journal/roster/" 400
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/?pupil_scope=outside&class_id=1" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/pdf/?pupil_scope=outside&class_id=1" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /assignment/1/submit/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /assignment/1/submit/" 302 OK
+..[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/pdf/?class_id=1&pupil_scope=all" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/?class_id=1" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/?class_id=1&graded_only=1" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/outside-students/?q=%D0%9F%D1%96%D0%B4%D0%BC%D1%96%D0%BD%D0%BD%D0%B8%D0%B9&class=1" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/outside-students/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/outside-students/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /api/v2/journal/grades/?class_id=1&subject_id=1&date_from=2000-01-01&date_to=2099-12-31" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /api/v2/journal/grades/?class_id=1&subject_id=1&date_from=2000-01-01&date_to=2099-12-31" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /api/v2/journal/grades/?class_id=1&subject_id=1&date_from=2000-01-01&date_to=2099-12-31" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/outside-students/" 200 OK
+..[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/submissions/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/students/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/students/?tab=schedule" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/ai/batch-check/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/ai/batch-check/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /?class=1" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /?class=all" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /?class=1" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/?class=1" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/submit/?class=1" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /?class=2" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/2/?class=2" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/2/submit/?class=2" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/assignment/create/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/assignment/1/edit/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/gradebook/?class_group=1" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/assignment/1/submissions/?class=1" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/settings/?tab=environment" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/profiles/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/ai-settings/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /?class=1" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /feed/fragment/?class=1" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /?class=2" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /feed/fragment/?class=2" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/submit/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/assignment/create/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/assignment/1/edit/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/submissions/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/assignment/1/submissions/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/gradebook/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/students/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/students/?tab=schedule" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/settings/?tab=profile" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/settings/?tab=environment" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/settings/?tab=ai" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/ai/batch-check/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/activity/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/rescheduled-calendar/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /my-submissions/?class=1&search=%D0%A2%D0%B5%D1%81%D1%82%D0%BE%D0%B2%D0%B8%D0%B9+%26+%D0%A3%D1%87%D0%B5%D0%BD%D1%8C" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /my-submissions/?class=1&search=%D0%A2%D0%B5%D1%81%D1%82%D0%BE%D0%B2%D0%B8%D0%B9" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/submissions/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/submissions/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/login/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /teacher/submission/1/python/" 403
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /teacher/submission/1/python/" 403
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /teacher/submission/1/python/" 403
+..[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/view-file/1/?file_id=1" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/view-file/1/?file_id=3" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/submission/1/python/?token=%2A%2A%2A&cursor=4&frame=1" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/submission/1/python/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/submission/1/python/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/submission/1/python/" 201 OK
+.[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /teacher/submission/1/python/?token=%2A%2A%2A" 404
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /teacher/submission/1/python/" 404
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /teacher/submission/1/python/" 404
+[КЛІЄНТ IP: 127.0.0.1] ❌ ВИНЯТОК на GET /teacher/submission/1/python/?token=%2A%2A%2A: Http404
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /teacher/submission/1/python/?token=%2A%2A%2A" 404
+[КЛІЄНТ IP: 127.0.0.1] ❌ ВИНЯТОК на POST /teacher/submission/1/python/: Http404
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /teacher/submission/1/python/" 404
+[КЛІЄНТ IP: 127.0.0.1] ❌ ВИНЯТОК на POST /teacher/submission/1/python/: Http404
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /teacher/submission/1/python/" 404
+[КЛІЄНТ IP: 127.0.0.1] ❌ ВИНЯТОК на GET /teacher/submission/1/python/?token=%2A%2A%2A: Http404
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /teacher/submission/1/python/?token=%2A%2A%2A" 404
+[КЛІЄНТ IP: 127.0.0.1] ❌ ВИНЯТОК на POST /teacher/submission/1/python/: Http404
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /teacher/submission/1/python/" 404
+[КЛІЄНТ IP: 127.0.0.1] ❌ ВИНЯТОК на POST /teacher/submission/1/python/: Http404
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /teacher/submission/1/python/" 404
+.[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /teacher/submission/1/python/" 403
+[КЛІЄНТ IP: 127.0.0.1] ❌ ВИНЯТОК на POST /teacher/submission/1/python/: Http404
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /teacher/submission/1/python/" 404
+[КЛІЄНТ IP: 127.0.0.1] ❌ ВИНЯТОК на POST /teacher/submission/1/python/: Http404
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /teacher/submission/1/python/" 404
+.[КЛІЄНТ IP: 127.0.0.1] ❌ "POST /teacher/submission/1/python/" 503
+.........[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/?class_id=1&assignment_id=2&graded_only=0" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/pdf/?class_id=1&assignment_id=2&graded_only=0" 200 OK
+..[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/pdf/?class_id=1&pupil_scope=outside&graded_only=0&mode=grades_only" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/pdf/?class_id=1&pupil_scope=outside&graded_only=0&mode=detailed" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/?class_id=1&pupil_scope=all&scope=all&assignment_id=all" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/pdf/?class_id=1&pupil_scope=all&scope=all&assignment_id=all&mode=grades_only" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/pdf/?class_id=1&pupil_scope=all&scope=all&assignment_id=all&mode=detailed" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/?class_id=1&pupil_scope=all&scope=all&assignment_id=all&graded_only=1" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/pdf/?class_id=1&pupil_scope=all&scope=all&assignment_id=all&graded_only=1&mode=grades_only" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/pdf/?class_id=1&pupil_scope=all&scope=all&assignment_id=all&graded_only=1&mode=detailed" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/?class_id=1&pupil_scope=roster&scope=all&assignment_id=all" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/pdf/?class_id=1&pupil_scope=roster&scope=all&assignment_id=all&mode=grades_only" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/pdf/?class_id=1&pupil_scope=roster&scope=all&assignment_id=all&mode=detailed" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/?class_id=1&pupil_scope=roster&scope=all&assignment_id=all&graded_only=1" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/pdf/?class_id=1&pupil_scope=roster&scope=all&assignment_id=all&graded_only=1&mode=grades_only" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/pdf/?class_id=1&pupil_scope=roster&scope=all&assignment_id=all&graded_only=1&mode=detailed" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/?class_id=1&pupil_scope=outside&scope=all&assignment_id=all" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/pdf/?class_id=1&pupil_scope=outside&scope=all&assignment_id=all&mode=grades_only" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/pdf/?class_id=1&pupil_scope=outside&scope=all&assignment_id=all&mode=detailed" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/?class_id=1&pupil_scope=outside&scope=all&assignment_id=all&graded_only=1" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/pdf/?class_id=1&pupil_scope=outside&scope=all&assignment_id=all&graded_only=1&mode=grades_only" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/pdf/?class_id=1&pupil_scope=outside&scope=all&assignment_id=all&graded_only=1&mode=detailed" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/?class_id=2&pupil_scope=all&scope=all&assignment_id=all" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/pdf/?class_id=2&pupil_scope=all&scope=all&assignment_id=all&mode=grades_only" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/pdf/?class_id=2&pupil_scope=all&scope=all&assignment_id=all&mode=detailed" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/?class_id=2&pupil_scope=all&scope=all&assignment_id=all&graded_only=1" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/pdf/?class_id=2&pupil_scope=all&scope=all&assignment_id=all&graded_only=1&mode=grades_only" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/pdf/?class_id=2&pupil_scope=all&scope=all&assignment_id=all&graded_only=1&mode=detailed" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/?class_id=2&pupil_scope=roster&scope=all&assignment_id=all" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/pdf/?class_id=2&pupil_scope=roster&scope=all&assignment_id=all&mode=grades_only" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/pdf/?class_id=2&pupil_scope=roster&scope=all&assignment_id=all&mode=detailed" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/?class_id=2&pupil_scope=roster&scope=all&assignment_id=all&graded_only=1" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/pdf/?class_id=2&pupil_scope=roster&scope=all&assignment_id=all&graded_only=1&mode=grades_only" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/pdf/?class_id=2&pupil_scope=roster&scope=all&assignment_id=all&graded_only=1&mode=detailed" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/?class_id=2&pupil_scope=outside&scope=all&assignment_id=all" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/pdf/?class_id=2&pupil_scope=outside&scope=all&assignment_id=all&mode=grades_only" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/pdf/?class_id=2&pupil_scope=outside&scope=all&assignment_id=all&mode=detailed" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/?class_id=2&pupil_scope=outside&scope=all&assignment_id=all&graded_only=1" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/pdf/?class_id=2&pupil_scope=outside&scope=all&assignment_id=all&graded_only=1&mode=grades_only" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/pdf/?class_id=2&pupil_scope=outside&scope=all&assignment_id=all&graded_only=1&mode=detailed" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/?class_id=3&pupil_scope=all&scope=all&assignment_id=all" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/pdf/?class_id=3&pupil_scope=all&scope=all&assignment_id=all&mode=grades_only" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/pdf/?class_id=3&pupil_scope=all&scope=all&assignment_id=all&mode=detailed" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/?class_id=3&pupil_scope=all&scope=all&assignment_id=all&graded_only=1" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/pdf/?class_id=3&pupil_scope=all&scope=all&assignment_id=all&graded_only=1&mode=grades_only" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/pdf/?class_id=3&pupil_scope=all&scope=all&assignment_id=all&graded_only=1&mode=detailed" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/?class_id=3&pupil_scope=roster&scope=all&assignment_id=all" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/pdf/?class_id=3&pupil_scope=roster&scope=all&assignment_id=all&mode=grades_only" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/pdf/?class_id=3&pupil_scope=roster&scope=all&assignment_id=all&mode=detailed" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/?class_id=3&pupil_scope=roster&scope=all&assignment_id=all&graded_only=1" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/pdf/?class_id=3&pupil_scope=roster&scope=all&assignment_id=all&graded_only=1&mode=grades_only" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/pdf/?class_id=3&pupil_scope=roster&scope=all&assignment_id=all&graded_only=1&mode=detailed" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/?class_id=3&pupil_scope=outside&scope=all&assignment_id=all" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/pdf/?class_id=3&pupil_scope=outside&scope=all&assignment_id=all&mode=grades_only" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/pdf/?class_id=3&pupil_scope=outside&scope=all&assignment_id=all&mode=detailed" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/?class_id=3&pupil_scope=outside&scope=all&assignment_id=all&graded_only=1" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/pdf/?class_id=3&pupil_scope=outside&scope=all&assignment_id=all&graded_only=1&mode=grades_only" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/pdf/?class_id=3&pupil_scope=outside&scope=all&assignment_id=all&graded_only=1&mode=detailed" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/?class_id=all&pupil_scope=all&scope=all&assignment_id=all" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/pdf/?class_id=all&pupil_scope=all&scope=all&assignment_id=all&mode=grades_only" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/pdf/?class_id=all&pupil_scope=all&scope=all&assignment_id=all&mode=detailed" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/?class_id=all&pupil_scope=all&scope=all&assignment_id=all&graded_only=1" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/pdf/?class_id=all&pupil_scope=all&scope=all&assignment_id=all&graded_only=1&mode=grades_only" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/pdf/?class_id=all&pupil_scope=all&scope=all&assignment_id=all&graded_only=1&mode=detailed" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/?class_id=all&pupil_scope=roster&scope=all&assignment_id=all" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/pdf/?class_id=all&pupil_scope=roster&scope=all&assignment_id=all&mode=grades_only" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/pdf/?class_id=all&pupil_scope=roster&scope=all&assignment_id=all&mode=detailed" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/?class_id=all&pupil_scope=roster&scope=all&assignment_id=all&graded_only=1" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/pdf/?class_id=all&pupil_scope=roster&scope=all&assignment_id=all&graded_only=1&mode=grades_only" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/pdf/?class_id=all&pupil_scope=roster&scope=all&assignment_id=all&graded_only=1&mode=detailed" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/?class_id=all&pupil_scope=outside&scope=all&assignment_id=all" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/pdf/?class_id=all&pupil_scope=outside&scope=all&assignment_id=all&mode=grades_only" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/pdf/?class_id=all&pupil_scope=outside&scope=all&assignment_id=all&mode=detailed" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/?class_id=all&pupil_scope=outside&scope=all&assignment_id=all&graded_only=1" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/pdf/?class_id=all&pupil_scope=outside&scope=all&assignment_id=all&graded_only=1&mode=grades_only" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/pdf/?class_id=all&pupil_scope=outside&scope=all&assignment_id=all&graded_only=1&mode=detailed" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/pdf/" 302 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/?class_id=bad&graded_only=0" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/pdf/?class_id=bad&graded_only=0" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/?class_id=-1&graded_only=0" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/pdf/?class_id=-1&graded_only=0" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/?class_id=99999999999999999999999999999999999999999999999999&graded_only=0" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/pdf/?class_id=99999999999999999999999999999999999999999999999999&graded_only=0" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/?assignment_id=bad&graded_only=0" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/pdf/?assignment_id=bad&graded_only=0" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/?assignment_id=99999999999999999999999999999999999999999999999999&graded_only=0" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/pdf/?assignment_id=99999999999999999999999999999999999999999999999999&graded_only=0" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/?pupil_scope=unknown&graded_only=0" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/pdf/?pupil_scope=unknown&graded_only=0" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/?date_from=bad&graded_only=0" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/pdf/?date_from=bad&graded_only=0" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/?date_to=2026-02-30&graded_only=0" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/pdf/?date_to=2026-02-30&graded_only=0" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/pdf/?class_id=1&pupil_scope=outside&graded_only=0&selected_ids=3%2C8%2C16%2C17" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/reports/?class_id=1&scope=all&graded_only=0&target_teacher=%D0%86%D0%BD%D1%88%D0%B8%D0%B9+%D0%A3%D1%87%D0%B8%D1%82%D0%B5%D0%BB%D1%8C&pupil_scope=roster" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/submission/1/preview/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] ❌ ВИНЯТОК на GET /teacher/submission/1/preview/: Http404
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /teacher/submission/1/preview/" 404
+[КЛІЄНТ IP: 127.0.0.1] ❌ ВИНЯТОК на GET /teacher/submission/1/duplicates/: Http404
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /teacher/submission/1/duplicates/" 404
+[КЛІЄНТ IP: 127.0.0.1] ❌ ВИНЯТОК на GET /teacher/submission/1/preview/assets/e22ea8ea7da8f7a32af280ce3ccfa01960ff10db352bf776fbdafa54dba8ccb1.png/?v=c6041985496528926ac326d05768f3bed5918c9a741a02bd5cf7f35f0f912b6e: Http404
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /teacher/submission/1/preview/assets/e22ea8ea7da8f7a32af280ce3ccfa01960ff10db352bf776fbdafa54dba8ccb1.png/?v=c6041985496528926ac326d05768f3bed5918c9a741a02bd5cf7f35f0f912b6e" 404
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/submission/1/preview/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/submission/1/duplicates/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/submission/1/preview/assets/e22ea8ea7da8f7a32af280ce3ccfa01960ff10db352bf776fbdafa54dba8ccb1.png/?v=c6041985496528926ac326d05768f3bed5918c9a741a02bd5cf7f35f0f912b6e" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] ❌ ВИНЯТОК на GET /teacher/submission/1/preview/assets/invalid.png/: Http404
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /teacher/submission/1/preview/assets/invalid.png/" 404
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /teacher/submission/1/preview/" 405
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /teacher/submission/1/duplicates/" 405
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /teacher/submission/1/preview/assets/e22ea8ea7da8f7a32af280ce3ccfa01960ff10db352bf776fbdafa54dba8ccb1.png/?v=c6041985496528926ac326d05768f3bed5918c9a741a02bd5cf7f35f0f912b6e" 405
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/submission/1/duplicates/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/submission/1/duplicates/" 200 OK
+.Review preview failed for submission 1
+Traceback (most recent call last):
+  File "/home/mlinux/schoolprjct/schoolwork2/feed/views.py", line 4010, in review_document_preview
+    content, error = convert_office(active.path, extension)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mlinux/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/unittest/mock.py", line 1139, in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mlinux/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/unittest/mock.py", line 1143, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mlinux/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/unittest/mock.py", line 1198, in _execute_mock_call
+    raise effect
+RuntimeError: converter failed
+[КЛІЄНТ IP: 127.0.0.1] ❌ "GET /teacher/submission/1/preview/" 503
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/view-file/1/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/submission/1/preview/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/view-file/1/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/submission/1/preview/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/submission/1/preview/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/submission/1/preview/assets/e22ea8ea7da8f7a32af280ce3ccfa01960ff10db352bf776fbdafa54dba8ccb1.png/?v=bda82149b88c8c38d90f6f86d1634fb19ae385d7d782736c20b490d14a492a85" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] ❌ ВИНЯТОК на GET /teacher/submission/1/preview/assets/e22ea8ea7da8f7a32af280ce3ccfa01960ff10db352bf776fbdafa54dba8ccb1.png/?v=bda82149b88c8c38d90f6f86d1634fb19ae385d7d782736c20b490d14a492a85: Http404
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /teacher/submission/1/preview/assets/e22ea8ea7da8f7a32af280ce3ccfa01960ff10db352bf776fbdafa54dba8ccb1.png/?v=bda82149b88c8c38d90f6f86d1634fb19ae385d7d782736c20b490d14a492a85" 404
+..[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/submission/1/preview/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/submission/1/preview/assets/e22ea8ea7da8f7a32af280ce3ccfa01960ff10db352bf776fbdafa54dba8ccb1.png/?v=f58dab21325fc5587919d0cd4988fd61029e7bb6150d6fa5a59713a8ef12ed98" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/view-file/1/?class=1" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/submission/1/preview/?file_id=2" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/submission/1/preview/assets/e22ea8ea7da8f7a32af280ce3ccfa01960ff10db352bf776fbdafa54dba8ccb1.png/?v=0374a0850cb14cec58520916933d95bc64a02afc44ea7f768dbc2ed70dc0a89e&file_id=2" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] ❌ ВИНЯТОК на GET /teacher/submission/1/preview/assets/e22ea8ea7da8f7a32af280ce3ccfa01960ff10db352bf776fbdafa54dba8ccb1.png/?v=0374a0850cb14cec58520916933d95bc64a02afc44ea7f768dbc2ed70dc0a89e&file_id=1: Http404
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /teacher/submission/1/preview/assets/e22ea8ea7da8f7a32af280ce3ccfa01960ff10db352bf776fbdafa54dba8ccb1.png/?v=0374a0850cb14cec58520916933d95bc64a02afc44ea7f768dbc2ed70dc0a89e&file_id=1" 404
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/view-file/1/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/view-file/1/?class=1&grade_filter=ungraded&review_sync=1" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] ❌ ВИНЯТОК на POST /teacher/submission/1/grade/: RuntimeError
+[КЛІЄНТ IP: 127.0.0.1] ❌ "POST /teacher/submission/1/grade/" 500
+..[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/submission/1/grade/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/view-file/1/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /teacher/submission/1/grade/" 400
+.[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /teacher/submission/1/grade/" 403
+..[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/view-file/1/?from=all_submissions&class=1&grade_filter=ungraded&sort=student&order=asc&file_id=2" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/view-file/1/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /api/v2/journal/roster/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /api/v2/journal/roster/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /api/v2/journal/roster/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /api/v2/journal/roster/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /api/v2/journal/roster/" 403
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /api/v2/journal/roster/" 400
+.[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /api/v2/journal/roster/" 401
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /api/v2/journal/roster/" 401
+.[КЛІЄНТ IP: 127.0.0.1] "POST /api/v2/journal/roster/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /api/v2/journal/roster/" 400
+.[КЛІЄНТ IP: 127.0.0.1] "GET /api/v2/journal/grades/?class_id=1&subject_id=1&date_from=2000-01-01&date_to=2099-12-31" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /api/v2/journal/roster/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /api/v2/journal/roster/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /api/v2/journal/roster/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /api/students-autocomplete/?class_group_id=1" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /api/students-autocomplete/?class_group_id=1" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /api/v2/journal/roster/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /api/v2/journal/roster/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /api/v2/journal/roster/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /api/v2/journal/roster/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /api/v2/journal/roster/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /feed/fragment/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /assignment/1/submit/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/view-file/1/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/view-file/1/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/view-file/2/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/gradebook/?class=1" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/submissions/?class=1" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/view-file/2/?class=1&from=all_submissions" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/view-file/1/?class=1&from=all_submissions" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/assignment/1/submissions/?class=2" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/view-file/4/?class=2&assignment=1&from=assignment_submissions" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/view-file/2/?class=1&grade_filter=ungraded" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/view-file/2/?date=2026-11-08" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /" 200 OK
+..[КЛІЄНТ IP: 127.0.0.1] "GET /?date=2026-11-09" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /?date=2026-11-08" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/" 200 OK
+..[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/file/1/preview/?mode=text" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /api/teacher/live-status/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/submission/1/grade/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /api/teacher/live-status/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/submissions/mass-grade/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/assignment/1/duplicate/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /?date=2026-09-21" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/roster-sync/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/roster-sync/" 302 OK
+..[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /api/v1/journal/roster/" 409
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/student/Вигаданий_Учень/?student_id=2" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /api/v2/journal/grades/?class_id=1&subject_id=1&date_from=2000-01-01&date_to=2099-12-31" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /api/v2/journal/grades/?class_id=1&subject_id=1&date_from=2000-01-01&date_to=2099-12-31" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /api/v2/journal/grades/?class_id=1&subject_id=1&date_from=2000-01-01&date_to=2099-12-31" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /api/v2/journal/grades/?class_id=1&subject_id=1&date_from=2000-01-01&date_to=2099-12-31" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /api/v2/journal/grades/?class_id=1&subject_id=1&date_from=2000-01-01&date_to=2099-12-31" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /api/v2/journal/grades/?class_id=1&subject_id=1&date_from=2000-01-01&date_to=2099-12-31" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /api/v2/journal/grades/?class_id=1&subject_id=1&date_from=2000-01-01&date_to=2099-12-31" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /api/v2/journal/grades/?class_id=1&subject_id=1&date_from=2000-01-01&date_to=2099-12-31" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/settings/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /api/v2/journal/roster/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/settings/?tab=api" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] ❌ ВИНЯТОК на POST /teacher/settings/: Http404
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /teacher/settings/" 404
+[КЛІЄНТ IP: 127.0.0.1] ❌ ВИНЯТОК на POST /teacher/settings/: Http404
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /teacher/settings/" 404
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/roster-sync/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/roster-sync/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/roster-sync/" 302 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /api/v2/journal/grades/?class_id=1&subject_id=1&date_from=2000-01-01&date_to=2099-12-31" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /api/v2/journal/grades/?class_id=1&subject_id=1&date_from=2000-01-01&date_to=2099-12-31" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /api/v2/roster-sync/" 401
+[КЛІЄНТ IP: 127.0.0.1] "GET /api/v2/roster-sync/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/roster-sync/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /api/v2/journal/roster/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /api/v2/journal/grades/?class_id=1&subject_id=1&date_from=2000-01-01&date_to=2099-12-31" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /api/v2/journal/grades/?class_id=1&subject_id=1&date_from=2000-01-01&date_to=2099-12-31" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /api/v2/journal/grades/?class_id=1&subject_id=1&date_from=2000-01-01&date_to=2099-12-31" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /api/v2/journal/grades/?class_id=1&subject_id=1&date_from=2000-01-01&date_to=2099-12-31&cursor=1" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /api/v2/journal/grades/?class_id=1&subject_id=1&date_from=2000-01-01&date_to=2099-12-31" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /api/v2/journal/grades/?class_id=bad&subject_id=1&date_from=2000-01-01&date_to=2099-12-31" 400
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /api/v2/journal/grades/" 401
+.[КЛІЄНТ IP: 127.0.0.1] "GET /api/students-autocomplete/?class_group_id=1" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /?q=%D0%BF%D1%80%D0%B5%D0%B7%D0%B5%D0%BD%D1%82%D0%B0%D1%86%D1%96%D1%8F&class=1" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /feed/fragment/?q=%D0%A1%D0%B5%D0%BA%D1%80%D0%B5%D1%82%D0%BD%D0%B0" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /?q=%D0%BD%D1%96%D1%87%D0%BE%D0%B3%D0%BE%D0%BD%D0%B5%D0%BC%D0%B0%D1%94123456" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /?q=%D1%82%D0%B0%D0%B1%D0%BB%D0%B8%D1%86%D1%96" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /?q=nf%2Ckbw" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /feed/fragment/?q=%D1%82%D0%B0%D0%B1%D0%BB%D0%B8%D1%86%D1%96" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /feed/fragment/?q=nf%2Ckbw" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /my-submissions/?class=1&search=%D0%BD%D0%B5%D0%B2%D1%96%D0%B4%D0%BE%D0%BC%D0%B8%D0%B9123456" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /my-submissions/?class=1&search=%D0%9A%D0%BE%D0%B2%D0%B0%D0%BB%D0%B5%D0%BD%D0%BA%D0%BE+%D0%A2%D0%B0%D1%80%D0%B0%D1%81" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /my-submissions/?class=1&search=%D0%A2%D0%B0%D1%80%D0%B0%D1%81+%D0%9A%D0%BE%D0%B2%D0%B0%D0%BB%D0%B5%D0%BD%D0%BA%D0%BE" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /my-submissions/?class=1&search=Rjdfktyrj+Nfhfc" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /api/v2/journal/roster/" 403
+.[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /api/v2/journal/grades/" 403
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /api/v2/journal/roster/" 403
+..[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /teacher/students/1/delete/" 405
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /teacher/students/1/delete/" 403
+[КЛІЄНТ IP: 127.0.0.1] ❌ ВИНЯТОК на POST /teacher/students/1/delete/: PermissionDenied
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /teacher/students/1/delete/" 403
+.[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/students/1/delete/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/students/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /api/v2/journal/grades/?class_id=1&subject_id=1&date_from=2000-01-01&date_to=2099-12-31" 200 OK
+..[КЛІЄНТ IP: 127.0.0.1] ❌ ВИНЯТОК на POST /teacher/students/1/delete/: PermissionDenied
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /teacher/students/1/delete/" 403
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/student/Вигаданий Учень/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/students/1/delete/" 302 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/students/1/delete/" 302 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/students/1/delete/" 302 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/submission/1/delete/" 302 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/student/Вигаданий Учень/?student_id=1" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/students/1/delete/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] ❌ ВИНЯТОК на GET /teacher/student/Вигаданий Учень/?student_id=1: Http404
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /teacher/student/Вигаданий Учень/?student_id=1" 404
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/students/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/student/Вигаданий Учень/?student_id=1" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/student/Вигаданий Учень/?student_id=2" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/students/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /teacher/student/Вигаданий Учень/?student_id=1" 403
+.[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/submit/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/submit/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/submit/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/submit/?class=3" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/submit/?class=2" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /assignment/1/submit/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/submit/success/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /assignment/1/submit/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /assignment/1/submit/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /assignment/1/submit/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /assignment/1/submit/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /assignment/1/submit/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /assignment/1/submit/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /assignment/1/submit/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/submit/?class=2" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /assignment/1/submit/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/submit/success/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/submit/?class=2" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /assignment/1/submit/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/submit/success/" 200 OK
+...[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/settings/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/settings/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/settings/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/settings/" 302 OK
+.....[КЛІЄНТ IP: 127.0.0.1] "POST /assignment/1/submit/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /api/submission-notifications/?since=-1" 400
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /api/submission-notifications/?since=x" 400
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /api/submission-notifications/?class=x" 400
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /api/submission-notifications/?class=999999999999999999999999999999" 400
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /api/submission-notifications/" 405
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/settings/?tab=environment&section=notifications" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/settings/?tab=notifications" 200 OK
+...[КЛІЄНТ IP: 127.0.0.1] "POST /assignment/1/submit/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/view-file/1/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /assignment/1/submit/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/view-file/2/" 200 OK
+..[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/settings/?tab=environment" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /assignment/1/?class=1" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/settings/" 302 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/settings/?tab=environment&section=notifications" 200 OK
+..[КЛІЄНТ IP: 127.0.0.1] "POST /assignment/1/submit/" 302 OK
+...[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/view-file/1/" 302 OK
+..[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/submission/1/coauthors/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/export/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/export/" 200 OK
+...[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/submission/1/coauthors/" 200 OK
+..[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/assignment/1/reschedule/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /teacher/students/merge/" 400
+.[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/students/merge/" 200 OK
+..[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/assignment/generate-criteria/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/assignment/create/" 302 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/assignment/1/duplicate/" 302 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/assignment/1/reschedule/" 200 OK
+............[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/updates/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/login/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/updates/api/check/" 302 OK
+.[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /teacher/updates/" 403
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /teacher/updates/api/check/" 403
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/updates/api/check/" 200 OK
+....[КЛІЄНТ IP: 127.0.0.1] "GET /healthz/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/updates/api/check/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/updates/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /teacher/updates/api/start/" 403
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /teacher/updates/api/start/" 403
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /teacher/updates/api/rollback/" 403
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /teacher/updates/api/status/" 403
+.[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/updates/api/rollback/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/updates/api/start/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/updates/api/status/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/updates/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/settings/?tab=profile" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/updates/" 302 OK
+.[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/ai/check/1/" 202 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/ai/check/1/" 202 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/ai/check/1/" 202 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /api/ai/process-item/1/" 202 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /api/ai/process-item/1/" 202 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /api/ai/process-item/1/" 202 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/assignment/create/?class=1&subject=1&lesson_date=2026-10-05&bell_slot=1" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "POST /teacher/assignment/create/" 302 OK
+.[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /teacher/ai/check/1/" 400
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /teacher/ai/check/1/" 400
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /teacher/ai/check/1/" 400
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /teacher/ai/check/1/" 400
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /teacher/ai/check/1/" 400
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /teacher/ai/check/1/" 400
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /api/ai/process-item/1/" 400
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /api/ai/process-item/1/" 400
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /api/ai/process-item/1/" 400
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /api/ai/process-item/1/" 400
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /api/ai/process-item/1/" 400
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /api/ai/process-item/1/" 400
+.[КЛІЄНТ IP: 127.0.0.1] "GET /api/teacher/live-status/" 200 OK
+..[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /teacher/ai/check/1/" 400
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /api/ai/process-item/1/" 400
+....[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/view-file/1/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/submission/1/html/eyJzdWJtaXNzaW9uIjoxLCJ0ZWFjaGVyIjoxfQ:1xPzIK:ar45V7jdzd2qsZjy0jDjJGNja2eDGIIi4ZX_3Z2GjtY/index.html" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/submission/1/html/eyJzdWJtaXNzaW9uIjoxLCJ0ZWFjaGVyIjoxfQ:1xPzIK:ar45V7jdzd2qsZjy0jDjJGNja2eDGIIi4ZX_3Z2GjtY/style.css" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "POST /teacher/submission/1/html/eyJzdWJtaXNzaW9uIjoxLCJ0ZWFjaGVyIjoxfQ:1xPzIK:ar45V7jdzd2qsZjy0jDjJGNja2eDGIIi4ZX_3Z2GjtY/style.css" 405
+[КЛІЄНТ IP: 127.0.0.1] ❌ ВИНЯТОК на GET /teacher/submission/1/html/eyJzdWJtaXNzaW9uIjoxLCJ0ZWFjaGVyIjoxfQ:1xPzIK:ar45V7jdzd2qsZjy0jDjJGNja2eDGIIi4ZX_3Z2GjtY/missing.css: Http404
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /teacher/submission/1/html/eyJzdWJtaXNzaW9uIjoxLCJ0ZWFjaGVyIjoxfQ:1xPzIK:ar45V7jdzd2qsZjy0jDjJGNja2eDGIIi4ZX_3Z2GjtY/missing.css" 404
+[КЛІЄНТ IP: 127.0.0.1] ❌ ВИНЯТОК на GET /teacher/submission/1/html/eyJzdWJtaXNzaW9uIjoxLCJ0ZWFjaGVyIjoxfQ:1xPzIK:ar45V7jdzd2qsZjy0jDjJGNja2eDGIIi4ZX_3Z2GjtY/style.css: Http404
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /teacher/submission/1/html/eyJzdWJtaXNzaW9uIjoxLCJ0ZWFjaGVyIjoxfQ:1xPzIK:ar45V7jdzd2qsZjy0jDjJGNja2eDGIIi4ZX_3Z2GjtY/style.css" 404
+[КЛІЄНТ IP: 127.0.0.1] ❌ ВИНЯТОК на GET /teacher/submission/2/html/eyJzdWJtaXNzaW9uIjoxLCJ0ZWFjaGVyIjoxfQ:1xPzIK:ar45V7jdzd2qsZjy0jDjJGNja2eDGIIi4ZX_3Z2GjtY/style.css: Http404
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /teacher/submission/2/html/eyJzdWJtaXNzaW9uIjoxLCJ0ZWFjaGVyIjoxfQ:1xPzIK:ar45V7jdzd2qsZjy0jDjJGNja2eDGIIi4ZX_3Z2GjtY/style.css" 404
+[КЛІЄНТ IP: 127.0.0.1] ❌ ВИНЯТОК на GET /teacher/submission/1/html/eyJzdWJtaXNzaW9uIjoxLCJ0ZWFjaGVyIjoxfQ:1xPzIK:ar45V7jdzd2qsZjy0jDjJGNja2eDGIIi4ZX_3Z2GjtY/style.css: Http404
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /teacher/submission/1/html/eyJzdWJtaXNzaW9uIjoxLCJ0ZWFjaGVyIjoxfQ:1xPzIK:ar45V7jdzd2qsZjy0jDjJGNja2eDGIIi4ZX_3Z2GjtY/style.css" 404
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/view-file/1/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/submission/1/file/?inline=1&file_id=1" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/submission/1/file/?file_id=1" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/view-file/1/" 200 OK
+..[КЛІЄНТ IP: 127.0.0.1] ❌ ВИНЯТОК на GET /teacher/submission/1/file/../inside-private/secret.txt: Http404
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /teacher/submission/1/file/../inside-private/secret.txt" 404
+[КЛІЄНТ IP: 127.0.0.1] ❌ ВИНЯТОК на GET /teacher/submission/1/file/missing.css: Http404
+[КЛІЄНТ IP: 127.0.0.1] ⚠️ "GET /teacher/submission/1/file/missing.css" 404
+..[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/view-file/1/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/view-file/1/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/view-file/1/?file_id=link" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/view-file/1/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/submission/1/file/" 200 OK
+[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/submission/1/file/?inline=1" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/submission/1/web-proxy/" 200 OK
+.[КЛІЄНТ IP: 127.0.0.1] "GET /teacher/submission/1/web-proxy/" 200 OK
+.............invalid pdf header: b'not a'
+EOF marker not found
+................ss.........................................Cannot measure postgresql database storage (DatabaseError)
+.Cannot measure sqlite database storage (FileNotFoundError)
+...................................................
+----------------------------------------------------------------------
+Ran 987 tests in 106.823s
+
+OK (skipped=2)
+Destroying test database for alias 'default'...

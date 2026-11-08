@@ -1,0 +1,52 @@
+{
+  "production_unchanged": true,
+  "production": {
+    "schoolnet_app": {
+      "id": "113cb34ec5c48317f1b0070df366c230132323204975ec23d2091acceb5c0b10",
+      "image": "sha256:81c89bbb5d83a02ec87cfd1833d2a7c7a1fd504e2b35cdcaff75b40c47809be6",
+      "restart_count": 0,
+      "status": "running",
+      "health": "healthy"
+    },
+    "schoolnet_ai_worker": {
+      "id": "0269001f7f9b031f4a52d6b88d1359ec350cde65d3055eca0234a04dfeffd655",
+      "image": "sha256:81c89bbb5d83a02ec87cfd1833d2a7c7a1fd504e2b35cdcaff75b40c47809be6",
+      "restart_count": 0,
+      "status": "running",
+      "health": "healthy"
+    },
+    "schoolnet_postgres": {
+      "id": "66d210afa9de93e9ac30d664e67983d3f036f71813a4fb375ae12452a743680e",
+      "image": "sha256:f1c3376c26f2609ab9f29f71f824103fe2fcd8ee0346485cb6122a4f93df6f94",
+      "restart_count": 0,
+      "status": "running",
+      "health": "healthy"
+    },
+    "schooljournal-web-1": {
+      "id": "4d4eeba536584b1067752e86c290fd5428ce4d012708109b9c1e360241b7dbf9",
+      "image": "sha256:883d4f7f21a2dc6e525ce258eda4d9f0a711988ff634b21679987dce6fa2f17d",
+      "restart_count": 0,
+      "status": "running",
+      "health": "healthy"
+    },
+    "school_test-app-1": {
+      "id": "062a5d3507a7ca82c0528a86f4151bc5df6458c7a4855e50076ef85d094fae6a",
+      "image": "sha256:d8295b48ae461e147bc01151390f94b6a8859d7ebc03466effdfa0c00952c1f3",
+      "restart_count": 0,
+      "status": "running",
+      "health": "healthy"
+    }
+  },
+  "health": {
+    "status": 200,
+    "body": {
+      "status": "ok",
+      "version": "4.8.12",
+      "revision": "037ec788399ada0065c767b70ae251d8f1b1a0d2",
+      "source_digest": "7085866438159e02e720ab0829fdd98b2a90a56ef7a165365424a52006e7ea5a"
+    }
+  },
+  "remaining_trial_containers": [],
+  "remaining_trial_networks": [],
+  "private_config_directories_remaining": 0
+}

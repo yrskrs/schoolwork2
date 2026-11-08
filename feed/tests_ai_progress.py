@@ -130,7 +130,7 @@ class EvaluationProgressTests(TestCase):
         sleep.assert_not_called()
 
     @patch('feed.gemini_service.call_ai_api')
-    def test_exact_reported_six_model_sequence_is_exhausted_once(self, call):
+    def test_exact_six_model_sequence_waits_for_temporary_quota_after_one_pass(self, call):
         models = ['gemini-3.1-flash-lite', 'gemini-3.6-flash', 'gemini-3.8-flash',
                   'gemini-3.7-flash', 'gemini-flash-latest', 'openai/gpt-oss-120b']
         for index, name in enumerate(models):
@@ -140,20 +140,20 @@ class EvaluationProgressTests(TestCase):
         execute_job(job.pk)
         job.refresh_from_db()
         self.assertEqual([c.kwargs['model_name'] for c in call.call_args_list], models)
-        self.assertEqual(job.status, 'failed')
+        self.assertEqual(job.status, 'queued')
         self.assertEqual([e['model'] for e in job.events if e['kind'] == 'model_start'], models)
         self.assertEqual([e['status_code'] for e in job.events if e['kind'] == 'model_error'], [503,429,429,429,429,413])
         self.assertEqual(sum(e['kind'] == 'switching' for e in job.events), 5)
         self.assertEqual(job.events[-2]['kind'], 'exhausted')
-        self.assertEqual(job.events[-1]['kind'], 'failed')
-        self.assertIn('розміру, а не квоти', job.result['error'])
+        self.assertEqual(job.events[-1]['kind'], 'waiting_quota')
+        self.assertTrue(any('розміру, а не квоти' in event['message'] for event in job.events))
         result = self.client.get(reverse('ai_job_status', args=[job.pk])).json()
         self.assertEqual(result['events'], job.events)
         self.assertEqual([e['sequence'] for e in job.events], list(range(1, len(job.events)+1)))
         self.assertNotIn('synthetic-key', json.dumps(result))
         page = self.client.get(reverse('view_file', args=[self.sub.pk]))
-        self.assertContains(page, 'Події останньої перевірки ШІ')
-        self.assertContains(page, 'Наступної моделі')
+        self.assertContains(page, 'data-ai-job-status=')
+        self.assertContains(page, 'Робота в черзі на перевірку ШІ')
 
     @patch('feed.gemini_service.call_ai_api')
     def test_progress_is_readable_while_request_is_running_and_success_stops_queue(self, call):
@@ -266,24 +266,13 @@ class EvaluationProgressTests(TestCase):
         self.assertEqual(response.json()['events'], job.events)
 
     @patch('feed.gemini_service._http_post_json')
-    def test_visual_gpt_oss_strips_media_and_calls_api(self, post):
-        # gpt-oss-* is text-only: media is stripped before the HTTP call but the
-        # original caller's list must NOT be mutated.
-        post.return_value = (200, {'choices': [{'message': {'content': 'ok'}, 'finish_reason': 'stop'}]}, '')
+    def test_visual_gpt_oss_rejects_instead_of_dropping_evidence(self, post):
         media = [{'mime_type': 'application/pdf', 'data': 'synthetic', 'source': 'Карта знань'}]
         response = call_ai_api('Text', inline_media=media, provider='groq', model_name='openai/gpt-oss-120b', api_key='synthetic')
-        # Should succeed (stripped media, text sent)
-        self.assertEqual(response[0], 200)
-        # HTTP was called once (text-only)
-        post.assert_called_once()
-        # Caller's media list was not mutated
+        self.assertEqual(response[0], 415)
+        post.assert_not_called()
         self.assertEqual(len(media), 1)
         self.assertEqual(media[0]['source'], 'Карта знань')
-        # No images in the payload that was sent
-        sent_payload = post.call_args.args[1]
-        user_content = sent_payload['messages'][-1]['content']
-        image_parts = [p for p in (user_content if isinstance(user_content, list) else []) if p.get('type') == 'image_url']
-        self.assertEqual(image_parts, [])
 
     @patch('feed.gemini_service._http_post_json')
     def test_text_only_gpt_oss_still_calls_groq(self, post):
@@ -295,34 +284,25 @@ class EvaluationProgressTests(TestCase):
 
     @patch('feed.gemini_service._http_post_json')
     @patch('feed.ai_payload.optimize_media', side_effect=lambda items, provider: items)
-    def test_known_groq_vision_image_limit_is_capped_and_proceeds(self, optimize, post):
-        # qwen3.8-27b accepts at most 3 images: excess images are capped (not blocked).
-        post.return_value = (200, {'choices': [{'message': {'content': 'ok'}, 'finish_reason': 'stop'}]}, '')
-        media = [{'mime_type': 'image/png', 'data': str(index)} for index in range(4)]
+    def test_known_groq_image_limit_rejects_instead_of_capping(self, optimize, post):
+        from .tests_ai_payload import picture
+        media = [picture(color) for color in ('red', 'blue', 'green', 'black')]
         response = call_ai_api('Text', inline_media=media, provider='groq', model_name='qwen/qwen3.8-27b', api_key='synthetic')
-        # HTTP must be called (model proceeds with capped images)
-        post.assert_called_once()
-        # Caller's list is NOT mutated
+        self.assertEqual(response[0], 413)
+        post.assert_not_called()
         self.assertEqual(len(media), 4)
-        # Payload contains at most 3 image parts
-        sent_payload = post.call_args.args[1]
-        user_content = sent_payload['messages'][-1]['content']
-        image_parts = [p for p in (user_content if isinstance(user_content, list) else []) if p.get('type') == 'image_url']
-        self.assertLessEqual(len(image_parts), 3)
 
     @patch('feed.gemini_service._http_post_json')
     @patch('feed.ai_payload.optimize_media', side_effect=lambda items, provider: items)
-    def test_text_only_groq_calls_api_then_gemini_processes_visual(self, optimize, post):
-        # gpt-oss-120b strips media and calls HTTP (text-only). Groq returns Gemini-
-        # format payload which is unrecognised by the OpenAI response parser → empty
-        # reply → queue advances to gemini which succeeds with the full media.
+    def test_text_only_groq_is_skipped_then_gemini_gets_complete_visual(self, optimize, post):
         self.add_connection('groq', 'openai/gpt-oss-120b')
         self.add_connection('gemini', 'vision-model')
-        media = [{'mime_type': 'image/png', 'data': 'synthetic', 'source': 'Карта знань'}]
+        from .tests_ai_payload import picture
+        media = [picture()]
+        self.settings.privacy_mode = 'redact'
+        self.settings.save(update_fields=['privacy_mode'])
         answer = self.answer()[1]
-        # Both groq and gemini calls return the same mock body.
-        # Groq gets Gemini-format → empty reply → continues.
-        # Gemini call succeeds with the real candidate.
+        # Only the multimodal adapter sends the complete visual evidence.
         post.return_value = (200, {'candidates': [{'content': {'parts': [{'text': answer}]}}]}, '')
         original = call_ai_api
         def inject_media(**kwargs):
@@ -333,14 +313,17 @@ class EvaluationProgressTests(TestCase):
             execute_job(job.pk)
         job.refresh_from_db()
         self.assertEqual(job.status, 'succeeded')
-        # Two HTTP calls: one for groq (text-only), one for gemini (with image).
-        self.assertEqual(post.call_count, 2)
+        self.assertEqual(post.call_count, 1)
         # Last call is to gemini and contains the image
         gemini_payload = post.call_args.args[1]
         image_data = gemini_payload['contents'][0]['parts'][-1]['inlineData']['data']
-        self.assertEqual(image_data, 'synthetic')
-        # Both calls logged; last one is gemini
-        self.assertEqual(AIRequestLog.objects.count(), 2)
+        import base64, io
+        from PIL import Image
+        from .ai_payload import image_signature
+        self.assertEqual(image_signature(Image.open(io.BytesIO(base64.b64decode(image_data)))),
+                         image_signature(Image.open(io.BytesIO(base64.b64decode(media[0]['data'])))))
+        # Local preflight rejection is not a provider request.
+        self.assertEqual(AIRequestLog.objects.count(), 1)
         self.assertEqual(AIRequestLog.objects.order_by('pk').last().provider, 'gemini')
         self.assertEqual([e['model'] for e in job.events if e['kind'] == 'model_start'], ['openai/gpt-oss-120b', 'vision-model'])
 

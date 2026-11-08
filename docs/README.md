@@ -4,6 +4,7 @@
 
 ## Інструкції та експлуатація
 
+- [Паралельна ШІ-перевірка, квоти та захист даних — локальна реалізація](guides/AI_CHECKING.md)
 - [Очищення старих Docker-образів](guides/IMAGE_RETENTION.md)
 - [CLOUD_BACKUPS](guides/CLOUD_BACKUPS.md)
 - [INTEGRATION](guides/INTEGRATION.md)
@@ -11,6 +12,11 @@
 - [OUTSIDE_STUDENTS](guides/OUTSIDE_STUDENTS.md)
 
 ## Аудити, перевірки й історичні встановлення
+
+- [Журнал реалізації й синтетичних перевірок ШІ — 08.11.2026](audits/AI_IMPLEMENTATION_2026-11-08.md)
+- [Разовий дозвіл учителя й серверні перевірки — 08.11.2026](audits/AI_TEACHER_OVERRIDE_SERVER_2026-11-08.md)
+- [Установлення 4.8.13 і перевірка 10 реальних робіт — 08.11.2026](audits/AI_RELEASE_4_8_13_2026-11-08.md)
+- [ШІ-перевірка: приватність, швидкість і якість — 08.11.2026](audits/AI_PRIVACY_PERFORMANCE_2026-11-08.md)
 
 - [Звичайна сторінка перевірки робіт 4.8.12](audits/REVIEW_WORKSPACE_RELEASE_2026-11-08.md)
 

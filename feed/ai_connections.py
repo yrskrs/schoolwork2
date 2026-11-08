@@ -68,6 +68,20 @@ def save_connection(settings_id, data, delete=False):
                 raise ValueError('Вкажіть ідентифікатор моделі без пробілів, до 100 символів.')
             connection = {'id': connection_id or uuid4().hex, 'provider': provider,
                           'label': label, 'api_key': key, 'custom_url': url}
+            quota_group = str(data.get('quota_group', (existing or {}).get('quota_group', ''))).strip()
+            if len(quota_group) > 80:
+                raise ValueError('Назва спільної квоти має містити до 80 символів.')
+            limits = dict((existing or {}).get('quota_limits') or {})
+            for limit in ('rpm', 'rpd', 'tpm', 'tpd', 'itpm', 'otpm', 'concurrency'):
+                if 'quota_' + limit in data:
+                    try:
+                        value = int(data.get('quota_' + limit) or (1 if limit == 'concurrency' else 0))
+                    except (TypeError, ValueError):
+                        raise ValueError('Квоти мають бути цілими невід’ємними числами.')
+                    if value < (1 if limit == 'concurrency' else 0) or value > (8 if limit == 'concurrency' else 10**9):
+                        raise ValueError('Некоректне значення квоти або паралельності.')
+                    limits[limit] = value
+            connection.update(quota_group=quota_group, quota_limits=limits)
             if existing:
                 settings.provider_connections = [connection if c['id'] == connection_id else c for c in settings.provider_connections]
             else:

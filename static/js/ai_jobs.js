@@ -7,6 +7,9 @@
         if (!event) return defaultMsg;
         const msg = (event.message || '').toLowerCase();
         const kind = event.kind;
+        if (kind === 'waiting_quota' || kind === 'model_busy') {
+            return 'Перевірка очікує вільного підключення. Результат з’явиться автоматично; можна повернутися пізніше.';
+        }
         if (kind === 'model_start' || msg.includes('очікую відповідь')) {
             return '🧐 Розумний робот уважно читає завдання рядок за рядком…';
         }
@@ -217,7 +220,10 @@
                 if (!job.status_url) throw new Error('Не вдалося отримати статус перевірки.');
                 const statusUrl = new URL(job.status_url, window.location.origin);
                 if (statusUrl.origin !== window.location.origin) throw new Error('Некоректна адреса статусу.');
-                await new Promise(resolve => setTimeout(resolve, document.hidden ? 5000 : 1500));
+                const minimumDelay = document.hidden ? 5000 : 1500;
+                const retryAt = job.retry_at ? Date.parse(job.retry_at) : NaN;
+                const delay = Number.isFinite(retryAt) ? Math.min(10000, Math.max(minimumDelay, retryAt - Date.now())) : minimumDelay;
+                await new Promise(resolve => setTimeout(resolve, delay));
                 response = await fetch(statusUrl.href, {headers: {'Accept': 'application/json'}, cache: 'no-store'});
             }
             if (panel) {
