@@ -17,9 +17,15 @@
 - після розгортання виконано перевірене узгодження з upstream без сліпого
   масового додавання; фінальний HEAD/status фіксуються у звіті нижче.
 
-**Перевірка:** `git check-ignore` для `.env.bak-*`, `git status --short`,
-`git merge-base --is-ancestor`, наявність fast-forward. Повний `update.sh` на
-продакшені не запускався; перевірено передумови та ізольовану логіку.
+**Перевірка:** `git check-ignore` для `.env.bak-*` — так; серверний
+`git status --porcelain` — 0 записів; `HEAD == origin/main` =
+`905dbb9c53f282773086590634c4fbbae08757b7`; HEAD є предком upstream;
+`git merge --ff-only origin/main` — `Already up to date`. Приватні копії
+лежать у `~/school-private-backups/env-before-seven-fixes-20261108` (0600).
+Повний `update.sh` на продакшені не запускався; перевірено передумови та
+ізольовану логіку. Під час першої спроби розгортання g скрипт помилково
+вважав зміну порту PostgreSQL «сторонньою» і відкотився на f; після
+виправлення перевірки повторне розгортання g успішне.
 
 ## 2. Llama 4 Scout
 
@@ -103,8 +109,15 @@ health app/worker, відсутність змін у даних.
 - `LoginThrottle` (міграція 0075) застосована, таблиця порожня на старті.
 - `schoolnet_updater` перезапущено після копіювання джерел.
 - Повний кандидатний набір: **1012 тестів OK (2 skips)**.
+- Живий Funnel: HSTS `max-age=86400`, session/CSRF `Secure`, вхід 302 → кабінет 200.
+- Живий LAN: без HSTS, session/CSRF без `Secure`, вхід 302 → кабінет 200.
+- Синтетичні здачі через Funnel і LAN (ID 605, 606) створені й видалені;
+  підсумкові дані 451/95/17/296, тимчасових користувачів/повідомлень немає.
+- PostgreSQL: `LISTEN 127.0.0.1:5433`, зовнішній LAN TCP закритий.
+- `git status` на сервері — 0; HEAD = upstream.
 
-[Стан розгортання](artifacts/server_seven_fixes_4.8.13g_deployment.json).
+[Стан розгортання](artifacts/server_seven_fixes_4.8.13g_deployment.json) ·
+[Фактичні перевірки](artifacts/server_seven_fixes_4.8.13g_checks.json).
 
 ## Обмеження
 

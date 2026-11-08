@@ -1,0 +1,55 @@
+{
+  "time_local": "2026-11-08T22:18:00+02:00",
+  "release": "4.8.13g",
+  "image": "schoolwork2-app:4.8.13g-3dddc2799e8c",
+  "revision": "5cccf4ebe59255acc3d291893510d3cb6e94b84f",
+  "git": {
+    "server_head": "905dbb9c53f282773086590634c4fbbae08757b7",
+    "status_entries": 0,
+    "upstream_equal": true,
+    "fast_forward_ready": true
+  },
+  "https": {
+    "funnel_hsts": "max-age=86400",
+    "funnel_csrf_secure": true,
+    "funnel_session_secure": true,
+    "lan_hsts": null,
+    "lan_csrf_secure": false,
+    "lan_session_secure": false,
+    "funnel_login_status": 302,
+    "lan_login_status": 302
+  },
+  "postgres": {
+    "listener": "127.0.0.1:5433",
+    "lan_port_open": false
+  },
+  "data": {
+    "submissions": 451,
+    "assignments": 95,
+    "classes": 17,
+    "students": 296
+  },
+  "synthetic_submissions": {
+    "created": [
+      605,
+      606
+    ],
+    "cleaned": true
+  },
+  "scout": {
+    "supports_vision": true,
+    "context_tokens": 131000,
+    "max_images": 32
+  },
+  "auth": {
+    "password_validators": 4,
+    "login_throttle_rows_after_cleanup": 0
+  },
+  "quotas": {
+    "status": "pending_owner_values",
+    "connections": 5
+  },
+  "tests": {
+    "candidate_full": "1012 OK (2 skips)"
+  }
+}
