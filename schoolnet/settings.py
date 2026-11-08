@@ -46,6 +46,7 @@ MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'feed.middleware.PageCompressionMiddleware',
+    'feed.https_hardening.HTTPSHardeningMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'schoolnet.middleware.LegacySessionCookieMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -107,7 +108,13 @@ if DATABASES['default'].get('ENGINE') == 'django.db.backends.sqlite3':
     DATABASES['default'].setdefault('OPTIONS', {}).update(timeout=20, transaction_mode='IMMEDIATE')
 
 # ─── Пароль ────────────────────────────────────────────────────────────────────
-AUTH_PASSWORD_VALIDATORS = []  # Спрощено для локального середовища
+AUTH_PASSWORD_VALIDATORS = [
+    {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+     'OPTIONS': {'min_length': 10}},
+    {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
+]
 
 # ─── Локалізація ────────────────────────────────────────────────────────────────
 LANGUAGE_CODE = 'uk'
@@ -183,6 +190,7 @@ CACHES = {
 # Server-only, optional peer-to-peer roster integration.
 import json as _roster_json
 PUBLIC_BASE_URL = os.getenv('PUBLIC_BASE_URL', '').rstrip('/')
+HTTPS_HSTS_MAX_AGE = int(os.environ.get('HTTPS_HSTS_MAX_AGE', '86400'))
 JOURNAL_API_BASE_URL = os.getenv('JOURNAL_API_BASE_URL', '').rstrip('/')
 ROSTER_BACKEND = 'feed.roster_backend'
 ROSTER_SYNC_TOKEN = os.getenv("ROSTER_SYNC_TOKEN", "")

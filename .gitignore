@@ -99,3 +99,6 @@ site-redesign*.zip
 
 # Private cloud backup control store (never serve or commit)
 private-backups/
+# Private environment snapshots (never commit)
+.env.bak-*
+.env.before-*

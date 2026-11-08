@@ -72,6 +72,7 @@ from .models import (
     AssignmentRescheduleLog, AIErrorLog
 )
 
+from .login_throttle import clear as clear_login_throttle, record_failure, wait_seconds
 from .forms import (
     AssignmentForm, TeacherLoginForm, ClassSelectForm,
     TeacherProfileForm, SubjectForm, ClassGroupForm,
@@ -1032,20 +1033,27 @@ def teacher_login(request):
         if form.is_valid():
             username = form.cleaned_data['username']
             password = form.cleaned_data['password']
-            user = authenticate(request, username=username, password=password)
-
-            if user is not None:
-                # Перевіряємо що є профіль вчителя
-                try:
-                    teacher = user.teacher_profile
-                    login(request, user)
-                    log_submission_activity(user, 'login', f"Вчитель {teacher.full_name} увійшов в систему")
-                    messages.success(request, f'Вітаємо, {teacher.full_name}! 👋')
-                    return redirect('teacher_dashboard')
-                except Teacher.DoesNotExist:
-                    messages.error(request, 'Профіль вчителя не знайдено для цього облікового запису.')
+            wait = wait_seconds(request, username)
+            if wait:
+                messages.error(request, f'Забагато невдалих спроб входу. Спробуйте через {max(1, wait // 60)} хв.')
             else:
-                messages.error(request, 'Неправильний логін або пароль.')
+                user = authenticate(request, username=username, password=password)
+
+                if user is not None:
+                    # Перевіряємо що є профіль вчителя
+                    try:
+                        teacher = user.teacher_profile
+                        clear_login_throttle(request, username)
+                        login(request, user)
+                        log_submission_activity(user, 'login', f"Вчитель {teacher.full_name} увійшов в систему")
+                        messages.success(request, f'Вітаємо, {teacher.full_name}! 👋')
+                        return redirect('teacher_dashboard')
+                    except Teacher.DoesNotExist:
+                        record_failure(request, username)
+                        messages.error(request, 'Профіль вчителя не знайдено для цього облікового запису.')
+                else:
+                    record_failure(request, username)
+                    messages.error(request, 'Неправильний логін або пароль.')
 
     return render(request, 'feed/teacher_login.html', {'form': form})
 

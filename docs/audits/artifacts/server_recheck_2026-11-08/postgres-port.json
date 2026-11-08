@@ -1,0 +1,6 @@
+{
+  "time_utc": "2026-11-08T19:57:24.999565+00:00",
+  "host": "192.168.1.13",
+  "port": 5433,
+  "result": "TCP connection accepted; no authentication or SQL attempted"
+}

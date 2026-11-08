@@ -1,0 +1,35 @@
+{
+  "scope": "read-only audit; no changes, restarts, submissions, external AI requests or corrective actions by this audit",
+  "final_time_kyiv": "2026-11-08T21:50:07.446514+02:00",
+  "final_version": "4.8.13f",
+  "final_image": "schoolwork2-app:4.8.13f-ea2947d8ef77",
+  "runtime_matches_checkout": true,
+  "django_deploy_warnings": [
+    "security.W004",
+    "security.W008",
+    "security.W012",
+    "security.W016"
+  ],
+  "migration_check_ok": true,
+  "dependency_consistency_ok": true,
+  "submissions": 451,
+  "assignments": 95,
+  "file_references_checked": 1075,
+  "missing_file_references": 0,
+  "active_ai_jobs": 0,
+  "python_files_parsed": 295,
+  "python_syntax_errors": 0,
+  "static_references_checked": 54,
+  "missing_static_references": 0,
+  "gzip_asset_responses_match": true,
+  "findings": [
+    "High: normal updater is blocked by dirty server Git checkout",
+    "Medium: enabled Cloudflare Llama 4 Scout incorrectly has supports_vision=false and max_images=0",
+    "Medium: public HTTPS cookie/HSTS hardening remains deferred",
+    "Medium: PostgreSQL host port 5433 reachable from audit client",
+    "Medium: six private .env backup files are untracked and not ignored by Git; modes 0600, excluded from image",
+    "Medium: five AI connections have no configured local quota limits",
+    "Medium: password validators absent and no application-level login throttling found; external controls not assessed"
+  ],
+  "concurrent_deployment_observed": "4.8.13e to 4.8.13f by separate activity; temporary outage observed; final state healthy"
+}

@@ -1,0 +1,397 @@
+{
+  "time_utc": "2026-11-08T19:40:33.154339+00:00",
+  "requests": {
+    "LAN /healthz/": {
+      "status": 200,
+      "seconds": 0.004,
+      "headers": {
+        "Content-Type": "application/json",
+        "Content-Length": "179",
+        "X-Content-Type-Options": "nosniff",
+        "X-Frame-Options": "DENY",
+        "Referrer-Policy": "same-origin"
+      },
+      "bytes": 179,
+      "cookies": []
+    },
+    "LAN /": {
+      "status": 200,
+      "seconds": 0.046,
+      "headers": {
+        "Content-Type": "text/html; charset=utf-8",
+        "Content-Length": "75715",
+        "Vary": "Cookie, Accept-Encoding",
+        "X-Content-Type-Options": "nosniff",
+        "X-Frame-Options": "DENY",
+        "Referrer-Policy": "same-origin"
+      },
+      "bytes": 75715,
+      "cookies": []
+    },
+    "LAN /teacher/login/": {
+      "status": 200,
+      "seconds": 0.009,
+      "headers": {
+        "Content-Type": "text/html; charset=utf-8",
+        "Content-Length": "21308",
+        "Vary": "Cookie, Accept-Encoding",
+        "X-Content-Type-Options": "nosniff",
+        "X-Frame-Options": "DENY",
+        "Referrer-Policy": "same-origin"
+      },
+      "bytes": 21308,
+      "cookies": [
+        {
+          "name": "schoolwork2_csrftoken",
+          "secure": false,
+          "httponly": false
+        }
+      ]
+    },
+    "Funnel /healthz/": {
+      "status": 404,
+      "seconds": 0.037,
+      "headers": {
+        "Content-Type": "text/html; charset=utf-8",
+        "Content-Length": "179",
+        "Cache-Control": "private, no-store",
+        "Vary": "Cookie",
+        "X-Content-Type-Options": "nosniff",
+        "X-Frame-Options": "DENY",
+        "Referrer-Policy": "same-origin"
+      },
+      "bytes": 179,
+      "cookies": []
+    },
+    "Funnel /teacher/login/": {
+      "status": 200,
+      "seconds": 0.025,
+      "headers": {
+        "Content-Type": "text/html; charset=utf-8",
+        "Content-Length": "21308",
+        "Cache-Control": "private, no-store",
+        "Vary": "Cookie, Accept-Encoding",
+        "X-Content-Type-Options": "nosniff",
+        "X-Frame-Options": "DENY",
+        "Referrer-Policy": "same-origin"
+      },
+      "bytes": 21308,
+      "cookies": [
+        {
+          "name": "schoolwork2_csrftoken",
+          "secure": false,
+          "httponly": false
+        }
+      ]
+    },
+    "Funnel /": {
+      "status": 200,
+      "seconds": 0.065,
+      "headers": {
+        "Content-Type": "text/html; charset=utf-8",
+        "Content-Length": "75715",
+        "Cache-Control": "private, no-store",
+        "Vary": "Cookie, Accept-Encoding",
+        "X-Content-Type-Options": "nosniff",
+        "X-Frame-Options": "DENY",
+        "Referrer-Policy": "same-origin"
+      },
+      "bytes": 75715,
+      "cookies": []
+    }
+  },
+  "static_assets": {
+    "/static/js/site_preferences.js": {
+      "identity": {
+        "status": 200,
+        "seconds": 0.001,
+        "headers": {
+          "Content-Type": "text/javascript; charset=\"utf-8\"",
+          "Content-Length": "4081",
+          "Cache-Control": "max-age=60, public",
+          "Vary": "Accept-Encoding",
+          "ETag": "\"6af0b211-ff1\"",
+          "X-Content-Type-Options": "nosniff",
+          "Referrer-Policy": "same-origin"
+        },
+        "bytes": 4081,
+        "cookies": []
+      },
+      "gzip": {
+        "status": 200,
+        "seconds": 0.001,
+        "headers": {
+          "Content-Type": "text/javascript; charset=\"utf-8\"",
+          "Content-Encoding": "gzip",
+          "Content-Length": "1504",
+          "Cache-Control": "max-age=60, public",
+          "Vary": "Accept-Encoding",
+          "ETag": "\"6af0b211-ff1\"",
+          "X-Content-Type-Options": "nosniff",
+          "Referrer-Policy": "same-origin"
+        },
+        "bytes": 1504,
+        "cookies": []
+      },
+      "decoded_matches": true
+    },
+    "/static/css/main.css": {
+      "identity": {
+        "status": 200,
+        "seconds": 0.001,
+        "headers": {
+          "Content-Type": "text/css; charset=\"utf-8\"",
+          "Content-Length": "137842",
+          "Cache-Control": "max-age=60, public",
+          "Vary": "Accept-Encoding",
+          "ETag": "\"6af0b211-21a72\"",
+          "X-Content-Type-Options": "nosniff",
+          "Referrer-Policy": "same-origin"
+        },
+        "bytes": 137842,
+        "cookies": []
+      },
+      "gzip": {
+        "status": 200,
+        "seconds": 0.001,
+        "headers": {
+          "Content-Type": "text/css; charset=\"utf-8\"",
+          "Content-Encoding": "gzip",
+          "Content-Length": "23462",
+          "Cache-Control": "max-age=60, public",
+          "Vary": "Accept-Encoding",
+          "ETag": "\"6af0b211-21a72\"",
+          "X-Content-Type-Options": "nosniff",
+          "Referrer-Policy": "same-origin"
+        },
+        "bytes": 23462,
+        "cookies": []
+      },
+      "decoded_matches": true
+    },
+    "/static/css/submission_notifications.css": {
+      "identity": {
+        "status": 200,
+        "seconds": 0.001,
+        "headers": {
+          "Content-Type": "text/css; charset=\"utf-8\"",
+          "Content-Length": "4672",
+          "Cache-Control": "max-age=60, public",
+          "Vary": "Accept-Encoding",
+          "ETag": "\"6af0b211-1240\"",
+          "X-Content-Type-Options": "nosniff",
+          "Referrer-Policy": "same-origin"
+        },
+        "bytes": 4672,
+        "cookies": []
+      },
+      "gzip": {
+        "status": 200,
+        "seconds": 0.001,
+        "headers": {
+          "Content-Type": "text/css; charset=\"utf-8\"",
+          "Content-Encoding": "gzip",
+          "Content-Length": "1323",
+          "Cache-Control": "max-age=60, public",
+          "Vary": "Accept-Encoding",
+          "ETag": "\"6af0b211-1240\"",
+          "X-Content-Type-Options": "nosniff",
+          "Referrer-Policy": "same-origin"
+        },
+        "bytes": 1323,
+        "cookies": []
+      },
+      "decoded_matches": true
+    },
+    "/static/css/platform_layout.css": {
+      "identity": {
+        "status": 200,
+        "seconds": 0.001,
+        "headers": {
+          "Content-Type": "text/css; charset=\"utf-8\"",
+          "Content-Length": "22620",
+          "Cache-Control": "max-age=60, public",
+          "Vary": "Accept-Encoding",
+          "ETag": "\"6af0b211-585c\"",
+          "X-Content-Type-Options": "nosniff",
+          "Referrer-Policy": "same-origin"
+        },
+        "bytes": 22620,
+        "cookies": []
+      },
+      "gzip": {
+        "status": 200,
+        "seconds": 0.001,
+        "headers": {
+          "Content-Type": "text/css; charset=\"utf-8\"",
+          "Content-Encoding": "gzip",
+          "Content-Length": "4931",
+          "Cache-Control": "max-age=60, public",
+          "Vary": "Accept-Encoding",
+          "ETag": "\"6af0b211-585c\"",
+          "X-Content-Type-Options": "nosniff",
+          "Referrer-Policy": "same-origin"
+        },
+        "bytes": 4931,
+        "cookies": []
+      },
+      "decoded_matches": true
+    },
+    "/static/css/school_ui.css": {
+      "identity": {
+        "status": 200,
+        "seconds": 0.001,
+        "headers": {
+          "Content-Type": "text/css; charset=\"utf-8\"",
+          "Content-Length": "46492",
+          "Cache-Control": "max-age=60, public",
+          "Vary": "Accept-Encoding",
+          "ETag": "\"6af0b211-b59c\"",
+          "X-Content-Type-Options": "nosniff",
+          "Referrer-Policy": "same-origin"
+        },
+        "bytes": 46492,
+        "cookies": []
+      },
+      "gzip": {
+        "status": 200,
+        "seconds": 0.001,
+        "headers": {
+          "Content-Type": "text/css; charset=\"utf-8\"",
+          "Content-Encoding": "gzip",
+          "Content-Length": "8583",
+          "Cache-Control": "max-age=60, public",
+          "Vary": "Accept-Encoding",
+          "ETag": "\"6af0b211-b59c\"",
+          "X-Content-Type-Options": "nosniff",
+          "Referrer-Policy": "same-origin"
+        },
+        "bytes": 8583,
+        "cookies": []
+      },
+      "decoded_matches": true
+    },
+    "/static/js/main.js": {
+      "identity": {
+        "status": 200,
+        "seconds": 0.001,
+        "headers": {
+          "Content-Type": "text/javascript; charset=\"utf-8\"",
+          "Content-Length": "49012",
+          "Cache-Control": "max-age=60, public",
+          "Vary": "Accept-Encoding",
+          "ETag": "\"6af0b211-bf74\"",
+          "X-Content-Type-Options": "nosniff",
+          "Referrer-Policy": "same-origin"
+        },
+        "bytes": 49012,
+        "cookies": []
+      },
+      "gzip": {
+        "status": 200,
+        "seconds": 0.001,
+        "headers": {
+          "Content-Type": "text/javascript; charset=\"utf-8\"",
+          "Content-Encoding": "gzip",
+          "Content-Length": "12155",
+          "Cache-Control": "max-age=60, public",
+          "Vary": "Accept-Encoding",
+          "ETag": "\"6af0b211-bf74\"",
+          "X-Content-Type-Options": "nosniff",
+          "Referrer-Policy": "same-origin"
+        },
+        "bytes": 12155,
+        "cookies": []
+      },
+      "decoded_matches": true
+    }
+  },
+  "private_backup_file_metadata": [
+    {
+      "name": ".env.bak-4.8.13c",
+      "mode": "0o600",
+      "bytes": 2959
+    },
+    {
+      "name": ".env.bak-4.8.13e",
+      "mode": "0o600",
+      "bytes": 2950
+    },
+    {
+      "name": ".env.bak-4.8.13b",
+      "mode": "0o600",
+      "bytes": 2966
+    },
+    {
+      "name": ".env.bak-compose-file-20261108",
+      "mode": "0o600",
+      "bytes": 2972
+    },
+    {
+      "name": ".env.bak-4.8.13d",
+      "mode": "0o600",
+      "bytes": 2972
+    }
+  ],
+  "dockerignore_private_patterns": [
+    "venv/",
+    "env/",
+    ".venv/",
+    ".env",
+    ".env.local",
+    ".env*",
+    "!.env.example"
+  ],
+  "gitignore_private_patterns": [
+    "# Virtual environment",
+    "venv/",
+    "env/",
+    ".env",
+    ".venv/",
+    "# Environment variables",
+    ".env",
+    ".env.local",
+    ".env.*.local",
+    ".env.before-image-update",
+    ".env.image-*"
+  ],
+  "image_private_files": {
+    "environment_files_in_image": [
+      {
+        "name": ".env.example",
+        "mode": "0o664"
+      }
+    ]
+  },
+  "current_ai": {
+    "connection_limits": [
+      {
+        "provider": "gemini",
+        "quota_limits": {},
+        "explicit_quota_group": false
+      },
+      {
+        "provider": "openrouter",
+        "quota_limits": {},
+        "explicit_quota_group": false
+      },
+      {
+        "provider": "groq",
+        "quota_limits": {},
+        "explicit_quota_group": false
+      },
+      {
+        "provider": "gemini",
+        "quota_limits": {},
+        "explicit_quota_group": false
+      },
+      {
+        "provider": "cloudflare",
+        "quota_limits": {},
+        "explicit_quota_group": false
+      }
+    ],
+    "requests_since_current_app_start": [],
+    "jobs_since_current_app_start": []
+  }
+}

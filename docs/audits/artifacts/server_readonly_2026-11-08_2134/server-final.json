@@ -1,0 +1,668 @@
+{
+  "started_at_utc": "2026-11-08T19:45:32.020911+00:00",
+  "mode": "read-only; no external AI requests",
+  "containers_before": {
+    "schoolnet_app": {
+      "id": "4dd11d77ab98d2af45f3ba68d6941fdbd085152c0683bc0b4faf6442d4b0f76e",
+      "image": "schoolwork2-app:4.8.13f-ea2947d8ef77",
+      "image_id": "sha256:a34cea56ba383403c1f899d0d1ceb5b8cba5305cf3199998af2fec34df1510b9",
+      "started_at": "2026-11-08T19:43:28.96770509Z",
+      "restart_count": 0,
+      "health": "healthy",
+      "oom_killed": false,
+      "user": "root",
+      "memory_limit": 0,
+      "read_only_root": false,
+      "ports": {
+        "8000/tcp": [
+          {
+            "HostIp": "",
+            "HostPort": "8080"
+          }
+        ]
+      },
+      "networks": [
+        "schoolwork2_default",
+        "schoolwork2_runner_control"
+      ],
+      "docker_socket_mounted": false
+    },
+    "schoolnet_ai_worker": {
+      "id": "12871481c2752627d38f00eae9cf01951c572898cd42b2b559e56c4e82f8bcfe",
+      "image": "schoolwork2-app:4.8.13f-ea2947d8ef77",
+      "image_id": "sha256:a34cea56ba383403c1f899d0d1ceb5b8cba5305cf3199998af2fec34df1510b9",
+      "started_at": "2026-11-08T19:43:40.703731179Z",
+      "restart_count": 0,
+      "health": "healthy",
+      "oom_killed": false,
+      "user": "root",
+      "memory_limit": 0,
+      "read_only_root": false,
+      "ports": {},
+      "networks": [
+        "schoolwork2_default"
+      ],
+      "docker_socket_mounted": false
+    },
+    "schoolnet_postgres": {
+      "id": "66d210afa9de93e9ac30d664e67983d3f036f71813a4fb375ae12452a743680e",
+      "image": "postgres:16",
+      "image_id": "sha256:f1c3376c26f2609ab9f29f71f824103fe2fcd8ee0346485cb6122a4f93df6f94",
+      "started_at": "2026-11-08T07:57:50.576772805Z",
+      "restart_count": 0,
+      "health": "healthy",
+      "oom_killed": false,
+      "user": "root",
+      "memory_limit": 0,
+      "read_only_root": false,
+      "ports": {
+        "5432/tcp": [
+          {
+            "HostIp": "",
+            "HostPort": "5433"
+          }
+        ]
+      },
+      "networks": [
+        "schoolwork2_default"
+      ],
+      "docker_socket_mounted": false
+    },
+    "schoolnet_updater": {
+      "id": "f232aa88f6c0efefb5ed5616dd50a5d224829880f28257110e8189cae36f2d21",
+      "image": "schoolwork2-updater:latest",
+      "image_id": "sha256:1c57667bb4ac1de1968e69ac6fb21d9e28b1bb66a603d6d7915e0dbad3d5b447",
+      "started_at": "2026-11-08T19:44:15.944909776Z",
+      "restart_count": 0,
+      "health": null,
+      "oom_killed": false,
+      "user": "root",
+      "memory_limit": 0,
+      "read_only_root": false,
+      "ports": {},
+      "networks": [
+        "schoolwork2_default"
+      ],
+      "docker_socket_mounted": true
+    },
+    "schoolwork2-code_runner-1": {
+      "id": "66401d7bc61e88c0d8b57ffa8f3cb40d897f4a98659086d02f76ae7505cb38c5",
+      "image": "schoolwork2-python-runner:4.5.7",
+      "image_id": "sha256:c9ca74577f2a69977ce9f0258f805cd406d35083d77d730c73749508b53cd00b",
+      "started_at": "2026-11-08T07:57:50.442578157Z",
+      "restart_count": 0,
+      "health": "healthy",
+      "oom_killed": false,
+      "user": "root",
+      "memory_limit": 0,
+      "read_only_root": false,
+      "ports": {},
+      "networks": [
+        "schoolwork2_runner_control"
+      ],
+      "docker_socket_mounted": true
+    }
+  },
+  "django_check": {
+    "returncode": 0,
+    "stdout": "",
+    "stderr": "System check identified some issues:\n\nWARNINGS:\n?: (security.W004) You have not set a value for the SECURE_HSTS_SECONDS setting. If your entire site is served only over SSL, you may want to consider setting a value and enabling HTTP Strict Transport Security. Be sure to read the documentation first; enabling HSTS carelessly can cause serious, irreversible problems.\n?: (security.W008) Your SECURE_SSL_REDIRECT setting is not set to True. Unless your site should be available over both SSL and non-SSL connections, you may want to either set this setting True or configure a load balancer or reverse-proxy server to redirect all connections to HTTPS.\n?: (security.W012) SESSION_COOKIE_SECURE is not set to True. Using a secure-only session cookie makes it more difficult for network traffic sniffers to hijack user sessions.\n?: (security.W016) You have 'django.middleware.csrf.CsrfViewMiddleware' in your MIDDLEWARE, but you have not set CSRF_COOKIE_SECURE to True. Using a secure-only CSRF cookie makes it more difficult for network traffic sniffers to steal the CSRF token.\n\nSystem check identified 4 issues (0 silenced).\n"
+  },
+  "migration_check": {
+    "returncode": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  "dependencies": {
+    "returncode": 0,
+    "stdout": "No broken requirements found.\n",
+    "stderr": ""
+  },
+  "host_locale": {
+    "returncode": 0,
+    "stdout": "UTF-8\n",
+    "stderr": ""
+  },
+  "swap_activity": {
+    "returncode": 0,
+    "stdout": "procs -----------memory---------- ---swap-- -----io---- -system-- -------cpu-------\n r  b   swpd   free   buff  cache   si   so    bi    bo   in   cs us sy id wa st gu\n 5  0 1151796 1614968  50860 3566912    2   25   892  1662 3712   14 10  3 86  1  0  0\n 2  1 1151796 1491600  50920 3568780    0    0  1924  2140 5872 7164 72  6 17  5  0  0\n 9  0 1151796 1512548  51392 3578736    0    0 10388    96 11759 31494 64  9 15 11  0  0\n",
+    "stderr": ""
+  },
+  "disk_usage": {
+    "returncode": 0,
+    "stdout": "TYPE            TOTAL     ACTIVE    SIZE      RECLAIMABLE\nImages          39        17        19.69GB   329.2MB (1%)\nContainers      22        19        895.8MB   12.29kB (0%)\nLocal Volumes   22        18        5.684GB   162.3MB (2%)\nBuild Cache     297       0         6.638GB   2.346GB\n",
+    "stderr": ""
+  },
+  "server_git": {
+    "returncode": 0,
+    "stdout": " M CHANGELOG.md\n M Dockerfile\n M README.md\n M RELEASES.json\n M VERSION\n M compose.yaml\n M docs/README.md\n M feed/ai_concurrency.py\n M feed/ai_connections.py\n M feed/ai_context.py\n M feed/ai_jobs.py\n M feed/ai_model_catalog.py\n M feed/ai_provenance.py\n M feed/changelog.py\n M feed/gemini_service.py\n M feed/job_models.py\n M feed/management/commands/process_ai_jobs.py\n M feed/management/commands/run_ai_job.py\n M feed/models.py\n M feed/services/updates.py\n M feed/tests.py\n M feed/tests_ai_assessment_v4.py\n M feed/tests_ai_detection_formats_v413.py\n M feed/tests_ai_payload.py\n M feed/tests_ai_progress.py\n M feed/tests_ai_student_feedback.py\n M feed/tests_audit_fixes.py\n M feed/tests_system_updates.py\n M feed/urls.py\n M feed/views.py\n M schoolnet/settings.py\n M scripts/select_release_image.py\n M scripts/test_updater_jobs.py\n M scripts/test_updater_service.py\n M scripts/update_metadata.py\n M static/js/ai_jobs.js\n M templates/feed/ai_batch_check.html\n M templates/feed/components/ai_connections.html\n M templates/feed/components/viewer_ai_panel.html\n M templates/feed/file_viewer.html\n M templates/feed/settings.html\n?? .env.bak-4.8.13b\n?? .env.bak-4.8.13c\n?? .env.bak-4.8.13d\n?? .env.bak-4.8.13e\n?? .env.bak-4.8.13f\n?? .env.bak-compose-file-20261108\n?? docs/audits/AI_ERRORS_CAUSE_REPORT_2026-11-08.md\n?? docs/audits/AI_IMPLEMENTATION_2026-11-08.md\n?? docs/audits/AI_PRIVACY_AND_GRADING_FIX_2026-11-08.md\n?? docs/audits/AI_PRIVACY_PERFORMANCE_2026-11-08.md\n?? docs/audits/AI_RELEASE_4_8_13_2026-11-08.md\n?? docs/audits/AI_TEACHER_OVERRIDE_SERVER_2026-11-08.md\n?? docs/audits/ASSESSMENT_PIPELINE_4_8_13b.md\n?? docs/audits/ASSESSMENT_STABILITY_4_8_13d.md\n?? docs/audits/CLASS_MISMATCH_FIX_4_8_13c.md\n?? docs/audits/PERFORMANCE_4_8_13E_2026-11-08.md\n?? docs/audits/READINESS_4_8_13D_2026-11-08.md\n?? docs/audits/REAL_WORKS_COMPARISON_4_8_13b.md\n?? docs/audits/SERVER_LOCALE_FIX_2026-11-08.md\n?? docs/audits/artifacts/\n?? docs/guides/AI_CHECKING.md\n?? docs/plans/AI_PRIVACY_AND_GRADING_FIX_PLAN.md\n?? docs/plans/SECURITY_HARDENING_HTTPS_2026-11-08.md\n?? feed/ai_batches.py\n?? feed/ai_compatibility.py\n?? feed/ai_metrics.py\n?? feed/ai_preparation.py\n?? feed/ai_privacy.py\n?? feed/ai_scheduler.py\n?? feed/ai_transport.py\n?? feed/migrations/0073_ai_parallel_privacy.py\n?? feed/migrations/0074_privacy_default_redact.py\n?? feed/tests_ai_parallel_privacy.py\n?? feed/tests_ai_provider_requests.py\n?? feed/tests_ai_stability_policy.py\n?? feed/tests_ai_teacher_privacy_override.py\n?? feed/tests_ai_unreadable_links.py\n?? feed/tests_class_mismatch_regression.py\n?? scripts/ai_live_provider_trial.py\n?? scripts/ai_real_works_comparison.py\n?? scripts/ai_run_live_server_trial.py\n?? scripts/ai_server_trial.py\n?? scripts/render_ai_synthetic_pages.py\n?? scripts/test_ai_batch_browser.cjs\n?? scripts/test_ai_synthetic_runtime.py\n",
+    "stderr": ""
+  },
+  "runtime_fingerprint_app": {
+    "returncode": 0,
+    "stdout": "ea2947d8ef7775470b6cad924e2a1b374634fe9c68610ee071763b054893003e\n",
+    "stderr": ""
+  },
+  "runtime_fingerprint_worker": {
+    "returncode": 0,
+    "stdout": "ea2947d8ef7775470b6cad924e2a1b374634fe9c68610ee071763b054893003e\n",
+    "stderr": ""
+  },
+  "checkout_fingerprint": {
+    "returncode": 0,
+    "stdout": "ea2947d8ef7775470b6cad924e2a1b374634fe9c68610ee071763b054893003e\n",
+    "stderr": ""
+  },
+  "listen_ports": {
+    "returncode": 0,
+    "stdout": "State  Recv-Q Send-Q                          Local Address:Port  Peer Address:Port\nLISTEN 0      4096                  100.85.197.7%tailscale0:443        0.0.0.0:*   \nLISTEN 0      4096                                  0.0.0.0:3001       0.0.0.0:*   \nLISTEN 0      4096                               127.0.0.54:53         0.0.0.0:*   \nLISTEN 0      4096                  100.85.197.7%tailscale0:8443       0.0.0.0:*   \nLISTEN 0      4096                            127.0.0.53%lo:53         0.0.0.0:*   \nLISTEN 0      4096                  100.85.197.7%tailscale0:33761      0.0.0.0:*   \nLISTEN 0      511                                 127.0.0.1:18080      0.0.0.0:*   \nLISTEN 0      4096                                  0.0.0.0:19999      0.0.0.0:*   \nLISTEN 0      4096                                  0.0.0.0:8085       0.0.0.0:*   \nLISTEN 0      4096                                  0.0.0.0:8080       0.0.0.0:*   \nLISTEN 0      128                                 127.0.0.1:4317       0.0.0.0:*   \nLISTEN 0      4096                                  0.0.0.0:8000       0.0.0.0:*   \nLISTEN 0      4096                  100.85.197.7%tailscale0:10000      0.0.0.0:*   \nLISTEN 0      4096                                127.0.0.1:19938      0.0.0.0:*   \nLISTEN 0      4096                                  0.0.0.0:8800       0.0.0.0:*   \nLISTEN 0      4096                                  0.0.0.0:9000       0.0.0.0:*   \nLISTEN 0      4096                                127.0.0.1:11434      0.0.0.0:*   \nLISTEN 0      50                                    0.0.0.0:139        0.0.0.0:*   \nLISTEN 0      4096                                  0.0.0.0:22         0.0.0.0:*   \nLISTEN 0      4096                                127.0.0.1:8125       0.0.0.0:*   \nLISTEN 0      50                                    0.0.0.0:445        0.0.0.0:*   \nLISTEN 0      4096                                  0.0.0.0:9443       0.0.0.0:*   \nLISTEN 0      4096                                  0.0.0.0:5433       0.0.0.0:*   \nLISTEN 0      4096                                  0.0.0.0:5432       0.0.0.0:*   \nLISTEN 0      4096                                     [::]:3001          [::]:*   \nLISTEN 0      4096                                     [::]:19999         [::]:*   \nLISTEN 0      4096                                     [::]:8080          [::]:*   \nLISTEN 0      4096                                     [::]:8000          [::]:*   \nLISTEN 0      4096                                     [::]:8800          [::]:*   \nLISTEN 0      4096                                        *:9090             *:*   \nLISTEN 0      4096                                     [::]:9000          [::]:*   \nLISTEN 0      4096   [fd7a:115c:a1e0::384b:c508]%tailscale0:10000         [::]:*   \nLISTEN 0      50                                       [::]:139           [::]:*   \nLISTEN 0      4096                                     [::]:22            [::]:*   \nLISTEN 0      511                                         *:80               *:*   \nLISTEN 0      50                                       [::]:445           [::]:*   \nLISTEN 0      4096   [fd7a:115c:a1e0::384b:c508]%tailscale0:443           [::]:*   \nLISTEN 0      4096   [fd7a:115c:a1e0::384b:c508]%tailscale0:36874         [::]:*   \nLISTEN 0      4096   [fd7a:115c:a1e0::384b:c508]%tailscale0:8443          [::]:*   \nLISTEN 0      4096                                     [::]:9443          [::]:*   \nLISTEN 0      4096                                     [::]:5433          [::]:*   \nLISTEN 0      4096                                     [::]:5432          [::]:*   \n",
+    "stderr": ""
+  },
+  "funnel": {
+    "returncode": 0,
+    "stdout": "{\n  \"TCP\": {\n    \"10000\": {\n      \"HTTPS\": true\n    },\n    \"443\": {\n      \"HTTPS\": true\n    },\n    \"8443\": {\n      \"HTTPS\": true\n    }\n  },\n  \"Web\": {\n    \"localwork.tail9ec47d.ts.net:10000\": {\n      \"Handlers\": {\n        \"/\": {\n          \"Proxy\": \"http://127.0.0.1:8085\"\n        }\n      }\n    },\n    \"localwork.tail9ec47d.ts.net:443\": {\n      \"Handlers\": {\n        \"/\": {\n          \"Proxy\": \"http://127.0.0.1:8080\"\n        },\n        \"/test\": {\n          \"Proxy\": \"http://127.0.0.1:8000\"\n        }\n      }\n    },\n    \"localwork.tail9ec47d.ts.net:8443\": {\n      \"Handlers\": {\n        \"/\": {\n          \"Proxy\": \"http://127.0.0.1:18080\"\n        }\n      }\n    }\n  },\n  \"AllowFunnel\": {\n    \"localwork.tail9ec47d.ts.net:10000\": true,\n    \"localwork.tail9ec47d.ts.net:443\": true,\n    \"localwork.tail9ec47d.ts.net:8443\": true\n  }\n}\n",
+    "stderr": ""
+  },
+  "container_resources": {
+    "returncode": 0,
+    "stdout": "{\"BlockIO\":\"13.6MB / 12.2MB\",\"CPUPerc\":\"0.05%\",\"Container\":\"schoolnet_app\",\"ID\":\"4dd11d77ab98\",\"MemPerc\":\"3.48%\",\"MemUsage\":\"250.8MiB / 7.032GiB\",\"Name\":\"schoolnet_app\",\"NetIO\":\"782kB / 149kB\",\"PIDs\":\"9\"}\n{\"BlockIO\":\"86kB / 0B\",\"CPUPerc\":\"3.43%\",\"Container\":\"schoolnet_ai_worker\",\"ID\":\"12871481c275\",\"MemPerc\":\"1.03%\",\"MemUsage\":\"74.14MiB / 7.032GiB\",\"Name\":\"schoolnet_ai_worker\",\"NetIO\":\"4.63MB / 4.49MB\",\"PIDs\":\"4\"}\n{\"BlockIO\":\"59.5MB / 1.27GB\",\"CPUPerc\":\"1.01%\",\"Container\":\"schoolnet_postgres\",\"ID\":\"66d210afa9de\",\"MemPerc\":\"0.71%\",\"MemUsage\":\"51.48MiB / 7.032GiB\",\"Name\":\"schoolnet_postgres\",\"NetIO\":\"2.22GB / 2.81GB\",\"PIDs\":\"12\"}\n{\"BlockIO\":\"23.4MB / 20.5kB\",\"CPUPerc\":\"0.01%\",\"Container\":\"schoolnet_updater\",\"ID\":\"f232aa88f6c0\",\"MemPerc\":\"0.50%\",\"MemUsage\":\"35.8MiB / 7.032GiB\",\"Name\":\"schoolnet_updater\",\"NetIO\":\"789kB / 30.1kB\",\"PIDs\":\"1\"}\n{\"BlockIO\":\"34.9MB / 17.3MB\",\"CPUPerc\":\"0.01%\",\"Container\":\"schoolwork2-code_runner-1\",\"ID\":\"66401d7bc61e\",\"MemPerc\":\"0.16%\",\"MemUsage\":\"11.25MiB / 7.032GiB\",\"Name\":\"schoolwork2-code_runner-1\",\"NetIO\":\"3.58kB / 126B\",\"PIDs\":\"2\"}\n",
+    "stderr": ""
+  },
+  "log_summaries": {
+    "schoolnet_app": {
+      "scope": "last up to 4000 lines in past 24h of current container",
+      "lines": 44,
+      "http_status_counts": {
+        "200": 31
+      },
+      "exception_counts": {},
+      "marker_counts": {
+        "Booting worker": 3
+      },
+      "last_timestamps": {
+        "Booting worker": "2026-11-08T19:43:37.929265211Z"
+      },
+      "returncode": 0
+    },
+    "schoolnet_ai_worker": {
+      "scope": "last up to 4000 lines in past 24h of current container",
+      "lines": 0,
+      "http_status_counts": {},
+      "exception_counts": {},
+      "marker_counts": {},
+      "last_timestamps": {},
+      "returncode": 0
+    },
+    "schoolnet_postgres": {
+      "scope": "last up to 4000 lines in past 24h of current container",
+      "lines": 0,
+      "http_status_counts": {},
+      "exception_counts": {},
+      "marker_counts": {},
+      "last_timestamps": {},
+      "returncode": 0
+    },
+    "schoolnet_updater": {
+      "scope": "last up to 4000 lines in past 24h of current container",
+      "lines": 2,
+      "http_status_counts": {},
+      "exception_counts": {},
+      "marker_counts": {},
+      "last_timestamps": {},
+      "returncode": 0
+    },
+    "schoolwork2-code_runner-1": {
+      "scope": "last up to 4000 lines in past 24h of current container",
+      "lines": 0,
+      "http_status_counts": {},
+      "exception_counts": {},
+      "marker_counts": {},
+      "last_timestamps": {},
+      "returncode": 0
+    }
+  },
+  "application": {
+    "db_read_only": "on",
+    "db_bytes": 25369623,
+    "db_active_connections": 1,
+    "db_idle_in_transaction": 0,
+    "oldest_other_transaction_seconds": null,
+    "security": {
+      "debug": false,
+      "allowed_hosts": [
+        "*"
+      ],
+      "secret_key_is_default": false,
+      "password_validators_count": 0,
+      "session_cookie_secure": false,
+      "csrf_cookie_secure": false,
+      "session_cookie_httponly": true,
+      "csrf_cookie_httponly": false,
+      "secure_ssl_redirect": false,
+      "hsts_seconds": 0,
+      "trust_proxy_https": true,
+      "csrf_trusted_origins_count": 1,
+      "ai_worker_concurrency": 3,
+      "ai_student_reserved": 1,
+      "ai_job_timeout": 600,
+      "ai_request_deadline": 150
+    },
+    "ai_settings": {
+      "enabled": true,
+      "privacy_mode": "redact",
+      "connections": [
+        {
+          "provider": "gemini",
+          "has_key": true,
+          "has_custom_endpoint": false,
+          "quota_limits": {}
+        },
+        {
+          "provider": "openrouter",
+          "has_key": true,
+          "has_custom_endpoint": false,
+          "quota_limits": {}
+        },
+        {
+          "provider": "groq",
+          "has_key": true,
+          "has_custom_endpoint": false,
+          "quota_limits": {}
+        },
+        {
+          "provider": "gemini",
+          "has_key": true,
+          "has_custom_endpoint": false,
+          "quota_limits": {}
+        },
+        {
+          "provider": "cloudflare",
+          "has_key": true,
+          "has_custom_endpoint": true,
+          "quota_limits": {}
+        }
+      ],
+      "enabled_model_count": 11
+    },
+    "active_jobs": [],
+    "jobs_24h": [
+      {
+        "kind": "prepare",
+        "status": "succeeded",
+        "count": 1
+      },
+      {
+        "kind": "teacher_check",
+        "status": "failed",
+        "count": 8
+      },
+      {
+        "kind": "teacher_check",
+        "status": "succeeded",
+        "count": 13
+      },
+      {
+        "kind": "understanding",
+        "status": "succeeded",
+        "count": 2
+      }
+    ],
+    "errors": [
+      {
+        "window": "24h",
+        "groups": [
+          {
+            "provider": "gemini",
+            "model_name": "gemini-3.1-flash-lite",
+            "status_code": 503,
+            "error_type": "HTTP 503",
+            "count": 6,
+            "latest": "2026-11-08 15:40:13.380855+00:00"
+          },
+          {
+            "provider": "cloudflare",
+            "model_name": "@cf/meta/llama-4-scout-17b-16e-instruct",
+            "status_code": 400,
+            "error_type": "HTTP 400",
+            "count": 6,
+            "latest": "2026-11-08 15:40:50.677003+00:00"
+          },
+          {
+            "provider": "gemini",
+            "model_name": "gemini-3.5-flash-lite",
+            "status_code": 400,
+            "error_type": "HTTP 400",
+            "count": 6,
+            "latest": "2026-11-08 15:40:23.887903+00:00"
+          },
+          {
+            "provider": "cloudflare",
+            "model_name": "@cf/qwen/qwen3.8-27b",
+            "status_code": 400,
+            "error_type": "HTTP 400",
+            "count": 6,
+            "latest": "2026-11-08 15:40:56.055108+00:00"
+          },
+          {
+            "provider": "cloudflare",
+            "model_name": "@cf/zai-org/glm-4.7-flash",
+            "status_code": 400,
+            "error_type": "HTTP 400",
+            "count": 6,
+            "latest": "2026-11-08 15:40:38.803411+00:00"
+          },
+          {
+            "provider": "openrouter",
+            "model_name": "openrouter/free",
+            "status_code": 413,
+            "error_type": "HTTP 413",
+            "count": 5,
+            "latest": "2026-11-08 15:40:16.933959+00:00"
+          },
+          {
+            "provider": "gemini",
+            "model_name": "gemini-3.7-flash",
+            "status_code": 503,
+            "error_type": "HTTP 503",
+            "count": 4,
+            "latest": "2026-11-08 15:38:11.285356+00:00"
+          },
+          {
+            "provider": "gemini",
+            "model_name": "gemini-3.8-flash",
+            "status_code": 503,
+            "error_type": "HTTP 503",
+            "count": 3,
+            "latest": "2026-11-08 15:35:57.542190+00:00"
+          },
+          {
+            "provider": "openrouter",
+            "model_name": "openrouter/free",
+            "status_code": 200,
+            "error_type": "HTTP 200",
+            "count": 2,
+            "latest": "2026-11-08 15:33:32.777295+00:00"
+          },
+          {
+            "provider": "gemini",
+            "model_name": "gemini-3.7-flash",
+            "status_code": 429,
+            "error_type": "HTTP 429",
+            "count": 1,
+            "latest": "2026-11-08 15:40:28.120588+00:00"
+          },
+          {
+            "provider": "gemini",
+            "model_name": "gemini-3.1-flash-lite",
+            "status_code": 0,
+            "error_type": "API Error",
+            "count": 1,
+            "latest": "2026-11-07 22:56:46.781463+00:00"
+          },
+          {
+            "provider": "gemini",
+            "model_name": "gemini-3.8-flash",
+            "status_code": 429,
+            "error_type": "HTTP 429",
+            "count": 1,
+            "latest": "2026-11-08 15:38:15.585102+00:00"
+          }
+        ]
+      },
+      {
+        "window": "2h",
+        "groups": []
+      }
+    ],
+    "ai_requests_2h": {
+      "count": 11,
+      "successful_api_responses": 10,
+      "status_counts": {
+        "200": 10,
+        "0": 1
+      },
+      "median_latency_ms": 11237,
+      "p95_latency_ms": 58575
+    },
+    "counts": {
+      "submissions": 451,
+      "assignments": 95
+    },
+    "file_references": [
+      {
+        "model": "Teacher",
+        "field": "avatar_image",
+        "references_checked": 1,
+        "missing_count": 0,
+        "missing_ids": [],
+        "uncheckable": 0
+      },
+      {
+        "model": "AssignmentFile",
+        "field": "file",
+        "references_checked": 213,
+        "missing_count": 0,
+        "missing_ids": [],
+        "uncheckable": 0
+      },
+      {
+        "model": "Submission",
+        "field": "file",
+        "references_checked": 428,
+        "missing_count": 0,
+        "missing_ids": [],
+        "uncheckable": 0
+      },
+      {
+        "model": "SubmissionFile",
+        "field": "file",
+        "references_checked": 433,
+        "missing_count": 0,
+        "missing_ids": [],
+        "uncheckable": 0
+      }
+    ]
+  },
+  "backups_metadata": [
+    {
+      "directory": "/home/yrsadmin/school-deployments/schoolnet-4.8.13f-20261108/backup",
+      "database_bytes": 1959624,
+      "database_mtime": "2026-11-08T19:41:33.432997+00:00",
+      "media_exists": true,
+      "media_bytes": 1463424281,
+      "checksum_manifest_exists": true
+    },
+    {
+      "directory": "/home/yrsadmin/school-deployments/schoolnet-4.8.13e-20261108/backup",
+      "database_bytes": 1959498,
+      "database_mtime": "2026-11-08T19:30:51.665515+00:00",
+      "media_exists": true,
+      "media_bytes": 1463424281,
+      "checksum_manifest_exists": true
+    },
+    {
+      "directory": "/home/yrsadmin/school-deployments/schoolnet-4.8.13d-20261108/backup",
+      "database_bytes": 1958284,
+      "database_mtime": "2026-11-08T19:01:47.664048+00:00",
+      "media_exists": true,
+      "media_bytes": 1463424281,
+      "checksum_manifest_exists": true
+    },
+    {
+      "directory": "/home/yrsadmin/school-deployments/class-mismatch-release-4.8.13c-20261108/backup",
+      "database_bytes": 1917610,
+      "database_mtime": "2026-11-08T18:10:36.196543+00:00",
+      "media_exists": true,
+      "media_bytes": 1463424281,
+      "checksum_manifest_exists": true
+    },
+    {
+      "directory": "/home/yrsadmin/school-deployments/ai-release-4.8.13-evidence-20261108/backup",
+      "database_bytes": 1849473,
+      "database_mtime": "2026-11-08T14:02:10.345218+00:00",
+      "media_exists": true,
+      "media_bytes": 1463424281,
+      "checksum_manifest_exists": true
+    },
+    {
+      "directory": "/home/yrsadmin/school-deployments/ai-release-4.8.13-20261108/backup",
+      "database_bytes": 1844291,
+      "database_mtime": "2026-11-08T13:45:08.423568+00:00",
+      "media_exists": true,
+      "media_bytes": 1463424281,
+      "checksum_manifest_exists": true
+    },
+    {
+      "directory": "/home/yrsadmin/school-deployments/review-workspace-release-20261108-010737/schoolwork2",
+      "database_bytes": 1844251,
+      "database_mtime": "2026-11-07T23:07:38.519300+00:00",
+      "media_exists": false,
+      "media_bytes": null,
+      "checksum_manifest_exists": false
+    },
+    {
+      "directory": "/home/yrsadmin/school-deployments/review-workspace-trial-20261108-003927/schoolwork2",
+      "database_bytes": 1835251,
+      "database_mtime": "2026-11-07T22:39:28.408122+00:00",
+      "media_exists": false,
+      "media_bytes": null,
+      "checksum_manifest_exists": false
+    },
+    {
+      "directory": "/home/yrsadmin/school-deployments/criteria-formatting-20261107-231003/schoolwork2",
+      "database_bytes": 1835002,
+      "database_mtime": "2026-11-07T21:10:04.436283+00:00",
+      "media_exists": false,
+      "media_bytes": null,
+      "checksum_manifest_exists": false
+    },
+    {
+      "directory": "/home/yrsadmin/school-deployments/criteria-formatting-20261107-225826/schoolwork2",
+      "database_bytes": 1834844,
+      "database_mtime": "2026-11-07T20:58:27.605978+00:00",
+      "media_exists": false,
+      "media_bytes": null,
+      "checksum_manifest_exists": false
+    },
+    {
+      "directory": "/home/yrsadmin/school-deployments/assignment-layout-20261107-223524/schoolwork2",
+      "database_bytes": 1832034,
+      "database_mtime": "2026-11-07T20:35:25.707322+00:00",
+      "media_exists": false,
+      "media_bytes": null,
+      "checksum_manifest_exists": false
+    },
+    {
+      "directory": "/home/yrsadmin/school-deployments/organization-20261107-212908/schooljournal",
+      "database_bytes": 489630,
+      "database_mtime": "2026-11-07T19:29:14.138542+00:00",
+      "media_exists": false,
+      "media_bytes": null,
+      "checksum_manifest_exists": false
+    }
+  ],
+  "containers_after": {
+    "schoolnet_app": {
+      "id": "4dd11d77ab98d2af45f3ba68d6941fdbd085152c0683bc0b4faf6442d4b0f76e",
+      "image": "schoolwork2-app:4.8.13f-ea2947d8ef77",
+      "image_id": "sha256:a34cea56ba383403c1f899d0d1ceb5b8cba5305cf3199998af2fec34df1510b9",
+      "started_at": "2026-11-08T19:43:28.96770509Z",
+      "restart_count": 0,
+      "health": "healthy",
+      "oom_killed": false,
+      "user": "root",
+      "memory_limit": 0,
+      "read_only_root": false,
+      "ports": {
+        "8000/tcp": [
+          {
+            "HostIp": "",
+            "HostPort": "8080"
+          }
+        ]
+      },
+      "networks": [
+        "schoolwork2_default",
+        "schoolwork2_runner_control"
+      ],
+      "docker_socket_mounted": false
+    },
+    "schoolnet_ai_worker": {
+      "id": "12871481c2752627d38f00eae9cf01951c572898cd42b2b559e56c4e82f8bcfe",
+      "image": "schoolwork2-app:4.8.13f-ea2947d8ef77",
+      "image_id": "sha256:a34cea56ba383403c1f899d0d1ceb5b8cba5305cf3199998af2fec34df1510b9",
+      "started_at": "2026-11-08T19:43:40.703731179Z",
+      "restart_count": 0,
+      "health": "healthy",
+      "oom_killed": false,
+      "user": "root",
+      "memory_limit": 0,
+      "read_only_root": false,
+      "ports": {},
+      "networks": [
+        "schoolwork2_default"
+      ],
+      "docker_socket_mounted": false
+    },
+    "schoolnet_postgres": {
+      "id": "66d210afa9de93e9ac30d664e67983d3f036f71813a4fb375ae12452a743680e",
+      "image": "postgres:16",
+      "image_id": "sha256:f1c3376c26f2609ab9f29f71f824103fe2fcd8ee0346485cb6122a4f93df6f94",
+      "started_at": "2026-11-08T07:57:50.576772805Z",
+      "restart_count": 0,
+      "health": "healthy",
+      "oom_killed": false,
+      "user": "root",
+      "memory_limit": 0,
+      "read_only_root": false,
+      "ports": {
+        "5432/tcp": [
+          {
+            "HostIp": "",
+            "HostPort": "5433"
+          }
+        ]
+      },
+      "networks": [
+        "schoolwork2_default"
+      ],
+      "docker_socket_mounted": false
+    },
+    "schoolnet_updater": {
+      "id": "f232aa88f6c0efefb5ed5616dd50a5d224829880f28257110e8189cae36f2d21",
+      "image": "schoolwork2-updater:latest",
+      "image_id": "sha256:1c57667bb4ac1de1968e69ac6fb21d9e28b1bb66a603d6d7915e0dbad3d5b447",
+      "started_at": "2026-11-08T19:44:15.944909776Z",
+      "restart_count": 0,
+      "health": null,
+      "oom_killed": false,
+      "user": "root",
+      "memory_limit": 0,
+      "read_only_root": false,
+      "ports": {},
+      "networks": [
+        "schoolwork2_default"
+      ],
+      "docker_socket_mounted": true
+    },
+    "schoolwork2-code_runner-1": {
+      "id": "66401d7bc61e88c0d8b57ffa8f3cb40d897f4a98659086d02f76ae7505cb38c5",
+      "image": "schoolwork2-python-runner:4.5.7",
+      "image_id": "sha256:c9ca74577f2a69977ce9f0258f805cd406d35083d77d730c73749508b53cd00b",
+      "started_at": "2026-11-08T07:57:50.442578157Z",
+      "restart_count": 0,
+      "health": "healthy",
+      "oom_killed": false,
+      "user": "root",
+      "memory_limit": 0,
+      "read_only_root": false,
+      "ports": {},
+      "networks": [
+        "schoolwork2_runner_control"
+      ],
+      "docker_socket_mounted": true
+    }
+  },
+  "containers_unchanged": true,
+  "finished_at_utc": "2026-11-08T19:45:37.891151+00:00"
+}

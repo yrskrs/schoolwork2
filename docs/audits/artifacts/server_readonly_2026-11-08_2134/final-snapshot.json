@@ -1,0 +1,36 @@
+{
+  "time_utc": "2026-11-08T19:50:07.446514+00:00",
+  "health": {
+    "status": 200,
+    "body": {
+      "status": "ok",
+      "version": "4.8.13f",
+      "revision": "9e85cba895bf69471729a1f7cb501120e59f4e90",
+      "source_digest": "ea2947d8ef7775470b6cad924e2a1b374634fe9c68610ee071763b054893003e"
+    }
+  },
+  "server_git_head": "c53924b013dd4c9e0a6d556ded2bb5c42fdefcd0",
+  "containers": {
+    "schoolnet_app": {
+      "image": "schoolwork2-app:4.8.13f-ea2947d8ef77",
+      "id": "4dd11d77ab98d2af45f3ba68d6941fdbd085152c0683bc0b4faf6442d4b0f76e",
+      "status": "running",
+      "health": "healthy",
+      "restart_count": 0
+    },
+    "schoolnet_ai_worker": {
+      "image": "schoolwork2-app:4.8.13f-ea2947d8ef77",
+      "id": "12871481c2752627d38f00eae9cf01951c572898cd42b2b559e56c4e82f8bcfe",
+      "status": "running",
+      "health": "healthy",
+      "restart_count": 0
+    },
+    "schoolnet_postgres": {
+      "image": "postgres:16",
+      "id": "66d210afa9de93e9ac30d664e67983d3f036f71813a4fb375ae12452a743680e",
+      "status": "running",
+      "health": "healthy",
+      "restart_count": 0
+    }
+  }
+}

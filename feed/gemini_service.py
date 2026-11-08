@@ -7074,8 +7074,12 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
 
         from .ai_payload import estimate_text_tokens
         media_tokens_per_item = 1500 if clean_model_name(c_model, c_provider) == 'qwen/qwen3.8-27b' else 1000
-        current_images = [m for m in (inline_media or []) if (m.get('mime_type') or '').startswith('image/') or m.get('mime_type') == 'application/pdf']
-        current_images_count = len(current_images)
+        from .ai_payload import media_image_units
+        # Gemini and native-PDF OpenRouter receive one PDF object; other
+        # providers receive one image per converted page.
+        convert_pdf = not (c_provider == 'gemini' or (c_provider == 'openrouter'
+                          and clean_model_name(c_model, c_provider) != 'openrouter/free'))
+        current_images_count = media_image_units(inline_media, convert_pdf)
         est_tokens = estimate_text_tokens(provider_prompt + provider_system) + len(inline_media or []) * media_tokens_per_item
 
         # 0. Перевірка зафіксованого ліміту контексту (якщо раніше виникала помилка 413 / перевищення контексту)

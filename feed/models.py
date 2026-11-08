@@ -4585,6 +4585,19 @@ class AICriteriaPreset(models.Model):
 
 
 
+class LoginThrottle(models.Model):
+    """Shared failed-login window; keyed by a hash, never by a password."""
+    key = models.CharField(max_length=64, unique=True)
+    failures = models.PositiveIntegerField(default=0)
+    window_started = models.DateTimeField(default=timezone.now)
+    locked_until = models.DateTimeField(null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Обмеження невдалих входів'
+        verbose_name_plural = 'Обмеження невдалих входів'
+
+
 from .job_models import AIJob, StudentAICheckReservation, AIResourceState, AIBatch  # noqa: E402, F401
 from .cloud_models import CloudImport  # noqa: E402, F401
 from .roster_models import RosterReplica, RosterState  # noqa: E402, F401

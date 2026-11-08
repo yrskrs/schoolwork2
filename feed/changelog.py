@@ -3,14 +3,31 @@
 Забезпечує чітке розділення змін для учнів та для вчителів.
 """
 
-SITE_VERSION = "4.8.13f"
-SITE_VERSION_SHORT = "v4.8.13f"
+SITE_VERSION = "4.8.13g"
+SITE_VERSION_SHORT = "v4.8.13g"
 
 CHANGELOG_DATA = [
+{'version': '4.8.13g',
+ 'date': '8 листопада 2026',
+ 'badge': 'Безпека',
+ 'is_latest': True,
+ 'student_changes': [],
+ 'teacher_changes': [{'icon': '🔐',
+                      'title': 'Безпечніший HTTPS і вхід',
+                      'desc': 'Публічний Funnel отримує HSTS і Secure-cookies, а LAN HTTP '
+                              'продовжує працювати. Додано перевірку якості паролів і тимчасове '
+                              'обмеження частих невдалих входів.'},
+                     {'icon': '🖼️',
+                      'title': 'Llama 4 Scout бачить зображення',
+                      'desc': 'Модель Cloudflare Llama 4 Scout тепер має коректні метадані Vision '
+                              'та ліміт зображень; PDF-сторінки враховуються після адаптації.'},
+                     {'icon': '🔒',
+                      'title': 'Менше мережевого доступу',
+                      'desc': 'PostgreSQL більше не публікується на всі LAN-інтерфейси — лише loopback.'}]},
 {'version': '4.8.13f',
  'date': '8 листопада 2026',
  'badge': 'Виправлення',
- 'is_latest': True,
+ 'is_latest': False,
  'student_changes': [],
  'teacher_changes': [{'icon': '🔄',
                       'title': 'Перевірка оновлень знову працює',

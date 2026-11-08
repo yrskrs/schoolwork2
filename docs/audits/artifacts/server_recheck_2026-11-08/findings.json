@@ -1,0 +1,133 @@
+{
+  "time_utc": "2026-11-08T19:57:21.011070+00:00",
+  "health": {
+    "status": "ok",
+    "version": "4.8.13f",
+    "revision": "9e85cba895bf69471729a1f7cb501120e59f4e90",
+    "source_digest": "ea2947d8ef7775470b6cad924e2a1b374634fe9c68610ee071763b054893003e"
+  },
+  "git_status_entries": 86,
+  "private_backups": [
+    {
+      "name": ".env.bak-4.8.13c",
+      "mode": "0o600",
+      "git_ignored": false
+    },
+    {
+      "name": ".env.bak-4.8.13e",
+      "mode": "0o600",
+      "git_ignored": false
+    },
+    {
+      "name": ".env.bak-4.8.13b",
+      "mode": "0o600",
+      "git_ignored": false
+    },
+    {
+      "name": ".env.bak-compose-file-20261108",
+      "mode": "0o600",
+      "git_ignored": false
+    },
+    {
+      "name": ".env.bak-4.8.13f",
+      "mode": "0o600",
+      "git_ignored": false
+    },
+    {
+      "name": ".env.bak-4.8.13d",
+      "mode": "0o600",
+      "git_ignored": false
+    }
+  ],
+  "containers": {
+    "schoolnet_app": {
+      "image": "schoolwork2-app:4.8.13f-ea2947d8ef77",
+      "status": "running",
+      "health": "healthy",
+      "ports": {
+        "8000/tcp": [
+          {
+            "HostIp": "",
+            "HostPort": "8080"
+          }
+        ]
+      }
+    },
+    "schoolnet_ai_worker": {
+      "image": "schoolwork2-app:4.8.13f-ea2947d8ef77",
+      "status": "running",
+      "health": "healthy",
+      "ports": {}
+    },
+    "schoolnet_postgres": {
+      "image": "postgres:16",
+      "status": "running",
+      "health": "healthy",
+      "ports": {
+        "5432/tcp": [
+          {
+            "HostIp": "",
+            "HostPort": "5433"
+          }
+        ]
+      }
+    }
+  },
+  "application": {
+    "scout": {
+      "enabled": true,
+      "supports_vision": false,
+      "max_images": 0
+    },
+    "quotas": [
+      {
+        "provider": "gemini",
+        "quota_limits": {},
+        "explicit_group": false
+      },
+      {
+        "provider": "openrouter",
+        "quota_limits": {},
+        "explicit_group": false
+      },
+      {
+        "provider": "groq",
+        "quota_limits": {},
+        "explicit_group": false
+      },
+      {
+        "provider": "gemini",
+        "quota_limits": {},
+        "explicit_group": false
+      },
+      {
+        "provider": "cloudflare",
+        "quota_limits": {},
+        "explicit_group": false
+      }
+    ],
+    "security": {
+      "SESSION_COOKIE_SECURE": false,
+      "CSRF_COOKIE_SECURE": false,
+      "SECURE_HSTS_SECONDS": 0,
+      "SECURE_SSL_REDIRECT": false,
+      "password_validators_count": 0,
+      "authentication_backends": [
+        "django.contrib.auth.backends.ModelBackend"
+      ],
+      "throttle_named_components": [],
+      "teacher_login_decorators": [],
+      "teacher_login_throttle_marker": false
+    }
+  },
+  "https_login": {
+    "status": 200,
+    "hsts": null,
+    "cookies": [
+      {
+        "name": "schoolwork2_csrftoken",
+        "secure": false
+      }
+    ]
+  }
+}

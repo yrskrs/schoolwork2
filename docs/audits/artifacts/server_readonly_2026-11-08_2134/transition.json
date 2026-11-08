@@ -1,0 +1,105 @@
+{
+  "time_utc": "2026-11-08T19:43:11.551362+00:00",
+  "containers": [
+    {
+      "name": "/schoolnet_ai_worker",
+      "id": "9709a14e543fe229ef6ce4f127f34abd6008fa226813edd436c916b393f61b2f",
+      "image": "schoolwork2-app:4.8.13e-90973619ef73",
+      "status": "exited",
+      "exit_code": 0,
+      "finished_at": "2026-11-08T19:41:22.58242165Z",
+      "started_at": "2026-11-08T19:32:10.257975235Z",
+      "error": "",
+      "oom_killed": false,
+      "health": "unhealthy"
+    },
+    {
+      "name": "/schoolnet_app",
+      "id": "5968a8f69bd74765fdf16fa88a70376be1b37c0c7e1bc9112a2c0cdef2360803",
+      "image": "schoolwork2-app:4.8.13e-90973619ef73",
+      "status": "exited",
+      "exit_code": 137,
+      "finished_at": "2026-11-08T19:41:32.767475344Z",
+      "started_at": "2026-11-08T19:31:58.492923378Z",
+      "error": "",
+      "oom_killed": false,
+      "health": "unhealthy"
+    },
+    {
+      "name": "/schoolnet_updater",
+      "id": "f232aa88f6c0efefb5ed5616dd50a5d224829880f28257110e8189cae36f2d21",
+      "image": "schoolwork2-updater:latest",
+      "status": "running",
+      "exit_code": 0,
+      "finished_at": "2026-11-07T23:41:47.979757665Z",
+      "started_at": "2026-11-08T07:57:50.567426348Z",
+      "error": "",
+      "oom_killed": false,
+      "health": null
+    },
+    {
+      "name": "/schoolnet_postgres",
+      "id": "66d210afa9de93e9ac30d664e67983d3f036f71813a4fb375ae12452a743680e",
+      "image": "postgres:16",
+      "status": "running",
+      "exit_code": 0,
+      "finished_at": "2026-11-07T23:41:37.959761866Z",
+      "started_at": "2026-11-08T07:57:50.576772805Z",
+      "error": "",
+      "oom_killed": false,
+      "health": "healthy"
+    }
+  ],
+  "events": [],
+  "recent_deployment_metadata": [
+    {
+      "directory": "schoolnet-4.8.13f-20261108",
+      "mtime_utc": "2026-11-08T19:41:20.916890+00:00",
+      "reports": [
+        {
+          "file": "results/deployment.json",
+          "status": "preparing",
+          "image": "schoolwork2-app:4.8.13f-ea2947d8ef77"
+        }
+      ]
+    },
+    {
+      "directory": "schoolnet-4.8.13e-20261108",
+      "mtime_utc": "2026-11-08T19:30:39.036405+00:00",
+      "reports": [
+        {
+          "file": "results/deployment.json",
+          "status": "deployed",
+          "image": "schoolwork2-app:4.8.13e-90973619ef73"
+        }
+      ]
+    },
+    {
+      "directory": "schoolnet-4.8.13d-20261108",
+      "mtime_utc": "2026-11-08T19:01:34.885931+00:00",
+      "reports": [
+        {
+          "file": "results/deployment.json",
+          "status": "deployed",
+          "image": "schoolwork2-app:4.8.13d-9807b53b970f"
+        }
+      ]
+    },
+    {
+      "directory": "assessment-stability-4.8.13d-20261108",
+      "mtime_utc": "2026-11-08T18:49:00.632986+00:00",
+      "reports": []
+    },
+    {
+      "directory": "class-mismatch-release-4.8.13c-20261108",
+      "mtime_utc": "2026-11-08T18:13:07.024858+00:00",
+      "reports": [
+        {
+          "file": "results/deployment.json",
+          "status": "deployed",
+          "image": "schoolwork2-app:4.8.13c-f82b7812eb6d"
+        }
+      ]
+    }
+  ]
+}

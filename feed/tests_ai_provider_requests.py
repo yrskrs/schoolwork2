@@ -40,6 +40,12 @@ class ModelCatalogCapabilityTests(SimpleTestCase):
         self.assertFalse(caps['supports_vision'])
         self.assertEqual(caps['max_images'], 0)
 
+    def test_cloudflare_llama4_scout_is_multimodal(self):
+        caps = get_model_capabilities('@cf/meta/llama-4-scout-17b-16e-instruct', 'cloudflare')
+        self.assertTrue(caps['supports_vision'])
+        self.assertEqual(caps['max_images'], 32)
+        self.assertEqual(caps['context_tokens'], 131000)
+
     def test_cloudflare_glm_flash_is_text_only(self):
         caps = get_model_capabilities('@cf/zai-org/glm-4.7-flash', 'cloudflare')
         self.assertFalse(caps['supports_vision'])
@@ -166,3 +172,19 @@ class DeterministicPayloadTests(SimpleTestCase):
         self.assertEqual(status, 200)
         payload = post.call_args.args[1]
         self.assertEqual(payload['seed'], 42)
+
+
+class MediaUnitTests(SimpleTestCase):
+    def test_pdf_pages_are_counted_after_adaptation(self):
+        import base64
+        import io
+        from pypdf import PdfWriter
+        from .ai_payload import media_image_units
+        writer = PdfWriter()
+        writer.add_blank_page(width=100, height=100)
+        writer.add_blank_page(width=100, height=100)
+        buffer = io.BytesIO()
+        writer.write(buffer)
+        media = [{'mime_type': 'application/pdf', 'data': base64.b64encode(buffer.getvalue()).decode()}]
+        self.assertEqual(media_image_units(media, convert_pdf=False), 1)
+        self.assertEqual(media_image_units(media, convert_pdf=True), 2)

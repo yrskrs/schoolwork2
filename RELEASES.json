@@ -1,5 +1,18 @@
 [
   {
+    "version": "4.8.13g",
+    "date": "2026-11-08",
+    "title": "Безпека HTTPS, модель Scout і захист входу",
+    "changes": [
+      "HSTS і Secure session/CSRF cookies для перевіреного Funnel/HTTPS; LAN HTTP працює без змін.",
+      "Llama 4 Scout: explicit Vision metadata, context 131000, max_images=32; PDF pages counted after adaptation.",
+      "PostgreSQL host port bound to 127.0.0.1 only; app/worker Docker network unchanged.",
+      "AUTH_PASSWORD_VALIDATORS enabled; DB-backed temporary failed-login throttle keyed by IP+username hash.",
+      ".env.bak-* / .env.before-* / .env.image-* ignored and private backups moved outside the checkout.",
+      "Git alignment and seven-point verification records added; AI account quota values still require owner input."
+    ]
+  },
+  {
     "version": "4.8.13f",
     "date": "2026-11-08",
     "title": "Виправлено перевірку оновлень для версій із літерою",

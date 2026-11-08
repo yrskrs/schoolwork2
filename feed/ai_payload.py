@@ -241,6 +241,34 @@ def _pdf_covered_images(raw):
     return covered
 
 
+def media_image_units(media, convert_pdf):
+    """Count actual image units after PDF/Office adaptation.
+
+    Native-PDF providers receive one PDF object; other providers receive one
+    image per page. Counting the PDF as one image would bypass max_images and
+    let a model receive more pages than it supports.
+    """
+    if not convert_pdf:
+        return sum(1 for item in (media or []) if isinstance(item, dict)
+                   and ((item.get('mime_type') or '').startswith('image/')
+                        or item.get('mime_type') == 'application/pdf'))
+    units = 0
+    for item in media or []:
+        if not isinstance(item, dict):
+            continue
+        mime = item.get('mime_type') or ''
+        if mime.startswith('image/'):
+            units += 1
+        elif mime == 'application/pdf':
+            try:
+                import base64 as _b64
+                import io as _io
+                from pypdf import PdfReader
+                units += max(1, len(PdfReader(_io.BytesIO(_b64.b64decode(item.get('data', '')) )).pages))
+            except Exception:
+                units += 1
+    return units
+
 def optimize_media(media, provider):
     from .ai_context import evidence_cache
     cache = evidence_cache()
