@@ -7479,52 +7479,12 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                     # Evidence-aware completion check: the model may describe
                     # a RANK/COUNTIF formula that is not in the student's file.
                     from .ai_context import (clear_false_format_warning,
-                                             downgrade_unsupported_task_claims,
-                                             task_completion_grade_cap)
+                                             downgrade_unsupported_task_claims)
                     result_json = downgrade_unsupported_task_claims(result_json, student_combined_text)
                     result_json = clear_false_format_warning(result_json, submission)
                     format_warning = str(result_json.get('format_warning') or '').strip()
                     if format_warning.lower() in ['none', 'null', 'false', 'ok', 'none.', 'null.']:
                         format_warning = ''
-
-                    # Do not award 10-12 when only one of several assigned tasks
-                    # was actually completed. This is a cap, not a replacement
-                    # for the teacher's final decision.
-                    completion_cap = task_completion_grade_cap(
-                        result_json.get('tasks_total_count'), result_json.get('tasks_completed_count'))
-                    if completion_cap is not None and str(suggested_grade) != 'Доопрацювати':
-                        try:
-                            current_grade = int(float(str(suggested_grade).replace(',', '.')))
-                        except (TypeError, ValueError):
-                            current_grade = None
-                        if current_grade is not None and current_grade > completion_cap:
-                            suggested_grade = str(completion_cap)
-                            result_json['suggested_grade'] = suggested_grade
-                            result_json['_grade_cap_reason'] = (
-                                f'Виконано {result_json.get("tasks_completed_count", 0)} '
-                                f'з {result_json.get("tasks_total_count", 0)} завдань.')
-                            if completion_cap <= 3:
-                                result_json['level'] = 'Початковий (1-3)'
-                            elif completion_cap <= 6:
-                                result_json['level'] = 'Середній (4-6)'
-                            elif completion_cap <= 9:
-                                result_json['level'] = 'Достатній (7-9)'
-                            for row in result_json.get('gr_results') or []:
-                                if isinstance(row, dict):
-                                    try:
-                                        if int(float(str(row.get('grade')).replace(',', '.'))) > completion_cap:
-                                            row['grade'] = str(completion_cap)
-                                    except (TypeError, ValueError):
-                                        pass
-                            note = ('Бал обмежено, бо виконано лише частину завдань: '
-                                    f'{result_json.get("tasks_completed_count", 0)} '
-                                    f'з {result_json.get("tasks_total_count", 0)}.')
-                            if note not in weaknesses:
-                                weaknesses.append(note)
-                            if note not in feedback_comment:
-                                feedback_comment = (feedback_comment + ' ' + note).strip()
-                            result_json['feedback_comment'] = feedback_comment
-                            result_json['weaknesses'] = weaknesses
 
                     # Нормалізуємо evaluation_plan
                     eval_plan = result_json.get('evaluation_plan')

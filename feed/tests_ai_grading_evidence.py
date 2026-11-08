@@ -3,8 +3,7 @@ from types import SimpleNamespace
 
 from django.test import SimpleTestCase
 
-from .ai_context import (clear_false_format_warning, downgrade_unsupported_task_claims,
-                         task_completion_grade_cap)
+from .ai_context import clear_false_format_warning, downgrade_unsupported_task_claims
 from .gemini_service import parse_teacher_specific_task_numbers
 
 
@@ -18,14 +17,6 @@ class TaskNumberParsingTests(SimpleTestCase):
         self.assertEqual(parse_teacher_specific_task_numbers('Виконати завдання 1 (4 бали).'), [1])
         self.assertEqual(parse_teacher_specific_task_numbers('Виконати завдання 4.'), [4])
         self.assertEqual(parse_teacher_specific_task_numbers('Завдання 1 та 2.'), [1, 2])
-
-
-class CompletionCapTests(SimpleTestCase):
-    def test_partial_tasks_cap_full_grade(self):
-        self.assertEqual(task_completion_grade_cap(4, 1), 3)
-        self.assertEqual(task_completion_grade_cap(3, 1), 4)
-        self.assertIsNone(task_completion_grade_cap(4, 4))
-        self.assertIsNone(task_completion_grade_cap(1, 1))
 
 
 class ClaimedEvidenceTests(SimpleTestCase):

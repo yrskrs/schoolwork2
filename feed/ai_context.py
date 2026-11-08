@@ -600,18 +600,6 @@ def clear_false_format_warning(result, submission):
     return result
 
 
-def task_completion_grade_cap(total, completed):
-    """Conservative cap when only part of the assigned tasks is completed."""
-    try:
-        total = int(total or 0)
-        completed = max(0, int(completed or 0))
-    except (TypeError, ValueError):
-        return None
-    if total <= 1 or completed >= total:
-        return None
-    return max(1, min(12, math.ceil(12 * completed / total)))
-
-
 def downgrade_unsupported_task_claims(result, student_text):
     """Remove full-credit claims for functions absent from the student's file.
 
