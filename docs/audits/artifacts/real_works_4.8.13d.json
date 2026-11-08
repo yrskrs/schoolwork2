@@ -1,0 +1,515 @@
+{
+  "scope": "real works on restored DB copy; media read-only; production untouched",
+  "repeats": 2,
+  "ids": [
+    602,
+    450,
+    436,
+    435,
+    433,
+    427,
+    418,
+    410,
+    372,
+    347
+  ],
+  "works": [
+    {
+      "id": 602,
+      "grades": [
+        null,
+        null
+      ],
+      "statuses": [
+        "success",
+        "success"
+      ],
+      "privacy": [
+        "blocked",
+        "blocked"
+      ],
+      "stable": true,
+      "numeric_stable": true,
+      "runs": [
+        {
+          "run": 1,
+          "grade": null,
+          "status": "success",
+          "assessment_blocked": true,
+          "blocked_reasons": [
+            "Використання функції RANK",
+            "Правильність налаштування параметрів функції",
+            "ГР 1: Працює з інформацією, даними, моделями (теоретичні знання)",
+            "ГР 4: Безпечно та відповідально працює з інформаційними технологіями (етичне ставлення)"
+          ],
+          "seconds": 34.368,
+          "deferred_retries": 0,
+          "error": ""
+        },
+        {
+          "run": 2,
+          "grade": null,
+          "status": "success",
+          "assessment_blocked": true,
+          "blocked_reasons": [
+            "Використання функції RANK",
+            "Правильність налаштування параметрів функції",
+            "ГР 1: Працює з інформацією, даними, моделями (теоретичні знання)",
+            "ГР 4: Безпечно та відповідально працює з інформаційними технологіями (етичне ставлення)"
+          ],
+          "seconds": 8.243,
+          "deferred_retries": 0,
+          "error": ""
+        }
+      ]
+    },
+    {
+      "id": 450,
+      "grades": [
+        "12",
+        "12"
+      ],
+      "statuses": [
+        "success",
+        "success"
+      ],
+      "privacy": [
+        "allowed",
+        "allowed"
+      ],
+      "stable": true,
+      "numeric_stable": true,
+      "runs": [
+        {
+          "run": 1,
+          "grade": "12",
+          "status": "success",
+          "assessment_blocked": false,
+          "blocked_reasons": [],
+          "seconds": 36.905,
+          "deferred_retries": 0,
+          "error": ""
+        },
+        {
+          "run": 2,
+          "grade": "12",
+          "status": "success",
+          "assessment_blocked": false,
+          "blocked_reasons": [],
+          "seconds": 13.903,
+          "deferred_retries": 0,
+          "error": ""
+        }
+      ]
+    },
+    {
+      "id": 436,
+      "grades": [
+        "10",
+        "10"
+      ],
+      "statuses": [
+        "success",
+        "success"
+      ],
+      "privacy": [
+        "allowed",
+        "allowed"
+      ],
+      "stable": true,
+      "numeric_stable": true,
+      "runs": [
+        {
+          "run": 1,
+          "grade": "10",
+          "status": "success",
+          "assessment_blocked": false,
+          "blocked_reasons": [],
+          "seconds": 41.69,
+          "deferred_retries": 0,
+          "error": ""
+        },
+        {
+          "run": 2,
+          "grade": "10",
+          "status": "success",
+          "assessment_blocked": false,
+          "blocked_reasons": [],
+          "seconds": 37.074,
+          "deferred_retries": 0,
+          "error": ""
+        }
+      ]
+    },
+    {
+      "id": 435,
+      "grades": [
+        "12",
+        "12"
+      ],
+      "statuses": [
+        "success",
+        "success"
+      ],
+      "privacy": [
+        "allowed",
+        "allowed"
+      ],
+      "stable": true,
+      "numeric_stable": true,
+      "runs": [
+        {
+          "run": 1,
+          "grade": "12",
+          "status": "success",
+          "assessment_blocked": false,
+          "blocked_reasons": [],
+          "seconds": 38.85,
+          "deferred_retries": 0,
+          "error": ""
+        },
+        {
+          "run": 2,
+          "grade": "12",
+          "status": "success",
+          "assessment_blocked": false,
+          "blocked_reasons": [],
+          "seconds": 9.772,
+          "deferred_retries": 0,
+          "error": ""
+        }
+      ]
+    },
+    {
+      "id": 433,
+      "grades": [
+        null,
+        null
+      ],
+      "statuses": [
+        "unsupported",
+        "unsupported"
+      ],
+      "privacy": [
+        "allowed",
+        "allowed"
+      ],
+      "stable": true,
+      "numeric_stable": true,
+      "runs": [
+        {
+          "run": 1,
+          "grade": null,
+          "status": "unsupported",
+          "assessment_blocked": false,
+          "blocked_reasons": [],
+          "seconds": 0.938,
+          "deferred_retries": 0,
+          "error": "Вміст роботи за посиланням не вдалося прочитати. Надішліть доступний файл або відкрийте вміст для ручної перевірки. Оцінку не сформовано; спробу самоперевірки не використано."
+        },
+        {
+          "run": 2,
+          "grade": null,
+          "status": "unsupported",
+          "assessment_blocked": false,
+          "blocked_reasons": [],
+          "seconds": 1.12,
+          "deferred_retries": 0,
+          "error": "Вміст роботи за посиланням не вдалося прочитати. Надішліть доступний файл або відкрийте вміст для ручної перевірки. Оцінку не сформовано; спробу самоперевірки не використано."
+        }
+      ]
+    },
+    {
+      "id": 427,
+      "grades": [
+        "9",
+        "9"
+      ],
+      "statuses": [
+        "success",
+        "success"
+      ],
+      "privacy": [
+        "allowed",
+        "allowed"
+      ],
+      "stable": true,
+      "numeric_stable": true,
+      "runs": [
+        {
+          "run": 1,
+          "grade": "9",
+          "status": "success",
+          "assessment_blocked": false,
+          "blocked_reasons": [],
+          "seconds": 114.302,
+          "deferred_retries": 0,
+          "error": ""
+        },
+        {
+          "run": 2,
+          "grade": "9",
+          "status": "success",
+          "assessment_blocked": false,
+          "blocked_reasons": [],
+          "seconds": 12.787,
+          "deferred_retries": 0,
+          "error": ""
+        }
+      ]
+    },
+    {
+      "id": 418,
+      "grades": [
+        null,
+        null
+      ],
+      "statuses": [
+        "unsupported",
+        "unsupported"
+      ],
+      "privacy": [
+        "allowed",
+        "allowed"
+      ],
+      "stable": true,
+      "numeric_stable": true,
+      "runs": [
+        {
+          "run": 1,
+          "grade": null,
+          "status": "unsupported",
+          "assessment_blocked": false,
+          "blocked_reasons": [],
+          "seconds": 0.646,
+          "deferred_retries": 0,
+          "error": "Вміст роботи за посиланням не вдалося прочитати. Надішліть доступний файл або відкрийте вміст для ручної перевірки. Оцінку не сформовано; спробу самоперевірки не використано."
+        },
+        {
+          "run": 2,
+          "grade": null,
+          "status": "unsupported",
+          "assessment_blocked": false,
+          "blocked_reasons": [],
+          "seconds": 0.543,
+          "deferred_retries": 0,
+          "error": "Вміст роботи за посиланням не вдалося прочитати. Надішліть доступний файл або відкрийте вміст для ручної перевірки. Оцінку не сформовано; спробу самоперевірки не використано."
+        }
+      ]
+    },
+    {
+      "id": 410,
+      "grades": [
+        "12",
+        "12"
+      ],
+      "statuses": [
+        "success",
+        "success"
+      ],
+      "privacy": [
+        "allowed",
+        "allowed"
+      ],
+      "stable": true,
+      "numeric_stable": true,
+      "runs": [
+        {
+          "run": 1,
+          "grade": "12",
+          "status": "success",
+          "assessment_blocked": false,
+          "blocked_reasons": [],
+          "seconds": 17.015,
+          "deferred_retries": 0,
+          "error": ""
+        },
+        {
+          "run": 2,
+          "grade": "12",
+          "status": "success",
+          "assessment_blocked": false,
+          "blocked_reasons": [],
+          "seconds": 11.839,
+          "deferred_retries": 0,
+          "error": ""
+        }
+      ]
+    },
+    {
+      "id": 372,
+      "grades": [
+        null,
+        null
+      ],
+      "statuses": [
+        "success",
+        "success"
+      ],
+      "privacy": [
+        "blocked",
+        "blocked"
+      ],
+      "stable": true,
+      "numeric_stable": true,
+      "runs": [
+        {
+          "run": 1,
+          "grade": null,
+          "status": "success",
+          "assessment_blocked": true,
+          "blocked_reasons": [
+            "Наявність 3 сутностей",
+            "Наявність атрибутів та PK",
+            "Візуалізація зв'язків",
+            "Таблиці з тестовими даними"
+          ],
+          "seconds": 13.852,
+          "deferred_retries": 0,
+          "error": ""
+        },
+        {
+          "run": 2,
+          "grade": null,
+          "status": "success",
+          "assessment_blocked": true,
+          "blocked_reasons": [
+            "Наявність 3 сутностей",
+            "Наявність атрибутів та PK",
+            "Візуалізація зв'язків",
+            "Таблиці з тестовими даними"
+          ],
+          "seconds": 4.768,
+          "deferred_retries": 0,
+          "error": ""
+        }
+      ]
+    },
+    {
+      "id": 347,
+      "grades": [
+        "6",
+        "6"
+      ],
+      "statuses": [
+        "success",
+        "success"
+      ],
+      "privacy": [
+        "allowed",
+        "allowed"
+      ],
+      "stable": true,
+      "numeric_stable": true,
+      "runs": [
+        {
+          "run": 1,
+          "grade": "6",
+          "status": "success",
+          "assessment_blocked": false,
+          "blocked_reasons": [],
+          "seconds": 90.159,
+          "deferred_retries": 0,
+          "error": ""
+        },
+        {
+          "run": 2,
+          "grade": "6",
+          "status": "success",
+          "assessment_blocked": false,
+          "blocked_reasons": [],
+          "seconds": 15.964,
+          "deferred_retries": 0,
+          "error": ""
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "works": 10,
+    "all_stable": true,
+    "numeric_stable": true,
+    "per_work": {
+      "602": {
+        "grades": [
+          null,
+          null
+        ],
+        "stable": true,
+        "numeric_stable": true
+      },
+      "450": {
+        "grades": [
+          "12",
+          "12"
+        ],
+        "stable": true,
+        "numeric_stable": true
+      },
+      "436": {
+        "grades": [
+          "10",
+          "10"
+        ],
+        "stable": true,
+        "numeric_stable": true
+      },
+      "435": {
+        "grades": [
+          "12",
+          "12"
+        ],
+        "stable": true,
+        "numeric_stable": true
+      },
+      "433": {
+        "grades": [
+          null,
+          null
+        ],
+        "stable": true,
+        "numeric_stable": true
+      },
+      "427": {
+        "grades": [
+          "9",
+          "9"
+        ],
+        "stable": true,
+        "numeric_stable": true
+      },
+      "418": {
+        "grades": [
+          null,
+          null
+        ],
+        "stable": true,
+        "numeric_stable": true
+      },
+      "410": {
+        "grades": [
+          "12",
+          "12"
+        ],
+        "stable": true,
+        "numeric_stable": true
+      },
+      "372": {
+        "grades": [
+          null,
+          null
+        ],
+        "stable": true,
+        "numeric_stable": true
+      },
+      "347": {
+        "grades": [
+          "6",
+          "6"
+        ],
+        "stable": true,
+        "numeric_stable": true
+      }
+    }
+  }
+}
