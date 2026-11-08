@@ -1,0 +1,15 @@
+{
+  "version": "4.8.13j",
+  "date": "2026-11-08",
+  "command": ".venv/bin/python manage.py test --settings=schoolnet.test_settings --noinput",
+  "tests": 1071,
+  "skipped": 2,
+  "errors": 0,
+  "failures": 0,
+  "elapsed_seconds": 101.092,
+  "new_quota_tests": 22,
+  "django_check": "passed",
+  "migration_dry_run": "no changes",
+  "network": "No live inference in test suite; provider HTTP mocked. Separate quota probes use only synthetic Return OK.",
+  "learner_materials_used": false
+}

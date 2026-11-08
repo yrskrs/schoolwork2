@@ -34,12 +34,24 @@ def configured_call(function):
         config = {'provider': values.get('provider', 'gemini'), 'connection_id': values.get('connection_id') or '',
                   'model': values.get('model_name', ''),
                   'deadline': evaluation_deadline.get() or time.monotonic() + settings.AI_REQUEST_DEADLINE}
+        from .ai_quotas import credential_fingerprint
+        config['credential_fingerprint'] = credential_fingerprint(values.get('api_key', ''), values.get('custom_url', ''))
         token = request_config.set(config)
         try:
             return function(*args, **kwargs)
         finally:
             request_config.reset(token)
     return wrapped
+
+
+def capture_quota_headers(headers, status):
+    from .ai_quotas import learn_groq_headers
+    try:
+        learn_groq_headers(request_config.get(), headers, status)
+    except Exception as error:
+        # A metadata update must not discard an already received assessment.
+        import logging
+        logging.getLogger(__name__).warning('Quota metadata update failed (%s)', type(error).__name__)
 
 
 def payload_budget(payload):

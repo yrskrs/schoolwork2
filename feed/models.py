@@ -3531,7 +3531,11 @@ class AISettings(models.Model):
         from .ai_connections import configured
         return [{k: c[k] for k in ('id', 'provider', 'label', 'custom_url')} |
                 {'configured': configured(c), 'has_key': bool(c.get('api_key')),
-                 'quota_group': c.get('quota_group', ''), 'quota_limits': c.get('quota_limits', {})} for c in self.provider_connections]
+                 'quota_group': c.get('quota_group', ''), 'quota_limits': c.get('quota_limits', {}),
+                 'quota_model_rows': [{'name': name, **limits} for name, limits in sorted((c.get('model_quota_limits') or {}).items())],
+                 'quota_source_note': (c.get('quota_provenance') or {}).get('summary', ''),
+                 'quota_fallback_limits': c.get('quota_fallback_limits', {}),
+                 'quota_fallback_note': c.get('quota_fallback_note', '')} for c in self.provider_connections]
 
     # ── Основний API ──────────────────────────────────────────────────────────
     ai_provider = models.CharField(

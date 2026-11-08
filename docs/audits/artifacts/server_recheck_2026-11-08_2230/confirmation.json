@@ -1,0 +1,65 @@
+{
+  "time_utc": "2026-11-08T20:32:28.787847+00:00",
+  "git": {
+    "head": "5b788179cb3a937e6b7e2217ac1d7479893de7dc",
+    "cached_origin_main": "5b788179cb3a937e6b7e2217ac1d7479893de7dc",
+    "clean": true,
+    "head_ancestor_of_cached_upstream": true,
+    "private_backup_pattern_ignored": true
+  },
+  "private_backup_directory": {
+    "exists": true,
+    "mode": "0o700",
+    "file_modes": [
+      "0o600",
+      "0o600",
+      "0o600",
+      "0o600",
+      "0o600",
+      "0o600"
+    ]
+  },
+  "lan_login": {
+    "status": 200,
+    "hsts": null,
+    "csrf_secure": false
+  },
+  "https_login": {
+    "status": 200,
+    "hsts": "max-age=86400",
+    "csrf_secure": true
+  },
+  "postgres_loopback_tcp": "accepted",
+  "login_protection": {
+    "migration_0075_applied": true,
+    "throttle_table_exists": true,
+    "teacher_login_calls_wait_seconds": true,
+    "admin_login_calls_wait_seconds": true,
+    "failed_login_receiver_loaded": true,
+    "max_failures": 5,
+    "lock_seconds": 900.0,
+    "weak_synthetic_password_rejected": true,
+    "runtime_middleware": [
+      "django.middleware.security.SecurityMiddleware",
+      "whitenoise.middleware.WhiteNoiseMiddleware",
+      "feed.middleware.PageCompressionMiddleware",
+      "feed.https_hardening.HTTPSHardeningMiddleware",
+      "django.contrib.sessions.middleware.SessionMiddleware",
+      "schoolnet.middleware.LegacySessionCookieMiddleware",
+      "django.middleware.common.CommonMiddleware",
+      "django.middleware.csrf.CsrfViewMiddleware",
+      "django.contrib.auth.middleware.AuthenticationMiddleware",
+      "feed.login_throttle_middleware.AdminLoginThrottleMiddleware",
+      "django.contrib.messages.middleware.MessageMiddleware",
+      "feed.access_middleware.PublicAccessMiddleware",
+      "django.middleware.clickjacking.XFrameOptionsMiddleware",
+      "feed.middleware.OnlineClientsMiddleware",
+      "feed.middleware.FirstRunSetupMiddleware"
+    ]
+  },
+  "fingerprints": {
+    "schoolnet_app": "3735703470d857aff929a828a89376e7661e174a38d24b4f989e5fcb0f328ca8",
+    "schoolnet_ai_worker": "3735703470d857aff929a828a89376e7661e174a38d24b4f989e5fcb0f328ca8",
+    "checkout": "3735703470d857aff929a828a89376e7661e174a38d24b4f989e5fcb0f328ca8"
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "results": [
+    {
+      "provider": "openrouter",
+      "model": null,
+      "at": "2026-11-08T20:37:46.041505+00:00",
+      "http_status": 200,
+      "headers": {},
+      "free_model_daily_requests": {
+        "limit": 1000,
+        "remaining": 995,
+        "used": 5
+      },
+      "is_free_tier": false
+    },
+    {
+      "provider": "groq",
+      "model": "qwen/qwen3.8-27b",
+      "at": "2026-11-08T20:37:46.351585+00:00",
+      "http_status": 200,
+      "headers": {
+        "x-ratelimit-limit-requests": "1000",
+        "x-ratelimit-limit-tokens": "8000",
+        "x-ratelimit-remaining-requests": "999",
+        "x-ratelimit-remaining-tokens": "7953",
+        "x-ratelimit-reset-requests": "1m26.4s",
+        "x-ratelimit-reset-tokens": "352ms"
+      }
+    },
+    {
+      "provider": "groq",
+      "model": "openai/gpt-oss-120b",
+      "at": "2026-11-08T20:37:46.641443+00:00",
+      "http_status": 200,
+      "headers": {
+        "x-ratelimit-limit-requests": "1000",
+        "x-ratelimit-limit-tokens": "8000",
+        "x-ratelimit-remaining-requests": "999",
+        "x-ratelimit-remaining-tokens": "7894",
+        "x-ratelimit-reset-requests": "1m26.4s",
+        "x-ratelimit-reset-tokens": "794ms"
+      }
+    }
+  ],
+  "gemini_distinct_keys": 2,
+  "gemini_project_relationship": "unknown: distinct API keys do not establish distinct projects",
+  "scope": "GET OpenRouter key limits and tiny synthetic Groq requests; no submissions/users/media; no DB writes"
+}

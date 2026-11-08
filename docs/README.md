@@ -64,3 +64,5 @@
 - [SIMPLE_EXCHANGE_PLAN](plans/SIMPLE_EXCHANGE_PLAN.md)
 
 Засоби запуску з ПК збережені окремо: [desktop/](../desktop/README.md).
+
+- [Квоти моделей ШІ: налаштування, синхронізація й межі підтвердження](audits/AI_QUOTA_CONFIGURATION_2026-11-08.md).

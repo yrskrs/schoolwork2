@@ -3,14 +3,15 @@
 Забезпечує чітке розділення змін для учнів та для вчителів.
 """
 
-SITE_VERSION = "4.8.13i"
-SITE_VERSION_SHORT = "v4.8.13i"
+SITE_VERSION = "4.8.13j"
+SITE_VERSION_SHORT = "v4.8.13j"
 
 CHANGELOG_DATA = [
+{'version': '4.8.13j', 'date': '8 листопада 2026', 'badge': 'ШІ', 'is_latest': True, 'student_changes': [], 'teacher_changes': [{'icon': '⚙️', 'title': 'Окремі квоти моделей ШІ', 'desc': 'Ліміти Gemini враховуються окремо для моделей і спільно для ключів. Квоти Groq оновлюються з відповідей API; джерела та захисні межі показано в налаштуваннях.'}]},
 {'version': '4.8.13i',
  'date': '8 листопада 2026',
  'badge': 'Стабільність ШІ',
- 'is_latest': True,
+ 'is_latest': False,
  'student_changes': [],
  'teacher_changes': [{'icon': '🧠',
                       'title': 'Менше технічних збоїв ШІ',

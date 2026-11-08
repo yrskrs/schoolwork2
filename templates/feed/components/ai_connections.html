@@ -9,6 +9,14 @@
             <input type="hidden" name="connection_id" value="{{ connection.id }}">
             <input type="hidden" name="connection_provider" value="{{ connection.provider }}">
             <details><summary>Квоти та паралельна перевірка</summary>
+                {% if connection.quota_source_note %}<p class="form-hint">{{ connection.quota_source_note }}</p>{% endif %}
+                {% if connection.quota_model_rows %}
+                <div style="overflow-x:auto"><table class="table"><thead><tr><th>Модель</th><th>Запитів/хв</th><th>Запитів/добу</th><th>Токенів/хв</th><th>Вхідних токенів/хв</th></tr></thead><tbody>
+                    {% for row in connection.quota_model_rows %}<tr><td>{{ row.name }}</td><td>{{ row.rpm|default:'—' }}</td><td>{{ row.rpd|default:'—' }}</td><td>{{ row.tpm|default:'—' }}</td><td>{{ row.itpm|default:'—' }}</td></tr>{% endfor %}
+                </tbody></table></div>
+                <p class="form-hint">Ліміти моделі рахуються окремо; межі групи нижче додатково обмежують усі її моделі разом. Спроби з різними ключами однієї групи не отримують подвійного бюджету.</p>
+                {% endif %}
+                {% if connection.quota_fallback_note %}<p class="form-hint">{{ connection.quota_fallback_note }}</p>{% endif %}
                 <p class="form-hint">Укажіть квоти зі свого кабінету провайдера. 0 означає, що квоту не задано. Підключення зі спільною квотою повинні мати однакову групу; порожня група об’єднує підключення одного провайдера. Для спільної групи діє найменший заданий ліміт.</p>
                 <label class="form-label">Група спільної квоти<input class="form-input" name="quota_group" maxlength="80" value="{{ connection.quota_group }}" placeholder="Типово — провайдер"></label>
                 <label class="form-label">Одночасних запитів<input class="form-input" type="number" name="quota_concurrency" min="1" max="8" value="{{ connection.quota_limits.concurrency|default:1 }}"></label>

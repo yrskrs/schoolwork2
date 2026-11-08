@@ -83,6 +83,24 @@ def save_connection(settings_id, data, delete=False):
                     limits[limit] = value
             connection.update(quota_group=quota_group, quota_limits=limits)
             if existing:
+                # Editing a label must not discard installed model budgets.
+                # Provider-derived model limits must not follow a different key.
+                for field in ('quota_fallback_limits', 'quota_fallback_note'):
+                    if field in existing:
+                        connection[field] = existing[field]
+                if key == existing.get('api_key') and url == existing.get('custom_url', ''):
+                    for field in ('model_quota_limits', 'quota_provenance'):
+                        if field in existing:
+                            connection[field] = existing[field]
+                else:
+                    # A verified account-wide value must not silently follow a
+                    # replacement key. Retain any stricter explicitly set budget.
+                    observations = (existing.get('quota_provenance') or {}).get('api_observations', {})
+                    for observation in observations.values():
+                        for name, value in observation.get('limits', {}).items():
+                            if connection['quota_limits'].get(name) == value:
+                                connection['quota_limits'].pop(name)
+            if existing:
                 settings.provider_connections = [connection if c['id'] == connection_id else c for c in settings.provider_connections]
             else:
                 settings.provider_connections = [*settings.provider_connections, connection]

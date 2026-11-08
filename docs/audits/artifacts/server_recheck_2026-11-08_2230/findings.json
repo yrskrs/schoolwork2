@@ -1,0 +1,104 @@
+{
+  "time_utc": "2026-11-08T20:30:56.530458+00:00",
+  "health": {
+    "status": "ok",
+    "version": "4.8.13h",
+    "revision": "6e53989e1294286aceb77ce89e52e985de0cbce4",
+    "source_digest": "3735703470d857aff929a828a89376e7661e174a38d24b4f989e5fcb0f328ca8"
+  },
+  "git_status_entries": 0,
+  "private_backups": [],
+  "containers": {
+    "schoolnet_app": {
+      "image": "schoolwork2-app:4.8.13h-3735703470d8",
+      "status": "running",
+      "health": "healthy",
+      "ports": {
+        "8000/tcp": [
+          {
+            "HostIp": "",
+            "HostPort": "8080"
+          }
+        ]
+      }
+    },
+    "schoolnet_ai_worker": {
+      "image": "schoolwork2-app:4.8.13h-3735703470d8",
+      "status": "running",
+      "health": "healthy",
+      "ports": {}
+    },
+    "schoolnet_postgres": {
+      "image": "postgres:16",
+      "status": "running",
+      "health": "healthy",
+      "ports": {
+        "5432/tcp": [
+          {
+            "HostIp": "127.0.0.1",
+            "HostPort": "5433"
+          }
+        ]
+      }
+    }
+  },
+  "application": {
+    "scout": {
+      "enabled": true,
+      "supports_vision": true,
+      "max_images": 32
+    },
+    "quotas": [
+      {
+        "provider": "gemini",
+        "quota_limits": {},
+        "explicit_group": false
+      },
+      {
+        "provider": "openrouter",
+        "quota_limits": {},
+        "explicit_group": false
+      },
+      {
+        "provider": "groq",
+        "quota_limits": {},
+        "explicit_group": false
+      },
+      {
+        "provider": "gemini",
+        "quota_limits": {},
+        "explicit_group": false
+      },
+      {
+        "provider": "cloudflare",
+        "quota_limits": {},
+        "explicit_group": false
+      }
+    ],
+    "security": {
+      "SESSION_COOKIE_SECURE": false,
+      "CSRF_COOKIE_SECURE": false,
+      "SECURE_HSTS_SECONDS": 0,
+      "SECURE_SSL_REDIRECT": false,
+      "password_validators_count": 4,
+      "authentication_backends": [
+        "django.contrib.auth.backends.ModelBackend"
+      ],
+      "throttle_named_components": [
+        "feed.login_throttle_middleware.AdminLoginThrottleMiddleware"
+      ],
+      "teacher_login_decorators": [],
+      "teacher_login_throttle_marker": false
+    }
+  },
+  "https_login": {
+    "status": 200,
+    "hsts": "max-age=86400",
+    "cookies": [
+      {
+        "name": "schoolwork2_csrftoken",
+        "secure": true
+      }
+    ]
+  }
+}

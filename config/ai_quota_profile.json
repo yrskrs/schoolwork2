@@ -1,0 +1,78 @@
+{
+  "providers": {
+    "gemini": {
+      "quota_group": "gemini",
+      "quota_limits": {
+        "concurrency": 1
+      },
+      "model_quota_limits": {
+        "gemini-3.8-flash": {
+          "rpm": 5,
+          "rpd": 20,
+          "itpm": 250000
+        },
+        "gemini-3.6-flash": {
+          "rpm": 5,
+          "rpd": 20,
+          "itpm": 250000
+        },
+        "gemini-3.5-flash-lite": {
+          "rpm": 15,
+          "rpd": 500,
+          "itpm": 250000
+        },
+        "gemini-3.1-flash-lite": {
+          "rpm": 15,
+          "rpd": 500,
+          "itpm": 250000
+        }
+      },
+      "quota_fallback_limits": {
+        "rpm": 5,
+        "rpd": 20,
+        "itpm": 250000
+      },
+      "quota_fallback_note": "Для моделі без підтвердженої квоти: локальна захисна межа 5 запитів/хв, 20/добу, 250000 вхідних токенів/хв. Це не підтверджена квота цієї моделі.",
+      "quota_provenance": {
+        "summary": "Ліміти чотирьох моделей надані власником з AI Studio 08.11.2026 для одного акаунта. Для двох ключів застосовано спільний консервативний облік; незалежність проєктів не припускається.",
+        "source": "owner_ai_studio_2026-11-08",
+        "scope": "one account supplied; conservative shared ceilings"
+      }
+    },
+    "groq": {
+      "quota_group": "groq",
+      "quota_limits": {
+        "rpm": 30,
+        "concurrency": 1
+      },
+      "model_quota_limits": {},
+      "quota_provenance": {
+        "summary": "RPD і TPM отримуються з заголовків реальних службових API-відповідей окремо для моделі. Межа групи 30 RPM — локальний запобіжник на основі опублікованої таблиці; не заявляється індивідуальною квотою акаунта.",
+        "source_url": "https://console.groq.com/docs/rate-limits"
+      }
+    },
+    "openrouter": {
+      "quota_group": "openrouter",
+      "quota_limits": {
+        "rpm": 20,
+        "concurrency": 1
+      },
+      "quota_provenance": {
+        "summary": "RPD безкоштовного пулу отримується з GET /api/v1/key. Межа 20 RPM — консервативна політика для безкоштовних маршрутів із документації. Нові платні маршрути потребують окремої групи/перевірки.",
+        "source_url": "https://openrouter.ai/docs/api_reference/limits"
+      }
+    },
+    "cloudflare": {
+      "quota_group": "cloudflare",
+      "quota_limits": {
+        "rpm": 20,
+        "concurrency": 1
+      },
+      "quota_provenance": {
+        "summary": "Локальна захисна межа 20 RPM: найменша стандартна межа Text Generation у документації (типово 300, стандартні paid-моделі 20). Це не перевірена індивідуальна квота акаунта. Добовий Neuron-бюджет не підмінюється кількістю запитів або токенів.",
+        "source": "conservative_application_policy",
+        "source_url": "https://developers.cloudflare.com/workers-ai/platform/limits/"
+      }
+    }
+  }
+}
