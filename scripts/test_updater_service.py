@@ -13,6 +13,9 @@ class UpdaterServiceUnitTests(unittest.TestCase):
         self.assertEqual(updater._version_tuple('4.4.4'), (4, 4, 4))
         self.assertEqual(updater._version_tuple('4.5.1'), (4, 5, 1))
         self.assertTrue(updater._version_tuple('4.4.5') > updater._version_tuple('4.4.4'))
+        self.assertEqual(updater._version_tuple('4.8.13e'), (4, 8, 13, 5))
+        self.assertGreater(updater._version_tuple('4.8.13e'), updater._version_tuple('4.8.13d'))
+        self.assertGreater(updater._version_tuple('4.8.13d'), updater._version_tuple('4.8.13'))
 
     def test_parse_changelog_markdown(self):
         md = """
@@ -22,12 +25,17 @@ class UpdaterServiceUnitTests(unittest.TestCase):
 
 ## [4.4.5] - 2026-10-13 - Заголовок 4.4.5
 * Пункт 3
+
+## 4.8.13e — 2026-11-08 — Letter suffix
+- Пункт e
         """
         parsed = updater.parse_changelog_markdown(md)
-        self.assertEqual(len(parsed), 2)
+        self.assertEqual(len(parsed), 3)
         self.assertEqual(parsed[0]['version'], '4.4.6')
         self.assertEqual(parsed[0]['title'], 'Заголовок 4.4.6')
         self.assertEqual(len(parsed[0]['changes']), 2)
+        self.assertEqual(parsed[2]['version'], '4.8.13e')
+        self.assertEqual(parsed[2]['changes'], ['Пункт e'])
 
     def test_filter_releases_between(self):
         rels = [

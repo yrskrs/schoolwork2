@@ -139,10 +139,11 @@ class UpdaterJobTests(unittest.TestCase):
         self.assertIn('offline', result['error'])
 
     def test_changelog_supports_all_project_formats(self):
-        releases = parse_changelog_markdown('## [4.4.6] - 2026-10-12 - Title\n* Work\n## 1.5.8 — 2026-10-12\n- Test')
+        releases = parse_changelog_markdown('## [4.4.6] - 2026-10-12 - Title\n* Work\n## 1.5.8 — 2026-10-12\n- Test\n## 4.8.13e — 2026-11-08 — Letter\n- E')
         self.assertEqual(releases[0]['date'], '2026-10-12')
         self.assertEqual(releases[0]['changes'], ['Work'])
         self.assertEqual(releases[1]['changes'], ['Test'])
+        self.assertEqual(releases[2]['version'], '4.8.13e')
 
 
 

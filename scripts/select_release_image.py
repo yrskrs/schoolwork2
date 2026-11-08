@@ -14,7 +14,7 @@ key,path,constant,default={
  'schoolwork2':('SCHOOLWORK_IMAGE','feed/changelog.py','SITE_VERSION','schoolwork2-app'),
 }[project]
 version=next(ast.literal_eval(node.value) for node in ast.parse(Path(path).read_text()).body if isinstance(node,ast.Assign) and any(isinstance(target,ast.Name) and target.id==constant for target in node.targets))
-assert re.fullmatch(r'\d+\.\d+\.\d+',version),'Invalid release version'
+assert re.fullmatch(r'\d+\.\d+\.\d+[a-z]?',version,re.IGNORECASE),'Invalid release version'
 p=Path('.env');text=p.read_text()
 matches=list(re.finditer(r'(?m)^'+key+r'=(.*)$',text))
 values=shlex.split(matches[-1].group(1),comments=True) if matches else []

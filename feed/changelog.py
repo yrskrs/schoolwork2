@@ -3,14 +3,24 @@
 Забезпечує чітке розділення змін для учнів та для вчителів.
 """
 
-SITE_VERSION = "4.8.13e"
-SITE_VERSION_SHORT = "v4.8.13e"
+SITE_VERSION = "4.8.13f"
+SITE_VERSION_SHORT = "v4.8.13f"
 
 CHANGELOG_DATA = [
+{'version': '4.8.13f',
+ 'date': '8 листопада 2026',
+ 'badge': 'Виправлення',
+ 'is_latest': True,
+ 'student_changes': [],
+ 'teacher_changes': [{'icon': '🔄',
+                      'title': 'Перевірка оновлень знову працює',
+                      'desc': 'Версії з літерою (4.8.13d, 4.8.13e, 4.8.13f) коректно '
+                              'розпізнаються в GitHub, CHANGELOG і RELEASES. Сторінка '
+                              'оновлення більше не показує «Некоректна версія на GitHub».'}]},
 {'version': '4.8.13e',
  'date': '8 листопада 2026',
  'badge': 'Оптимізація',
- 'is_latest': True,
+ 'is_latest': False,
  'student_changes': [{'icon': '⚡',
                       'title': 'Швидше завантаження сторінок',
                       'desc': 'CSS і JavaScript тепер передаються стиснутими (brotli/gzip). '

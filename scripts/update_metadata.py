@@ -7,7 +7,16 @@ import urllib.request
 
 
 def version_tuple(value):
-    return tuple(int(p) for p in re.findall(r'\d+', str(value))) or (0,)
+    text = str(value).strip().lower().lstrip('v')
+    match = re.match(r'^(\d+(?:\.\d+)*)(.*)$', text)
+    if not match:
+        return (0,)
+    numbers = tuple(int(part) for part in match.group(1).split('.'))
+    suffix = match.group(2)
+    if re.fullmatch(r'[a-z]', suffix):
+        return numbers + (ord(suffix) - ord('a') + 1,)
+    digits = tuple(int(part) for part in re.findall(r'\d+', suffix))
+    return numbers + digits if digits else numbers
 
 
 def read_version(root):
@@ -25,7 +34,7 @@ def parse_changelog_markdown(text):
     releases, current = [], None
     for line in text.splitlines():
         line = line.strip()
-        match = re.match(r'^##\s+\[?v?(\d+\.\d+(?:\.\d+)*)\]?(.*)$', line)
+        match = re.match(r'^##\s+\[?v?(\d+\.\d+(?:\.\d+)*[a-z]?)\]?(.*)$', line)
         if match:
             if current:
                 releases.append(current)
@@ -76,7 +85,7 @@ def check_remote(root, repo, current_ver, branch='main'):
             if not match:
                 raise ValueError('GitHub не повернув номер версії')
             remote_ver = match[1]
-        if not re.fullmatch(r'\d+\.\d+\.\d+', remote_ver):
+        if not re.fullmatch(r'\d+\.\d+\.\d+[a-z]?', remote_ver, re.IGNORECASE):
             raise ValueError('Некоректна версія на GitHub')
         try:
             releases = json.loads(fetch('RELEASES.json'))

@@ -30,10 +30,23 @@ def get_current_local_version():
 
 
 def parse_version_tuple(version_str):
-    """Converts version string into integer tuple for comparison."""
+    """Converts version string into integer tuple for comparison.
+
+    SchoolNet uses letter suffixes for fast follow-up releases
+    (4.8.13d, 4.8.13e, ...). They must sort after the base version and
+    after earlier letters, not collapse to the same (4, 8, 13) tuple.
+    """
     try:
-        parts = [int(p) for p in re.findall(r'\d+', str(version_str))]
-        return tuple(parts) if parts else (0,)
+        text = str(version_str).strip().lower().lstrip('v')
+        match = re.match(r'^(\d+(?:\.\d+)*)(.*)$', text)
+        if not match:
+            return (0,)
+        numbers = tuple(int(part) for part in match.group(1).split('.'))
+        suffix = match.group(2)
+        if re.fullmatch(r'[a-z]', suffix):
+            return numbers + (ord(suffix) - ord('a') + 1,)
+        digits = tuple(int(part) for part in re.findall(r'\d+', suffix))
+        return numbers + digits if digits else numbers
     except Exception:
         return (0,)
 
@@ -44,7 +57,7 @@ def parse_changelog_markdown(text):
     current = None
     for line in text.splitlines():
         line = line.strip()
-        header_match = re.match(r'^##\s+\[?v?(\d+\.\d+(?:\.\d+)*)\]?(.*)$', line)
+        header_match = re.match(r'^##\s+\[?v?(\d+\.\d+(?:\.\d+)*[a-z]?)\]?(.*)$', line)
         if header_match:
             if current:
                 releases.append(current)
