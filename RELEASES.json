@@ -1,5 +1,16 @@
 [
   {
+    "version": "4.8.13i",
+    "date": "2026-11-08",
+    "title": "Захист від повторних 400/413 у ШІ",
+    "changes": [
+      "Post-adaptation media guard: Cloudflare >32 images and text-only models blocked before HTTP.",
+      "Gemini 3.5 Flash-Lite catalog metadata + rejected seed cache; timeout floor 60s.",
+      "OpenRouter/free output budget at least 8192 to reduce MAX_TOKENS with reasoning models.",
+      "No evidence dropped; incompatible model is skipped for failover."
+    ]
+  },
+  {
     "version": "4.8.13h",
     "date": "2026-11-08",
     "title": "Захист входу в адмінку тим самим throttle",

@@ -188,3 +188,33 @@ class MediaUnitTests(SimpleTestCase):
         media = [{'mime_type': 'application/pdf', 'data': base64.b64encode(buffer.getvalue()).decode()}]
         self.assertEqual(media_image_units(media, convert_pdf=False), 1)
         self.assertEqual(media_image_units(media, convert_pdf=True), 2)
+
+
+class MediaPostAdaptationGuardTests(SimpleTestCase):
+    def image(self, n=0):
+        import base64
+        import io
+        from PIL import Image
+        buffer = io.BytesIO()
+        Image.new('RGB', (4 + n, 4 + n), (n % 255, 10, 20)).save(buffer, format='PNG')
+        return {'mime_type': 'image/png', 'data': base64.b64encode(buffer.getvalue()).decode()}
+
+    def test_text_only_cloudflare_model_is_blocked_before_http(self):
+        from .ai_payload import media_guard_error
+        result = media_guard_error([self.image()], 'cloudflare', '@cf/zai-org/glm-4.7-flash')
+        self.assertEqual(result[0], 415)
+        self.assertIn('не підтримує', result[1])
+
+    def test_cloudflare_image_cap_is_enforced_after_adaptation(self):
+        from .ai_payload import media_guard_error
+        media = [self.image(i) for i in range(33)]
+        result = media_guard_error(media, 'cloudflare', '@cf/qwen/qwen3.8-27b')
+        self.assertEqual(result[0], 413)
+        self.assertIn('33', result[1])
+
+    def test_gemini_35_flash_lite_has_official_multimodal_metadata(self):
+        from .ai_model_catalog import get_model_capabilities
+        caps = get_model_capabilities('gemini-3.5-flash-lite', 'gemini')
+        self.assertTrue(caps['supports_vision'])
+        self.assertEqual(caps['context_tokens'], 1048576)
+        self.assertEqual(caps['max_images'], 3600)

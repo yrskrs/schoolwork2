@@ -153,6 +153,8 @@ def _http_post_json(url, payload_dict, headers=None, timeout=30):
                 raise
             finally:
                 resp.release_conn()
+            from .ai_transport import capture_quota_headers
+            capture_quota_headers(getattr(resp, 'headers', {}), status)
             try:
                 data = json.loads(body_text)
                 if status == 429:
@@ -174,6 +176,8 @@ def _http_post_json(url, payload_dict, headers=None, timeout=30):
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             status = resp.getcode()
+            from .ai_transport import capture_quota_headers
+            capture_quota_headers(getattr(resp, 'headers', {}), status)
             body_bytes = _read_api_body(resp, deadline)
             body_text = body_bytes.decode('utf-8', errors='replace')
             try:
@@ -185,6 +189,8 @@ def _http_post_json(url, payload_dict, headers=None, timeout=30):
                 return status, None, body_text
     except urllib.error.HTTPError as e:
         status = e.code
+        from .ai_transport import capture_quota_headers
+        capture_quota_headers(e.headers, status)
         err_bytes = _read_api_body(e, deadline)
         err_text = err_bytes.decode('utf-8', errors='replace')
         try:
@@ -343,6 +349,15 @@ def _raw_call_ai_api(prompt_text, system_prompt="", inline_media=None, provider=
         inline_media = optimize_media(inline_media, provider)
     except Exception:
         return 0, None, 'Не вдалося прочитати всі візуальні матеріали для цього провайдера. Спробуйте PDF-сумісну модель.', None
+    # Final guard after PDF/Office adaptation and image optimization. The
+    # evaluation loop also preflights, but this layer must be independently
+    # safe: a wrong count here used to produce Cloudflare 400 "too many images"
+    # and text-only 400 "not a multimodal model".
+    from .ai_payload import media_guard_error
+    guard = media_guard_error(inline_media, provider, model_name)
+    if guard:
+        status, message = guard
+        return status, None, message, {'_schoolnet_local_preflight': True}
     # Never drop visual evidence to fit a model's image limit.
     if provider == 'groq' and clean_model_name(model_name, provider) == 'qwen/qwen3.8-27b' and len(inline_media) > 3:
         return 413, None, 'Модель допускає лише 3 зображення; усі докази збережено для іншої моделі.', {'_schoolnet_local_preflight': True}
@@ -356,7 +371,7 @@ def _raw_call_ai_api(prompt_text, system_prompt="", inline_media=None, provider=
 
     if provider == 'gemini':
         # Збільшений таймаут для Gemini для запобігання read timeouts (рекомендація: >= 50с)
-        gemini_timeout = max(timeout, 50) if timeout <= 35 else timeout
+        gemini_timeout = max(timeout, 60) if timeout <= 35 else max(timeout, 60)
 
         parts = []
         if prompt_text and str(prompt_text).strip():
@@ -479,6 +494,7 @@ def _raw_call_ai_api(prompt_text, system_prompt="", inline_media=None, provider=
             # 1. Повтор без seed, якщо конкретна Gemini-модель його не приймає.
             if _generic_invalid and "seed" in payload.get("generationConfig", {}):
                 _log_gemini_400(text, payload)
+                api_options.remember("seed", payload["generationConfig"]["seed"])
                 del payload["generationConfig"]["seed"]
                 status_code, data, text = _http_post_json(url, payload, headers=headers, timeout=gemini_timeout)
                 _generic_invalid = status_code == 400 and _recoverable_400(text)
@@ -7190,6 +7206,12 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                     # що скорочує час очікування відповіді з 25-40 секунд до 2-4 секунд!
                     thinking_budget_val = 0 if (c_provider in ('groq', 'openrouter') or ('flash' in c_model.lower() and c_provider == 'gemini')) else None
 
+                output_budget = min(10000, (2200 if c_provider == 'groq' else 4000) + 300 * len(active_grs) + 180 * len(scope.get("assigned_tasks") or []))
+                if c_provider == 'openrouter' and clean_model_name(c_model, c_provider) == 'openrouter/free':
+                    # Dynamic free routers may select a reasoning model. A 4K
+                    # output budget is consumed by reasoning before JSON, which
+                    # produced repeat MAX_TOKENS outcomes.
+                    output_budget = max(output_budget, 8192)
                 status_code, raw_text, err_msg, raw_data = call_ai_api(
                     prompt_text=provider_prompt,
                     system_prompt=provider_system,
@@ -7199,7 +7221,7 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                     model_name=c_model,
                     custom_url=c_url,
                     temperature=0.0,
-                    max_output_tokens=min(10000, (2200 if c_provider == 'groq' else 4000) + 300 * len(active_grs) + 180 * len(scope.get("assigned_tasks") or [])),
+                    max_output_tokens=output_budget,
                     timeout=50 if c_provider == 'gemini' else (90 if router_retry else 35),
                     json_mode=True,
                     thinking_budget=thinking_budget_val,

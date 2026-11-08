@@ -8,6 +8,7 @@ PROVIDER_CATALOG = [
         'quota_note': 'RPM / RPD / TPM залежать від моделі й рівня проєкту. Точні значення — у Google AI Studio.',
         'models': [
             {'name': 'gemini-3.8-flash', 'description': 'Flash для складних і повсякденних завдань.', 'quota': 'За рівнем проєкту', 'supports_vision': True, 'context_tokens': 1048576, 'context_display': '1 048 576 токенів (~1M)'},
+            {'name': 'gemini-3.5-flash-lite', 'description': 'Швидка мультимодальна Flash-Lite: текст, фото, PDF.', 'quota': 'За рівнем проєкту', 'supports_vision': True, 'context_tokens': 1048576, 'context_display': '1 048 576 токенів (~1M, до 3 600 зображень)', 'max_images': 3600},
             {'name': 'gemini-3.6-flash', 'description': 'Flash попереднього покоління.', 'quota': 'За рівнем проєкту', 'supports_vision': True, 'context_tokens': 1048576, 'context_display': '1 048 576 токенів (~1M)'},
             {'name': 'gemini-3.1-flash-lite', 'description': 'Легка модель для великої кількості запитів.', 'quota': 'За рівнем проєкту', 'supports_vision': True, 'context_tokens': 1048576, 'context_display': '1 048 576 токенів (~1M)'},
             {'name': 'gemini-3.1-pro-preview', 'description': 'Попередня Pro-версія; доступність може змінюватися.', 'quota': 'За рівнем проєкту', 'supports_vision': True, 'context_tokens': 1048576, 'context_display': '1 048 576 токенів (~1M)'},

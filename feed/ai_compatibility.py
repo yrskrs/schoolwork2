@@ -27,7 +27,7 @@ class GeminiOptions:
 
     def apply(self, payload):
         config = payload['generationConfig']
-        for name in ('thinkingConfig', 'responseMimeType'):
+        for name in ('thinkingConfig', 'responseMimeType', 'seed'):
             if name in config and option_key(name, config[name]) in self.rejected:
                 config.pop(name)
         if 'systemInstruction' in self.rejected:

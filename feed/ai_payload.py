@@ -269,6 +269,38 @@ def media_image_units(media, convert_pdf):
                 units += 1
     return units
 
+
+
+def media_guard_error(media, provider, model_name):
+    """Return (status, message) before an HTTP call if media is unsupported.
+
+    This is the final guard after PDF/Office adaptation and image optimization.
+    It deliberately does not drop or trim pages: an incompatible model is
+    skipped by the caller, while a later model receives all evidence.
+    """
+    from .ai_model_catalog import get_model_capabilities
+    media = media or []
+    if not media:
+        return None
+    caps = get_model_capabilities(model_name, provider)
+    if not caps.get('supports_vision', True):
+        return 415, 'Модель не підтримує зображення/PDF; візуальні докази не надіслано.'
+    units = media_image_units(media, convert_pdf=False)
+    limit = caps.get('max_images')
+    if limit is not None and units > limit:
+        return 413, (f'Модель приймає щонайбільше {limit} зображень/PDF, '
+                     f'а підготовлено {units}. Запит не надіслано; докази збережено.')
+    if (provider or '').lower() != 'gemini':
+        unsupported = []
+        for item in media:
+            mime = str(item.get('mime_type') or '').lower()
+            if not mime.startswith('image/') and not ((provider or '').lower() == 'openrouter'
+                                                      and mime == 'application/pdf'):
+                unsupported.append(mime or 'невідомий тип')
+        if unsupported:
+            return 415, 'Непідтримуваний тип візуального матеріалу: ' + ', '.join(sorted(set(unsupported))[:3])
+    return None
+
 def optimize_media(media, provider):
     from .ai_context import evidence_cache
     cache = evidence_cache()

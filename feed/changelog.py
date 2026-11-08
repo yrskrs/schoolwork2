@@ -3,14 +3,24 @@
 Забезпечує чітке розділення змін для учнів та для вчителів.
 """
 
-SITE_VERSION = "4.8.13h"
-SITE_VERSION_SHORT = "v4.8.13h"
+SITE_VERSION = "4.8.13i"
+SITE_VERSION_SHORT = "v4.8.13i"
 
 CHANGELOG_DATA = [
+{'version': '4.8.13i',
+ 'date': '8 листопада 2026',
+ 'badge': 'Стабільність ШІ',
+ 'is_latest': True,
+ 'student_changes': [],
+ 'teacher_changes': [{'icon': '🧠',
+                      'title': 'Менше технічних збоїв ШІ',
+                      'desc': 'Остаточна перевірка візуальних матеріалів після PDF/Office-адаптації '
+                              'не дає надіслати зайві зображення чи фото текстовій моделі. '
+                              'Для Gemini закешовано відхилені опції, для OpenRouter збільшено бюджет відповіді.'}]},
 {'version': '4.8.13h',
  'date': '8 листопада 2026',
  'badge': 'Безпека',
- 'is_latest': True,
+ 'is_latest': False,
  'student_changes': [],
  'teacher_changes': [{'icon': '🔐',
                       'title': 'Захист входу і в адмінці',
