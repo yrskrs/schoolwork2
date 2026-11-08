@@ -91,6 +91,7 @@ health app/worker, відсутність змін у даних.
   чинні паролі не змінюються;
 - модель `LoginThrottle` + міграція 0075; ключ — SHA-256 від IP+username,
   пароль/логін у відкритому вигляді не зберігаються;
+- те саме обмеження застосовано до `/admin/login/`; сигнали фіксують/очищають спроби.
 - 5 невдач за 15 хвилин → тимчасове блокування 15 хвилин для цієї пари;
   успішний вхід очищає лічильник; ключ IP+username не блокує інших учнів
   зі спільним шкільним IP.
@@ -98,17 +99,17 @@ health app/worker, відсутність змін у даних.
 **Перевірка:** тести блокування, очищення, іншого користувача з тим самим IP,
 валідаторів; перевірка відсутності пароля в ключі.
 
-## Розгортання 4.8.13g
+## Розгортання 4.8.13h
 
-- Образ: `schoolwork2-app:4.8.13g-3dddc2799e8c`.
-- Ревізія: `5cccf4ebe59255acc3d291893510d3cb6e94b84f`.
-- Відбиток коду: `3dddc2799e8cb75de06562af5c5073097fd27b3ec45cc50dceffdae675d321f0`.
-- `/healthz/` — 4.8.13g; app/ai_worker healthy; дані 451/95/17/296 без змін.
+- Образ: `schoolwork2-app:4.8.13h-3735703470d8`.
+- Ревізія: `6e53989e1294286aceb77ce89e52e985de0cbce4`.
+- Відбиток коду: `3735703470d857aff929a828a89376e7661e174a38d24b4f989e5fcb0f328ca8`.
+- `/healthz/` — 4.8.13h; app/ai_worker healthy; дані 451/95/17/296 без змін.
 - PostgreSQL після recreate слухає лише `127.0.0.1:5433`; LAN-порт закритий.
 - Funnel `/teacher/login/`: `Strict-Transport-Security: max-age=86400`, CSRF cookie `Secure`; LAN — без HSTS і без `Secure`.
 - `LoginThrottle` (міграція 0075) застосована, таблиця порожня на старті.
 - `schoolnet_updater` перезапущено після копіювання джерел.
-- Повний кандидатний набір: **1012 тестів OK (2 skips)**.
+- Повний кандидатний набір: **1013 тестів OK (2 skips)**.
 - Живий Funnel: HSTS `max-age=86400`, session/CSRF `Secure`, вхід 302 → кабінет 200.
 - Живий LAN: без HSTS, session/CSRF без `Secure`, вхід 302 → кабінет 200.
 - Синтетичні здачі через Funnel і LAN (ID 605, 606) створені й видалені;
@@ -116,8 +117,8 @@ health app/worker, відсутність змін у даних.
 - PostgreSQL: `LISTEN 127.0.0.1:5433`, зовнішній LAN TCP закритий.
 - `git status` на сервері — 0; HEAD = upstream.
 
-[Стан розгортання](artifacts/server_seven_fixes_4.8.13g_deployment.json) ·
-[Фактичні перевірки](artifacts/server_seven_fixes_4.8.13g_checks.json).
+[Стан розгортання](artifacts/server_seven_fixes_4.8.13h_deployment.json) ·
+[Фактичні перевірки](artifacts/server_seven_fixes_4.8.13h_checks.json).
 
 ## Обмеження
 
