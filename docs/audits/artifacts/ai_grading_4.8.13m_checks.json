@@ -1,0 +1,13 @@
+{
+  "release": "4.8.13m",
+  "submission_601": {
+    "ai_suggested_grade": "5",
+    "level": "Середній (4-6)",
+    "tasks_completed": "1",
+    "tasks_total": "4",
+    "false_format_warning": false,
+    "historical_recalculated": true
+  },
+  "tests": "1044 OK (2 skips)",
+  "scope": "synthetic and deterministic post-processing; no new external AI call"
+}
