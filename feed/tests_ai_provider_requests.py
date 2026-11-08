@@ -142,3 +142,27 @@ class GeminiRecoveryTests(SimpleTestCase):
         # First attempt carried thinkingConfig, the retry did not.
         self.assertIn('thinkingConfig', sent_payloads[0]['generationConfig'])
         self.assertNotIn('thinkingConfig', sent_payloads[-1]['generationConfig'])
+
+
+class DeterministicPayloadTests(SimpleTestCase):
+    """Evaluation requests must carry a fixed seed where the provider supports it."""
+
+    @patch('feed.gemini_service._http_post_json')
+    def test_gemini_payload_contains_seed(self, post):
+        from . import gemini_service
+        post.return_value = (200, {'candidates': [{'content': {'parts': [{'text': '{"ok": true}'}]}}]}, '{"ok": true}')
+        status, reply, error, _ = gemini_service._raw_call_ai_api(
+            'synthetic prompt', provider='gemini', model_name='gemini-3.1-flash-lite', seed=42)
+        self.assertEqual(status, 200)
+        payload = post.call_args.args[1]
+        self.assertEqual(payload['generationConfig']['seed'], 42)
+
+    @patch('feed.gemini_service._http_post_json')
+    def test_openai_compatible_payload_contains_seed(self, post):
+        from . import gemini_service
+        post.return_value = (200, {'choices': [{'message': {'content': '{"ok": true}'}}]}, '{"ok": true}')
+        status, reply, error, _ = gemini_service._raw_call_ai_api(
+            'synthetic prompt', provider='groq', model_name='qwen/qwen3.8-27b', seed=42)
+        self.assertEqual(status, 200)
+        payload = post.call_args.args[1]
+        self.assertEqual(payload['seed'], 42)

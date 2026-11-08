@@ -316,7 +316,7 @@ def log_ai_request_metric(model_name, provider='gemini', action='evaluation', st
         pass
 
 
-def _raw_call_ai_api(prompt_text, system_prompt="", inline_media=None, provider="gemini", api_key="", model_name="", custom_url="", temperature=0.2, max_output_tokens=3500, timeout=35, json_mode=False, thinking_budget=None):
+def _raw_call_ai_api(prompt_text, system_prompt="", inline_media=None, provider="gemini", api_key="", model_name="", custom_url="", temperature=0.2, max_output_tokens=3500, timeout=35, json_mode=False, thinking_budget=None, seed=None):
     provider = (provider or 'gemini').lower().strip()
     from django.conf import settings as django_settings
     from .ai_privacy import outbound, PrivacyBlocked
@@ -396,6 +396,8 @@ def _raw_call_ai_api(prompt_text, system_prompt="", inline_media=None, provider=
             "temperature": temperature,
             "maxOutputTokens": max_output_tokens
         }
+        if seed is not None:
+            generation_config["seed"] = seed
         if thinking_budget is not None:
             generation_config["thinkingConfig"] = {"thinkingBudget": thinking_budget}
         if json_mode:
@@ -474,7 +476,14 @@ def _raw_call_ai_api(prompt_text, system_prompt="", inline_media=None, provider=
 
             _generic_invalid = status_code == 400 and _recoverable_400(text)
 
-            # 1. Повтор без thinkingConfig (thinkingBudget=0 часто відхиляється
+            # 1. Повтор без seed, якщо конкретна Gemini-модель його не приймає.
+            if _generic_invalid and "seed" in payload.get("generationConfig", {}):
+                _log_gemini_400(text, payload)
+                del payload["generationConfig"]["seed"]
+                status_code, data, text = _http_post_json(url, payload, headers=headers, timeout=gemini_timeout)
+                _generic_invalid = status_code == 400 and _recoverable_400(text)
+
+            # 2. Повтор без thinkingConfig (thinkingBudget=0 часто відхиляється
             #    моделями, що вимагають мінімальний бюджет міркувань).
             if _generic_invalid and "thinkingConfig" in payload.get("generationConfig", {}):
                 _log_gemini_400(text, payload)
@@ -579,6 +588,8 @@ def _raw_call_ai_api(prompt_text, system_prompt="", inline_media=None, provider=
             "temperature": temperature,
             "max_tokens": max_output_tokens,
         }
+        if seed is not None and provider in ('openai', 'groq', 'openrouter', 'deepseek', 'custom'):
+            payload['seed'] = seed
         if provider == 'groq':
             payload['max_completion_tokens'] = payload.pop('max_tokens')
             if thinking_budget == 0:
@@ -609,6 +620,11 @@ def _raw_call_ai_api(prompt_text, system_prompt="", inline_media=None, provider=
                 if 'reasoning' in error_text and any(term in error_text for term in ('mandatory', 'cannot be disabled', 'required')):
                     payload.pop('reasoning')
                     status_code, data, text = post_chat(payload)
+
+            # Якщо провайдер не приймає seed, повторюємо без нього.
+            if status_code == 400 and 'seed' in payload:
+                payload.pop('seed', None)
+                status_code, data, text = post_chat(payload)
 
             # Якщо endpoint не підтримує response_format (400), пробуємо повторити без нього
             if status_code == 400 and json_mode and ('response_format' in text or 'json_object' in text):
@@ -667,7 +683,7 @@ def _raw_call_ai_api(prompt_text, system_prompt="", inline_media=None, provider=
 
 
 @configured_call
-def call_ai_api(prompt_text, system_prompt="", inline_media=None, provider="gemini", api_key="", model_name="", custom_url="", temperature=0.2, max_output_tokens=3500, timeout=35, json_mode=False, thinking_budget=None, action="evaluation", connection_id=None):
+def call_ai_api(prompt_text, system_prompt="", inline_media=None, provider="gemini", api_key="", model_name="", custom_url="", temperature=0.2, max_output_tokens=3500, timeout=35, json_mode=False, thinking_budget=None, action="evaluation", connection_id=None, seed=None):
     """
     Універсальна функція для звернення до будь-якого ШІ-провайдера
     (Google Gemini, OpenAI, DeepSeek, Groq, OpenRouter, Custom/Ollama).
@@ -687,7 +703,8 @@ def call_ai_api(prompt_text, system_prompt="", inline_media=None, provider="gemi
         max_output_tokens=max_output_tokens,
         timeout=timeout,
         json_mode=json_mode,
-        thinking_budget=thinking_budget
+        thinking_budget=thinking_budget,
+        seed=seed
     )
     latency_ms = int((time.time() - t_start) * 1000)
 
@@ -6847,9 +6864,9 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
         )
     prompt_lines.extend(text_parts)
     if is_traditional:
-        prompt_lines.append(f"\nПроаналізуй роботу за класичною (традиційною) 12-бальною системою ({preset_name_display}) та обов'язково поверни JSON з полями: suggested_grade (тільки ціле число 1-12 або 'Доопрацювати'), level, format_warning (рядок із зауваженням або null), unclear_task (true/false), summary, strengths (масив), weaknesses (масив), feedback_comment, task_resolution (об'єкт з scope_source, assigned_task_count, assigned_tasks, ignored_found_tasks), evaluation_plan (об'єкт з task_summary, assigned_tasks, criteria, format_requirements), submission_evidence (об'єкт з submitted_files, has_link, has_comment, inaccessible_materials), criteria_results (масив об'єктів з criterion, status ['completed'/'partial'/'missing'/'unverifiable'], evidence, recommendation), revision_advice (масив рядків конкретних порад для перездачі), tasks_evaluated (масив об'єктів з task_num, task_title, status ['completed'/'partial'/'missing'], comment), tasks_completed_count (число), tasks_total_count (число — УВАГА: tasks_total_count обов'язково має дорівнювати assigned_task_count з task_resolution, а не кількості вправ у презентації), ai_generated_percent (число 0-100), ai_generated_detected (true/false), ai_generated_confidence ('none'/'low'/'medium'/'high'), ai_generated_details (рядок або null). Поле 'gr_results' поверни порожнім масивом [] або null, оскільки групи результатів НЕ використовуються в класичній системі.")
+        prompt_lines.append(f"\nПроаналізуй роботу за класичною (традиційною) 12-бальною системою ({preset_name_display}) та обов'язково поверни JSON з полями: suggested_grade (тільки ціле число 1-12 або 'Доопрацювати'), level, format_warning (рядок із зауваженням або null), unclear_task (true/false), summary, strengths (масив), weaknesses (масив), feedback_comment, task_resolution (об'єкт з scope_source, assigned_task_count, assigned_tasks, ignored_found_tasks), evaluation_plan (об'єкт з task_summary, assigned_tasks, criteria, format_requirements), submission_evidence (об'єкт з submitted_files, has_link, has_comment, inaccessible_materials), criteria_results (масив об'єктів з criterion, status ['completed'/'partial'/'missing'/'not_completed'/'unverifiable'], evidence, recommendation), revision_advice (масив рядків конкретних порад для перездачі), tasks_evaluated (масив об'єктів з task_num, task_title, status ['completed'/'partial'/'missing'/'not_completed'], comment), tasks_completed_count (число), tasks_total_count (число — УВАГА: tasks_total_count обов'язково має дорівнювати assigned_task_count з task_resolution, а не кількості вправ у презентації), ai_generated_percent (число 0-100), ai_generated_detected (true/false), ai_generated_confidence ('none'/'low'/'medium'/'high'), ai_generated_details (рядок або null). Поле 'gr_results' поверни порожнім масивом [] або null, оскільки групи результатів НЕ використовуються в класичній системі. Статус completed дозволений лише з непорожнім evidence (цитата або конкретний фрагмент). Пропущений пункт/невиконана дія — not_completed або missing, не unverifiable. unverifiable — лише технічно нечитабельний матеріал. assessment_blocked=true — лише коли основний матеріал не читається або unverifiable > половини критеріїв/ГР.")
     else:
-        prompt_lines.append(f"\nПроаналізуй роботу згідно з обраними критеріями ({preset_name_display}) та обов'язково поверни JSON з полями: suggested_grade (тільки ціле число 1-12 або 'Доопрацювати'), level, format_warning (рядок із зауваженням або null), unclear_task (true/false), summary, strengths (масив), weaknesses (масив), feedback_comment, task_resolution (об'єкт з scope_source, assigned_task_count, assigned_tasks, ignored_found_tasks), evaluation_plan (об'єкт з task_summary, assigned_tasks, criteria, format_requirements), submission_evidence (об'єкт з submitted_files, has_link, has_comment, inaccessible_materials), criteria_results (масив об'єктів з criterion, status ['completed'/'partial'/'missing'/'unverifiable'], evidence, recommendation), revision_advice (масив рядків конкретних порад для перездачі), gr_results (масив об'єктів з code, name, grade, level, comment), tasks_evaluated (масив об'єктів з task_num, task_title, status ['completed'/'partial'/'missing'], comment), tasks_completed_count (число), tasks_total_count (число — УВАГА: tasks_total_count обов'язково має дорівнювати assigned_task_count з task_resolution, а не кількості вправ у презентації), ai_generated_percent (число 0-100), ai_generated_detected (true/false), ai_generated_confidence ('none'/'low'/'medium'/'high'), ai_generated_details (рядок або null). Усі оцінки обов'язково мають бути цілими числами (без десятих часток), заокругленими на користь учня.")
+        prompt_lines.append(f"\nПроаналізуй роботу згідно з обраними критеріями ({preset_name_display}) та обов'язково поверни JSON з полями: suggested_grade (тільки ціле число 1-12 або 'Доопрацювати'), level, format_warning (рядок із зауваженням або null), unclear_task (true/false), summary, strengths (масив), weaknesses (масив), feedback_comment, task_resolution (об'єкт з scope_source, assigned_task_count, assigned_tasks, ignored_found_tasks), evaluation_plan (об'єкт з task_summary, assigned_tasks, criteria, format_requirements), submission_evidence (об'єкт з submitted_files, has_link, has_comment, inaccessible_materials), criteria_results (масив об'єктів з criterion, status ['completed'/'partial'/'missing'/'not_completed'/'unverifiable'], evidence, recommendation), revision_advice (масив рядків конкретних порад для перездачі), gr_results (масив об'єктів з code, name, grade, level, status ['assessed'/'not_completed'/'unverifiable'], comment), tasks_evaluated (масив об'єктів з task_num, task_title, status ['completed'/'partial'/'missing'/'not_completed'], comment), tasks_completed_count (число), tasks_total_count (число — УВАГА: tasks_total_count обов'язково має дорівнювати assigned_task_count з task_resolution, а не кількості вправ у презентації), ai_generated_percent (число 0-100), ai_generated_detected (true/false), ai_generated_confidence ('none'/'low'/'medium'/'high'), ai_generated_details (рядок або null). Усі оцінки обов'язково мають бути цілими числами (без десятих часток), заокругленими на користь учня. Статус completed дозволений лише з непорожнім evidence (цитата або конкретний фрагмент). Пропущений пункт/невиконана дія — not_completed або missing, не unverifiable. unverifiable — лише технічно нечитабельний матеріал. assessment_blocked=true — лише коли основний матеріал не читається або unverifiable > половини критеріїв/ГР. Якщо перевірено більшість ГР, постав частковий числовий бал за перевіреними ГР.")
 
     if custom_prompt:
         system_instruction = custom_prompt.strip()
@@ -7177,12 +7194,13 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                     api_key=c_key,
                     model_name=c_model,
                     custom_url=c_url,
-                    temperature=float(settings.temperature if settings.temperature is not None else 0.2),
+                    temperature=0.0,
                     max_output_tokens=min(10000, (2200 if c_provider == 'groq' else 4000) + 300 * len(active_grs) + 180 * len(scope.get("assigned_tasks") or [])),
                     timeout=50 if c_provider == 'gemini' else (90 if router_retry else 35),
                     json_mode=True,
                     thinking_budget=thinking_budget_val,
-                    connection_id=c_conn_id
+                    connection_id=c_conn_id,
+                    seed=42
                 )
 
                 if isinstance(raw_data, dict) and raw_data.get('_schoolnet_deferred'):
@@ -7320,11 +7338,23 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                     )
 
                 if result_json:
-                    if result_json.get('assessment_blocked') is True or result_json.get('suggested_grade') is None:
-                        reason = report_failure('Модель не змогла оцінити роботу або не повернула бал. Оцінку не збережено.')
-                        attempted_errors.append(f'[{c_provider}/{c_model}]: {reason}')
-                        break
-                    suggested_grade = str(result_json.get('suggested_grade', '')).strip()
+                    proposed_grade = result_json.get('suggested_grade')
+                    if proposed_grade is None or not str(proposed_grade).strip():
+                        # A model may withhold the grade because one item was
+                        # unverifiable. If most GR have verified marks, use their
+                        # average instead of failing the whole assessment.
+                        from .ai_context import partial_grade_from_gr_results
+                        partial_grade = partial_grade_from_gr_results(
+                            result_json.get('gr_results'), active_grs)
+                        if partial_grade is not None:
+                            result_json['_partial_from_gr'] = True
+                            suggested_grade = str(partial_grade)
+                        else:
+                            reason = report_failure('Модель не змогла оцінити роботу або не повернула бал. Оцінку не збережено.')
+                            attempted_errors.append(f'[{c_provider}/{c_model}]: {reason}')
+                            break
+                    else:
+                        suggested_grade = str(proposed_grade).strip()
                     if suggested_grade != 'Доопрацювати':
                         try:
                             numeric_grade = float(suggested_grade.replace(',', '.'))
@@ -7545,10 +7575,20 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                                 st_val = 'partial'
                             elif raw_st in ['unverified', 'unverifiable', 'не підтверджено', 'непідтверджено']:
                                 st_val = 'unverifiable'
+                            elif raw_st in ['not_completed', 'not completed', 'не виконано', 'пропущено', 'missing']:
+                                st_val = 'missing'
                             else:
                                 st_val = 'missing'
 
                         rec_text = str(found_res.get('recommendation') or '').strip()
+                        if st_val == 'completed' and not ev_text:
+                            # A completed criterion without a concrete quote or
+                            # screenshot description is not verifiable evidence.
+                            # Do not block the whole work: count it as partial and
+                            # make the missing evidence visible to the teacher.
+                            st_val = 'partial'
+                            ev_text = 'Модель не навела конкретного доказу виконання.'
+                            rec_text = rec_text or f"Навести конкретний фрагмент/цитату для: {c_name}"
                         if not rec_text and st_val in ['missing', 'partial']:
                             rec_text = f"Виконати вимогу: {c_name}"
 
@@ -8101,28 +8141,42 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                     feedback_comment = re.sub(r'\n{3,}', '\n\n', feedback_comment).strip()
                     summary = re.sub(r'\s{2,}', ' ', summary).strip()
 
-                    from .ai_context import complete_result_groups, unverifiable_labels
+                    from .ai_context import assessment_policy, complete_result_groups
                     if not is_traditional and active_grs:
                         clean_gr_results = complete_result_groups(clean_gr_results, active_grs)
                     # A final artifact cannot verify who performed the work.
                     strengths = [s for s in strengths if not re.search(r'самостійніст|самостійно\b|власноруч', str(s), re.I)]
                     result_json['grade_explanation'] = result_json.get('grade_explanation') or summary or feedback_comment
-                    # Any unconfirmed active criterion or GR blocks the numeric
-                    # grade. The teacher must review it manually before a mark
-                    # becomes available; we never store a guessed number.
-                    blocked_labels = unverifiable_labels(
-                        result_json.get('criteria_results'), clean_gr_results)
-                    assessment_blocked = bool(blocked_labels)
+                    # A single unverifiable item no longer withholds the whole
+                    # mark. Block only when the main work is unreadable or more
+                    # than half of the active criteria/GR are unverifiable.
+                    main_unreadable = (not student_raw_text.strip()) and not (inline_media or [])
+                    policy = assessment_policy(
+                        result_json.get('criteria_results'), clean_gr_results,
+                        main_unreadable=main_unreadable)
+                    blocked_labels = policy['labels'] if policy['blocked'] else []
+                    partial_labels = policy['labels'] if policy['partial'] else []
+                    assessment_blocked = policy['blocked']
+                    partial_assessment = policy['partial']
                     result_json['assessment_blocked'] = assessment_blocked
+                    result_json['partial_assessment'] = partial_assessment
                     result_json['blocked_reasons'] = blocked_labels
+                    result_json['unverified_reasons'] = policy['labels']
                     result_json['needs_teacher_review'] = (
-                        assessment_blocked
+                        assessment_blocked or partial_assessment
                         or not assignment.allow_ai_usage)
                     full_feedback_parts = []
                     if assessment_blocked:
                         full_feedback_parts.append(
                             '⛔ **Оцінку заблоковано:** не підтверджено ' + ', '.join(blocked_labels)
                             + '. Числовий бал не збережено. Він стане доступним лише після ручної перевірки вчителем.')
+                    elif partial_assessment:
+                        partial_note = (
+                            '⚠️ **Оцінено частково:** не підтверджено ' + ', '.join(partial_labels)
+                            + '. Бал розраховано за перевіреними критеріями/ГР; '
+                            'учитель має переглянути непідтверджені пункти.')
+                        full_feedback_parts.append(partial_note)
+                        format_warning = (format_warning + ' ' + partial_note).strip()
                     elif result_json.get('submission_evidence', {}).get('inaccessible_materials'):
                         full_feedback_parts.append('⚠️ **Потрібна перевірка вчителя:** частину матеріалів не вдалося підтвердити. Оцінка попередня; перед прийняттям перегляньте непідтверджені матеріали.')
                     if format_warning:
@@ -8181,6 +8235,8 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                                 suggested_grade = str(int(min(12, max(1, math.ceil(s_num)))))
                             except (ValueError, TypeError):
                                 pass
+                        if not suggested_grade:
+                            suggested_grade = str(avg_gr_grade) if avg_gr_grade is not None else 'Доопрацювати'
 
                     # Формуємо чистий відгук для публічних коментарів учневі (БЕЗ оцінок ГР)
                     from .ai_student_feedback import compact_student_feedback
@@ -8233,7 +8289,9 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                         'suggested_grade': None if assessment_blocked else suggested_grade,
                         'level': '' if assessment_blocked else level,
                         'assessment_blocked': assessment_blocked,
+                        'partial_assessment': partial_assessment,
                         'blocked_reasons': blocked_labels,
+                        'unverified_reasons': policy['labels'],
                         'tasks_total_count': result_json.get('tasks_total_count'),
                         'tasks_completed_count': result_json.get('tasks_completed_count'),
                         'task_resolution': result_json.get('task_resolution'),

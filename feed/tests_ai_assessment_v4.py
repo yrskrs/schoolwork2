@@ -134,7 +134,11 @@ class AssessmentV4Tests(TestCase):
         self.assertNotIn('Підтверджено', row['evidence'])
 
     def test_blocked_and_malformed_evaluations_do_not_use_student_attempt(self):
-        for result in [self.result(assessment_blocked=True), {'feedback_comment': 'Без оцінки'}]:
+        blocked_without_evidence = self.result(assessment_blocked=True, suggested_grade=None, criteria_results=[
+            {'criterion': 'Зміст', 'status': 'unverifiable', 'evidence': 'Файл не читається.', 'recommendation': ''},
+            {'criterion': 'Формат', 'status': 'unverifiable', 'evidence': 'Файл не читається.', 'recommendation': ''},
+        ])
+        for result in [blocked_without_evidence, {'feedback_comment': 'Без оцінки'}]:
             with patch('feed.views._evaluate_student_submission', return_value={'status': 'failed'}):
                 job = enqueue_submission_job(self.sub, 'student_check')
             self.assertEqual(job.status, 'failed')

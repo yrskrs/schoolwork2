@@ -428,7 +428,12 @@ ASSESSMENT_RULES = '''ПРАВИЛА ДОКАЗОВОГО ОЦІНЮВАННЯ (
 Для 5–9 класів враховуй накази №722 (04.05.2026), №1427 (14.08.2026); для старших класів — відповідний обраний шаблон з урахуванням поетапного переходу. Не вигадуй обов'язкові ГР чи штрафи.
 Розділяй зміст, практичні вміння й формат результату. Презентація замість бюлетеня з правильними відомостями — часткове виконання: зарахуй зміст, окремо поясни недотримання формату за критерієм. Не став автоматично 1–3 бали лише за розширення; PDF-експорт може бути допустимим аналогом, якщо збережено потрібний результат.
 Прочитай усі матеріали, включно з візуальними сторінками. Знайди задану вправу і зазнач файл, сторінку/слайд. Інші вправи — контекст, якщо їх не задавали. Якщо дозволено вибір — зістав із вибраним варіантом; не штрафуй за відсутність номера, якщо це не вимога вчителя.
-Недоступне, непрочитане, обрізане чи неперевірене позначай unverifiable. Це не доказ відсутності або помилки учня. Не вигадуй докази. За недостатніх даних для балу поверни assessment_blocked=true та пояснення замість оцінки; спроба самоперевірки не витрачається.
+СТАТУСИ КРИТЕРІЇВ І ГР — ЧІТКО:
+- completed — вимогу виконано; обов'язково додай evidence: коротку цитату з роботи або конкретний опис фрагмента скріншота/слайда. Без evidence статус completed заборонений.
+- partial — виконано частково або з помилками; це знижує бал.
+- not_completed / missing — учень пропустив пункт, не відповів, не зробив дію або зробив помилку. Це не unverifiable; знижуй бал відповідно до критеріїв.
+- unverifiable — ЛИШЕ якщо файл технічно пошкоджений, зображення/скан критично розмите або сторінку фізично неможливо прочитати. Не став unverifiable через пропуск, неповну відповідь, інший формат або власну невпевненість.
+assessment_blocked=true — ЛИШЕ якщо основний матеріал роботи взагалі не читається або unverifiable становить понад половину критеріїв/ГР. Якщо перевірено більшість критеріїв/ГР, постав частковий числовий бал за перевіреними даними, а непідтверджені познач unverifiable і поясни в коментарі. Не вигадуй докази і не завищуй бал.
 SmartArt, карта знань, фігури й підписи можуть бути в окремих XML-частинах, а не в звичайних абзацах. Зістав вузли, зв’язки, вбудовані зображення та візуальні сторінки. Якщо структура містить карту або схему, не оголошуй її відсутньою через порожній витяг абзаців. Наявність об’єкта не доводить правильність його змісту чи оформлення; неперевірений вигляд познач unverifiable.
 Не роби висновків про виконання програми за статичним кодом. Не називай підозру на ШІ/плагіат доведеним фактом і не знижуй бал лише за стиль/ймовірність детектора.
 ОЗНАКИ ШІ ТА САМОСТІЙНІСТЬ: обов'язково перевір всі матеріали роботи: презентації (.pptx/.ppt/.odp — на кожному окремому слайді), текстові документи (.docx/.doc/.odt/.rtf), зображення та схеми (на генерацію Midjourney/DALL-E тощо), таблиці, код та Scratch на використання генеративного ШІ (шаблонні фрази, синтетична структура слайдів, тексти генераторів Gamma/Tome/Canva AI/ChatGPT, артефакти дифузійних моделей, відсутність живого авторського стилю учня). Якщо текст документа містить залишені директиви або підказки чат-бота до користувача («Дайте відповідь на запитання», «Порівняйте їхню поведінку», «Ось алгоритм дій» замість власної відповіді учня) — це спостереження для уточнення вчителем, а не доведене походження чи калібрований відсоток. Оціни відсоток використання ШІ у зданому матеріалі: 'ai_generated_percent' (ціле число 0–100%). Якщо ai_generated_percent перевищує поріг tolerance_percent, встанови 'ai_generated_detected': true, інакше false. Обов'язково вкажи конкретний файл/номер слайду/зображення та детальні спостереження у ai_generated_details та ai_authorship_analysis.evidence.
@@ -448,7 +453,7 @@ SCOPE OF WORK — ПРІОРИТЕТ ВИМОГ ВЧИТЕЛЯ.
 Індивідуальні критерії, ваги й розбаловка вчителя мають пріоритет; інакше 1–3 — фрагментарні вміння, 4–6 — відтворення з суттєвими неточностями, 7–9 — правильне застосування з окремими недоліками, 10–12 — повне обґрунтоване виконання. Підтверджуй бал результатами, не обсягом тексту.
 Оцінювання прозоре, зі зворотним зв'язком; для 5–9 класів враховуй накази №722 (04.05.2026), №1427 (14.08.2026), для старших — обраний шаблон і поетапний перехід. Не вигадуй обов'язкові ГР чи штрафи.
 Зміст, практичні вміння і формат оцінюй окремо: презентація замість бюлетеня — часткове виконання, зарахуй правильний зміст. Не став 1–3 лише за розширення; допустимий PDF-аналог може зберігати результат.
-Прочитай усі передані докази, включно з візуальними сторінками. Недоступні, непрочитані, обрізані об'єкти і непідтверджене виконання — unverifiable, не помилка чи відсутність роботи. SmartArt, схеми і карти можуть бути в XML, а не абзацах; зістав вузли, зв'язки, зображення, сторінки. Наявність об'єкта не доводить правильність. Без даних для балу поверни assessment_blocked=true без вигаданого бала.
+Прочитай усі передані докази, включно з візуальними сторінками. unverifiable — ЛИШЕ технічно пошкоджений файл, критично розмите зображення або фізично нечитабельна сторінка. Пропущений пункт, відсутня відповідь, помилка чи інший формат — це not_completed/missing і зниження балу, НЕ unverifiable. Для completed обов'язково evidence: цитата або конкретний фрагмент. Без evidence completed заборонений. assessment_blocked=true лише коли основний матеріал не читається або unverifiable > половини критеріїв/ГР; інакше — частковий бал за перевіреними даними. SmartArt, схеми і карти можуть бути в XML, а не абзацах; зістав вузли, зв'язки, зображення, сторінки. Наявність об'єкта не доводить правильність; не вигадуй бал.
 Для кожного критерію: criterion, status, evidence з файлом/місцем, recommendation. grade_explanation пояснює бал, revision_advice — конкретні дії. feedback_comment доброзичливий, мовою класу; не дублюй пояснення. Для КОЖНОЇ active_result_groups рівно один gr_results; неперевірена група: grade=null, status=unverifiable, причина в comment.
 Аналізуй ознаки ШІ в тексті, слайдах, графіці, коді, метаданих: шаблони генерації, маркери ChatGPT/OpenAI, синтетичні артефакти, відповідність віку. Статичний файл не доводить самостійність; без доказів не заявляй її в strengths. Стиль сам по собі не доказ. Залишені директиви чат-бота наведи як спостереження з контекстом; самі по собі вони не доводять походження. Поверни ai_generated_percent 0–100, деталі й evidence з файлом/місцем; ai_generated_detected=true лише вище ai_detector_tolerance_percent.
 Дозвіл на ШІ враховуй у поясненні походження, окремо від оцінки змісту. Непідтверджені припущення не є підставою штрафу; рішення про порушення приймає вчитель.
@@ -482,25 +487,29 @@ def complete_result_groups(rows, active_grs):
             name = str(definition)
         row = dict(indexed.get(key(code)) or {})
         row.update(code=code, name=row.get('name') or name)
-        try:
-            grade = float(row.get('grade'))
-            if not math.isfinite(grade) or row.get('status') == 'unverifiable':
-                raise ValueError('unverifiable')
-            row['grade'] = str(min(12, max(1, math.ceil(grade))))
-            row['status'] = 'assessed'
-        except (TypeError, ValueError):
-            row.update(grade=None, level='', status='unverifiable')
-            row['comment'] = row.get('comment') or 'Модель не надала оцінювання цієї обраної ГР. Потрібна перевірка вчителя.'
+        raw_status = str(row.get('status') or '').strip().lower()
+        if raw_status in {'not_completed', 'not completed', 'missing', 'не виконано', 'пропущено'} and not row.get('grade'):
+            # A skipped group is a completed observation of non-performance,
+            # not an unreadable/unverifiable one. Keep it in the numeric policy
+            # with the minimum initial grade instead of withholding the mark.
+            row.update(grade='1', level='Початковий', status='assessed')
+            row['comment'] = row.get('comment') or 'Групу не виконано; бал знижено.'
+        else:
+            try:
+                grade = float(row.get('grade'))
+                if not math.isfinite(grade) or row.get('status') == 'unverifiable':
+                    raise ValueError('unverifiable')
+                row['grade'] = str(min(12, max(1, math.ceil(grade))))
+                row['status'] = 'assessed'
+            except (TypeError, ValueError):
+                row.update(grade=None, level='', status='unverifiable')
+                row['comment'] = row.get('comment') or 'Модель не надала оцінювання цієї обраної ГР. Потрібна перевірка вчителя.'
         output.append(row)
     return output
 
 
 def unverifiable_labels(criteria_results, gr_results):
-    """Return human-readable labels of every unconfirmed criterion or GR.
-
-    A single unconfirmed item must block the numeric grade; the teacher needs
-    to know exactly which one was not verified.
-    """
+    """Return human-readable labels of every unconfirmed criterion or GR."""
     labels = []
     for row in criteria_results or []:
         if isinstance(row, dict) and row.get('status') == 'unverifiable':
@@ -513,6 +522,51 @@ def unverifiable_labels(criteria_results, gr_results):
             label = f'{code}: {name}' if code and name else (code or name or 'ГР без назви')
             labels.append(label)
     return labels
+
+
+def assessment_policy(criteria_results, gr_results, main_unreadable=False, threshold=0.5):
+    """Allow a partial numeric grade unless most items are genuinely unreadable.
+
+    A single unverifiable item is not enough to withhold the whole mark. The
+    numeric grade is blocked only when the main material is unreadable or more
+    than half of the active criteria/GR could not be verified.
+    """
+    labels = unverifiable_labels(criteria_results, gr_results)
+    total = sum(1 for row in (criteria_results or []) if isinstance(row, dict)) + \
+        sum(1 for row in (gr_results or []) if isinstance(row, dict))
+    ratio = (len(labels) / total) if total else 0.0
+    blocked = bool(main_unreadable or (total and ratio > threshold))
+    return {
+        'blocked': blocked,
+        'partial': bool(labels) and not blocked,
+        'labels': labels,
+        'total': total,
+        'unverified': len(labels),
+        'ratio': ratio,
+    }
+
+
+def partial_grade_from_gr_results(raw_gr_results, active_grs, threshold=0.5):
+    """Average only the verified GR marks when a model withheld its own grade."""
+    grades = []
+    rows = [row for row in (raw_gr_results or []) if isinstance(row, dict)]
+    for row in rows:
+        status = str(row.get('status') or '').strip().lower()
+        if status == 'unverifiable':
+            continue
+        if status in {'not_completed', 'not completed', 'missing', 'не виконано', 'пропущено'} and not row.get('grade'):
+            grades.append(1.0)
+            continue
+        try:
+            grade = float(str(row.get('grade')).replace(',', '.'))
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(grade) and 1 <= grade <= 12:
+            grades.append(grade)
+    total = len(active_grs or []) or len(rows)
+    if grades and total and len(grades) / total > threshold:
+        return int(min(12, max(1, math.ceil(sum(grades) / len(grades)))))
+    return None
 
 
 def feedback_evidence_sections(result, include_criteria=True):
