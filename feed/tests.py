@@ -6755,7 +6755,13 @@ class QuestionAnswerMappingTests(TestCase):
             "weaknesses": [],
             "feedback_comment": "Чудова презентація!",
             "tasks_total_count": 1,
-            "tasks_completed_count": 1
+            "tasks_completed_count": 1,
+            "criteria_results": [
+                {"criterion": "8 слайдів", "status": "completed", "evidence": "8 слайдів у наявності."},
+                {"criterion": "титульний слайд", "status": "completed", "evidence": "Титульний слайд присутній."},
+                {"criterion": "висновок", "status": "completed", "evidence": "Висновки наведені на слайді 8."},
+                {"criterion": "джерела", "status": "completed", "evidence": "Джерела наведені."},
+            ]
         }, ensure_ascii=False), None, {})
 
         result = evaluate_submission_with_gemini(submission)

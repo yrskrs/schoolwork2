@@ -15,11 +15,27 @@ from .models import AIJob, AISettings, Teacher
 from .ai_jobs import execute_job
 from .ai_privacy import _current
 from .gemini_service import evaluate_submission_with_gemini
+import io
+import base64
+from PIL import Image
+
+
+def picture_with_personal_data():
+    buffer = io.BytesIO()
+    image = Image.new('RGB', (32, 24), 'blue')
+    exif = image.getexif()
+    exif[315] = 'Іван Петренко'
+    image.save(buffer, format='PNG', exif=exif)
+    return {'mime_type': 'image/png', 'data': base64.b64encode(buffer.getvalue()).decode(), 'source': 'Синтетичний файл'}
 
 
 @override_settings(AI_JOBS_EAGER=False)
 class TeacherPrivacyOverrideTests(TestCase):
-    setUp = fixtures.AIConnectionsTests.setUp
+    def setUp(self):
+        fixtures.AIConnectionsTests.setUp(self)
+        self.settings.privacy_mode = 'strict'
+        self.settings.save(update_fields=['privacy_mode'])
+
     add_connection = fixtures.AIConnectionsTests.add_connection
     answer = fixtures.AIConnectionsTests.answer
 
@@ -116,7 +132,7 @@ class TeacherPrivacyOverrideTests(TestCase):
     @patch('feed.gemini_service._http_post_json')
     def test_next_student_check_remains_strict_even_if_job_parameters_are_forged(self, post, extract):
         self.add_connection('gemini', 'synthetic-vision')
-        extract.return_value = (['Використовуй складні паролі.'], [picture()], None)
+        extract.return_value = (['Використовуй складні паролі.'], [picture_with_personal_data()], None)
         post.return_value = self.visual_answer()
         first = self.client.post(self.endpoint(), {'ignore_strict_privacy': '1'})
         execute_job(first.json()['job_id'])

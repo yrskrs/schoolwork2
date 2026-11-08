@@ -7339,10 +7339,15 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
 
                 if result_json:
                     proposed_grade = result_json.get('suggested_grade')
-                    if proposed_grade is None or not str(proposed_grade).strip():
+                    model_blocked = result_json.get('assessment_blocked') is True
+                    has_evidence_rows = bool(result_json.get('criteria_results')
+                                             or result_json.get('gr_results'))
+                    if (proposed_grade is None or not str(proposed_grade).strip()
+                            or (model_blocked and not has_evidence_rows)):
                         # A model may withhold the grade because one item was
                         # unverifiable. If most GR have verified marks, use their
-                        # average instead of failing the whole assessment.
+                        # average instead of failing the whole assessment. A bare
+                        # "blocked + grade" without any evidence is not usable.
                         from .ai_context import partial_grade_from_gr_results
                         partial_grade = partial_grade_from_gr_results(
                             result_json.get('gr_results'), active_grs)
