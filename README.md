@@ -4,7 +4,7 @@
 
 Поточний випуск: **4.8.13e — швидша віддача статичних файлів**. [Зміни](CHANGELOG.md), [звіт про продуктивність](docs/audits/PERFORMANCE_4_8_13E_2026-11-08.md), [документація](docs/README.md).
 
-Встановлено на головному сервері 08.11.2026: `/healthz/` — 4.8.13d, app/ai_worker healthy, дані до/після збігаються. [Стан розгортання](docs/audits/artifacts/assessment_stability_4_8_13d_deployment.json).
+Встановлено на головному сервері 08.11.2026: `/healthz/` — 4.8.13e, app/ai_worker healthy, дані до/після збігаються. [Стан розгортання](docs/audits/artifacts/performance_4.8.13e_deployment.json).
 
 Попередній випуск: **4.8.13d** — стабільна оцінка без втрати безпеки. [Зміни](CHANGELOG.md), [звіт](docs/audits/ASSESSMENT_STABILITY_4_8_13d.md).
 
