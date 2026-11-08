@@ -1,0 +1,460 @@
+{
+  "image": "schoolwork2-app:4.8.13c-f82b7812eb6d",
+  "version": "4.8.13c",
+  "source_digest": "f82b7812eb6d89d54b9995cb2952209d283618389f4c5acb7e8c4fe6b2ef2c26",
+  "before": {
+    "schoolnet_app": {
+      "image": "sha256:f6466de8cbefef0d962d9a5c1a2684a2c8f18a81c93ea79c9463c23fb41848d5",
+      "image_tag": "schoolwork2-app:4.8.13b",
+      "mounts": [
+        [
+          "/usr/bin/tailscale",
+          "/usr/local/bin/tailscale",
+          false
+        ],
+        [
+          "/var/lib/docker/volumes/schoolwork2_app_cache/_data",
+          "/var/cache/schoolnet",
+          true
+        ],
+        [
+          "/var/lib/docker/volumes/schoolwork2_app_logs/_data",
+          "/app/logs",
+          true
+        ],
+        [
+          "/var/lib/docker/volumes/schoolwork2_app_media/_data",
+          "/app/media",
+          true
+        ],
+        [
+          "/var/run/tailscale",
+          "/var/run/tailscale",
+          false
+        ]
+      ],
+      "networks": [
+        "schoolwork2_default",
+        "schoolwork2_runner_control"
+      ],
+      "ports": {
+        "8000/tcp": [
+          {
+            "HostIp": "",
+            "HostPort": "8080"
+          }
+        ]
+      },
+      "command": [
+        "sh",
+        "-c",
+        "python manage.py migrate && python manage.py collectstatic --noinput && gunicorn --config /app/gunicorn.conf.py schoolnet.wsgi:application"
+      ],
+      "health": "healthy",
+      "restart_count": 0
+    },
+    "schoolnet_ai_worker": {
+      "image": "sha256:f6466de8cbefef0d962d9a5c1a2684a2c8f18a81c93ea79c9463c23fb41848d5",
+      "image_tag": "schoolwork2-app:4.8.13b",
+      "mounts": [
+        [
+          "/var/lib/docker/volumes/schoolwork2_app_cache/_data",
+          "/var/cache/schoolnet",
+          true
+        ],
+        [
+          "/var/lib/docker/volumes/schoolwork2_app_logs/_data",
+          "/app/logs",
+          true
+        ],
+        [
+          "/var/lib/docker/volumes/schoolwork2_app_media/_data",
+          "/app/media",
+          true
+        ]
+      ],
+      "networks": [
+        "schoolwork2_default"
+      ],
+      "ports": {},
+      "command": [
+        "python",
+        "manage.py",
+        "process_ai_jobs"
+      ],
+      "health": "healthy",
+      "restart_count": 0
+    },
+    "schoolnet_postgres": {
+      "image": "sha256:f1c3376c26f2609ab9f29f71f824103fe2fcd8ee0346485cb6122a4f93df6f94",
+      "image_tag": "postgres:16",
+      "mounts": [
+        [
+          "/var/lib/docker/volumes/schoolwork2_postgres_data/_data",
+          "/var/lib/postgresql/data",
+          true
+        ]
+      ],
+      "networks": [
+        "schoolwork2_default"
+      ],
+      "ports": {
+        "5432/tcp": [
+          {
+            "HostIp": "",
+            "HostPort": "5433"
+          }
+        ]
+      },
+      "command": [
+        "postgres"
+      ],
+      "health": "healthy",
+      "restart_count": 0
+    },
+    "schooljournal-web-1": {
+      "image": "sha256:883d4f7f21a2dc6e525ce258eda4d9f0a711988ff634b21679987dce6fa2f17d",
+      "image_tag": "schooljournal-web:1.4.6-aa66358",
+      "mounts": [
+        [
+          "/home/yrsadmin/schooljournal/CHANGELOG.md",
+          "/app/CHANGELOG.md",
+          false
+        ],
+        [
+          "/home/yrsadmin/schooljournal/RELEASES.json",
+          "/app/RELEASES.json",
+          false
+        ],
+        [
+          "/home/yrsadmin/schooljournal/VERSION",
+          "/app/VERSION",
+          false
+        ],
+        [
+          "/var/lib/docker/volumes/schooljournal_backups_data/_data",
+          "/app/backups",
+          true
+        ],
+        [
+          "/var/lib/docker/volumes/schooljournal_media_data/_data",
+          "/app/media",
+          true
+        ],
+        [
+          "/var/lib/docker/volumes/schooljournal_static_data/_data",
+          "/app/staticfiles",
+          true
+        ]
+      ],
+      "networks": [
+        "school-integration",
+        "schooljournal_journal_net"
+      ],
+      "ports": {},
+      "command": [
+        "gunicorn",
+        "config.wsgi:application",
+        "--config",
+        "/app/gunicorn.conf.py",
+        "--bind",
+        "0.0.0.0:8000",
+        "--workers",
+        "3",
+        "--threads",
+        "2",
+        "--timeout",
+        "120"
+      ],
+      "health": "healthy",
+      "restart_count": 0
+    },
+    "school_test-app-1": {
+      "image": "sha256:d8295b48ae461e147bc01151390f94b6a8859d7ebc03466effdfa0c00952c1f3",
+      "image_tag": "schooltest5-app:1.8.8-1f0f386",
+      "mounts": [
+        [
+          "/var/lib/docker/volumes/school_test_app_data/_data",
+          "/app/data",
+          true
+        ],
+        [
+          "/var/lib/docker/volumes/school_test_app_general_uploads/_data",
+          "/app/app/static/uploads",
+          true
+        ],
+        [
+          "/var/lib/docker/volumes/school_test_app_uploads/_data",
+          "/app/app/static/tests",
+          true
+        ],
+        [
+          "/var/lib/docker/volumes/school_test_lan_inventory/_data",
+          "/run/school-lan",
+          false
+        ]
+      ],
+      "networks": [
+        "school-integration",
+        "school_test_schooltest_net"
+      ],
+      "ports": {
+        "8000/tcp": [
+          {
+            "HostIp": "",
+            "HostPort": "8000"
+          }
+        ]
+      },
+      "command": [
+        "uvicorn",
+        "funnel_test_app:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000"
+      ],
+      "health": "healthy",
+      "restart_count": 0
+    }
+  },
+  "before_counts": {
+    "assignments": "95",
+    "classes": "17",
+    "students": "296",
+    "submissions": "451"
+  },
+  "status": "deployed",
+  "backup_verified": true,
+  "after": {
+    "schoolnet_app": {
+      "image": "sha256:7ab6d4295751157e62e1b32ad2e6e724a01e1d68f6241f6c6af4e8c59319a7fe",
+      "image_tag": "schoolwork2-app:4.8.13c-f82b7812eb6d",
+      "mounts": [
+        [
+          "/usr/bin/tailscale",
+          "/usr/local/bin/tailscale",
+          false
+        ],
+        [
+          "/var/lib/docker/volumes/schoolwork2_app_cache/_data",
+          "/var/cache/schoolnet",
+          true
+        ],
+        [
+          "/var/lib/docker/volumes/schoolwork2_app_logs/_data",
+          "/app/logs",
+          true
+        ],
+        [
+          "/var/lib/docker/volumes/schoolwork2_app_media/_data",
+          "/app/media",
+          true
+        ],
+        [
+          "/var/run/tailscale",
+          "/var/run/tailscale",
+          false
+        ]
+      ],
+      "networks": [
+        "schoolwork2_default",
+        "schoolwork2_runner_control"
+      ],
+      "ports": {
+        "8000/tcp": [
+          {
+            "HostIp": "",
+            "HostPort": "8080"
+          }
+        ]
+      },
+      "command": [
+        "sh",
+        "-c",
+        "python manage.py migrate && python manage.py collectstatic --noinput && gunicorn --config /app/gunicorn.conf.py schoolnet.wsgi:application"
+      ],
+      "health": "healthy",
+      "restart_count": 0
+    },
+    "schoolnet_ai_worker": {
+      "image": "sha256:7ab6d4295751157e62e1b32ad2e6e724a01e1d68f6241f6c6af4e8c59319a7fe",
+      "image_tag": "schoolwork2-app:4.8.13c-f82b7812eb6d",
+      "mounts": [
+        [
+          "/var/lib/docker/volumes/schoolwork2_app_cache/_data",
+          "/var/cache/schoolnet",
+          true
+        ],
+        [
+          "/var/lib/docker/volumes/schoolwork2_app_logs/_data",
+          "/app/logs",
+          true
+        ],
+        [
+          "/var/lib/docker/volumes/schoolwork2_app_media/_data",
+          "/app/media",
+          true
+        ]
+      ],
+      "networks": [
+        "schoolwork2_default"
+      ],
+      "ports": {},
+      "command": [
+        "python",
+        "manage.py",
+        "process_ai_jobs"
+      ],
+      "health": "healthy",
+      "restart_count": 0
+    },
+    "schoolnet_postgres": {
+      "image": "sha256:f1c3376c26f2609ab9f29f71f824103fe2fcd8ee0346485cb6122a4f93df6f94",
+      "image_tag": "postgres:16",
+      "mounts": [
+        [
+          "/var/lib/docker/volumes/schoolwork2_postgres_data/_data",
+          "/var/lib/postgresql/data",
+          true
+        ]
+      ],
+      "networks": [
+        "schoolwork2_default"
+      ],
+      "ports": {
+        "5432/tcp": [
+          {
+            "HostIp": "",
+            "HostPort": "5433"
+          }
+        ]
+      },
+      "command": [
+        "postgres"
+      ],
+      "health": "healthy",
+      "restart_count": 0
+    },
+    "schooljournal-web-1": {
+      "image": "sha256:883d4f7f21a2dc6e525ce258eda4d9f0a711988ff634b21679987dce6fa2f17d",
+      "image_tag": "schooljournal-web:1.4.6-aa66358",
+      "mounts": [
+        [
+          "/home/yrsadmin/schooljournal/CHANGELOG.md",
+          "/app/CHANGELOG.md",
+          false
+        ],
+        [
+          "/home/yrsadmin/schooljournal/RELEASES.json",
+          "/app/RELEASES.json",
+          false
+        ],
+        [
+          "/home/yrsadmin/schooljournal/VERSION",
+          "/app/VERSION",
+          false
+        ],
+        [
+          "/var/lib/docker/volumes/schooljournal_backups_data/_data",
+          "/app/backups",
+          true
+        ],
+        [
+          "/var/lib/docker/volumes/schooljournal_media_data/_data",
+          "/app/media",
+          true
+        ],
+        [
+          "/var/lib/docker/volumes/schooljournal_static_data/_data",
+          "/app/staticfiles",
+          true
+        ]
+      ],
+      "networks": [
+        "school-integration",
+        "schooljournal_journal_net"
+      ],
+      "ports": {},
+      "command": [
+        "gunicorn",
+        "config.wsgi:application",
+        "--config",
+        "/app/gunicorn.conf.py",
+        "--bind",
+        "0.0.0.0:8000",
+        "--workers",
+        "3",
+        "--threads",
+        "2",
+        "--timeout",
+        "120"
+      ],
+      "health": "healthy",
+      "restart_count": 0
+    },
+    "school_test-app-1": {
+      "image": "sha256:d8295b48ae461e147bc01151390f94b6a8859d7ebc03466effdfa0c00952c1f3",
+      "image_tag": "schooltest5-app:1.8.8-1f0f386",
+      "mounts": [
+        [
+          "/var/lib/docker/volumes/school_test_app_data/_data",
+          "/app/data",
+          true
+        ],
+        [
+          "/var/lib/docker/volumes/school_test_app_general_uploads/_data",
+          "/app/app/static/uploads",
+          true
+        ],
+        [
+          "/var/lib/docker/volumes/school_test_app_uploads/_data",
+          "/app/app/static/tests",
+          true
+        ],
+        [
+          "/var/lib/docker/volumes/school_test_lan_inventory/_data",
+          "/run/school-lan",
+          false
+        ]
+      ],
+      "networks": [
+        "school-integration",
+        "school_test_schooltest_net"
+      ],
+      "ports": {
+        "8000/tcp": [
+          {
+            "HostIp": "",
+            "HostPort": "8000"
+          }
+        ]
+      },
+      "command": [
+        "uvicorn",
+        "funnel_test_app:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000"
+      ],
+      "health": "healthy",
+      "restart_count": 0
+    }
+  },
+  "after_counts": {
+    "assignments": "95",
+    "classes": "17",
+    "students": "296",
+    "submissions": "451"
+  },
+  "health": {
+    "status": 200,
+    "body": {
+      "status": "ok",
+      "version": "4.8.13c",
+      "revision": "dfb376f57444c86041f4094183d737a75f7e147a",
+      "source_digest": "f82b7812eb6d89d54b9995cb2952209d283618389f4c5acb7e8c4fe6b2ef2c26"
+    }
+  }
+}

@@ -56,3 +56,35 @@
   цього виправлення (наявні проблеми ізольованості тестів
   `AISettings.privacy_mode` та очікувань `suggested_grade`), до
   `class_mismatch` не належать.
+
+## Встановлення 4.8.13c на сервері
+
+08.11.2026 випуск встановлено на `192.168.1.13`:
+
+- Образ: `schoolwork2-app:4.8.13c-f82b7812eb6d`.
+- Ревізія: `dfb376f57444c86041f4094183d737a75f7e147a`.
+- Відбиток коду: `f82b7812eb6d89d54b9995cb2952209d283618389f4c5acb7e8c4fe6b2ef2c26`.
+- `/healthz/` — HTTP 200, версія `4.8.13c`; app і ai_worker healthy, використовують один образ.
+- `manage.py check`, `migrate --check` і `scripts/verify_release.py` — успішно.
+- Дані до/після збігаються: 451 робота, 95 завдань, 17 класів, 296 учнів.
+- Порти, мережі, монтування, команда запуску, PostgreSQL та інші шкільні застосунки не змінені.
+- Міграцій і нових залежностей немає.
+
+Перед заміною сервісів створено перевірену копію БД (`database.dump`), медіа
+(`media.tar.gz`, 1 463 424 281 байт) і попередніх джерел у приватному каталозі
+`/home/yrsadmin/school-deployments/class-mismatch-release-4.8.13c-20261108/backup`.
+Контрольні суми — у `checksums.json`; попередній `.env` збережено як `.env.before`.
+
+Після запуску перевірено саме живий контейнер на 14 роботах: 9 хибних
+(445, 437, 439, 440, 443, 446, 442, 441, 438) мають `code=none`, SUB 378 —
+`class_mismatch`, `teacher_duplicate` 251, 257, 258, 225 — без змін.
+
+Повернення попереднього образу й джерел (без відновлення БД, бо схема не
+змінювалася):
+
+```sh
+python3 /home/yrsadmin/school-deployments/class-mismatch-release-4.8.13c-20261108/rollback.py
+```
+
+[Стан розгортання](artifacts/class_mismatch_4_8_13c_deployment.json) ·
+[Перевірка живого контейнера](artifacts/class_mismatch_4_8_13c_live.json).
