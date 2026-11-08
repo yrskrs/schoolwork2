@@ -11,5 +11,13 @@
   "django_check": "passed",
   "migration_dry_run": "no changes",
   "network": "No live inference in test suite; provider HTTP mocked. Separate quota probes use only synthetic Return OK.",
-  "learner_materials_used": false
+  "learner_materials_used": false,
+  "server_image_tests": {
+    "tests": 91,
+    "errors": 0,
+    "failures": 0,
+    "elapsed_seconds": 2.182,
+    "network": "none",
+    "production_database_or_media_access": false
+  }
 }

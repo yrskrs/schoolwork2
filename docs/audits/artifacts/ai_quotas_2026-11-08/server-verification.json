@@ -1,0 +1,155 @@
+{
+  "git_head": "ce7f7aa18a8ac7b6e5ce5b100555046797cbfad0",
+  "github_main": "ce7f7aa18a8ac7b6e5ce5b100555046797cbfad0",
+  "git_clean": true,
+  "source_digest": "2212c416d7fdcf65742147d3e728e746f994a124de28965bc0a7c753af20919e",
+  "http": {
+    "lan_health": {
+      "status": 200,
+      "hsts": null,
+      "body": {
+        "status": "ok",
+        "version": "4.8.13j",
+        "revision": "ce7f7aa18a8ac7b6e5ce5b100555046797cbfad0",
+        "source_digest": "2212c416d7fdcf65742147d3e728e746f994a124de28965bc0a7c753af20919e"
+      }
+    },
+    "https_health": {
+      "status": 404,
+      "hsts": "max-age=86400",
+      "csrf_cookie_secure": false
+    },
+    "lan_login": {
+      "status": 200,
+      "hsts": null,
+      "csrf_cookie_secure": false
+    },
+    "https_login": {
+      "status": 200,
+      "hsts": "max-age=86400",
+      "csrf_cookie_secure": true
+    }
+  },
+  "effective_policies": {
+    "connection_count": 5,
+    "active_model_policies": [
+      {
+        "provider": "gemini",
+        "model": "gemini-3.1-flash-lite",
+        "limits": {
+          "concurrency": 1,
+          "_model_limits": {
+            "rpm": 15,
+            "rpd": 500,
+            "itpm": 250000
+          }
+        }
+      },
+      {
+        "provider": "openrouter",
+        "model": "openrouter/free",
+        "limits": {
+          "rpd": 1000,
+          "rpm": 20,
+          "concurrency": 1
+        }
+      },
+      {
+        "provider": "gemini",
+        "model": "gemini-3.1-flash-lite",
+        "limits": {
+          "concurrency": 1,
+          "_model_limits": {
+            "rpm": 15,
+            "rpd": 500,
+            "itpm": 250000
+          }
+        }
+      },
+      {
+        "provider": "groq",
+        "model": "qwen/qwen3.8-27b",
+        "limits": {
+          "rpm": 30,
+          "concurrency": 1,
+          "_model_limits": {
+            "rpd": 1000,
+            "tpm": 8000
+          }
+        }
+      },
+      {
+        "provider": "groq",
+        "model": "openai/gpt-oss-120b",
+        "limits": {
+          "rpm": 30,
+          "concurrency": 1,
+          "_model_limits": {
+            "rpd": 1000,
+            "tpm": 8000
+          }
+        }
+      },
+      {
+        "provider": "gemini",
+        "model": "gemini-3.5-flash-lite",
+        "limits": {
+          "concurrency": 1,
+          "_model_limits": {
+            "rpm": 15,
+            "rpd": 500,
+            "itpm": 250000
+          }
+        }
+      },
+      {
+        "provider": "gemini",
+        "model": "gemini-3.7-flash",
+        "limits": {
+          "concurrency": 1,
+          "_model_limits": {
+            "rpm": 5,
+            "rpd": 20,
+            "itpm": 250000
+          }
+        }
+      },
+      {
+        "provider": "gemini",
+        "model": "gemini-3.8-flash",
+        "limits": {
+          "concurrency": 1,
+          "_model_limits": {
+            "rpm": 5,
+            "rpd": 20,
+            "itpm": 250000
+          }
+        }
+      },
+      {
+        "provider": "cloudflare",
+        "model": "@cf/zai-org/glm-4.7-flash",
+        "limits": {
+          "rpm": 20,
+          "concurrency": 1
+        }
+      },
+      {
+        "provider": "cloudflare",
+        "model": "@cf/meta/llama-4-scout-17b-16e-instruct",
+        "limits": {
+          "rpm": 20,
+          "concurrency": 1
+        }
+      },
+      {
+        "provider": "cloudflare",
+        "model": "@cf/qwen/qwen3.8-27b",
+        "limits": {
+          "rpm": 20,
+          "concurrency": 1
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,633 @@
+{
+  "version": "4.8.13j",
+  "revision": "ce7f7aa18a8ac7b6e5ce5b100555046797cbfad0",
+  "source_digest": "2212c416d7fdcf65742147d3e728e746f994a124de28965bc0a7c753af20919e",
+  "image": "schoolwork2-app:4.8.13j-2212c416d7fd",
+  "before": {
+    "schoolnet_app": {
+      "image": "sha256:7e8731345ff03904b2d210431f065e97e2101cb8ad7aa50b2073bebce9fb9720",
+      "tag": "schoolwork2-app:4.8.13h-3735703470d8",
+      "mounts": [
+        [
+          "/usr/bin/tailscale",
+          "/usr/local/bin/tailscale",
+          false
+        ],
+        [
+          "/var/lib/docker/volumes/schoolwork2_app_cache/_data",
+          "/var/cache/schoolnet",
+          true
+        ],
+        [
+          "/var/lib/docker/volumes/schoolwork2_app_logs/_data",
+          "/app/logs",
+          true
+        ],
+        [
+          "/var/lib/docker/volumes/schoolwork2_app_media/_data",
+          "/app/media",
+          true
+        ],
+        [
+          "/var/run/tailscale",
+          "/var/run/tailscale",
+          false
+        ]
+      ],
+      "ports": {
+        "8000/tcp": [
+          {
+            "HostIp": "",
+            "HostPort": "8080"
+          }
+        ]
+      },
+      "networks": [
+        "schoolwork2_default",
+        "schoolwork2_runner_control"
+      ],
+      "command": [
+        "sh",
+        "-c",
+        "python manage.py migrate && python manage.py collectstatic --noinput && gunicorn --config /app/gunicorn.conf.py schoolnet.wsgi:application"
+      ],
+      "health": "healthy",
+      "restart_count": 0
+    },
+    "schoolnet_ai_worker": {
+      "image": "sha256:7e8731345ff03904b2d210431f065e97e2101cb8ad7aa50b2073bebce9fb9720",
+      "tag": "schoolwork2-app:4.8.13h-3735703470d8",
+      "mounts": [
+        [
+          "/var/lib/docker/volumes/schoolwork2_app_cache/_data",
+          "/var/cache/schoolnet",
+          true
+        ],
+        [
+          "/var/lib/docker/volumes/schoolwork2_app_logs/_data",
+          "/app/logs",
+          true
+        ],
+        [
+          "/var/lib/docker/volumes/schoolwork2_app_media/_data",
+          "/app/media",
+          true
+        ]
+      ],
+      "ports": {},
+      "networks": [
+        "schoolwork2_default"
+      ],
+      "command": [
+        "python",
+        "manage.py",
+        "process_ai_jobs"
+      ],
+      "health": "healthy",
+      "restart_count": 0
+    },
+    "schoolnet_postgres": {
+      "image": "sha256:f1c3376c26f2609ab9f29f71f824103fe2fcd8ee0346485cb6122a4f93df6f94",
+      "tag": "postgres:16",
+      "mounts": [
+        [
+          "/var/lib/docker/volumes/schoolwork2_postgres_data/_data",
+          "/var/lib/postgresql/data",
+          true
+        ]
+      ],
+      "ports": {
+        "5432/tcp": [
+          {
+            "HostIp": "127.0.0.1",
+            "HostPort": "5433"
+          }
+        ]
+      },
+      "networks": [
+        "schoolwork2_default"
+      ],
+      "command": [
+        "postgres"
+      ],
+      "health": "healthy",
+      "restart_count": 0
+    },
+    "schooljournal-web-1": {
+      "image": "sha256:883d4f7f21a2dc6e525ce258eda4d9f0a711988ff634b21679987dce6fa2f17d",
+      "tag": "schooljournal-web:1.4.6-aa66358",
+      "mounts": [
+        [
+          "/home/yrsadmin/schooljournal/CHANGELOG.md",
+          "/app/CHANGELOG.md",
+          false
+        ],
+        [
+          "/home/yrsadmin/schooljournal/RELEASES.json",
+          "/app/RELEASES.json",
+          false
+        ],
+        [
+          "/home/yrsadmin/schooljournal/VERSION",
+          "/app/VERSION",
+          false
+        ],
+        [
+          "/var/lib/docker/volumes/schooljournal_backups_data/_data",
+          "/app/backups",
+          true
+        ],
+        [
+          "/var/lib/docker/volumes/schooljournal_media_data/_data",
+          "/app/media",
+          true
+        ],
+        [
+          "/var/lib/docker/volumes/schooljournal_static_data/_data",
+          "/app/staticfiles",
+          true
+        ]
+      ],
+      "ports": {},
+      "networks": [
+        "school-integration",
+        "schooljournal_journal_net"
+      ],
+      "command": [
+        "gunicorn",
+        "config.wsgi:application",
+        "--config",
+        "/app/gunicorn.conf.py",
+        "--bind",
+        "0.0.0.0:8000",
+        "--workers",
+        "3",
+        "--threads",
+        "2",
+        "--timeout",
+        "120"
+      ],
+      "health": "healthy",
+      "restart_count": 0
+    },
+    "school_test-app-1": {
+      "image": "sha256:d8295b48ae461e147bc01151390f94b6a8859d7ebc03466effdfa0c00952c1f3",
+      "tag": "schooltest5-app:1.8.8-1f0f386",
+      "mounts": [
+        [
+          "/var/lib/docker/volumes/school_test_app_data/_data",
+          "/app/data",
+          true
+        ],
+        [
+          "/var/lib/docker/volumes/school_test_app_general_uploads/_data",
+          "/app/app/static/uploads",
+          true
+        ],
+        [
+          "/var/lib/docker/volumes/school_test_app_uploads/_data",
+          "/app/app/static/tests",
+          true
+        ],
+        [
+          "/var/lib/docker/volumes/school_test_lan_inventory/_data",
+          "/run/school-lan",
+          false
+        ]
+      ],
+      "ports": {
+        "8000/tcp": [
+          {
+            "HostIp": "",
+            "HostPort": "8000"
+          }
+        ]
+      },
+      "networks": [
+        "school-integration",
+        "school_test_schooltest_net"
+      ],
+      "command": [
+        "uvicorn",
+        "funnel_test_app:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000"
+      ],
+      "health": "healthy",
+      "restart_count": 0
+    }
+  },
+  "before_data": {
+    "submissions": {
+      "count": 451,
+      "sha256": "d5a76bd88bb2ba4b4fedca95bd4fe864af1ded6d96fc2ab46eda96158b1fb7f5"
+    },
+    "assignments": {
+      "count": 95,
+      "sha256": "eee78f493b64a751028a6dfb77666310c24d5ede93b34a791871817578490067"
+    },
+    "student_reservations": {
+      "count": 88,
+      "sha256": "498087593a0bd25f12990db0cc07211e01e946993310e3e3afafc6558f578792"
+    },
+    "active_jobs": 0,
+    "credentials_sha256": "fb51db94600502d6d733d3340e83f582f6bbcb9685a182a6f24d04afc11773ff",
+    "model_queue_sha256": "0e3eb9a375e33cfbad7241e49a2a088ea059cc46037ff68a7c85c12767307250"
+  },
+  "status": "deployed",
+  "unchanged_media_backup_reused": true,
+  "backup_verified": true,
+  "after": {
+    "schoolnet_app": {
+      "image": "sha256:697934f990634c3b586735cfb2fa31eca94fc7ddb7c42fec7967792ff46b7932",
+      "tag": "schoolwork2-app:4.8.13j-2212c416d7fd",
+      "mounts": [
+        [
+          "/usr/bin/tailscale",
+          "/usr/local/bin/tailscale",
+          false
+        ],
+        [
+          "/var/lib/docker/volumes/schoolwork2_app_cache/_data",
+          "/var/cache/schoolnet",
+          true
+        ],
+        [
+          "/var/lib/docker/volumes/schoolwork2_app_logs/_data",
+          "/app/logs",
+          true
+        ],
+        [
+          "/var/lib/docker/volumes/schoolwork2_app_media/_data",
+          "/app/media",
+          true
+        ],
+        [
+          "/var/run/tailscale",
+          "/var/run/tailscale",
+          false
+        ]
+      ],
+      "ports": {
+        "8000/tcp": [
+          {
+            "HostIp": "",
+            "HostPort": "8080"
+          }
+        ]
+      },
+      "networks": [
+        "schoolwork2_default",
+        "schoolwork2_runner_control"
+      ],
+      "command": [
+        "sh",
+        "-c",
+        "python manage.py migrate && python manage.py collectstatic --noinput && gunicorn --config /app/gunicorn.conf.py schoolnet.wsgi:application"
+      ],
+      "health": "healthy",
+      "restart_count": 0
+    },
+    "schoolnet_ai_worker": {
+      "image": "sha256:697934f990634c3b586735cfb2fa31eca94fc7ddb7c42fec7967792ff46b7932",
+      "tag": "schoolwork2-app:4.8.13j-2212c416d7fd",
+      "mounts": [
+        [
+          "/var/lib/docker/volumes/schoolwork2_app_cache/_data",
+          "/var/cache/schoolnet",
+          true
+        ],
+        [
+          "/var/lib/docker/volumes/schoolwork2_app_logs/_data",
+          "/app/logs",
+          true
+        ],
+        [
+          "/var/lib/docker/volumes/schoolwork2_app_media/_data",
+          "/app/media",
+          true
+        ]
+      ],
+      "ports": {},
+      "networks": [
+        "schoolwork2_default"
+      ],
+      "command": [
+        "python",
+        "manage.py",
+        "process_ai_jobs"
+      ],
+      "health": "healthy",
+      "restart_count": 0
+    },
+    "schoolnet_postgres": {
+      "image": "sha256:f1c3376c26f2609ab9f29f71f824103fe2fcd8ee0346485cb6122a4f93df6f94",
+      "tag": "postgres:16",
+      "mounts": [
+        [
+          "/var/lib/docker/volumes/schoolwork2_postgres_data/_data",
+          "/var/lib/postgresql/data",
+          true
+        ]
+      ],
+      "ports": {
+        "5432/tcp": [
+          {
+            "HostIp": "127.0.0.1",
+            "HostPort": "5433"
+          }
+        ]
+      },
+      "networks": [
+        "schoolwork2_default"
+      ],
+      "command": [
+        "postgres"
+      ],
+      "health": "healthy",
+      "restart_count": 0
+    },
+    "schooljournal-web-1": {
+      "image": "sha256:883d4f7f21a2dc6e525ce258eda4d9f0a711988ff634b21679987dce6fa2f17d",
+      "tag": "schooljournal-web:1.4.6-aa66358",
+      "mounts": [
+        [
+          "/home/yrsadmin/schooljournal/CHANGELOG.md",
+          "/app/CHANGELOG.md",
+          false
+        ],
+        [
+          "/home/yrsadmin/schooljournal/RELEASES.json",
+          "/app/RELEASES.json",
+          false
+        ],
+        [
+          "/home/yrsadmin/schooljournal/VERSION",
+          "/app/VERSION",
+          false
+        ],
+        [
+          "/var/lib/docker/volumes/schooljournal_backups_data/_data",
+          "/app/backups",
+          true
+        ],
+        [
+          "/var/lib/docker/volumes/schooljournal_media_data/_data",
+          "/app/media",
+          true
+        ],
+        [
+          "/var/lib/docker/volumes/schooljournal_static_data/_data",
+          "/app/staticfiles",
+          true
+        ]
+      ],
+      "ports": {},
+      "networks": [
+        "school-integration",
+        "schooljournal_journal_net"
+      ],
+      "command": [
+        "gunicorn",
+        "config.wsgi:application",
+        "--config",
+        "/app/gunicorn.conf.py",
+        "--bind",
+        "0.0.0.0:8000",
+        "--workers",
+        "3",
+        "--threads",
+        "2",
+        "--timeout",
+        "120"
+      ],
+      "health": "healthy",
+      "restart_count": 0
+    },
+    "school_test-app-1": {
+      "image": "sha256:d8295b48ae461e147bc01151390f94b6a8859d7ebc03466effdfa0c00952c1f3",
+      "tag": "schooltest5-app:1.8.8-1f0f386",
+      "mounts": [
+        [
+          "/var/lib/docker/volumes/school_test_app_data/_data",
+          "/app/data",
+          true
+        ],
+        [
+          "/var/lib/docker/volumes/school_test_app_general_uploads/_data",
+          "/app/app/static/uploads",
+          true
+        ],
+        [
+          "/var/lib/docker/volumes/school_test_app_uploads/_data",
+          "/app/app/static/tests",
+          true
+        ],
+        [
+          "/var/lib/docker/volumes/school_test_lan_inventory/_data",
+          "/run/school-lan",
+          false
+        ]
+      ],
+      "ports": {
+        "8000/tcp": [
+          {
+            "HostIp": "",
+            "HostPort": "8000"
+          }
+        ]
+      },
+      "networks": [
+        "school-integration",
+        "school_test_schooltest_net"
+      ],
+      "command": [
+        "uvicorn",
+        "funnel_test_app:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000"
+      ],
+      "health": "healthy",
+      "restart_count": 0
+    }
+  },
+  "after_data": {
+    "submissions": {
+      "count": 451,
+      "sha256": "d5a76bd88bb2ba4b4fedca95bd4fe864af1ded6d96fc2ab46eda96158b1fb7f5"
+    },
+    "assignments": {
+      "count": 95,
+      "sha256": "eee78f493b64a751028a6dfb77666310c24d5ede93b34a791871817578490067"
+    },
+    "student_reservations": {
+      "count": 88,
+      "sha256": "498087593a0bd25f12990db0cc07211e01e946993310e3e3afafc6558f578792"
+    },
+    "active_jobs": 0,
+    "credentials_sha256": "fb51db94600502d6d733d3340e83f582f6bbcb9685a182a6f24d04afc11773ff",
+    "model_queue_sha256": "0e3eb9a375e33cfbad7241e49a2a088ea059cc46037ff68a7c85c12767307250"
+  },
+  "health": {
+    "status": "ok",
+    "version": "4.8.13j",
+    "revision": "ce7f7aa18a8ac7b6e5ce5b100555046797cbfad0",
+    "source_digest": "2212c416d7fdcf65742147d3e728e746f994a124de28965bc0a7c753af20919e"
+  },
+  "quota_sync": {
+    "applied": true,
+    "observations": [
+      {
+        "provider": "openrouter",
+        "model": null,
+        "limits": {
+          "rpd": 1000
+        },
+        "source": "provider_api",
+        "http_status": 200,
+        "applied_to_plan": true
+      },
+      {
+        "provider": "groq",
+        "model": "qwen/qwen3.8-27b",
+        "limits": {
+          "rpd": 1000,
+          "tpm": 8000
+        },
+        "source": "provider_api",
+        "http_status": 200,
+        "applied_to_plan": true
+      },
+      {
+        "provider": "groq",
+        "model": "openai/gpt-oss-120b",
+        "limits": {
+          "rpd": 1000,
+          "tpm": 8000
+        },
+        "source": "provider_api",
+        "http_status": 200,
+        "applied_to_plan": true
+      }
+    ],
+    "connections": [
+      {
+        "provider": "gemini",
+        "quota_group": "gemini",
+        "quota_limits": {
+          "concurrency": 1
+        },
+        "model_quota_limits": {
+          "gemini-3.8-flash": {
+            "rpm": 5,
+            "rpd": 20,
+            "itpm": 250000
+          },
+          "gemini-3.6-flash": {
+            "rpm": 5,
+            "rpd": 20,
+            "itpm": 250000
+          },
+          "gemini-3.5-flash-lite": {
+            "rpm": 15,
+            "rpd": 500,
+            "itpm": 250000
+          },
+          "gemini-3.1-flash-lite": {
+            "rpm": 15,
+            "rpd": 500,
+            "itpm": 250000
+          }
+        },
+        "fallback": {
+          "rpm": 5,
+          "rpd": 20,
+          "itpm": 250000
+        },
+        "fallback_note": "Для моделі без підтвердженої квоти: локальна захисна межа 5 запитів/хв, 20/добу, 250000 вхідних токенів/хв. Це не підтверджена квота цієї моделі."
+      },
+      {
+        "provider": "openrouter",
+        "quota_group": "openrouter",
+        "quota_limits": {
+          "rpm": 20,
+          "concurrency": 1,
+          "rpd": 1000
+        },
+        "model_quota_limits": {},
+        "fallback": {},
+        "fallback_note": ""
+      },
+      {
+        "provider": "groq",
+        "quota_group": "groq",
+        "quota_limits": {
+          "rpm": 30,
+          "concurrency": 1
+        },
+        "model_quota_limits": {
+          "qwen/qwen3.8-27b": {
+            "rpd": 1000,
+            "tpm": 8000
+          },
+          "openai/gpt-oss-120b": {
+            "rpd": 1000,
+            "tpm": 8000
+          }
+        },
+        "fallback": {},
+        "fallback_note": ""
+      },
+      {
+        "provider": "gemini",
+        "quota_group": "gemini",
+        "quota_limits": {
+          "concurrency": 1
+        },
+        "model_quota_limits": {
+          "gemini-3.8-flash": {
+            "rpm": 5,
+            "rpd": 20,
+            "itpm": 250000
+          },
+          "gemini-3.6-flash": {
+            "rpm": 5,
+            "rpd": 20,
+            "itpm": 250000
+          },
+          "gemini-3.5-flash-lite": {
+            "rpm": 15,
+            "rpd": 500,
+            "itpm": 250000
+          },
+          "gemini-3.1-flash-lite": {
+            "rpm": 15,
+            "rpd": 500,
+            "itpm": 250000
+          }
+        },
+        "fallback": {
+          "rpm": 5,
+          "rpd": 20,
+          "itpm": 250000
+        },
+        "fallback_note": "Для моделі без підтвердженої квоти: локальна захисна межа 5 запитів/хв, 20/добу, 250000 вхідних токенів/хв. Це не підтверджена квота цієї моделі."
+      },
+      {
+        "provider": "cloudflare",
+        "quota_group": "cloudflare",
+        "quota_limits": {
+          "rpm": 20,
+          "concurrency": 1
+        },
+        "model_quota_limits": {},
+        "fallback": {},
+        "fallback_note": ""
+      }
+    ]
+  }
+}

@@ -6,7 +6,7 @@
 
 Попередній випуск: **4.8.13i — стабільність запитів ШІ**. [Зміни](CHANGELOG.md), [аналіз помилок](docs/audits/AI_ERROR_ANALYSIS_2026-11-08.md), [документація](docs/README.md).
 
-Встановлено на головному сервері 08.11.2026: `/healthz/` — 4.8.13h, app/ai_worker healthy, дані до/після збігаються. [Стан розгортання](docs/audits/artifacts/server_seven_fixes_4.8.13h_deployment.json).
+Встановлено на головному сервері 08.11.2026: **4.8.13j**, web/worker healthy, відомі квоти застосовано, дані 451 роботи й 95 завдань без змін. [Результати](docs/audits/AI_QUOTA_CONFIGURATION_2026-11-08.md).
 
 Попередній випуск: **4.8.13h — захист входу, HTTPS і Scout**. [Зміни](CHANGELOG.md), [звіт](docs/audits/SERVER_SEVEN_FIXES_2026-11-08.md).
 
