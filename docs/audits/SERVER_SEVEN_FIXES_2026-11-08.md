@@ -1,6 +1,6 @@
 # Виправлення семи підтверджених зауважень сервера — 08.11.2026
 
-Стартова версія: 4.8.13f. Цільовий випуск: 4.8.13g.
+Стартова версія: 4.8.13f. Цільовий випуск: 4.8.13h.
 Резервні копії: `/home/mlinux/schoolprjct/private-backups/seven-fixes-20261108/`
 та `/home/yrsadmin/school-deployments/pre-seven-fixes-20261108/`.
 
@@ -19,7 +19,7 @@
 
 **Перевірка:** `git check-ignore` для `.env.bak-*` — так; серверний
 `git status --porcelain` — 0 записів; `HEAD == origin/main` =
-`905dbb9c53f282773086590634c4fbbae08757b7`; HEAD є предком upstream;
+`f9ef28cc44162635893b775d4958bb76ab53df81`; HEAD є предком upstream;
 `git merge --ff-only origin/main` — `Already up to date`. Приватні копії
 лежать у `~/school-private-backups/env-before-seven-fixes-20261108` (0600).
 Повний `update.sh` на продакшені не запускався; перевірено передумови та

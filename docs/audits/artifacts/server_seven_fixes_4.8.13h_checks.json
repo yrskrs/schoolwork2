@@ -4,7 +4,7 @@
   "image": "schoolwork2-app:4.8.13h-3735703470d8",
   "revision": "6e53989e1294286aceb77ce89e52e985de0cbce4",
   "git": {
-    "server_head": "905dbb9c53f282773086590634c4fbbae08757b7",
+    "server_head": "f9ef28cc44162635893b775d4958bb76ab53df81",
     "status_entries": 0,
     "upstream_equal": true,
     "fast_forward_ready": true
