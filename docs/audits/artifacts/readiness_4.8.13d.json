@@ -1,0 +1,96 @@
+{
+  "version": "4.8.13d",
+  "image": "schoolwork2-app:4.8.13d-9807b53b970f",
+  "revision": "b355634fe42369f0d0f3e4ffc5c3cf9456043380",
+  "lan": "http://192.168.1.13:8080",
+  "funnel": "https://localwork.tail9ec47d.ts.net",
+  "routes": {
+    "/": {
+      "lan": 200,
+      "funnel": 200
+    },
+    "/healthz/": {
+      "lan": 200,
+      "funnel": 404,
+      "note": "Funnel intentionally does not publish health"
+    },
+    "/teacher/login/": {
+      "lan": 200,
+      "funnel": 200
+    },
+    "/teacher/": {
+      "lan": 302,
+      "funnel": 404
+    },
+    "/teacher/settings/": {
+      "lan": 302,
+      "funnel": 404
+    },
+    "/admin/": {
+      "lan": 302,
+      "funnel": 302
+    },
+    "/admin/login/": {
+      "lan": 200,
+      "funnel": 404
+    },
+    "/api/": {
+      "lan": 404,
+      "funnel": 404
+    },
+    "/media/": {
+      "lan": 404,
+      "funnel": 404
+    },
+    "/assignment/99/": {
+      "lan": 200,
+      "funnel": 200
+    },
+    "/assignment/99/submit/": {
+      "lan": 200,
+      "funnel": 200
+    },
+    "/my-submissions/": {
+      "lan": 200,
+      "funnel": 200
+    },
+    "/api/submission-notifications/": {
+      "lan": 200,
+      "funnel": 200
+    }
+  },
+  "static_sha256": {
+    "main.css": "ac468da2e9f20da3cb6437ea7857db00cd549a5149e553fe8fc0b5688b06f140",
+    "main.js": "d459af17483c26bd6bf138063a2fd191992a9a1d05b83de94eba07b1753060f8",
+    "ai_jobs.js": "4149d130781b69b00528967ea691d9d266da4b30a73c39e64821e13f73e01850"
+  },
+  "tests": {
+    "feed_total": 1002,
+    "feed_ok": 1002,
+    "skipped": 2,
+    "access_submission_targeted": 103
+  },
+  "e2e_submission": {
+    "created_id": 604,
+    "result": "302 success",
+    "notification_created": 1,
+    "teacher_view_status": 200,
+    "cleaned": true,
+    "submission_count_after": 451
+  },
+  "stability": {
+    "app_restarts": 0,
+    "worker_restarts": 0,
+    "postgres_restarts": 0,
+    "health": "healthy",
+    "recent_500_or_traceback": 0,
+    "free_gb": 137
+  },
+  "findings": [
+    "fixed stale COMPOSE_FILE missing compose.override.yaml",
+    "open access allow_without_link=true exposes published student pages via Funnel",
+    "no Secure session/CSRF cookies or HSTS/CSP",
+    "Funnel health 404 by design",
+    "admin login 404 via Funnel"
+  ]
+}
