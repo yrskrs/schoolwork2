@@ -1,0 +1,154 @@
+{
+  "checked_at": "2026-11-08T20:30:00+02:00",
+  "release": {
+    "version": "4.8.13c",
+    "image": "schoolwork2-app:4.8.13c-f82b7812eb6d"
+  },
+  "class_mismatch": {
+    "targeted_tests": "29 OK (10 class_mismatch regression + 19 provider/413-related)",
+    "live_check": "artifacts/class_mismatch_4_8_13c_live.json",
+    "false_ids_cleared": [
+      445,
+      437,
+      439,
+      440,
+      443,
+      446,
+      442,
+      441,
+      438
+    ],
+    "true_sub_378": "class_mismatch",
+    "teacher_duplicate_ids": [
+      251,
+      257,
+      258,
+      225
+    ],
+    "teacher_duplicate": "4/4 unchanged",
+    "blank_practical_template": "logic unchanged"
+  },
+  "http_413": {
+    "historical_total": 23,
+    "historical_by_model": {
+      "groq/openai/gpt-oss-120b": 4,
+      "groq/qwen/qwen3.8-27b": 19
+    },
+    "historical_last_at": "2026-10-06T12:08:14.151712+00:00",
+    "since_deploy_requests": 9,
+    "since_deploy_413": 0,
+    "error_log_413_since_deploy": 0,
+    "configured_low_limit_models": [
+      {
+        "provider": "openrouter",
+        "model": "openrouter/free",
+        "connection_id": "686a5ff3…",
+        "context_tokens": 42778,
+        "max_images": null,
+        "enabled": true
+      },
+      {
+        "provider": "groq",
+        "model": "qwen/qwen3.8-27b",
+        "connection_id": "cfd90e56…",
+        "context_tokens": 6000,
+        "max_images": 3,
+        "enabled": true
+      },
+      {
+        "provider": "groq",
+        "model": "openai/gpt-oss-120b",
+        "connection_id": "cfd90e56…",
+        "context_tokens": 6500,
+        "max_images": 0,
+        "enabled": true
+      },
+      {
+        "provider": "cloudflare",
+        "model": "@cf/zai-org/glm-4.7-flash",
+        "connection_id": "45fb7ada…",
+        "context_tokens": 45057,
+        "max_images": 0,
+        "enabled": true
+      }
+    ],
+    "probes": [
+      {
+        "provider": "groq",
+        "model": "qwen/qwen3.8-27b",
+        "target_estimate": 5900,
+        "estimate": 5858,
+        "chars": 13600,
+        "status": 200,
+        "local_preflight": false,
+        "error": "",
+        "usage": {
+          "queue_time": 0.017606749,
+          "prompt_tokens": 4514,
+          "prompt_time": 0.354944282,
+          "completion_tokens": 6,
+          "completion_time": 0.013155917,
+          "total_tokens": 4520,
+          "total_time": 0.368100199
+        }
+      },
+      {
+        "provider": "groq",
+        "model": "openai/gpt-oss-120b",
+        "target_estimate": 6400,
+        "estimate": 6371,
+        "chars": 14790,
+        "status": 200,
+        "local_preflight": false,
+        "error": "",
+        "usage": {
+          "queue_time": 0.04940297,
+          "prompt_tokens": 4557,
+          "prompt_time": 0.192901518,
+          "completion_tokens": 63,
+          "completion_time": 0.131000814,
+          "total_tokens": 4620,
+          "total_time": 0.323902332,
+          "completion_tokens_details": {
+            "reasoning_tokens": 49
+          }
+        }
+      },
+      {
+        "provider": "groq",
+        "model": "qwen/qwen3.8-27b",
+        "kind": "3 synthetic images + text",
+        "estimate_text": 335,
+        "estimate_total_with_1500_per_image": 4835,
+        "status": 200,
+        "prompt_tokens": 1630,
+        "local_preflight": false,
+        "error": ""
+      }
+    ],
+    "probe_rows_in_ai_request_log": [
+      {
+        "at": "2026-11-08T18:30:33.504837+00:00",
+        "model": "qwen/qwen3.8-27b",
+        "status": 200,
+        "prompt_tokens": 1630,
+        "completion_tokens": 6
+      },
+      {
+        "at": "2026-11-08T18:30:18.499635+00:00",
+        "model": "openai/gpt-oss-120b",
+        "status": 200,
+        "prompt_tokens": 4557,
+        "completion_tokens": 63
+      },
+      {
+        "at": "2026-11-08T18:30:17.709984+00:00",
+        "model": "qwen/qwen3.8-27b",
+        "status": 200,
+        "prompt_tokens": 4514,
+        "completion_tokens": 6
+      }
+    ]
+  },
+  "conclusion": "No HTTP 413 after deployment: 0 in 9 requests and 0 in 3 synthetic low-limit probes. class_mismatch remains precise; SUB 378 and teacher_duplicate are unchanged."
+}
