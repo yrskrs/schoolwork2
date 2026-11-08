@@ -646,11 +646,49 @@ def downgrade_unsupported_task_claims(result, student_text):
             changed.append(f'criterion:{absent}')
 
     if changed and result.get('tasks_evaluated'):
+        # A criterion for task N downgraded means the generic task-completed
+        # claim for N is no longer supported either.
+        downgraded_nums = set()
+        for row in result.get('criteria_results') or []:
+            if isinstance(row, dict) and row.get('status') == 'unverifiable':
+                match = re.search(r'завдан\w*\s*(\d+)', str(row.get('criterion') or ''), re.IGNORECASE)
+                if match:
+                    downgraded_nums.add(int(match.group(1)))
+        for task in result['tasks_evaluated']:
+            if isinstance(task, dict) and task.get('task_num') in downgraded_nums:
+                task['status'] = 'not_completed'
         result['tasks_completed_count'] = sum(
             1 for task in result['tasks_evaluated']
             if isinstance(task, dict) and task.get('status') == 'completed')
     if changed:
         result['_unsupported_claims'] = sorted(set(changed))
+        # Rejected formula claims must not remain in student-facing praise.
+        absent_terms = set()
+        for item in changed:
+            function = item.split(':', 1)[-1]
+            absent_terms.update(aliases.get(function, (function,)))
+        def strip_claims(value):
+            pieces = re.split(r'(?<=[.!?])\s+', str(value or ''))
+            kept = [piece for piece in pieces
+                    if not any(term in piece.casefold() for term in absent_terms)]
+            return ' '.join(kept).strip()
+        for field in ('summary', 'feedback_comment'):
+            cleaned = strip_claims(result.get(field))
+            if cleaned != str(result.get(field) or '').strip():
+                result[field] = cleaned
+        if isinstance(result.get('strengths'), list):
+            result['strengths'] = [item for item in result['strengths']
+                                   if not any(term in str(item).casefold() for term in absent_terms)]
+        weakness = ('Не підтверджено використання заявлених функцій: '
+                    + ', '.join(sorted({item.split(':', 1)[-1].upper() for item in changed}))
+                    + '. Відповідні завдання не зараховано.')
+        weaknesses = result.setdefault('weaknesses', [])
+        if isinstance(weaknesses, list) and weakness not in weaknesses:
+            weaknesses.append(weakness)
+        if not str(result.get('summary') or '').strip():
+            result['summary'] = 'Роботу виконано частково: частину завдань не підтверджено.'
+        if result.get('feedback_comment') is not None and weakness not in str(result.get('feedback_comment')):
+            result['feedback_comment'] = (str(result.get('feedback_comment') or '').strip() + ' ' + weakness).strip()
     return result
 
 

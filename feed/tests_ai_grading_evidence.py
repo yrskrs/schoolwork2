@@ -26,6 +26,9 @@ class ClaimedEvidenceTests(SimpleTestCase):
                                  'status': 'completed', 'comment': 'Застосовано формулу ранжування.'}],
             'criteria_results': [{'criterion': 'Правильність використання функції RANK',
                                   'status': 'completed', 'evidence': 'Аркуш1'}],
+            'summary': 'Завдання виконано повністю, застосовано RANK.',
+            'feedback_comment': 'Чудова робота! Ти застосував функцію RANK.',
+            'strengths': ['Правильне застосування RANK.'],
             'tasks_completed_count': 1,
         }
         text = ('Аркуш1: A1 Номер партії, E2 =C2-D2. Аркуш2 порожній. Аркуш3 порожній.')
@@ -33,6 +36,9 @@ class ClaimedEvidenceTests(SimpleTestCase):
         self.assertEqual(result['tasks_evaluated'][0]['status'], 'not_completed')
         self.assertEqual(result['criteria_results'][0]['status'], 'unverifiable')
         self.assertEqual(result['tasks_completed_count'], 0)
+        self.assertNotIn('RANK', result['summary'])
+        self.assertNotIn('Ти застосував', result['feedback_comment'])
+        self.assertIn('Не підтверджено', result['weaknesses'][-1])
 
     def test_rank_formula_is_accepted(self):
         result = {
