@@ -1,0 +1,601 @@
+{
+  "scope": "real works on restored DB copy; media read-only; production untouched",
+  "repeats": 2,
+  "ids": [
+    602,
+    450,
+    436,
+    435,
+    433,
+    427,
+    418,
+    410,
+    372,
+    347
+  ],
+  "privacy_mode": "redact",
+  "works": [
+    {
+      "id": 602,
+      "runs": [
+        {
+          "run": 1,
+          "grade": null,
+          "status": "success",
+          "assessment_blocked": true,
+          "blocked_reasons": [
+            "Застосування функції RANK",
+            "Коректне ранжування (найбільше значення = 1)",
+            "Використання автозаповнення"
+          ],
+          "seconds": 47.2,
+          "error": ""
+        },
+        {
+          "run": 2,
+          "grade": null,
+          "status": "success",
+          "assessment_blocked": true,
+          "blocked_reasons": [
+            "Застосування функції RANK",
+            "Правильність аргументів функції",
+            "Використання автозаповнення",
+            "ГР 1: Працює з інформацією, даними, моделями (теоретичні знання)",
+            "ГР 2: Створює інформаційні продукти (практичні уміння)",
+            "ГР 3: Працює в цифровому середовищі (технічні навички)"
+          ],
+          "seconds": 9.572,
+          "error": ""
+        }
+      ],
+      "grades": [
+        null,
+        null
+      ],
+      "statuses": [
+        "success",
+        "success"
+      ],
+      "privacy": [
+        "blocked",
+        "blocked"
+      ],
+      "assignment": "Інструктаж з БЖД. Опрацювання табличних даних з використанням математичних, стат",
+      "files": [
+        "Книга1.xlsx"
+      ],
+      "legacy_file": true,
+      "grade_before": null,
+      "ai_grade_before": "Доопрацювати",
+      "numeric_grades": [],
+      "stable": true,
+      "numeric_stable": true
+    },
+    {
+      "id": 450,
+      "runs": [
+        {
+          "run": 1,
+          "grade": null,
+          "status": "success",
+          "assessment_blocked": true,
+          "blocked_reasons": [
+            "Створення структури підпапок",
+            "Робота з файлом"
+          ],
+          "seconds": 38.705,
+          "error": ""
+        },
+        {
+          "run": 2,
+          "grade": "12",
+          "status": "success",
+          "assessment_blocked": false,
+          "blocked_reasons": [],
+          "seconds": 15.491,
+          "error": ""
+        }
+      ],
+      "grades": [
+        null,
+        "12"
+      ],
+      "statuses": [
+        "success",
+        "success"
+      ],
+      "privacy": [
+        "blocked",
+        "allowed"
+      ],
+      "assignment": "Інструктаж з БЖД. Операційна система та її інтерфейс",
+      "files": [
+        "Знімок екрана 2026-11-02 132910.png"
+      ],
+      "legacy_file": true,
+      "grade_before": null,
+      "ai_grade_before": "12",
+      "numeric_grades": [
+        "12"
+      ],
+      "stable": false,
+      "numeric_stable": true
+    },
+    {
+      "id": 436,
+      "runs": [
+        {
+          "run": 1,
+          "grade": "7",
+          "status": "success",
+          "assessment_blocked": false,
+          "blocked_reasons": [],
+          "seconds": 37.622,
+          "error": ""
+        },
+        {
+          "run": 2,
+          "grade": null,
+          "status": "success",
+          "assessment_blocked": true,
+          "blocked_reasons": [
+            "Наявність 3 таблиць",
+            "Налаштування підстановок",
+            "Створення зв'язків"
+          ],
+          "seconds": 13.406,
+          "error": ""
+        }
+      ],
+      "grades": [
+        "7",
+        null
+      ],
+      "statuses": [
+        "success",
+        "success"
+      ],
+      "privacy": [
+        "allowed",
+        "blocked"
+      ],
+      "assignment": "Створення бази даних, додавання, видалення, редагування даних у базі",
+      "files": [
+        "ліза123.accdb"
+      ],
+      "legacy_file": true,
+      "grade_before": null,
+      "ai_grade_before": "7",
+      "numeric_grades": [
+        "7"
+      ],
+      "stable": false,
+      "numeric_stable": true
+    },
+    {
+      "id": 435,
+      "runs": [
+        {
+          "run": 1,
+          "grade": "8",
+          "status": "success",
+          "assessment_blocked": false,
+          "blocked_reasons": [],
+          "seconds": 41.455,
+          "error": ""
+        },
+        {
+          "run": 2,
+          "grade": "10",
+          "status": "success",
+          "assessment_blocked": false,
+          "blocked_reasons": [],
+          "seconds": 12.54,
+          "error": ""
+        }
+      ],
+      "grades": [
+        "8",
+        "10"
+      ],
+      "statuses": [
+        "success",
+        "success"
+      ],
+      "privacy": [
+        "allowed",
+        "allowed"
+      ],
+      "assignment": "Поняття про «глибокі фейки» та їх розпізнавання",
+      "files": [
+        "еееееееееееккккккккккккк.docx"
+      ],
+      "legacy_file": true,
+      "grade_before": null,
+      "ai_grade_before": "Доопрацювати",
+      "numeric_grades": [
+        "8",
+        "10"
+      ],
+      "stable": false,
+      "numeric_stable": false
+    },
+    {
+      "id": 433,
+      "runs": [
+        {
+          "run": 1,
+          "grade": null,
+          "status": "unsupported",
+          "assessment_blocked": false,
+          "blocked_reasons": [],
+          "seconds": 0.922,
+          "error": "Вміст роботи за посиланням не вдалося прочитати. Надішліть доступний файл або відкрийте вміст для ручної перевірки. Оцінку не сформовано; спробу самоперевірки не використано."
+        },
+        {
+          "run": 2,
+          "grade": null,
+          "status": "unsupported",
+          "assessment_blocked": false,
+          "blocked_reasons": [],
+          "seconds": 0.891,
+          "error": "Вміст роботи за посиланням не вдалося прочитати. Надішліть доступний файл або відкрийте вміст для ручної перевірки. Оцінку не сформовано; спробу самоперевірки не використано."
+        }
+      ],
+      "grades": [
+        null,
+        null
+      ],
+      "statuses": [
+        "unsupported",
+        "unsupported"
+      ],
+      "privacy": [
+        "allowed",
+        "allowed"
+      ],
+      "assignment": "Оновлення апаратного та програмного забезпечення",
+      "files": [],
+      "legacy_file": false,
+      "grade_before": "12",
+      "ai_grade_before": "12",
+      "numeric_grades": [],
+      "stable": true,
+      "numeric_stable": true
+    },
+    {
+      "id": 427,
+      "runs": [
+        {
+          "run": 1,
+          "grade": null,
+          "status": "success",
+          "assessment_blocked": true,
+          "blocked_reasons": [
+            "Опитування однокласників",
+            "Створення презентації"
+          ],
+          "seconds": 136.433,
+          "error": ""
+        },
+        {
+          "run": 2,
+          "grade": null,
+          "status": "success",
+          "assessment_blocked": true,
+          "blocked_reasons": [
+            "ГР 1",
+            "ГР 2",
+            "ГР 3",
+            "ГР 4"
+          ],
+          "seconds": 11.763,
+          "error": ""
+        }
+      ],
+      "grades": [
+        null,
+        null
+      ],
+      "statuses": [
+        "success",
+        "success"
+      ],
+      "privacy": [
+        "blocked",
+        "blocked"
+      ],
+      "assignment": "Онлайн-сервіси та їх функції",
+      "files": [
+        "Чим користується моя однокласниця дарья.pptx"
+      ],
+      "legacy_file": true,
+      "grade_before": "9",
+      "ai_grade_before": "9",
+      "numeric_grades": [],
+      "stable": true,
+      "numeric_stable": true
+    },
+    {
+      "id": 418,
+      "runs": [
+        {
+          "run": 1,
+          "grade": null,
+          "status": "unsupported",
+          "assessment_blocked": false,
+          "blocked_reasons": [],
+          "seconds": 0.562,
+          "error": "Вміст роботи за посиланням не вдалося прочитати. Надішліть доступний файл або відкрийте вміст для ручної перевірки. Оцінку не сформовано; спробу самоперевірки не використано."
+        },
+        {
+          "run": 2,
+          "grade": null,
+          "status": "unsupported",
+          "assessment_blocked": false,
+          "blocked_reasons": [],
+          "seconds": 0.568,
+          "error": "Вміст роботи за посиланням не вдалося прочитати. Надішліть доступний файл або відкрийте вміст для ручної перевірки. Оцінку не сформовано; спробу самоперевірки не використано."
+        }
+      ],
+      "grades": [
+        null,
+        null
+      ],
+      "statuses": [
+        "unsupported",
+        "unsupported"
+      ],
+      "privacy": [
+        "allowed",
+        "allowed"
+      ],
+      "assignment": "Хмарні сервіси",
+      "files": [],
+      "legacy_file": false,
+      "grade_before": null,
+      "ai_grade_before": "7",
+      "numeric_grades": [],
+      "stable": true,
+      "numeric_stable": true
+    },
+    {
+      "id": 410,
+      "runs": [
+        {
+          "run": 1,
+          "grade": null,
+          "status": "success",
+          "assessment_blocked": true,
+          "blocked_reasons": [
+            "Структура таблиць",
+            "Налаштування підстановок",
+            "Наявність даних"
+          ],
+          "seconds": 17.624,
+          "error": ""
+        },
+        {
+          "run": 2,
+          "grade": null,
+          "status": "success",
+          "assessment_blocked": true,
+          "blocked_reasons": [
+            "Наявність таблиць",
+            "Наявність записів",
+            "Налаштування підстановок"
+          ],
+          "seconds": 11.574,
+          "error": ""
+        }
+      ],
+      "grades": [
+        null,
+        null
+      ],
+      "statuses": [
+        "success",
+        "success"
+      ],
+      "privacy": [
+        "blocked",
+        "blocked"
+      ],
+      "assignment": "Створення бази даних, додавання, видалення, редагування даних у базі",
+      "files": [
+        "Database1.accdb"
+      ],
+      "legacy_file": true,
+      "grade_before": null,
+      "ai_grade_before": "8",
+      "numeric_grades": [],
+      "stable": true,
+      "numeric_stable": true
+    },
+    {
+      "id": 372,
+      "runs": [
+        {
+          "run": 1,
+          "grade": "Доопрацювати",
+          "status": "success",
+          "assessment_blocked": false,
+          "blocked_reasons": [],
+          "seconds": 10.056,
+          "error": ""
+        },
+        {
+          "run": 2,
+          "grade": "Доопрацювати",
+          "status": "success",
+          "assessment_blocked": false,
+          "blocked_reasons": [],
+          "seconds": 4.278,
+          "error": ""
+        }
+      ],
+      "grades": [
+        "Доопрацювати",
+        "Доопрацювати"
+      ],
+      "statuses": [
+        "success",
+        "success"
+      ],
+      "privacy": [
+        "allowed",
+        "allowed"
+      ],
+      "assignment": "Побудова моделі даних предметної області",
+      "files": [
+        "Рижук Артем.docx"
+      ],
+      "legacy_file": true,
+      "grade_before": null,
+      "ai_grade_before": "6",
+      "numeric_grades": [],
+      "stable": true,
+      "numeric_stable": true
+    },
+    {
+      "id": 347,
+      "runs": [
+        {
+          "run": 1,
+          "grade": null,
+          "status": "success",
+          "assessment_blocked": true,
+          "blocked_reasons": [
+            "ГР 3: Працює в цифровому середовищі (технічні навички)"
+          ],
+          "seconds": 36.017,
+          "error": ""
+        },
+        {
+          "run": 2,
+          "grade": null,
+          "status": "success",
+          "assessment_blocked": true,
+          "blocked_reasons": [
+            "Виконання у форматі питання-відповідь",
+            "Наявність висновку",
+            "Виконання практичної частини (аналіз власного кола)",
+            "ГР 2: Створює інформаційні продукти (практичні уміння)",
+            "ГР 3: Працює в цифровому середовищі (технічні навички)"
+          ],
+          "seconds": 13.323,
+          "error": ""
+        }
+      ],
+      "grades": [
+        null,
+        null
+      ],
+      "statuses": [
+        "success",
+        "success"
+      ],
+      "privacy": [
+        "blocked",
+        "blocked"
+      ],
+      "assignment": "Класифікація загроз безпеці та пошкодження даних у комп’ютерних системах",
+      "files": [
+        "чя.docx"
+      ],
+      "legacy_file": true,
+      "grade_before": null,
+      "ai_grade_before": "8",
+      "numeric_grades": [],
+      "stable": true,
+      "numeric_stable": true
+    }
+  ],
+  "summary": {
+    "works": 10,
+    "all_stable": false,
+    "numeric_stable": false,
+    "per_work": {
+      "602": {
+        "grades": [
+          null,
+          null
+        ],
+        "stable": true,
+        "numeric_stable": true
+      },
+      "450": {
+        "grades": [
+          null,
+          "12"
+        ],
+        "stable": false,
+        "numeric_stable": true
+      },
+      "436": {
+        "grades": [
+          "7",
+          null
+        ],
+        "stable": false,
+        "numeric_stable": true
+      },
+      "435": {
+        "grades": [
+          "8",
+          "10"
+        ],
+        "stable": false,
+        "numeric_stable": false
+      },
+      "433": {
+        "grades": [
+          null,
+          null
+        ],
+        "stable": true,
+        "numeric_stable": true
+      },
+      "427": {
+        "grades": [
+          null,
+          null
+        ],
+        "stable": true,
+        "numeric_stable": true
+      },
+      "418": {
+        "grades": [
+          null,
+          null
+        ],
+        "stable": true,
+        "numeric_stable": true
+      },
+      "410": {
+        "grades": [
+          null,
+          null
+        ],
+        "stable": true,
+        "numeric_stable": true
+      },
+      "372": {
+        "grades": [
+          "Доопрацювати",
+          "Доопрацювати"
+        ],
+        "stable": true,
+        "numeric_stable": true
+      },
+      "347": {
+        "grades": [
+          null,
+          null
+        ],
+        "stable": true,
+        "numeric_stable": true
+      }
+    }
+  }
+}
