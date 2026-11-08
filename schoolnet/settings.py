@@ -119,7 +119,10 @@ USE_TZ = True
 STATIC_URL = '/static/'
 STATICFILES_DIRS = [BASE_DIR / 'static']
 STATIC_ROOT = BASE_DIR / 'staticfiles'
-WHITENOISE_USE_FINDERS = True
+# In production serve the collected tree so WhiteNoise can use the .br/.gz
+# variants created by CompressedStaticFilesStorage. In development keep
+# finders so edits are visible without collectstatic.
+WHITENOISE_USE_FINDERS = DEBUG
 # Precompress public assets during the existing collectstatic step; keep URLs stable.
 STORAGES = {
     'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
