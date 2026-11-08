@@ -359,7 +359,7 @@ def parse_teacher_ai_feedback_groups(text='', result=None):
     pattern = re.compile(
         r'(?:^|\n)(?:'
         r'(#{2,4}\s+([^\n]+))|'
-        r'([⚠️📌🎯✅💡💬📋🔍📝⚡])\s*(?:\*\*)?([^\n:*]+)(?:\*\*)?[:\s]*|'
+        r'([⚠️📌🎯✅💡💬📋🔍📝⚡])\ufe0f?\s*(?:\*\*)?([^\n:*]+)(?:\*\*)?[:\s]*|'
         r'(?:\*\*)([^\n:*]+)(?:\*\*)[:\s]+'
         r')',
         re.MULTILINE
@@ -375,8 +375,10 @@ def parse_teacher_ai_feedback_groups(text='', result=None):
             if m.group(1):  # ### Title
                 h_title = m.group(2).strip()
             elif m.group(3):  # Icon + Title
-                h_icon = m.group(3)
-                h_title = m.group(4).strip()
+                h_icon = m.group(3).replace('\ufe0f', '')
+                h_title = m.group(4).strip().replace('\ufe0f', '').strip()
+                if not h_title or h_title in ('⚠', '️'):
+                    h_title = 'Зауваження'
             elif m.group(5):  # **Title:**
                 h_title = m.group(5).strip()
 

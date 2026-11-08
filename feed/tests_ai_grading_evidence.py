@@ -64,3 +64,16 @@ class FormatWarningTests(SimpleTestCase):
         result = {'format_warning': 'Файл здано без розширення (має бути .xlsx).'}
         clear_false_format_warning(result, self.submission('книга'))
         self.assertNotEqual(result['format_warning'], '')
+
+
+class TeacherFeedbackLabelTests(SimpleTestCase):
+    def test_warning_variation_selector_does_not_create_blank_title(self):
+        from .ai_student_feedback import parse_teacher_ai_feedback_groups
+        groups = parse_teacher_ai_feedback_groups(
+            '⚠️ **Оцінено частково:** не підтверджено формат.\n\n'
+            '📌 **Висновок:** роботу виконано частково.\n\n'
+            '⚠️ **Зауваження до формату файлу:** перевірте файл.')
+        self.assertTrue(groups)
+        for group in groups:
+            self.assertTrue(group['title'].strip())
+            self.assertNotEqual(group['title'].strip(), '\ufe0f')

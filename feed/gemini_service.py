@@ -8243,7 +8243,9 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                             + '. Бал розраховано за перевіреними критеріями/ГР; '
                             'учитель має переглянути непідтверджені пункти.')
                         full_feedback_parts.append(partial_note)
-                        format_warning = (format_warning + ' ' + partial_note).strip()
+                        # A partial-assessment note is not a file-format warning.
+                        # Keeping it in format_warning caused a false red banner
+                        # for valid .xlsx submissions.
                     elif result_json.get('submission_evidence', {}).get('inaccessible_materials'):
                         full_feedback_parts.append('⚠️ **Потрібна перевірка вчителя:** частину матеріалів не вдалося підтвердити. Оцінка попередня; перед прийняттям перегляньте непідтверджені матеріали.')
                     if format_warning:
