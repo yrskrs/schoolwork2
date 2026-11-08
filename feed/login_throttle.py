@@ -2,7 +2,9 @@
 import hashlib
 from datetime import timedelta
 
+from django.contrib.auth.signals import user_logged_in, user_login_failed
 from django.db import transaction
+from django.dispatch import receiver
 from django.utils import timezone
 
 from .models import LoginThrottle
@@ -53,3 +55,18 @@ def record_failure(request, username):
 
 def clear(request, username):
     LoginThrottle.objects.filter(key=_key(request, username)).delete()
+
+
+@receiver(user_login_failed)
+def _record_failed_login(sender, credentials, request=None, **kwargs):
+    if request is None:
+        return
+    path = getattr(request, 'path', '')
+    if path.startswith('/teacher/login') or path.startswith('/admin/login'):
+        record_failure(request, credentials.get('username', ''))
+
+
+@receiver(user_logged_in)
+def _clear_successful_login(sender, request, user, **kwargs):
+    if request is not None:
+        clear(request, getattr(user, 'username', ''))

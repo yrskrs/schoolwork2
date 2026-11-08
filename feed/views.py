@@ -72,7 +72,7 @@ from .models import (
     AssignmentRescheduleLog, AIErrorLog
 )
 
-from .login_throttle import clear as clear_login_throttle, record_failure, wait_seconds
+from .login_throttle import record_failure, wait_seconds
 from .forms import (
     AssignmentForm, TeacherLoginForm, ClassSelectForm,
     TeacherProfileForm, SubjectForm, ClassGroupForm,
@@ -1043,7 +1043,6 @@ def teacher_login(request):
                     # Перевіряємо що є профіль вчителя
                     try:
                         teacher = user.teacher_profile
-                        clear_login_throttle(request, username)
                         login(request, user)
                         log_submission_activity(user, 'login', f"Вчитель {teacher.full_name} увійшов в систему")
                         messages.success(request, f'Вітаємо, {teacher.full_name}! 👋')
@@ -1052,7 +1051,6 @@ def teacher_login(request):
                         record_failure(request, username)
                         messages.error(request, 'Профіль вчителя не знайдено для цього облікового запису.')
                 else:
-                    record_failure(request, username)
                     messages.error(request, 'Неправильний логін або пароль.')
 
     return render(request, 'feed/teacher_login.html', {'form': form})

@@ -1,12 +1,12 @@
-# SchoolNet 4.8.13g
+# SchoolNet 4.8.13h
 
 [Документація та аудити](docs/README.md) · [Необов’язковий запуск із ПК](desktop/README.md)
 
-Поточний випуск: **4.8.13g — безпека HTTPS, модель Scout і захист входу**. [Зміни](CHANGELOG.md), [звіт](docs/audits/SERVER_SEVEN_FIXES_2026-11-08.md), [документація](docs/README.md).
+Поточний випуск: **4.8.13h — захист входу, HTTPS і Scout**. [Зміни](CHANGELOG.md), [звіт](docs/audits/SERVER_SEVEN_FIXES_2026-11-08.md), [документація](docs/README.md).
 
 Встановлено на головному сервері 08.11.2026: `/healthz/` — 4.8.13g, app/ai_worker healthy, дані до/після збігаються. [Стан розгортання](docs/audits/artifacts/server_seven_fixes_4.8.13g_deployment.json).
 
-Попередній випуск: **4.8.13f — виправлено перевірку оновлень для версій із літерою**. [Зміни](CHANGELOG.md), [звіт](docs/audits/UPDATE_CHECK_4_8_13F_2026-11-08.md).
+Попередній випуск: **4.8.13g — безпека HTTPS, модель Scout і захист входу**. [Зміни](CHANGELOG.md), [звіт](docs/audits/SERVER_SEVEN_FIXES_2026-11-08.md).
 
 Попереднє Розгортання 07.11.2026: **4.8.9 встановлено на головному сервері**. Перевірено образ, посилання, нові сторінки та незмінність HTTPS-тунелю. [Результати встановлення](docs/audits/ASSIGNMENT_WORKSPACE_2026-11-07.md).
 

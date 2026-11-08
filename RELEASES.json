@@ -1,5 +1,15 @@
 [
   {
+    "version": "4.8.13h",
+    "date": "2026-11-08",
+    "title": "Захист входу в адмінку тим самим throttle",
+    "changes": [
+      "Failed-login throttle застосовано до /admin/login/ через спільний LoginThrottle; паролі не зберігаються.",
+      "Сигнали user_login_failed/user_logged_in очищують або фіксують спробу; вчительський вхід не подвоює лічильник.",
+      "Тести: 9 цільових, повний feed — OK."
+    ]
+  },
+  {
     "version": "4.8.13g",
     "date": "2026-11-08",
     "title": "Безпека HTTPS, модель Scout і захист входу",

@@ -52,6 +52,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'feed.login_throttle_middleware.AdminLoginThrottleMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'feed.access_middleware.PublicAccessMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',

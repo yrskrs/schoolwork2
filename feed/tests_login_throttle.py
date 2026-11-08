@@ -60,3 +60,20 @@ class LoginThrottleTests(TestCase):
         with self.assertRaises(ValidationError):
             validate_password('123456')
         validate_password('StrongPass!2026')
+
+
+class AdminLoginThrottleTests(TestCase):
+    def setUp(self):
+        User.objects.create_superuser('admin_throttle', password='AdminStrong!2026')
+
+    def test_admin_login_is_throttled_by_same_shared_store(self):
+        for _ in range(5):
+            response = self.client.post('/admin/login/', {
+                'username': 'admin_throttle', 'password': 'wrong',
+            }, REMOTE_ADDR='192.168.1.12')
+            self.assertEqual(response.status_code, 200)
+        response = self.client.post('/admin/login/', {
+            'username': 'admin_throttle', 'password': 'AdminStrong!2026',
+        }, REMOTE_ADDR='192.168.1.12')
+        self.assertEqual(response.status_code, 429)
+        self.assertEqual(LoginThrottle.objects.count(), 1)

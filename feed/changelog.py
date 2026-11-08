@@ -3,14 +3,23 @@
 Забезпечує чітке розділення змін для учнів та для вчителів.
 """
 
-SITE_VERSION = "4.8.13g"
-SITE_VERSION_SHORT = "v4.8.13g"
+SITE_VERSION = "4.8.13h"
+SITE_VERSION_SHORT = "v4.8.13h"
 
 CHANGELOG_DATA = [
-{'version': '4.8.13g',
+{'version': '4.8.13h',
  'date': '8 листопада 2026',
  'badge': 'Безпека',
  'is_latest': True,
+ 'student_changes': [],
+ 'teacher_changes': [{'icon': '🔐',
+                      'title': 'Захист входу і в адмінці',
+                      'desc': 'Тимчасове обмеження частих невдалих входів поширено на /admin/login/; '
+                              'спільний DB-журнал не зберігає паролів. Діє й перевірка якості паролів.'}]},
+{'version': '4.8.13g',
+ 'date': '8 листопада 2026',
+ 'badge': 'Безпека',
+ 'is_latest': False,
  'student_changes': [],
  'teacher_changes': [{'icon': '🔐',
                       'title': 'Безпечніший HTTPS і вхід',
