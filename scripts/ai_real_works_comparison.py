@@ -26,6 +26,8 @@ def main():
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--repeats', type=int, default=3)
     parser.add_argument('--ids', default=','.join(str(i) for i in WORK_IDS))
+    parser.add_argument('--retry-deferred', type=int, default=0)
+    parser.add_argument('--pause', type=float, default=0.0)
     args = parser.parse_args()
 
     exported = json.loads(args.config.read_text())
@@ -76,23 +78,33 @@ def main():
         entry['grade_before'] = sub.grade
         entry['ai_grade_before'] = sub.ai_suggested_grade
         for run in range(args.repeats):
+            if run and args.pause:
+                time.sleep(args.pause)
             close_old_connections()
-            started = time.monotonic()
-            try:
-                result = evaluate_submission_with_gemini(sub, ai_settings=settings)
-                grade = result.get('suggested_grade')
-                status = result.get('status')
-                blocked = bool(result.get('assessment_blocked'))
-                reasons = result.get('blocked_reasons') or []
-                err = sanitized(str(result.get('error') or ''))[:400]
-            except Exception as exc:  # noqa: BLE001 - record and continue
-                grade, status, blocked, reasons = None, 'exception', False, []
-                err = sanitized(f'{type(exc).__name__}: {exc}')[:400]
+            deferred_retries = 0
+            while True:
+                started = time.monotonic()
+                try:
+                    result = evaluate_submission_with_gemini(sub, ai_settings=settings)
+                    grade = result.get('suggested_grade')
+                    status = result.get('status')
+                    blocked = bool(result.get('assessment_blocked'))
+                    reasons = result.get('blocked_reasons') or []
+                    err = sanitized(str(result.get('error') or ''))[:400]
+                except Exception as exc:  # noqa: BLE001 - record and continue
+                    grade, status, blocked, reasons = None, 'exception', False, []
+                    err = sanitized(f'{type(exc).__name__}: {exc}')[:400]
+                if status == 'deferred' and deferred_retries < args.retry_deferred:
+                    deferred_retries += 1
+                    time.sleep(max(1, min(120, int(result.get('retry_after') or 5))))
+                    continue
+                break
             seconds = round(time.monotonic() - started, 3)
             entry['runs'].append({
                 'run': run + 1, 'grade': grade, 'status': status,
                 'assessment_blocked': blocked, 'blocked_reasons': reasons,
                 'seconds': seconds, 'error': err,
+                'deferred_retries': deferred_retries,
             })
             entry['grades'].append(grade)
             entry['statuses'].append(status)
