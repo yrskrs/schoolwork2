@@ -4,7 +4,7 @@
 
 Поточний випуск: **4.8.13d — стабільна оцінка без втрати безпеки**. [Зміни](CHANGELOG.md), [звіт про стабільність](docs/audits/ASSESSMENT_STABILITY_4_8_13d.md), [документація](docs/README.md).
 
-Встановлено на головному сервері 08.11.2026: `/healthz/` — 4.8.13c, app/ai_worker healthy, дані до/після збігаються. [Стан розгортання](docs/audits/artifacts/class_mismatch_4_8_13c_deployment.json).
+Встановлено на головному сервері 08.11.2026: `/healthz/` — 4.8.13d, app/ai_worker healthy, дані до/після збігаються. [Стан розгортання](docs/audits/artifacts/assessment_stability_4_8_13d_deployment.json).
 
 Попередній випуск: **4.8.13c** — точна перевірка класу без хибних блокувань. [Зміни](CHANGELOG.md), [звіт](docs/audits/CLASS_MISMATCH_FIX_4_8_13c.md).
 
