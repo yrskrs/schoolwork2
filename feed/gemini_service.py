@@ -5390,6 +5390,200 @@ def extract_student_answers(text: str) -> dict[int, str]:
     return answers
 
 
+# ─── Точна перевірка класу ────────────────────────────────────────────────────
+# Збігаємо лише явні згадки класу. Літера після дефіса сама по собі не є
+# згадкою: для «11-А клас» потрібне слово «клас», а для клітинки «11-А» —
+# явний заголовок «Клас» у тому самому тексті. Тому версії на кшталт
+# «0.8.4-alpha2» більше не можуть перетворитися на «4 клас».
+_CLASS_MENTION_RE = re.compile(
+    r'(?<![\d.,A-Za-zА-Яа-яЇїІіЄєҐґ])'
+    r'(?P<grade>1[0-2]|[1-9])(?!\d)'
+    r'\s*(?:-\s*(?:й|го|ий|ого|[А-ЯЇІЄҐ])\s*)?'
+    r'[\s_-]*'
+    r'(?i:клас(?:у|ом|і)?|кл\.?)'
+    r'(?!\w)'
+)
+# У таблицях трапляється заголовок «Клас», а в клітинках — лише «11-А».
+# Такий токен беремо до уваги тільки за наявності явного слова «клас»/«кл.»
+# у тому самому тексті; сам по собі «11-А» (і тим більше «4-a») не блокує.
+_BARE_CLASS_TOKEN_RE = re.compile(
+    r'(?<![\d.,A-Za-zА-Яа-яЇїІіЄєҐґ])'
+    r'(?P<grade>1[0-2]|[1-9])(?!\d)'
+    r'\s*-\s*(?P<letter>[А-ЯЇІЄҐ])(?!\w)'
+)
+_CLASS_CONTEXT_RE = re.compile(r'(?i:клас(?:у|ом|і)?|кл\.)(?!\w)')
+
+_JSON_VERSION_FIELD_RE = re.compile(
+    r'(?i)(?P<prefix>\\?"(?:packageVersion|version|appVersion|app_version|'
+    r'modelVersion|model_version|formatVersion|schemaVersion|buildVersion)\\?"\s*:\s*\\?")'
+    r'(?P<value>(?:[^"\\]|\\.)*)'
+    r'(?P<suffix>\\?")'
+)
+_CODE_FENCE_RE = re.compile(r'```.*?```', re.DOTALL)
+_DATA_URI_RE = re.compile(r'(?is)data:[^\s,;]+;base64,[A-Za-z0-9+/=]+')
+_UUID_RE = re.compile(
+    r'(?i)\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b'
+)
+_SEMVER_RE = re.compile(
+    r'(?<![\d.])\d+\.\d+(?:\.\d+)?(?:[-+][0-9A-Za-z][0-9A-Za-z.-]*)?'
+)
+_HEX_RE = re.compile(r'(?i)\b(?:0x)?[0-9a-f]{8,}\b')
+_HEX_PREFIX_RE = re.compile(r'(?i)\b0x[0-9a-f]{4,}\b')
+_BASE64_RE = re.compile(
+    r'(?<![A-Za-z0-9+/])'
+    r'(?=[A-Za-z0-9+/]*[A-Za-z])(?=[A-Za-z0-9+/]*\d)'
+    r'[A-Za-z0-9+/]{20,}={0,2}'
+    r'(?![A-Za-z0-9+/=])'
+)
+
+_ARCHIVE_FILE_EXTENSIONS = {
+    '.zip', '.rar', '.7z', '.tar', '.gz', '.tgz', '.bz2', '.xz', '.zst',
+    '.tar.gz', '.tar.bz2', '.tar.xz',
+}
+_CODE_OR_MODEL_FILE_EXTENSIONS = {
+    # Вихідний код і конфігурація
+    '.py', '.pyw', '.ipynb', '.js', '.mjs', '.cjs', '.jsx', '.ts', '.tsx',
+    '.vue', '.svelte', '.c', '.cpp', '.cxx', '.cc', '.h', '.hpp', '.cs',
+    '.java', '.kt', '.kts', '.scala', '.groovy', '.pas', '.pp', '.dpr',
+    '.inc', '.php', '.phtml', '.rb', '.go', '.rs', '.swift', '.lua', '.sql',
+    '.sh', '.bash', '.zsh', '.bat', '.cmd', '.ps1', '.html', '.htm',
+    '.xhtml', '.css', '.scss', '.sass', '.less', '.json', '.json5',
+    '.jsonl', '.yaml', '.yml', '.toml', '.ini', '.cfg', '.conf', '.env',
+    '.xml', '.tex', '.properties', '.gradle',
+    # Проєкти, моделі та бінарні дані
+    '.sb3', '.hex', '.tflite', '.h5', '.onnx', '.pkl', '.joblib', '.pt',
+    '.pth', '.keras', '.pb', '.safetensors', '.model', '.bin',
+}
+_IGNORED_CLASS_CONTENT_PREFIXES = (
+    'Вміст прикріпленого архіву (',
+    '[В архіві (',
+    'Розбір структури та коду Scratch',
+    'Вміст та вихідний код BBC micro:bit',
+)
+
+
+def _blank_preserving_newlines(value: str) -> str:
+    """Замінює символи пробілами, зберігаючи довжину та переноси рядків."""
+    return re.sub(r'[^\n]', ' ', value)
+
+
+def _mask_class_check_noise(text: str) -> str:
+    """Маскує версії, метадані, UUID, hex і base64 перед пошуком згадок класу."""
+    if not text:
+        return ''
+
+    def _mask_json_value(match):
+        return (match.group('prefix')
+                + _blank_preserving_newlines(match.group('value'))
+                + match.group('suffix'))
+
+    masked = _CODE_FENCE_RE.sub(lambda m: _blank_preserving_newlines(m.group(0)), text)
+    masked = _JSON_VERSION_FIELD_RE.sub(_mask_json_value, masked)
+    masked = _DATA_URI_RE.sub(lambda m: _blank_preserving_newlines(m.group(0)), masked)
+    masked = _UUID_RE.sub(lambda m: _blank_preserving_newlines(m.group(0)), masked)
+    masked = _SEMVER_RE.sub(lambda m: _blank_preserving_newlines(m.group(0)), masked)
+    masked = _HEX_PREFIX_RE.sub(lambda m: _blank_preserving_newlines(m.group(0)), masked)
+    masked = _HEX_RE.sub(lambda m: _blank_preserving_newlines(m.group(0)), masked)
+    masked = _BASE64_RE.sub(lambda m: _blank_preserving_newlines(m.group(0)), masked)
+    return masked
+
+
+def _submission_file_names(submission) -> list[str]:
+    """Повертає назви прикріплених файлів (без шляхів), зберігаючи порядок."""
+    names = []
+
+    def _add(name):
+        base = os.path.basename(str(name or '').strip())
+        if base and base not in names:
+            names.append(base)
+
+    primary = getattr(submission, 'file', None)
+    _add(getattr(primary, 'name', '') if primary else '')
+    try:
+        related = submission.files.all()
+    except Exception:
+        related = []
+    for item in related:
+        file_obj = getattr(item, 'file', None)
+        _add(getattr(item, 'original_name', '') or getattr(file_obj, 'name', ''))
+    return names
+
+
+def _file_extension(name: str) -> str:
+    lower = (name or '').lower()
+    for compound in ('.tar.gz', '.tar.bz2', '.tar.xz'):
+        if lower.endswith(compound):
+            return compound
+    return os.path.splitext(lower)[1]
+
+
+def _class_check_text(submission, text_parts: list[str]) -> tuple[str, list[str]]:
+    """
+    Повертає текст для перевірки класу та назви файлів.
+
+    Вміст архівів, коду й моделей не аналізуємо: для них перевіряється лише
+    назва файлу. Це прибирає хибні збіги з метаданих Teachable Machine та
+    інших ZIP/кодових проєктів.
+    """
+    names = _submission_file_names(submission)
+    extensions = [_file_extension(name) for name in names]
+    ignored_extensions = _ARCHIVE_FILE_EXTENSIONS | _CODE_OR_MODEL_FILE_EXTENSIONS
+    ignored_names = {name for name, ext in zip(names, extensions) if ext in ignored_extensions}
+    only_ignored_attachments = bool(extensions) and all(
+        ext in ignored_extensions for ext in extensions
+    )
+
+    if only_ignored_attachments:
+        return '', names
+
+    body_parts = []
+    for part in text_parts or []:
+        if not part:
+            continue
+        if part.startswith(_IGNORED_CLASS_CONTENT_PREFIXES):
+            continue
+        header = part[:240]
+        if any(name in header for name in ignored_names) and part.startswith((
+            'Вміст прикріпленого архіву',
+            '[В архіві',
+            'Вміст роботи учня',
+            'Вміст прикріпленого файлу',
+            'Розбір структури',
+            'Вміст та вихідний код',
+        )):
+            continue
+        body_parts.append(part)
+
+    return '\n'.join(body_parts)[:2500], names
+
+
+def _class_trigger_snippet(text: str, start: int, end: int) -> str:
+    """
+    Повертає короткий фрагмент-тригер для вчителя та журналу.
+
+    У таблицях показуємо лише клітинку зі згадкою класу, щоб не виносити
+    в причинах блокування імена інших учнів. Для звичайного тексту достатньо
+    самого збігу («11-А клас», «11 класу»).
+    """
+    line_start = text.rfind('\n', 0, start) + 1
+    line_end = text.find('\n', end)
+    if line_end == -1:
+        line_end = len(text)
+    line = text[line_start:line_end]
+    local_start = start - line_start
+    local_end = end - line_start
+    if '|' in line:
+        left_sep = line.rfind('|', 0, local_start)
+        right_sep = line.find('|', local_end)
+        if left_sep != -1 or right_sep != -1:
+            cell_start = left_sep + 1 if left_sep != -1 else max(0, local_start - 20)
+            cell_end = right_sep if right_sep != -1 else min(len(line), local_end + 20)
+            cell = re.sub(r'\s+', ' ', line[cell_start:cell_end]).strip()
+            if cell:
+                return cell[:140]
+    return re.sub(r'\s+', ' ', text[start:end]).strip()[:140]
+
+
 def detect_invalid_or_teacher_template_submission(submission, text_parts: list[str]) -> tuple[bool, str, str]:
     """
     Автоматично перевіряє роботу учня на критичну невідповідність:
@@ -5433,31 +5627,52 @@ def detect_invalid_or_teacher_template_submission(submission, text_parts: list[s
     if student_grade:
         asgn_grades.add(student_grade)
 
-    if asgn_grades and (student_raw_text or submission.file):
-        sample_to_check = student_raw_text[:2500]
-        if submission.file:
-            sample_to_check += " " + os.path.basename(submission.file.name)
+    if asgn_grades and (student_raw_text or submission.file or _submission_file_names(submission)):
+        class_body, attachment_names = _class_check_text(submission, text_parts)
+        sample_to_check = (class_body + " " + " ".join(attachment_names)).strip()
+        masked_sample = _mask_class_check_noise(sample_to_check)
 
-        found_grade_matches = re.findall(
-            r'\b(1[0-2]|[1-9])(?:\s*-\s*[А-Яа-яA-Za-z]|\s*й\s*клас|\s*го\s*класу|\s+клас|\s+класу|\s+кл[\.\s])',
-            sample_to_check,
-            re.IGNORECASE
-        )
-        found_grades = set()
-        for g_str in found_grade_matches:
+        mention_matches = list(_CLASS_MENTION_RE.finditer(masked_sample))
+        # «11-А» у клітинці таблиці є згадкою класу лише тоді, коли в тексті
+        # є заголовок/слово «Клас» або «кл.». Це зберігає істинний SUB 378,
+        # але не перетворює будь-який «4-a» у версії на «4 клас».
+        if _CLASS_CONTEXT_RE.search(masked_sample):
+            mention_matches.extend(_BARE_CLASS_TOKEN_RE.finditer(masked_sample))
+        mention_matches.sort(key=lambda item: item.start())
+
+        found_mentions = []
+        seen_starts = set()
+        for match in mention_matches:
+            if match.start() in seen_starts:
+                continue
+            seen_starts.add(match.start())
             try:
-                found_grades.add(int(g_str))
+                mention_grade = int(match.group('grade'))
             except (ValueError, TypeError):
-                pass
+                continue
+            # Маска зберігає довжину рядка, тому індекси придатні й для оригіналу.
+            snippet = _class_trigger_snippet(sample_to_check, match.start(), match.end())
+            found_mentions.append((mention_grade, match.group(0), snippet))
 
+        found_grades = {grade for grade, _, _ in found_mentions}
         other_grades = found_grades - asgn_grades
         # Якщо в документі знайдено згадку іншого класу і немає жодної згадки свого класу
         if other_grades and not (found_grades & asgn_grades):
             mismatched_grade = sorted(list(other_grades))[0]
             expected_grades_str = ", ".join(str(g) for g in sorted(list(asgn_grades)))
+            trigger_snippet = next(
+                (snippet for grade, _, snippet in found_mentions if grade == mismatched_grade),
+                '',
+            )
+            trigger_note = f" Фрагмент-тригер: «{trigger_snippet}»." if trigger_snippet else ""
             msg = (
                 f"Прикріплена робота містить завдання/матеріали для {mismatched_grade} класу, тоді як завдання призначене для "
-                f"{expected_grades_str} класу ({class_name}). Здано роботу не з цього класу, оцінку не зараховано."
+                f"{expected_grades_str} класу ({class_name}).{trigger_note} Здано роботу не з цього класу, оцінку не зараховано."
+            )
+            logger.warning(
+                "class_mismatch: submission=%s class=%s expected_grades=%s found_grade=%s trigger=%r",
+                getattr(submission, 'pk', None), class_name,
+                sorted(asgn_grades), mismatched_grade, trigger_snippet,
             )
             return True, msg, 'class_mismatch'
 

@@ -1,0 +1,104 @@
+{
+  "scope": "120 most recent works, restored DB copy, media read-only, no API calls",
+  "works": 120,
+  "blocked": [
+    {
+      "id": 251,
+      "code": "teacher_duplicate",
+      "class": "9-А",
+      "files": [
+        "9а_л.xlsx",
+        "9а л.xlsx"
+      ],
+      "reason": "Прикріплений файл повністю збігається з матеріалами/практичною роботою вчителя («Бібліотека.xlsx»). Здано вихідний файл завдання замість виконаної учнем роботи.",
+      "old_class_trigger": false,
+      "old_found_grades": []
+    },
+    {
+      "id": 257,
+      "code": "teacher_duplicate",
+      "class": "9-А",
+      "files": [
+        "sdsgdeg.xlsx",
+        "sdsgdeg.xlsx"
+      ],
+      "reason": "Прикріплений файл повністю збігається з матеріалами/практичною роботою вчителя («Бібліотека.xlsx»). Здано вихідний файл завдання замість виконаної учнем роботи.",
+      "old_class_trigger": false,
+      "old_found_grades": []
+    },
+    {
+      "id": 258,
+      "code": "teacher_duplicate",
+      "class": "9-А",
+      "files": [
+        "sdsgdeg_TgLRbn4.xlsx",
+        "sdsgdeg.xlsx"
+      ],
+      "reason": "Прикріплений файл повністю збігається з матеріалами/практичною роботою вчителя («Бібліотека.xlsx»). Здано вихідний файл завдання замість виконаної учнем роботи.",
+      "old_class_trigger": false,
+      "old_found_grades": []
+    },
+    {
+      "id": 378,
+      "code": "class_mismatch",
+      "class": "9-В",
+      "files": [
+        "Новий_Аркуш_Microsoft_Excel_2.xlsx",
+        "Новий Аркуш Microsoft Excel (2).xlsx"
+      ],
+      "reason": "Прикріплена робота містить завдання/матеріали для 11 класу, тоді як завдання призначене для 9 класу (9-В). Фрагмент-тригер: «11-А». Здано роботу не з цього класу, оцінку не зараховано.",
+      "old_class_trigger": true,
+      "old_found_grades": [
+        11
+      ]
+    },
+    {
+      "id": 225,
+      "code": "teacher_duplicate",
+      "class": "9-Г",
+      "files": [
+        "Бібліотека.xlsx",
+        "Бібліотека.xlsx"
+      ],
+      "reason": "Прикріплений файл повністю збігається з матеріалами/практичною роботою вчителя («Бібліотека.xlsx»). Здано вихідний файл завдання замість виконаної учнем роботи.",
+      "old_class_trigger": false,
+      "old_found_grades": []
+    }
+  ],
+  "errors": [],
+  "old_class_mismatch_ids": [
+    445,
+    437,
+    439,
+    440,
+    443,
+    446,
+    442,
+    441,
+    438,
+    378
+  ],
+  "new_class_mismatch_ids": [
+    378
+  ],
+  "checks": {
+    "all_120_loaded": true,
+    "old_has_expected_10": true,
+    "all_9_false_cleared": true,
+    "sub_378_still_class_mismatch": true,
+    "teacher_duplicates_unchanged": true,
+    "only_sub_378_class_mismatch": true
+  },
+  "counts": {
+    "teacher_duplicate": 4,
+    "class_mismatch": 1
+  },
+  "false_class_blocks": [],
+  "teacher_duplicate_codes": {
+    "225": "teacher_duplicate",
+    "251": "teacher_duplicate",
+    "257": "teacher_duplicate",
+    "258": "teacher_duplicate"
+  },
+  "ok": true
+}
