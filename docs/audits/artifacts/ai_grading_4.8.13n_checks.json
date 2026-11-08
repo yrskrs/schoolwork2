@@ -1,0 +1,11 @@
+{
+  "release": "4.8.13n",
+  "submission_601": {
+    "ai_suggested_grade": "4",
+    "ai_score_level": "Середній (4-6)",
+    "format_warning_present": false,
+    "feedback_groups": 7,
+    "all_group_titles_nonempty": true
+  },
+  "tests": "1045 OK (2 skips)"
+}
