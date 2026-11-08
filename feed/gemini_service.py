@@ -5951,6 +5951,7 @@ def apply_multi_task_evaluation_guardrail(
 
     # 3. Аналіз виконаних завдань (K)
     detected_missing_nums = set()
+    explicit_missing_eval_nums = set()
     ai_completed = None
     try:
         if 'tasks_completed_count' in result_json:
@@ -5979,6 +5980,7 @@ def apply_multi_task_evaluation_guardrail(
                 elif st in ['missing', 'omitted', 'not_completed', 'пропущено', 'не виконано', 'ні']:
                     if num_int is not None:
                         detected_missing_nums.add(num_int)
+                        explicit_missing_eval_nums.add(num_int)
 
     # Шукаємо згадки про пропущені завдання у тексті відгуку ШІ
     all_ai_feedback_text = f"{summary} {' '.join(str(w) for w in weaknesses)} {feedback_comment}".lower()
@@ -6020,7 +6022,19 @@ def apply_multi_task_evaluation_guardrail(
 
     # 5. Визначаємо фактичну кількість виконаних завдань
     if detected_missing_nums:
-        completed_tasks = max(1, total_tasks - len(detected_missing_nums))
+        # A model may list only the task it marked missing (e.g. task 4),
+        # without listing tasks 1-3. Do not assume every unlisted task was
+        # completed: use explicit completed rows or the model's own count.
+        if completed_evals:
+            completed_tasks = len(completed_evals)
+        elif explicit_missing_eval_nums:
+            # Only the explicitly missing tasks are known; do not assume the
+            # unlisted tasks were completed.
+            completed_tasks = max(1, ai_completed or 1)
+        elif ai_completed is not None:
+            completed_tasks = max(1, min(total_tasks - 1, ai_completed))
+        else:
+            completed_tasks = max(1, total_tasks - len(detected_missing_nums))
     elif completed_evals and len(completed_evals) < total_tasks:
         completed_tasks = len(completed_evals)
     elif ai_completed is not None and ai_completed < total_tasks:

@@ -685,7 +685,9 @@ def downgrade_unsupported_task_claims(result, student_text):
         weaknesses = result.setdefault('weaknesses', [])
         if isinstance(weaknesses, list) and weakness not in weaknesses:
             weaknesses.append(weakness)
-        if not str(result.get('summary') or '').strip():
+        if (not str(result.get('summary') or '').strip()
+                or any(term in str(result.get('summary') or '').casefold()
+                       for term in ('повністю', 'без помилок', 'виконано правильно'))):
             result['summary'] = 'Роботу виконано частково: частину завдань не підтверджено.'
         if result.get('feedback_comment') is not None and weakness not in str(result.get('feedback_comment')):
             result['feedback_comment'] = (str(result.get('feedback_comment') or '').strip() + ' ' + weakness).strip()
