@@ -15,7 +15,7 @@
   `~/school-private-backups/env-before-seven-fixes-20261108` з правами 0600;
 - серверний код звірено з upstream, HEAD є предком `origin/main`;
 - після розгортання виконано перевірене узгодження з upstream без сліпого
-  масового додавання; результат фіксується нижче.
+  масового додавання; фінальний HEAD/status фіксуються у звіті нижче.
 
 **Перевірка:** `git check-ignore` для `.env.bak-*`, `git status --short`,
 `git merge-base --is-ancestor`, наявність fast-forward. Повний `update.sh` на
@@ -91,6 +91,20 @@ health app/worker, відсутність змін у даних.
 
 **Перевірка:** тести блокування, очищення, іншого користувача з тим самим IP,
 валідаторів; перевірка відсутності пароля в ключі.
+
+## Розгортання 4.8.13g
+
+- Образ: `schoolwork2-app:4.8.13g-3dddc2799e8c`.
+- Ревізія: `5cccf4ebe59255acc3d291893510d3cb6e94b84f`.
+- Відбиток коду: `3dddc2799e8cb75de06562af5c5073097fd27b3ec45cc50dceffdae675d321f0`.
+- `/healthz/` — 4.8.13g; app/ai_worker healthy; дані 451/95/17/296 без змін.
+- PostgreSQL після recreate слухає лише `127.0.0.1:5433`; LAN-порт закритий.
+- Funnel `/teacher/login/`: `Strict-Transport-Security: max-age=86400`, CSRF cookie `Secure`; LAN — без HSTS і без `Secure`.
+- `LoginThrottle` (міграція 0075) застосована, таблиця порожня на старті.
+- `schoolnet_updater` перезапущено після копіювання джерел.
+- Повний кандидатний набір: **1012 тестів OK (2 skips)**.
+
+[Стан розгортання](artifacts/server_seven_fixes_4.8.13g_deployment.json).
 
 ## Обмеження
 

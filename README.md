@@ -4,7 +4,7 @@
 
 Поточний випуск: **4.8.13g — безпека HTTPS, модель Scout і захист входу**. [Зміни](CHANGELOG.md), [звіт](docs/audits/SERVER_SEVEN_FIXES_2026-11-08.md), [документація](docs/README.md).
 
-Встановлено на головному сервері 08.11.2026: `/healthz/` — 4.8.13f, app/ai_worker healthy, дані до/після збігаються. [Стан розгортання](docs/audits/artifacts/update_check_4.8.13f_deployment.json).
+Встановлено на головному сервері 08.11.2026: `/healthz/` — 4.8.13g, app/ai_worker healthy, дані до/після збігаються. [Стан розгортання](docs/audits/artifacts/server_seven_fixes_4.8.13g_deployment.json).
 
 Попередній випуск: **4.8.13f — виправлено перевірку оновлень для версій із літерою**. [Зміни](CHANGELOG.md), [звіт](docs/audits/UPDATE_CHECK_4_8_13F_2026-11-08.md).
 
