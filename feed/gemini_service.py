@@ -30,6 +30,10 @@ from .models import AISettings, Submission, DEFAULT_NUS_SYSTEM_PROMPT, AICriteri
 from .duplicate_detector import check_submission_duplicates, get_normalized_file_content
 from .document_parsers import parse_drawingml_chart_xml, format_python_pptx_chart_info
 
+from .ai_privacy import private_assessment
+from .ai_transport import guarded_http, configured_call, retry_after
+from .ai_metrics import timed
+
 logger = logging.getLogger(__name__)
 
 GEMINI_API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
@@ -102,6 +106,7 @@ def _read_api_body(response, deadline):
     return b''.join(parts)
 
 
+@guarded_http
 def _http_post_json(url, payload_dict, headers=None, timeout=30):
     """
     Виконує HTTP POST запит із JSON тілом через пул з'єднань urllib3 (з Keep-Alive та gzip)
@@ -149,6 +154,8 @@ def _http_post_json(url, payload_dict, headers=None, timeout=30):
                 resp.release_conn()
             try:
                 data = json.loads(body_text)
+                if status == 429:
+                    data = retry_after(data, getattr(resp, 'headers', {}))
                 return status, data, body_text
             except json.JSONDecodeError:
                 return status, None, body_text
@@ -170,6 +177,8 @@ def _http_post_json(url, payload_dict, headers=None, timeout=30):
             body_text = body_bytes.decode('utf-8', errors='replace')
             try:
                 data = json.loads(body_text)
+                if status == 429:
+                    data = retry_after(data, getattr(resp, 'headers', {}))
                 return status, data, body_text
             except json.JSONDecodeError:
                 return status, None, body_text
@@ -179,6 +188,8 @@ def _http_post_json(url, payload_dict, headers=None, timeout=30):
         err_text = err_bytes.decode('utf-8', errors='replace')
         try:
             err_data = json.loads(err_text)
+            if status == 429:
+                err_data = retry_after(err_data, e.headers)
             return status, err_data, err_text
         except json.JSONDecodeError:
             return status, None, err_text
@@ -306,37 +317,34 @@ def log_ai_request_metric(model_name, provider='gemini', action='evaluation', st
 
 def _raw_call_ai_api(prompt_text, system_prompt="", inline_media=None, provider="gemini", api_key="", model_name="", custom_url="", temperature=0.2, max_output_tokens=3500, timeout=35, json_mode=False, thinking_budget=None):
     provider = (provider or 'gemini').lower().strip()
+    from django.conf import settings as django_settings
+    from .ai_privacy import outbound, PrivacyBlocked
+    if provider not in django_settings.AI_PRIVACY_ALLOWED_PROVIDERS:
+        return 0, None, 'Постачальник не дозволений політикою приватності.', {'_schoolnet_local_preflight': True}
+    try:
+        prompt_text, system_prompt, inline_media = outbound(prompt_text, system_prompt or '', inline_media)
+    except PrivacyBlocked as error:
+        return 0, None, str(error), {'_schoolnet_local_preflight': True, '_schoolnet_privacy_blocked': True}
     system_prompt = system_prompt or ''
-    # Readable reference text replaces redundant teacher/rubric visual copies.
-    # Unreadable references, primary tasks and student evidence remain required.
-    if provider in ('groq', 'openrouter'):
-        inline_media = [m for m in (inline_media or [])
-                        if not (m.get('evidence_role') in ('reference', 'rubric') and m.get('text_available'))]
+    # A readable text extract does not prove that diagrams, examples and
+    # formatting in teacher/rubric media are redundant. Only exact evidence
+    # deduplication below may remove a visual copy.
     _text_only_groq = ('openai/gpt-oss-120b', 'openai/gpt-oss-20b')
     if provider == 'groq' and inline_media and clean_model_name(model_name, provider) in _text_only_groq:
-        system_prompt += ('\nМЕЖІ ВХОДУ: ця модель отримує тільки витяг тексту, без зображень і PDF-сторінок. '
-                          'Візуальні критерії, оформлення та непрочитані об’єкти познач unverifiable. '
-                          'Не заявляй про їх відсутність; якщо без них неможливий бал, assessment_blocked=true.')
-        inline_media = []
+        return 415, None, 'Модель не підтримує потрібні візуальні докази; оберіть мультимодальну модель.', {'_schoolnet_local_preflight': True}
     from .ai_context import media_for_provider
-    from .ai_payload import optimize_media, pack_document_pages
+    from .ai_payload import optimize_media
     try:
         # The free router selects vision models from image input. Native PDF
         # processing unnecessarily restricts that pool; send actual page images.
         media_provider = 'openai' if provider == 'openrouter' and clean_model_name(model_name, provider) == 'openrouter/free' else provider
         inline_media = media_for_provider(inline_media or [], media_provider)
-        if provider == 'groq' and clean_model_name(model_name, provider) == 'qwen/qwen3.8-27b':
-            inline_media = pack_document_pages(inline_media)
         inline_media = optimize_media(inline_media, provider)
     except Exception:
         return 0, None, 'Не вдалося прочитати всі візуальні матеріали для цього провайдера. Спробуйте PDF-сумісну модель.', None
-    # qwen3.8-27b supports at most 3 images. Cap rather than block so evaluation
-    # still proceeds with text + up to 3 representative images.
+    # Never drop visual evidence to fit a model's image limit.
     if provider == 'groq' and clean_model_name(model_name, provider) == 'qwen/qwen3.8-27b' and len(inline_media) > 3:
-        inline_media = inline_media[:3]
-        system_prompt += ('\nМЕЖІ ВХОДУ: передано тільки перші 3 візуальні об’єкти через ліміт моделі. '
-                          'Решту візуальних доказів не перевірено; залежні від них критерії — unverifiable, '
-                          'за недостатності доказів для балу — assessment_blocked=true.')
+        return 413, None, 'Модель допускає лише 3 зображення; усі докази збережено для іншої моделі.', {'_schoolnet_local_preflight': True}
 
     if provider == 'groq':
         from .ai_payload import groq_output_budget
@@ -406,6 +414,10 @@ def _raw_call_ai_api(prompt_text, system_prompt="", inline_media=None, provider=
                 "parts": [{"text": str(system_prompt).strip()}]
             }
 
+        from .ai_compatibility import GeminiOptions
+        api_options = GeminiOptions(url, model)
+        api_options.apply(payload)
+
         def _log_gemini_400(err_text, cur_payload):
             try:
                 debug_payload = {
@@ -417,7 +429,7 @@ def _raw_call_ai_api(prompt_text, system_prompt="", inline_media=None, provider=
                     "has_system": bool(cur_payload.get("systemInstruction")),
                     "gen_config": cur_payload.get("generationConfig"),
                 }
-                logger.warning("Gemini 400 Invalid Argument: %s | Payload: %s", str(err_text)[:500], debug_payload)
+                logger.warning("Gemini 400 Invalid Argument | Payload structure: %s", debug_payload)
             except Exception:
                 pass
 
@@ -426,20 +438,23 @@ def _raw_call_ai_api(prompt_text, system_prompt="", inline_media=None, provider=
 
             # Каскадне відновлення при 400 (Invalid argument):
             # 1. Повтор без thinkingConfig, якщо він заданий
-            if status_code == 400 and "thinkingConfig" in payload.get("generationConfig", {}):
+            if status_code == 400 and "thinkingConfig" in payload.get("generationConfig", {}) and any(word in (text or "").lower() for word in ("thinkingconfig", "thinkingbudget", "thinking_budget", "thinking")):
                 _log_gemini_400(text, payload)
+                api_options.remember("thinkingConfig", payload["generationConfig"]["thinkingConfig"])
                 del payload["generationConfig"]["thinkingConfig"]
                 status_code, data, text = _http_post_json(url, payload, headers=headers, timeout=gemini_timeout)
 
             # 2. Повтор без responseMimeType, якщо модель не підтримує JSON mode
-            if status_code == 400 and "responseMimeType" in payload.get("generationConfig", {}):
+            if status_code == 400 and "responseMimeType" in payload.get("generationConfig", {}) and any(word in (text or "").lower() for word in ("responsemimetype", "response_mime_type", "json mode")):
                 _log_gemini_400(text, payload)
+                api_options.remember("responseMimeType", payload["generationConfig"]["responseMimeType"])
                 del payload["generationConfig"]["responseMimeType"]
                 status_code, data, text = _http_post_json(url, payload, headers=headers, timeout=gemini_timeout)
 
             # 3. Повтор без окремого systemInstruction (вбудовуємо в user prompt)
-            if status_code == 400 and "systemInstruction" in payload:
+            if status_code == 400 and "systemInstruction" in payload and any(word in (text or "").lower() for word in ("systeminstruction", "system instruction")):
                 _log_gemini_400(text, payload)
+                api_options.remember("systemInstruction", None)
                 sys_text = payload.pop("systemInstruction", {}).get("parts", [{}])[0].get("text", "")
                 if sys_text and payload.get("contents") and payload["contents"][0].get("parts"):
                     first_part = payload["contents"][0]["parts"][0]
@@ -611,6 +626,7 @@ def _raw_call_ai_api(prompt_text, system_prompt="", inline_media=None, provider=
             return 0, None, str(e), None
 
 
+@configured_call
 def call_ai_api(prompt_text, system_prompt="", inline_media=None, provider="gemini", api_key="", model_name="", custom_url="", temperature=0.2, max_output_tokens=3500, timeout=35, json_mode=False, thinking_budget=None, action="evaluation", connection_id=None):
     """
     Універсальна функція для звернення до будь-якого ШІ-провайдера
@@ -670,6 +686,10 @@ def log_ai_error(teacher=None, submission=None, assignment=None, action='evaluat
         elif assignment and not teacher:
             teacher = assignment.teacher
 
+        from .ai_privacy import diagnostic
+        error_message = diagnostic(error_message)
+        prompt_preview = ''
+        raw_response = ''
         AIErrorLog.objects.create(
             teacher=teacher,
             submission=submission,
@@ -2362,6 +2382,8 @@ def fetch_url_content(url, timeout=10, max_chars=20000):
             # Якщо це чистий текст або JSON/код
             if 'text/plain' in content_type or 'application/json' in content_type:
                 clean_text = html_or_text[:max_chars]
+                if not clean_text.strip():
+                    return None, None, 'Ресурс відкрився, але не містить доступного тексту; вміст роботи не прочитано.'
                 return "Текстовий веб-ресурс", clean_text, None
 
             # Парсимо HTML
@@ -2374,9 +2396,9 @@ def fetch_url_content(url, timeout=10, max_chars=20000):
                     formatted_content = f"🌐 Вміст веб-сторінки («{title}» | {url}):\n{clean_text}"
                     return title, formatted_content, None
                 else:
-                    return title, f"🌐 Веб-сторінка: {url} (Сторінка відкрилась, але не містить видимого статичного тексту).", None
+                    return title, None, 'Сторінка відкрилась, але не містить видимого статичного тексту. Вміст роботи не прочитано; потрібен доступний файл або ручна перевірка.'
             except Exception as pe:
-                return "Веб-сторінка", f"🌐 Веб-сторінка: {url} (Помилка аналізу HTML: {str(pe)})", None
+                return "Веб-сторінка", None, f'Не вдалося прочитати HTML сторінки: {pe}'
 
     except urllib.error.HTTPError as e:
         return None, None, f"HTTP {e.code} при відкритті {url}"
@@ -2443,6 +2465,7 @@ def _optimize_image_for_ai(file_path_or_bytes, max_dim=1280, quality=80):
 # ОСНОВНА ФУНКЦІЯ ВИДОБУВАННЯ ВМІСТУ ЗДАЧІ РОБОТИ УЧНЯ
 # ═══════════════════════════════════════════════════════════════════════════════
 
+@timed('extract_submission')
 def extract_submission_content(submission):
     """
     Видобуває текст та медіа-вміст із зданої учнем роботи:
@@ -2461,6 +2484,7 @@ def extract_submission_content(submission):
     inline_media = []
     inaccessible_materials = []
     unreadable_files = []
+    readable_links = 0
 
     # 1. Текстовий коментар учня (обов'язково читається ШІ)
     if submission.comment_student:
@@ -2471,6 +2495,7 @@ def extract_submission_content(submission):
             u = url_match.group(0)
             u_title, u_content, u_err = fetch_url_content(u)
             if u_content:
+                readable_links += 1
                 text_parts.append(f"Вміст веб-сторінки за посиланням з коментаря:\n{u_content}")
             elif u_err:
                 inaccessible_materials.append({
@@ -2487,6 +2512,7 @@ def extract_submission_content(submission):
         text_parts.append(f"Посилання на виконаний проєкт/роботу:\n{link_url}")
         u_title, u_content, u_err = fetch_url_content(link_url)
         if u_content:
+            readable_links += 1
             text_parts.append(f"Автоматично завантажений вміст сторінки ({link_url}):\n{u_content}")
         elif u_err:
             text_parts.append(f"[Примітка щодо посилання {link_url}: не вдалося завантажити вміст сторінки ({u_err})]")
@@ -2817,6 +2843,15 @@ def extract_submission_content(submission):
                 text_parts.append(f"[Прикріплено файл формату {ext} ({filename}, {file_size_kb:.1f} КБ)]")
 
     setattr(submission, '_inaccessible_materials', inaccessible_materials)
+    readable_files = bool(submission_files) and len(unreadable_files) < len(submission_files)
+    comment_without_urls = re.sub(r'https?://[^\s<>"\']+', '', submission.comment_student or '').strip()
+    if (any(item.get('type') == 'url' for item in inaccessible_materials)
+            and not readable_links and not readable_files and not inline_media and not comment_without_urls):
+        # A URL and its fetch diagnostic are not evidence of the submitted work.
+        # Do not spend a model request that could invent a budget or document.
+        return [], [], ('Вміст роботи за посиланням не вдалося прочитати. '
+                        'Надішліть доступний файл або відкрийте вміст для ручної перевірки. '
+                        'Оцінку не сформовано; спробу самоперевірки не використано.')
     if submission_files and len(unreadable_files) == len(submission_files) and not submission.link:
         return [], [], 'Вміст прикріплених файлів не прочитано. Потрібна ручна перевірка; спробу самоперевірки не використано.'
 
@@ -2951,6 +2986,7 @@ def repair_json_string(text):
     return None
 
 
+@timed('validate_json')
 def extract_json_from_text(text, allow_partial=True):
     """
     Надійно видобуває JSON-об'єкт із будь-якого тексту чи markdown-блоку відповіді Gemini.
@@ -4437,32 +4473,8 @@ def log_task_understanding_diagnostics(
     """
     Форматована діагностика інтерпретації завдання у відповідності до Section 26.
     """
-    ignored_str = "\n".join(f"- {item}" for item in (ignored_tasks or [])) if ignored_tasks else "Немає (усі матеріали релевантні або сторонні вправи відсутні)"
-    mand_reqs = final_task_understanding.get('mandatory_requirements', [])
-    mand_str = "\n".join(f"- {r.get('requirement', str(r))} [{r.get('source', 'teacher')}]" if isinstance(r, dict) else f"- {r}" for r in mand_reqs) if mand_reqs else "Базові вимоги відповідно до формату"
-    ambiguities = final_task_understanding.get('ambiguities', [])
-    amb_str = "\n".join(f"- {a}" for a in ambiguities) if ambiguities else "Не виявлено"
-
-    diag_text = (
-        "\n=== TASK UNDERSTANDING ===\n\n"
-        f"TEACHER TITLE:\n{title or '(порожньо)'}\n\n"
-        f"TEACHER DESCRIPTION:\n{desc or '(порожньо)'}\n\n"
-        f"CUSTOM CRITERIA:\n{custom_criteria or '(не задано)'}\n\n"
-        f"TEACHER FILE CONTEXT:\n{file_context[:300] if file_context else '(файли відсутні)'}\n\n"
-        f"DETECTED TEACHER INTENT:\n{json.dumps(final_task_understanding.get('teacher_intent', {}), ensure_ascii=False, indent=2)}\n\n"
-        f"TASK TYPE:\n{final_task_understanding.get('task_type')}\n\n"
-        f"TASK COMPONENTS:\n{json.dumps(final_task_understanding.get('task_components', []), ensure_ascii=False)}\n\n"
-        f"ASSIGNED SCOPE:\n{json.dumps(final_task_understanding.get('assigned_scope', []), ensure_ascii=False)}\n\n"
-        f"EXPECTED RESULT:\n{final_task_understanding.get('expected_result')}\n\n"
-        f"MANDATORY REQUIREMENTS:\n{mand_str}\n\n"
-        f"IGNORED MATERIAL:\n{ignored_str}\n\n"
-        f"QUESTIONS EXPECTED:\n{final_task_understanding.get('questions_expected')}\n\n"
-        f"CONFIDENCE:\n{final_task_understanding.get('task_understanding_confidence')}\n\n"
-        f"AMBIGUITIES:\n{amb_str}\n"
-        "===========================\n"
-    )
-    logger.info(diag_text)
-    print(diag_text)
+    logger.debug('Task interpretation: assigned=%d, ignored=%d',
+        len(final_task_understanding.get('assigned_scope') or []), len(ignored_tasks or []))
 
 
 def interpret_assignment_task(
@@ -5890,7 +5902,8 @@ def apply_multi_task_evaluation_guardrail(
 
 
 
-def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=None, preset_id=None, criteria_preset=None, selected_gr_codes=None, force_thinking=None, teacher=None):
+@private_assessment
+def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=None, preset_id=None, criteria_preset=None, selected_gr_codes=None, force_thinking=None, teacher=None, ignore_strict_privacy=False):
     """
     Виконує педагогічний аналіз та попереднє оцінювання роботи учня за допомогою Google Gemini.
     Підтримує чергу пріоритетів моделей, вибір шаблону критеріїв, вибір конкретних ГР (прапорцями)
@@ -6697,21 +6710,10 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
             "  * НЕ МОЖНА ставити оцінку за те, що учень просто щось прикріпив. Оцінюються виключно реальні відповіді та праця учня!\n"
         )
 
+    scope['_duplicate_facts'] = {key: bool(dup_info.get(key)) for key in ('is_duplicate_teacher', 'is_duplicate_student', 'is_coauthor', 'plagiarism_ignored')}
     from .ai_context import build_assessment_request
-    # Keep media only for the exercise actually assigned. A task with a visual
-    # sample or dependency retains its visual source; selecting text never alters
-    # student work. Provider adapters also discard readable reference duplicates.
-    from .ai_context import focus_assigned_material
-    assigned_numbers = parse_teacher_specific_task_numbers(assignment.description)
-    for source in primary_task_content if 'primary_task_content' in locals() else []:
-        focused, selected = focus_assigned_material(source, assigned_numbers)
-        if selected and not re.search(r'(?i)рисун|зображен|схем|таблиц|діаграм|малюн|скрін|фото', focused):
-            # Source labels contain the original filename as emitted by teacher_materials.
-            match = re.search(r'Матеріал вчителя «([^»]+)»', source)
-            if match:
-                inline_media = [m for m in inline_media if not
-                                (m.get('evidence_role') == 'task' and m.get('text_available')
-                                 and m.get('source', '').startswith(f'Матеріал вчителя: {match[1]} ·'))]
+    # Keep original visual sources: text focusing alone cannot prove that a
+    # visual sample or an implicit dependency is irrelevant to the exercise.
     prompt_content, system_instruction = build_assessment_request(
         submission, selected_preset, active_grs, scope, text_parts,
         primary_task_content if 'primary_task_content' in locals() else [],
@@ -6731,6 +6733,7 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
     attempts_configs = settings.get_request_configs()
 
     attempted_errors = []
+    deferred_waits = []
 
     from .ai_progress import emit_event
 
@@ -6739,7 +6742,8 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
         for config in attempts_configs:
             if config.get('api_key'):
                 text = text.replace(config['api_key'], '[приховано]')
-        return text[:800]
+        from .ai_privacy import diagnostic
+        return diagnostic(text)[:800]
 
     def report_failure(reason, status_code=None):
         reason = safe_failure(reason)
@@ -6760,6 +6764,11 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
     ))
 
     for cfg_idx, cfg in enumerate(attempts_configs):
+        from .ai_transport import evaluation_deadline
+        deadline = evaluation_deadline.get()
+        if deadline is not None and time.monotonic() >= deadline:
+            attempted_errors.append('Вичерпано загальний бюджет часу перевірки; повтори зупинено.')
+            break
         c_provider = cfg['provider']
         c_key = cfg['api_key']
         c_model = cfg['model']
@@ -6782,7 +6791,7 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
         )
 
         provider_prompt, provider_system = prompt_content, system_instruction
-        if c_provider in ('groq', 'openrouter'):
+        if c_provider in ('gemini', 'groq', 'openrouter'):
             provider_prompt, provider_system = build_assessment_request(
                 submission, selected_preset, active_grs, scope, text_parts,
                 primary_task_content if 'primary_task_content' in locals() else [],
@@ -6805,30 +6814,12 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                 attempted_errors.append(f"[{c_provider}/{c_model} пропущено]: зафіксовано ліміт контексту")
                 continue
 
-        # 1. Перевірка чи модель на паузі після збою/перевантаження (Cooldown)
-        is_cooldown, cooldown_rem, cooldown_reason = get_model_cooldown(c_provider, c_model)
-        if is_cooldown and cooldown_rem > 0:
-            if has_other_models:
-                skip_msg = f"{c_provider}/{c_model}: модель на паузі через перевантаження (ще {cooldown_rem}с). Перемикаюсь на наступну модель."
-                emit_event('model_cooldown_skipped', skip_msg, provider=c_provider, model=c_model, position=cfg_idx + 1, total=len(attempts_configs))
-                attempted_errors.append(f"[{c_provider}/{c_model} на паузі]: перевантаження (ще {cooldown_rem}с)")
-                continue
-            else:
-                emit_event('model_cooldown_wait', f"{c_provider}/{c_model}: модель на паузі ({cooldown_rem}с). Очікую перед повторним викликом...", provider=c_provider, model=c_model)
-                time.sleep(min(cooldown_rem, 30))
-
-        # 2. Перевірка паралельної перевірки (Concurrency check)
-        if is_model_busy(c_provider, c_model):
-            if has_other_models:
-                skip_msg = f"{c_provider}/{c_model}: модель наразі зайнята іншою перевіркою. Перемикаюсь на наступну модель у черзі."
-                emit_event('model_busy', skip_msg, provider=c_provider, model=c_model, position=cfg_idx + 1, total=len(attempts_configs))
-                attempted_errors.append(f"[{c_provider}/{c_model} зайнята]: виконується паралельна перевірка")
-                continue
-            else:
-                emit_event('model_waiting', f"{c_provider}/{c_model}: модель зайнята іншою перевіркою. Очікую чергу...", provider=c_provider, model=c_model)
-                wait_t0 = time.time()
-                while is_model_busy(c_provider, c_model) and (time.time() - wait_t0 < 10):
-                    time.sleep(1.0)
+        # Busy/cooling models do not block unrelated providers or hold a worker asleep.
+        is_cooldown, cooldown_rem, _ = get_model_cooldown(c_provider, c_model)
+        if is_cooldown or is_model_busy(c_provider, c_model, c_conn_id):
+            deferred_waits.append(max(1, cooldown_rem) if is_cooldown else 2)
+            emit_event('model_busy', f'{c_provider}/{c_model}: очікує доступного слота або квоти.', provider=c_provider, model=c_model)
+            continue
 
         # 2.5 Перевірка кількості зображень (наприклад qwen3.8-27b підтримує до 3 зображень, текстові моделі 0)
         if max_images_allowed is not None and current_images_count > max_images_allowed:
@@ -6867,25 +6858,9 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                 emit_event('model_skipped', skip_msg, provider=c_provider, model=c_model, position=cfg_idx + 1, total=len(attempts_configs))
                 attempted_errors.append(f"[{c_provider}/{c_model} пропущено]: перевищено ліміт контексту (~{est_tokens} > {model_context_tokens})")
                 continue
-            elif c_provider == 'groq':
-                # Якщо більшої моделі в черзі немає, а це Groq — автоматично скорочуємо контекст (truncate),
-                # щоб уникнути HTTP 413 (Payload Too Large). Докази учня зберігаємо!
-                excess_tokens = est_tokens - model_context_tokens + 400
-                excess_chars = int(excess_tokens * 2.5)
-                ref_marker = 'МАТЕРІАЛИ ДО УРОКУ / ДОВІДКОВІ ФАЙЛИ ВЧИТЕЛЯ:\n'
-                if ref_marker in provider_prompt:
-                    p_before, p_after = provider_prompt.split(ref_marker, 1)
-                    student_marker = '\nВИКОНАНА РОБОТА УЧНЯ ДЛЯ ОЦІНЮВАННЯ:\n'
-                    if student_marker in p_after:
-                        ref_content, student_part = p_after.split(student_marker, 1)
-                        shortened_ref = ref_content[:-min(len(ref_content), excess_chars)].rstrip()
-                        if not shortened_ref:
-                            shortened_ref = "[Довідкову теорію вчителя скорочено для безпечного обсягу запиту]"
-                        provider_prompt = p_before + ref_marker + shortened_ref + student_marker + student_part
-                est_tokens = estimate_text_tokens(provider_prompt + provider_system) + len(inline_media or []) * media_tokens_per_item
-                emit_event('context_truncated',
-                           f"{c_provider}/{c_model}: виконано авто-скорочення контексту до ~{est_tokens} токенів для запобігання HTTP 413.",
-                           provider=c_provider, model=c_model, position=cfg_idx + 1, total=len(attempts_configs))
+            else:
+                attempted_errors.append(f'[{c_provider}/{c_model}]: повний контекст перевищує місткість моделі; докази не обрізано.')
+                continue
 
         emit_event('model_start', f'Спроба {cfg_idx + 1}/{len(attempts_configs)}: {c_provider}/{c_model}. Очікую відповідь.',
                    provider=c_provider, model=c_model, position=cfg_idx + 1, total=len(attempts_configs))
@@ -6904,8 +6879,17 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                    f'і {len(provider_system)} символів правил; текст роботи учня збережено повністю.',
                    provider=c_provider, model=c_model, position=cfg_idx + 1, total=len(attempts_configs))
 
-        slot_acquired = acquire_model_slot(c_provider, c_model, holder_id=str(submission.pk if submission else 'active'))
+        from uuid import uuid4
+        from django.conf import settings as django_settings
+        from .ai_progress import _job_id
+        slot_owner = str(_job_id.get() or 'direct') + ':' + uuid4().hex
+        slot_acquired = False
         for attempt in range(max_retries + 1):
+            slot_acquired = acquire_model_slot(c_provider, c_model, holder_id=slot_owner,
+                timeout=django_settings.AI_JOB_TIMEOUT + 60, connection_id=c_conn_id)
+            if not slot_acquired:
+                deferred_waits.append(2)
+                break
             try:
                 if use_thinking:
                     # Режим глибокого мислення (Thinking mode): даємо розширений бюджет міркувань
@@ -6931,6 +6915,14 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                     connection_id=c_conn_id
                 )
 
+                if isinstance(raw_data, dict) and raw_data.get('_schoolnet_deferred'):
+                    deferred_waits.append(int(raw_data['_schoolnet_deferred']))
+                    break
+                if isinstance(raw_data, dict) and raw_data.get('_schoolnet_privacy_blocked'):
+                    submission.ai_status = 'failed'
+                    submission.ai_error_reason = err_msg
+                    submission.save(update_fields=['ai_status', 'ai_error_reason'])
+                    return {'status': 'failed', 'error': err_msg, 'privacy_blocked': True}
                 retryable = (status_code in (502, 503) if router_retry
                              else status_code in (429, 500, 502, 503, 504))
                 # Cold starts can return 200 with no content. Do not repeat an
@@ -6964,6 +6956,9 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                     # Фіксуємо паузу при перевантаженні (429, 503 тощо)
                     if is_overload_error(status_code, fail_reason) or status_code in (429, 503):
                         cooldown_secs = 60 if status_code == 503 else 45
+                        if status_code == 429:
+                            cooldown_secs = max(1, min(86400, int((raw_data or {}).get('_schoolnet_retry_after') or 45)))
+                            deferred_waits.append(cooldown_secs)
                         set_model_cooldown(c_provider, c_model, duration_seconds=cooldown_secs, reason=fail_reason)
 
                     # Фіксуємо та позначаємо помилку обсягу/контексту (413 тощо)
@@ -7317,34 +7312,9 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                     result_json['improvement_steps'] = rev_advice
                     result_json['resubmission_recommendations'] = rev_advice
 
-                    # ── Діагностичне логування оцінювання (Section 20) ──────────
-                    try:
-                        assigned_tasks_log = "\n".join(f" - {t.get('description', '')}" for t in (scope.get('assigned_tasks') or [])) or " - (Не вказано)"
-                        ignored_tasks_log = "\n".join(f" - {t.get('description', '')}" for t in (scope.get('ignored_found_tasks') or [])) or " - (Немає)"
-                        crit_log = "\n".join(f" - {c.get('name', '') if isinstance(c, dict) else str(c)}" for c in (eval_plan.get('criteria') or [])) or " - (Загальні критерії)"
-                        stud_comm = (submission.comment_student or "").strip()
-                        evidence_log = f" - student_files: {submitted_files_list}\n - student_comment: {stud_comm[:120] if stud_comm else '(порожньо)'}"
-                        crit_res_log = "\n".join(f" - {cr.get('criterion', '')}: {cr.get('status', '')} (evidence: {cr.get('evidence_source', '')})" for cr in synced_crit_results)
-
-                        logger.info(
-                            "\n═══════════════════════════════════════════════════════════════════\n"
-                            "ASSIGNMENT SCOPE\n"
-                            "Assigned task count: %s\n"
-                            "Assigned tasks:\n%s\n\n"
-                            "Ignored found tasks:\n%s\n\n"
-                            "CRITERIA\n%s\n\n"
-                            "STUDENT EVIDENCE\n%s\n\n"
-                            "CRITERIA RESULTS\n%s\n"
-                            "═══════════════════════════════════════════════════════════════════",
-                            scope.get('assigned_task_count', 1),
-                            assigned_tasks_log,
-                            ignored_tasks_log,
-                            crit_log,
-                            evidence_log,
-                            crit_res_log
-                        )
-                    except Exception as log_err:
-                        logger.debug("Помилка формування діагностичного логу: %s", log_err)
+                    # Telemetry contains counts only, never student work or comments.
+                    logger.debug('Assessment coverage: criteria=%d, files=%d',
+                        len(synced_crit_results), len(submitted_files_list))
 
                     # Санація коментаря учня та вимог формату у тексті зворотного зв'язку
                     if comment_nuance.get('has_substance') and comment_nuance.get('substance_type') == 'conclusion':
@@ -7445,20 +7415,13 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                                     'comment': comment
                                 })
 
-                    # Обчислюємо середній бал за оціненими групами результатів (заокруглення на перевагу учню, тільки ціле число)
+                    # Обчислюємо середній бал за оціненими групами результатів (заокруглення на перевагу учню, тільки ціле число).
+                    # Це лише проміжне значення: фінальний бал визначається ОДИН раз нижче,
+                    # після всіх перевірок (відхилення, unverifiable, ГР), щоб уникнути множинних перезаписів.
                     avg_gr_grade = None
                     if not is_traditional and numeric_gr_grades:
                         avg_val = sum(numeric_gr_grades) / len(numeric_gr_grades)
                         avg_gr_grade = int(min(12, max(1, math.ceil(avg_val))))
-                        # Якщо оцінювалось декілька ГР одночасно — середня оцінка стає рекомендованою
-                        if suggested_grade != 'Доопрацювати' and not custom_criteria.strip():
-                            suggested_grade = str(avg_gr_grade)
-                    elif suggested_grade and suggested_grade != 'Доопрацювати':
-                        try:
-                            s_num = float(str(suggested_grade).replace(',', '.'))
-                            suggested_grade = str(int(min(12, max(1, math.ceil(s_num)))))
-                        except (ValueError, TypeError):
-                            pass
 
                     # ── ПЕРЕВІРКА НА НЕВІДПОВІДНІСТЬ ТЕМІ, КЛАСУ ТА ЗДАЧУ БЛАНКУ ВЧИТЕЛЯ ──
                     post_is_invalid, post_reason, post_code = detect_invalid_or_teacher_template_submission(submission, text_parts)
@@ -7646,7 +7609,9 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                                 weaknesses = [w for w in weaknesses if phrase not in w.lower()]
 
                         if suggested_grade == 'Доопрацювати' and not is_rejected_submission:
-                            # Якщо оцінюються групи результатів (ГР) — підсумковий бал обов'язково відповідає середньому балу ГР!
+                            # Якщо оцінюються групи результатів (ГР) — підсумковий бал відповідатиме
+                            # середньому балу ГР. Сам бал визначається один раз нижче; тут лише
+                            # позначаємо, що робота не «Доопрацювати», коли ГР підтверджені.
                             if not is_traditional and numeric_gr_grades and avg_gr_grade is not None:
                                 suggested_grade = str(avg_gr_grade)
                                 if avg_gr_grade >= 10:
@@ -7852,17 +7817,30 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                     feedback_comment = re.sub(r'\n{3,}', '\n\n', feedback_comment).strip()
                     summary = re.sub(r'\s{2,}', ' ', summary).strip()
 
-                    from .ai_context import complete_result_groups
+                    from .ai_context import complete_result_groups, unverifiable_labels
                     if not is_traditional and active_grs:
                         clean_gr_results = complete_result_groups(clean_gr_results, active_grs)
                     # A final artifact cannot verify who performed the work.
                     strengths = [s for s in strengths if not re.search(r'самостійніст|самостійно\b|власноруч', str(s), re.I)]
                     result_json['grade_explanation'] = result_json.get('grade_explanation') or summary or feedback_comment
+                    # Any unconfirmed active criterion or GR blocks the numeric
+                    # grade. The teacher must review it manually before a mark
+                    # becomes available; we never store a guessed number.
+                    blocked_labels = unverifiable_labels(
+                        result_json.get('criteria_results'), clean_gr_results)
+                    assessment_blocked = bool(blocked_labels)
+                    result_json['assessment_blocked'] = assessment_blocked
+                    result_json['blocked_reasons'] = blocked_labels
                     result_json['needs_teacher_review'] = (
-                        any(row.get('status') == 'unverifiable' for row in result_json.get('criteria_results') or [] if isinstance(row, dict))
-                        or any(row.get('status') == 'unverifiable' for row in clean_gr_results)
+                        assessment_blocked
                         or not assignment.allow_ai_usage)
                     full_feedback_parts = []
+                    if assessment_blocked:
+                        full_feedback_parts.append(
+                            '⛔ **Оцінку заблоковано:** не підтверджено ' + ', '.join(blocked_labels)
+                            + '. Числовий бал не збережено. Він стане доступним лише після ручної перевірки вчителем.')
+                    elif result_json.get('submission_evidence', {}).get('inaccessible_materials'):
+                        full_feedback_parts.append('⚠️ **Потрібна перевірка вчителя:** частину матеріалів не вдалося підтвердити. Оцінка попередня; перед прийняттям перегляньте непідтверджені матеріали.')
                     if format_warning:
                         full_feedback_parts.append(f"⚠️ **Зауваження до формату файлу (вплинуло на оцінку):**\n{format_warning}")
                     if summary:
@@ -7887,20 +7865,8 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                     ai_generated_confidence = authorship['ai_generated_confidence']
                     ai_generated_details = authorship['ai_generated_details']
 
-                    if ai_generated_detected and not assignment.allow_ai_usage and ai_generated_percent is not None:
-                        try:
-                            cur_grade = int(float(str(suggested_grade).replace('бал', '').strip()))
-                            if cur_grade > 3:
-                                suggested_grade = 'Доопрацювати'
-                                level = 'Початковий'
-                        except (ValueError, TypeError):
-                            pass
-                        ai_violation_msg = f"У роботі виявлено ознаки використання штучного інтелекту ({ai_generated_percent}%), що перевищує допустимий поріг ({tolerance}%). Вчитель вимагав повністю самостійного виконання завдання без застосування сторонніх генераторів."
-                        if weaknesses and isinstance(weaknesses, list):
-                            if ai_violation_msg not in weaknesses:
-                                weaknesses.insert(0, ai_violation_msg)
-                        else:
-                            weaknesses = [ai_violation_msg]
+                    # Origin observations are reviewed separately by the teacher.
+                    # An unverified percentage must never lower the content grade.
 
                     if strengths and isinstance(strengths, list) and len(strengths) > 0:
                         full_feedback_parts.append("✅ **Сильні сторони:**\n" + "\n".join(f"• {s}" for s in strengths))
@@ -7913,14 +7879,34 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                     full_feedback_parts.extend(evidence_sections)
                     combined_feedback = "\n\n".join(full_feedback_parts) if full_feedback_parts else feedback_comment
 
+                    # ── ЄДИНЕ ВИЗНАЧЕННЯ ФІНАЛЬНОГО БАЛУ ──
+                    # Усі проміжні перевірки вже виконано. Тут бал нормалізується
+                    # рівно один раз, щоб уникнути нестабільності між повторами.
+                    if not assessment_blocked and not is_rejected_submission:
+                        if not is_traditional and numeric_gr_grades and avg_gr_grade is not None:
+                            # Для ГР підсумковий бал дорівнює середньому за ГР.
+                            suggested_grade = str(avg_gr_grade)
+                        elif suggested_grade and suggested_grade != 'Доопрацювати':
+                            try:
+                                s_num = float(str(suggested_grade).replace(',', '.'))
+                                suggested_grade = str(int(min(12, max(1, math.ceil(s_num)))))
+                            except (ValueError, TypeError):
+                                pass
+
                     # Формуємо чистий відгук для публічних коментарів учневі (БЕЗ оцінок ГР)
                     from .ai_student_feedback import compact_student_feedback
                     clean_student_feedback = compact_student_feedback(result=dict(
                         result_json, summary=summary, strengths=strengths,
                         weaknesses=weaknesses, feedback_comment=feedback_comment))
 
-                    submission.ai_suggested_grade = suggested_grade
-                    submission.ai_score_level = level
+                    # When any active criterion/GR is unverifiable the numeric
+                    # grade is withheld until the teacher reviews it manually.
+                    if assessment_blocked:
+                        submission.ai_suggested_grade = ''
+                        submission.ai_score_level = ''
+                    else:
+                        submission.ai_suggested_grade = suggested_grade
+                        submission.ai_score_level = level
                     submission.ai_feedback = combined_feedback
                     submission.ai_gr_results = json.dumps(clean_gr_results, ensure_ascii=False) if (clean_gr_results and not is_traditional) else ''
                     submission.ai_generated_detected = ai_generated_detected
@@ -7955,8 +7941,10 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
 
                     return {
                         'status': 'success',
-                        'suggested_grade': suggested_grade,
-                        'level': level,
+                        'suggested_grade': None if assessment_blocked else suggested_grade,
+                        'level': '' if assessment_blocked else level,
+                        'assessment_blocked': assessment_blocked,
+                        'blocked_reasons': blocked_labels,
                         'tasks_total_count': result_json.get('tasks_total_count'),
                         'tasks_completed_count': result_json.get('tasks_completed_count'),
                         'task_resolution': result_json.get('task_resolution'),
@@ -8037,8 +8025,11 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                 break
             finally:
                 if slot_acquired:
-                    release_model_slot(c_provider, c_model)
+                    release_model_slot(c_provider, c_model, holder_id=slot_owner, connection_id=c_conn_id)
                     slot_acquired = False
+
+    if deferred_waits:
+        return {'status': 'deferred', 'retry_after': min(deferred_waits), 'error': 'Очікує доступної моделі або квоти.'}
 
     # Якщо всі спроби (включаючи резервний API) зазнали невдачі
     all_err_msg = " | ".join(attempted_errors) if attempted_errors else "Не вдалося отримати відповідь від жодної з налаштованих моделей або резервного API ШІ."

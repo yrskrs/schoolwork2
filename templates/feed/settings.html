@@ -672,6 +672,14 @@
                         <form method="POST" id="ai-global-config-form">
                             {% csrf_token %}
                             <input type="hidden" name="action" value="save_ai_config">
+                            <div class="form-group">
+                                <label class="form-label" for="privacy_mode">Захист даних під час ШІ-перевірки</label>
+                                <select class="form-input" name="privacy_mode" id="privacy_mode">
+                                    <option value="redact" {% if ai_settings.privacy_mode == 'redact' %}selected{% endif %}>Очищати текст і дозволити візуальну перевірку (рекомендовано)</option>
+                                    <option value="strict" {% if ai_settings.privacy_mode == 'strict' %}selected{% endif %}>Суворий — блокувати лише за реально виявлені персональні дані</option>
+                                </select>
+                                <p class="form-hint">Відомі імена, контакти та приватні параметри посилань очищуються перед надсиланням. У режимі «Очищати текст» зображення й PDF дозволені: з них вилучаються метадані (EXIF), але видимі пікселі не анонімізуються — про це честно попереджаємо. Режим «Суворий» блокує матеріал лише тоді, коли в метаданих реально виявлено персональні дані (ім'я автора, контакти, GPS), а не через сам формат файлу. Повна анонімність довільного тексту не гарантується. Приватні вказівки вчителя передаються обраному ШІ.</p>
+                            </div>
 
                             <!-- Чекбокс увімкнення модуля -->
                             <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--color-bg-secondary);border-radius:var(--radius-md);border:1px solid var(--color-border);margin-bottom:20px;">

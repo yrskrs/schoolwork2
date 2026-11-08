@@ -30,6 +30,13 @@
 
                     <!-- Головна помітна кнопка перевірки ШІ -->
                     <div style="margin-bottom:12px;">
+                        <label for="ignore-strict-privacy-checkbox" style="display:flex;align-items:flex-start;gap:8px;font-size:12px;cursor:pointer;">
+                            <input type="checkbox" id="ignore-strict-privacy-checkbox" autocomplete="off" aria-describedby="teacher-privacy-override-hint" style="margin-top:2px;flex-shrink:0;">
+                            <span>Ігнорувати суворий режим для цієї перевірки</span>
+                        </label>
+                        <p id="teacher-privacy-override-hint" class="form-hint" style="font-size:11px;margin:5px 0 0;">Дозволяє передати ШІ фото та PDF, які можуть містити видимі особисті дані. Очищення тексту зберігається. Налаштування учнівської самоперевірки не змінюється.</p>
+                    </div>
+                    <div style="margin-bottom:12px;">
                         <button type="button" class="btn-ai-prominent" id="btn-run-ai-check" onclick="runSingleAICheck({{ submission.id }})">
                             <span style="font-size:16px;">⚡</span>
                             <span>Перевірити роботу ШІ</span>
@@ -79,6 +86,10 @@
                                 {% if submission.ai_suggested_grade == 'Доопрацювати' %}
                                 <span class="badge" style="font-size:12px;font-weight:700;background:var(--color-warning-light);color:var(--color-warning);border:1px solid #fcd34d;">
                                     🔄 Доопрацювати
+                                </span>
+                                {% elif not submission.ai_suggested_grade %}
+                                <span class="badge" style="font-size:12px;font-weight:700;background:rgba(239,68,68,0.12);color:#dc2626;border:1px solid #fca5a5;" title="Числовий бал не збережено: частину критеріїв не підтверджено. Потрібна ручна перевірка вчителем.">
+                                    ⛔ Оцінку заблоковано — потрібна перевірка вчителя
                                 </span>
                                 {% else %}
                                 <span class="badge" style="font-size:13px;font-weight:800;background:rgba(16,185,129,0.15);color:var(--color-success);">

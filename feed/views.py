@@ -1511,6 +1511,8 @@ def assignment_create(request):
                 Assignment.STATUS_SCHEDULED: 'заплановано до публікації',
             }
             label = status_labels.get(assignment.status, 'збережено')
+            from .ai_preparation import queue_after_commit
+            queue_after_commit('assignment', assignment.pk)
             messages.success(request, f'Завдання "{assignment.title}" — {label}! ✅')
             if assignment.status == Assignment.STATUS_PUBLISHED and assignment.allow_student_ai_understanding:
                 _async_trigger_ai_task_understanding(assignment.pk)
@@ -1744,6 +1746,8 @@ def assignment_edit(request, pk):
                     )
 
             messages.success(request, f'Завдання "{assignment.title}" оновлено! ✅')
+            from .ai_preparation import queue_after_commit
+            queue_after_commit('assignment', assignment.pk)
             if assignment.status == Assignment.STATUS_PUBLISHED and assignment.allow_student_ai_understanding:
                 _async_trigger_ai_task_understanding(assignment.pk, force_refresh=True)
             return redirect('teacher_dashboard')
@@ -2971,6 +2975,8 @@ def submit_assignment(request, pk):
 
             # Зберігаємо ID останньої здачі для кнопки самоперевірки учня (ШІ)
             request.session['last_submission_id'] = submission.id
+            from .ai_preparation import queue_after_commit
+            queue_after_commit('submission', submission.pk)
             # Зберігаємо ID здачі в сесії поточного користувача, щоб не надсилати сповіщення автору роботи
             my_subs = request.session.get('my_submission_ids', [])
             if submission.id not in my_subs:
@@ -3091,7 +3097,8 @@ def _evaluate_student_submission(submission):
 def _perform_student_ai_check(submission, result):
     assignment = submission.assignment
     if not result or result.get('status') not in ('success', 'ok'):
-        return JsonResponse({'error': 'ШІ не зміг завершити перевірку. Спробуйте ще раз; спробу не використано.'}, status=503)
+        message = result.get('error') if result and result.get('privacy_blocked') else None
+        return JsonResponse({'error': message or 'ШІ не зміг завершити перевірку. Спробуйте ще раз; спробу не використано.'}, status=503)
 
     # Зберігаємо чернову оцінку
     import json as _json
@@ -3101,10 +3108,13 @@ def _perform_student_ai_check(submission, result):
     unclear_task = bool(result.get('unclear_task'))
     format_warning = result.get('format_warning', '')
 
+    assessment_blocked = bool(result.get('assessment_blocked'))
     submission.student_ai_checked = True
     submission.student_ai_checked_at = timezone.now()
-    submission.student_ai_grade = str(result.get('suggested_grade', ''))
-    submission.student_ai_level = result.get('level', '')
+    # When any criterion/GR is unverifiable the numeric grade is withheld
+    # until the teacher reviews it manually.
+    submission.student_ai_grade = '' if assessment_blocked else str(result.get('suggested_grade') or '')
+    submission.student_ai_level = '' if assessment_blocked else result.get('level', '')
     summary_text = result.get('summary', '')
     if unclear_task and not summary_text:
         summary_text = "Не зрозуміло, яке завдання виконане. Будь ласка, вкажіть номер завдання у коментарі до здачі."
@@ -7740,6 +7750,9 @@ def teacher_settings_view(request):
             ai_settings.temperature = temperature_val
             ai_settings.is_enabled = is_enabled
             ai_settings.default_thinking_mode = bool(request.POST.get('default_thinking_mode'))
+            privacy_mode = request.POST.get('privacy_mode')
+            if privacy_mode in ('strict', 'redact'):
+                ai_settings.privacy_mode = privacy_mode
             if tolerance_val is not None:
                 try:
                     ai_settings.ai_detector_tolerance_percent = max(0, min(100, int(tolerance_val)))
@@ -7747,7 +7760,7 @@ def teacher_settings_view(request):
                     pass
             if ai_settings.unified_model_queue:
                 ai_settings.save(update_fields=['auto_failover_enabled', 'system_prompt', 'temperature', 'is_enabled',
-                    'default_thinking_mode', 'ai_detector_tolerance_percent', 'updated_at'])
+                    'default_thinking_mode', 'ai_detector_tolerance_percent', 'privacy_mode', 'updated_at'])
             else:
                 ai_settings.save()
             messages.success(request, "Параметри модуля ШІ збережено! 🤖")
@@ -8403,6 +8416,11 @@ def _teacher_ai_selection(request, submission):
     return str(preset.pk) if preset else None, codes
 
 
+def _teacher_ai_privacy_options(request):
+    """Only teacher endpoints persist this explicit, single-request choice."""
+    return {'ignore_strict_privacy': True} if request.POST.get('ignore_strict_privacy') == '1' else {}
+
+
 @teacher_required
 @require_POST
 def ai_check_single_submission(request, submission_id):
@@ -8432,6 +8450,7 @@ def ai_check_single_submission(request, submission_id):
         job = enqueue_submission_job(submission, 'teacher_check', user=request.user, parameters={
             'custom_prompt': custom_prompt, 'preset_id': preset_id,
             'selected_gr_codes': selected_gr_codes, 'force_thinking': force_thinking,
+            **_teacher_ai_privacy_options(request),
         })
     except SelfCheckUnavailable as exc:
         return JsonResponse({'status': 'error', 'error': str(exc)}, status=exc.http_status)
@@ -8643,6 +8662,7 @@ def api_ai_process_item(request, submission_id):
     try:
         job = enqueue_submission_job(submission, 'batch_check', user=request.user, parameters={
             'preset_id': preset_id, 'selected_gr_codes': selected_gr_codes,
+            **_teacher_ai_privacy_options(request),
         })
     except SelfCheckUnavailable as exc:
         return JsonResponse({'status': 'error', 'error': str(exc)}, status=exc.http_status)

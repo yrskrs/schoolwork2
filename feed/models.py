@@ -3497,6 +3497,9 @@ class AISettings(models.Model):
     AI_PROVIDER_CHOICES = AI_PROVIDER_CHOICES
     ACTIVE_KEY_CHOICES = ACTIVE_KEY_CHOICES
     provider_connections = models.JSONField('Підключення до постачальників ШІ', default=list, blank=True)
+    privacy_mode = models.CharField('Знеособлення', max_length=16, default='redact',
+        choices=[('redact', 'Очищення тексту; візуальні матеріали дозволені з EXIF-очищенням'),
+                 ('strict', 'Суворий: блокувати лише за реально виявлені персональні дані')])
     unified_model_queue = models.BooleanField('Налаштування перенесено до єдиної черги', default=False, editable=False)
 
     def import_legacy_connections(self):
@@ -3527,7 +3530,8 @@ class AISettings(models.Model):
     def public_connections(self):
         from .ai_connections import configured
         return [{k: c[k] for k in ('id', 'provider', 'label', 'custom_url')} |
-                {'configured': configured(c), 'has_key': bool(c.get('api_key'))} for c in self.provider_connections]
+                {'configured': configured(c), 'has_key': bool(c.get('api_key')),
+                 'quota_group': c.get('quota_group', ''), 'quota_limits': c.get('quota_limits', {})} for c in self.provider_connections]
 
     # ── Основний API ──────────────────────────────────────────────────────────
     ai_provider = models.CharField(
@@ -4581,7 +4585,7 @@ class AICriteriaPreset(models.Model):
 
 
 
-from .job_models import AIJob, StudentAICheckReservation  # noqa: E402, F401
+from .job_models import AIJob, StudentAICheckReservation, AIResourceState, AIBatch  # noqa: E402, F401
 from .cloud_models import CloudImport  # noqa: E402, F401
 from .roster_models import RosterReplica, RosterState  # noqa: E402, F401
 
