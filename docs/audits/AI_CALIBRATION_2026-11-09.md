@@ -95,3 +95,11 @@ Gemini — 5, DeepSeek — блок, DeepSeek — 4. Тобто **модель �
 - Точних збігів: 4 → **1**; MAE: 1.11 → **2.15**; зсув: −1.11 → **−2.00**.
 - Fallback: **8/14** — закріплений `deepseek-chat` текстовий, тому візуальні роботи пішли на Gemini.
 - Деталі: [AI_LAB_GRADING_SPOTCHECK_AFTER_FIXES_2026-11-09.md](AI_LAB_GRADING_SPOTCHECK_AFTER_FIXES_2026-11-09.md).
+
+
+## 10. Media-aware R6 (V2, 09.11.2026)
+
+- Візуальні роботи закріплюються за vision-моделлю, текстові — за першою текстовою.
+- Fallback: 8/14 → **5/14**; точних: 1 → **3**; MAE: 2.15 → **1.85**.
+- Залишок: 5 текстових робіт пішли на Gemini через `model_busy` закріпленого DeepSeek.
+- Деталі: [AI_LAB_GRADING_SPOTCHECK_V2_2026-11-09.md](AI_LAB_GRADING_SPOTCHECK_V2_2026-11-09.md).
