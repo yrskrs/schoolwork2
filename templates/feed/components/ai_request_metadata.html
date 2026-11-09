@@ -6,6 +6,9 @@
         <div><dt>Вхідні токени</dt><dd>{{ submission.ai_prompt_tokens|default_if_none:"Немає даних" }}</dd></div>
         <div><dt>Вихідні токени</dt><dd>{{ submission.ai_completion_tokens|default_if_none:"Немає даних" }}</dd></div>
         <div><dt>Усього токенів</dt><dd>{{ submission.ai_total_tokens|default_if_none:"Немає даних" }}</dd></div>
+        {% if payload_manifest %}
+        <div><dt>Пакет перевірки</dt><dd>{{ payload_manifest.prompt_chars }} симв. · {{ payload_manifest.media_count }} медіа · ~{{ payload_manifest.est_tokens }} ток. <a href="{{ payload_manifest_url }}">Що побачила модель</a></dd></div>
+        {% endif %}
     </dl>
     <p>{% if submission.ai_total_tokens is None %}Постачальник не повернув статистику токенів або її не було збережено під час старої перевірки.{% else %}Дані запиту, що сформував оцінку. Загальна кількість — за відповіддю API; вона може включати токени міркувань.{% endif %}</p>
 </section>

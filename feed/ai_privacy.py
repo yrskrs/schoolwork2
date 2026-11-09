@@ -118,6 +118,13 @@ class Redactor:
         for item in media or []:
             entry = dict(item)
             entry['source'] = self.text(entry.get('source', ''))
+            if str(entry.get('mime_type', '')).startswith(('audio/', 'video/')):
+                if self.mode == 'strict':
+                    raise PrivacyBlocked(
+                        'Суворе знеособлення не передає аудіо/відео: голос і зображення неможливо знеособити.',
+                        reason='mode_restriction')
+                output.append(entry)
+                continue
             # Strip image metadata without altering decoded pixels. This does
             # not anonymize visible content; the UI explicitly explains that.
             if str(entry.get('mime_type', '')).startswith('image/'):
@@ -135,11 +142,22 @@ class Redactor:
                         if getattr(image, 'is_animated', False):
                             raise PrivacyBlocked('Анімовані зображення потребують попереднього знеособлення.',
                                                  reason='mode_restriction')
-                        clean = Image.new('RGBA', image.size)
-                        clean.paste(image.convert('RGBA'))
                         buffer = io.BytesIO()
-                        clean.save(buffer, format='PNG')
-                        entry.update(mime_type='image/png', data=base64.b64encode(buffer.getvalue()).decode())
+                        has_alpha = image.mode in ('RGBA', 'LA') or (image.mode == 'P' and 'transparency' in image.info)
+                        # Screenshots and diagrams keep lossless PNG; real photos
+                        # stay JPEG so the request does not grow 4-5x and hit 413.
+                        few_colors = image.convert('RGB').getcolors(maxcolors=4096) is not None
+                        if has_alpha or (entry.get('mime_type') == 'image/png' and few_colors):
+                            clean = Image.new('RGBA', image.size)
+                            clean.paste(image.convert('RGBA'))
+                            clean.save(buffer, format='PNG', optimize=True)
+                            mime = 'image/png'
+                        else:
+                            clean = Image.new('RGB', image.size, 'white')
+                            clean.paste(image.convert('RGB'))
+                            clean.save(buffer, format='JPEG', quality=90, optimize=True, progressive=True)
+                            mime = 'image/jpeg'
+                        entry.update(mime_type=mime, data=base64.b64encode(buffer.getvalue()).decode())
                 except PrivacyBlocked:
                     raise
                 except Exception:

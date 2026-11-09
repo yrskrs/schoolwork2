@@ -31,6 +31,157 @@ def _identity_key(submission):
     return hashlib.sha256(value.encode()).hexdigest()
 
 
+def clone_snapshot_files(source_mapping, job_id):
+    """Copy frozen sources into a new job folder for a repeat check."""
+    import os
+    import shutil
+    from pathlib import Path as _Path
+    from django.conf import settings as django_settings
+    root = _Path(django_settings.MEDIA_ROOT) / 'ai_job_snapshots' / str(job_id)
+    mapping = {'submission': {}, 'assignment': {}, 'preset': {}, 'root': str(root)}
+    copied = False
+    for bucket in ('submission', 'assignment', 'preset'):
+        for key, path in (source_mapping.get(bucket) or {}).items():
+            if not path or not os.path.exists(path):
+                continue
+            root.mkdir(parents=True, exist_ok=True)
+            suffix = os.path.splitext(path)[1][:12]
+            target = root / f'{bucket}_{key}{suffix}'
+            shutil.copy2(path, target)
+            mapping[bucket][str(key)] = str(target)
+            copied = True
+    return mapping if copied else {}
+
+
+def snapshot_submission_files(job_id, submission):
+    """Copy the bytes that will be graded, so later edits cannot change the run."""
+    import os
+    import shutil
+    from pathlib import Path as _Path
+    from django.conf import settings as django_settings
+    root = _Path(django_settings.MEDIA_ROOT) / 'ai_job_snapshots' / str(job_id)
+    root.mkdir(parents=True, exist_ok=True)
+    mapping = {'submission': {}, 'assignment': {}, 'root': str(root)}
+
+    def copy(source_path, key, bucket, index):
+        if not source_path or not os.path.exists(source_path):
+            return
+        suffix = os.path.splitext(source_path)[1][:12]
+        target = root / f'{bucket}_{index}_{str(key)}{suffix}'
+        shutil.copy2(source_path, target)
+        mapping[bucket][str(key)] = str(target)
+
+    for index, file_obj in enumerate(submission.get_files(), 1):
+        copy(getattr(getattr(file_obj, 'file', None), 'path', ''), file_obj.pk, 'submission', index)
+    if (getattr(submission, 'file', None) and str(submission.pk) not in mapping['submission']
+            and getattr(submission.file, 'path', '')):
+        copy(submission.file.path, submission.pk, 'submission', 0)
+    assignment = submission.assignment
+    if assignment:
+        for index, file_obj in enumerate(assignment.files.all(), 1):
+            copy(getattr(getattr(file_obj, 'file', None), 'path', ''), file_obj.pk, 'assignment', index)
+    mapping['preset'] = {}
+    presets = []
+    if assignment:
+        for class_group in list(assignment.classes.all()) or [None]:
+            preset, _ = assignment.get_ai_policy(class_group)
+            if preset:
+                presets.append(preset)
+        if assignment.default_ai_preset and assignment.default_ai_preset not in presets:
+            presets.append(assignment.default_ai_preset)
+    for preset in presets:
+        document = getattr(preset, 'document_file', None)
+        try:
+            path = document.path if document else ''
+        except (ValueError, OSError):
+            path = ''
+        if path and os.path.exists(path):
+            copy(path, preset.pk, 'preset', preset.pk)
+    return mapping
+
+
+def snapshot_assignment_files(job_id, assignment):
+    import os
+    import shutil
+    from pathlib import Path as _Path
+    from django.conf import settings as django_settings
+    root = _Path(django_settings.MEDIA_ROOT) / 'ai_job_snapshots' / str(job_id)
+    root.mkdir(parents=True, exist_ok=True)
+    mapping = {'assignment': {}, 'root': str(root)}
+    for index, file_obj in enumerate(assignment.files.all(), 1):
+        path = getattr(getattr(file_obj, 'file', None), 'path', '')
+        if not path or not os.path.exists(path):
+            continue
+        target = root / f'assignment_{index}_{file_obj.pk}{os.path.splitext(path)[1][:12]}'
+        shutil.copy2(path, target)
+        mapping['assignment'][str(file_obj.pk)] = str(target)
+    return mapping
+
+
+def _parameters_key(parameters):
+    """Snapshot is diagnostic metadata and must not break job deduplication."""
+    return {key: value for key, value in (parameters or {}).items()
+            if key not in ('snapshot', 'snapshot_files')}
+
+
+def source_snapshot(submission):
+    """Freeze the assessment sources (hashes, not copies) at enqueue time."""
+    import os
+    from .ai_context import assignment_fingerprint
+    assignment = submission.assignment
+    files = []
+    for file_obj in submission.get_files():
+        path = getattr(getattr(file_obj, 'file', None), 'path', '') or ''
+        try:
+            stat = os.stat(path) if path else None
+        except OSError:
+            stat = None
+        files.append({
+            'name': getattr(file_obj, 'original_name', '') or os.path.basename(path),
+            'size': stat.st_size if stat else None,
+            'mtime_ns': stat.st_mtime_ns if stat else None,
+        })
+    preset, grs = assignment.get_ai_policy(submission.class_group) if assignment else (None, [])
+    payload = {
+        'assignment_id': getattr(assignment, 'pk', None),
+        'assignment_fingerprint': assignment_fingerprint(assignment) if assignment else '',
+        'description_sha256': hashlib.sha256((getattr(assignment, 'description', '') or '').encode()).hexdigest(),
+        'criteria_sha256': hashlib.sha256((getattr(assignment, 'custom_criteria', '') or '').encode()).hexdigest(),
+        'teacher_instructions_sha256': hashlib.sha256(
+            (getattr(assignment, 'teacher_ai_instructions', '') or '').encode()).hexdigest(),
+        'allow_ai_usage': bool(getattr(assignment, 'allow_ai_usage', False)),
+        'preset_id': getattr(preset, 'pk', None),
+        'gr_codes': list(grs or []),
+        'submission_files': sorted(files, key=lambda item: (item['name'] or '')),
+        'comment_sha256': hashlib.sha256((submission.comment_student or '').encode()).hexdigest(),
+        'link': bool(submission.link),
+    }
+    payload['fingerprint'] = hashlib.sha256(
+        json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str).encode()).hexdigest()
+    payload['captured_at'] = timezone.now().isoformat()
+    return payload
+
+
+def assignment_source_snapshot(assignment):
+    from .ai_context import assignment_fingerprint
+    payload = {'assignment_id': getattr(assignment, 'pk', None),
+               'assignment_fingerprint': assignment_fingerprint(assignment) if assignment else ''}
+    payload['fingerprint'] = hashlib.sha256(
+        json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str).encode()).hexdigest()
+    payload['captured_at'] = timezone.now().isoformat()
+    return payload
+
+
+def snapshot_drift(job, submission=None, assignment=None):
+    """True when sources changed after the job was queued."""
+    stored = (job.parameters or {}).get('snapshot') or {}
+    if not stored.get('fingerprint'):
+        return False
+    current = (source_snapshot(submission) if submission is not None
+               else assignment_source_snapshot(assignment) if assignment is not None else {})
+    return current.get('fingerprint') != stored.get('fingerprint')
+
+
 def enqueue_submission_job(submission, kind, user=None, parameters=None):
     parameters = parameters or {}
     with transaction.atomic():
@@ -41,7 +192,7 @@ def enqueue_submission_job(submission, kind, user=None, parameters=None):
         submission = Submission.objects.select_for_update().get(pk=submission.pk)
         current = AIJob.objects.filter(submission=submission, status__in=['queued', 'running']).first()
         if current:
-            if current.kind == kind and current.parameters == parameters:
+            if current.kind == kind and _parameters_key(current.parameters) == _parameters_key(parameters):
                 return current
             raise SelfCheckUnavailable('Цю роботу вже перевіряють. Дочекайтеся результату.', 409)
         reservations = []
@@ -63,7 +214,18 @@ def enqueue_submission_job(submission, kind, user=None, parameters=None):
                 if reservation.job_id and reservation.job.status in ('queued', 'running'):
                     return reservation.job
                 reservations.append(reservation)
-        job = AIJob.objects.create(kind=kind, submission=submission, requested_by=user, parameters=parameters)
+        parameters = dict(parameters or {})
+        parameters['snapshot'] = source_snapshot(submission)
+        import uuid as _uuid
+        job_id = _uuid.uuid4()
+        job = AIJob.objects.create(id=job_id, kind=kind, submission=submission,
+                                   requested_by=user, parameters=parameters)
+        try:
+            parameters['snapshot_files'] = snapshot_submission_files(job_id, submission)
+            job.parameters = parameters
+            job.save(update_fields=['parameters'])
+        except Exception:
+            logger.exception('Could not snapshot files for AI job %s', job_id)
         for reservation in reservations:
             reservation.job = job
         if reservations:
@@ -81,7 +243,15 @@ def enqueue_understanding_job(assignment, user=None, force_refresh=False, eager=
         job = AIJob.objects.filter(assignment=assignment, kind='understanding', status__in=['queued', 'running']).first()
         if not job:
             job = AIJob.objects.create(kind='understanding', assignment=assignment, requested_by=user,
-                                       parameters={'force_refresh': force_refresh})
+                                       parameters={'force_refresh': force_refresh,
+                                                   'snapshot': assignment_source_snapshot(assignment)})
+            try:
+                parameters = dict(job.parameters or {})
+                parameters['snapshot_files'] = snapshot_assignment_files(job.pk, assignment)
+                job.parameters = parameters
+                job.save(update_fields=['parameters'])
+            except Exception:
+                logger.exception('Could not snapshot assignment files for AI job %s', job.pk)
     if settings.AI_JOBS_EAGER and eager:
         execute_job(job.pk)
         job.refresh_from_db()
@@ -104,6 +274,8 @@ def job_response(job, is_teacher=False, request=None):
             result.pop('grade_explanation', None)
             result.pop('raw_json', None)
             result.pop('criteria_results', None)
+            result.pop('payload_manifest', None)
+            result.pop('server_adjustments', None)
         if request is not None and 'duplicate_info' in result:
             from .access_control import scope_duplicate_info
             result['duplicate_info'] = scope_duplicate_info(request, result['duplicate_info'])
@@ -238,6 +410,32 @@ def _execute_job(job_id):
             job.save(update_fields=['status', 'started_at'])
     try:
         from .ai_progress import emit_event
+        from .models import Assignment
+        drift = False
+        if job.submission_id:
+            drift = snapshot_drift(job, submission=Submission.objects.select_related(
+                'assignment', 'class_group').get(pk=job.submission_id))
+        elif job.assignment_id and job.kind == 'understanding':
+            drift = snapshot_drift(job, assignment=Assignment.objects.filter(pk=job.assignment_id).first())
+        if drift:
+            parameters = dict(job.parameters or {})
+            parameters['snapshot_drift'] = True
+            AIJob.objects.filter(pk=job_id).update(parameters=parameters)
+            emit_event('sources_changed', 'Джерела змінилися після постановки в чергу; результат потребує перевірки вчителем.')
+
+        def with_drift(result):
+            if drift and isinstance(result, dict):
+                result = dict(result)
+                result['sources_changed'] = True
+                result['needs_teacher_review'] = True
+            return result
+
+        source_overrides = (job.parameters or {}).get('snapshot_files') or {}
+
+        def call_parameters():
+            return {key: value for key, value in (job.parameters or {}).items()
+                    if key not in ('snapshot', 'snapshot_files')}
+
         if job.kind in ('student_check', 'teacher_check', 'batch_check'):
             from .models import AISettings
             if not AISettings.get_solo().is_enabled:
@@ -256,7 +454,8 @@ def _execute_job(job_id):
             return
         if job.kind == 'understanding':
             from .gemini_service import analyze_assignment_task_understanding
-            result = analyze_assignment_task_understanding(job.assignment, **job.parameters)
+            result = with_drift(analyze_assignment_task_understanding(
+                job.assignment, source_overrides=source_overrides, **call_parameters()))
             _finish_job(job_id, result, 200)
             return
         if job.kind == 'student_check':
@@ -265,7 +464,7 @@ def _execute_job(job_id):
                 'assignment', 'assignment__default_ai_preset', 'class_group').get(pk=job.submission_id)
             if not submission.assignment.allow_student_ai_check:
                 raise SelfCheckUnavailable('Самоперевірку вимкнено вчителем')
-            evaluation = _evaluate_student_submission(submission)
+            evaluation = _evaluate_student_submission(submission, source_overrides=source_overrides)
             if evaluation.get('status') == 'deferred':
                 defer_job(job_id, evaluation.get('retry_after', 2))
                 return
@@ -273,7 +472,7 @@ def _execute_job(job_id):
             with transaction.atomic():
                 response = _perform_student_ai_check(submission, evaluation)
                 result, status_code = json.loads(response.content), response.status_code
-                _finish_job(job_id, result, status_code)
+                _finish_job(job_id, with_drift(result), status_code)
             return
         else:
             from .gemini_service import evaluate_submission_with_gemini
@@ -285,7 +484,8 @@ def _execute_job(job_id):
                 _finish_job(job_id, {'status': 'failed', 'error': 'Немає доступу до роботи'}, 403)
                 return
             teacher = getattr(job.requested_by, 'teacher_profile', None)
-            result = evaluate_submission_with_gemini(submission, teacher=teacher, **job.parameters)
+            result = evaluate_submission_with_gemini(submission, teacher=teacher,
+                                                      source_overrides=source_overrides, **call_parameters())
             if result.get('status') == 'deferred':
                 defer_job(job_id, result.get('retry_after', 2))
                 return
@@ -312,7 +512,7 @@ def _execute_job(job_id):
                     'format_warning': result.get('format_warning') or '',
                     'error': result.get('error') or submission.ai_error_reason or ''
                 }
-            _finish_job(job_id, result, status_code)
+            _finish_job(job_id, with_drift(result), status_code)
     except Exception as error:
         logger.error('AI job %s failed (%s)', job_id, type(error).__name__)
         fail_job(job_id, 'ШІ тимчасово недоступний. Спробуйте ще раз.')

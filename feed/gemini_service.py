@@ -328,7 +328,7 @@ def _capture_quota_headers(headers, status):
         return
 
 
-def _raw_call_ai_api(prompt_text, system_prompt="", inline_media=None, provider="gemini", api_key="", model_name="", custom_url="", temperature=0.2, max_output_tokens=3500, timeout=35, json_mode=False, thinking_budget=None, seed=None):
+def _raw_call_ai_api(prompt_text, system_prompt="", inline_media=None, provider="gemini", api_key="", model_name="", custom_url="", temperature=0.2, max_output_tokens=3500, timeout=35, json_mode=False, thinking_budget=None, seed=None, manifest=None):
     provider = (provider or 'gemini').lower().strip()
     from django.conf import settings as django_settings
     from .ai_privacy import outbound, PrivacyBlocked
@@ -345,6 +345,13 @@ def _raw_call_ai_api(prompt_text, system_prompt="", inline_media=None, provider=
     _text_only_groq = ('openai/gpt-oss-120b', 'openai/gpt-oss-20b')
     if provider == 'groq' and inline_media and clean_model_name(model_name, provider) in _text_only_groq:
         return 415, None, 'Модель не підтримує потрібні візуальні докази; оберіть мультимодальну модель.', {'_schoolnet_local_preflight': True}
+    upload_media = [item for item in (inline_media or [])
+                    if isinstance(item, dict) and item.get('upload_path')]
+    inline_media = [item for item in (inline_media or [])
+                    if not (isinstance(item, dict) and item.get('upload_path'))]
+    if upload_media and provider != 'gemini':
+        return 415, None, ('Медіа завелике для цього провайдера; потрібен Gemini File API. '
+                           'Докази збережено.'), {'_schoolnet_local_preflight': True}
     from .ai_context import media_for_provider
     from .ai_payload import optimize_media
     try:
@@ -355,6 +362,10 @@ def _raw_call_ai_api(prompt_text, system_prompt="", inline_media=None, provider=
         inline_media = optimize_media(inline_media, provider)
     except Exception:
         return 0, None, 'Не вдалося прочитати всі візуальні матеріали для цього провайдера. Спробуйте PDF-сумісну модель.', None
+    if manifest is not None:
+        from .ai_payload import payload_manifest
+        manifest.update(payload_manifest(prompt_text, system_prompt, inline_media, provider, model_name))
+        manifest['uploads'] = len(upload_media)
     # Final guard after PDF/Office adaptation and image optimization. The
     # evaluation loop also preflights, but this layer must be independently
     # safe: a wrong count here used to produce Cloudflare 400 "too many images"
@@ -385,7 +396,9 @@ def _raw_call_ai_api(prompt_text, system_prompt="", inline_media=None, provider=
 
         _GEMINI_ALLOWED_MIMES = {
             'image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif',
-            'application/pdf', 'audio/mp3', 'audio/wav', 'audio/ogg',
+            'application/pdf', 'audio/mp3', 'audio/mpeg', 'audio/wav', 'audio/ogg',
+            'audio/mp4', 'audio/aac', 'audio/flac', 'audio/aiff',
+            'video/mp4', 'video/webm', 'video/quicktime', 'video/3gpp', 'video/ogg',
             'text/plain', 'text/csv', 'text/html'
         }
 
@@ -408,6 +421,24 @@ def _raw_call_ai_api(prompt_text, system_prompt="", inline_media=None, provider=
                             "data": b64_data
                         }
                     })
+
+        if upload_media:
+            from .ai_files import (FileApiError, delete_gemini_file, upload_gemini_file,
+                                   wait_gemini_file)
+            uploaded_names = []
+            try:
+                for item in upload_media:
+                    info = upload_gemini_file(item['upload_path'], item['mime_type'], api_key,
+                                              item.get('source', ''))
+                    wait_gemini_file(info['name'], api_key)
+                    uploaded_names.append(info['name'])
+                    parts.append({'file_data': {'mime_type': info['mime_type'],
+                                                'file_uri': info['uri']}})
+            except FileApiError as error:
+                for name in uploaded_names:
+                    delete_gemini_file(name, api_key)
+                return 503, None, f'Не вдалося завантажити медіа у Gemini File API: {error}', {
+                    '_schoolnet_local_preflight': True}
 
         # Gemini API вимагає непорожній список parts у contents
         if not parts:
@@ -705,7 +736,7 @@ def _raw_call_ai_api(prompt_text, system_prompt="", inline_media=None, provider=
 
 
 @configured_call
-def call_ai_api(prompt_text, system_prompt="", inline_media=None, provider="gemini", api_key="", model_name="", custom_url="", temperature=0.2, max_output_tokens=3500, timeout=35, json_mode=False, thinking_budget=None, action="evaluation", connection_id=None, seed=None):
+def call_ai_api(prompt_text, system_prompt="", inline_media=None, provider="gemini", api_key="", model_name="", custom_url="", temperature=0.2, max_output_tokens=3500, timeout=35, json_mode=False, thinking_budget=None, action="evaluation", connection_id=None, seed=None, manifest=None):
     """
     Універсальна функція для звернення до будь-якого ШІ-провайдера
     (Google Gemini, OpenAI, DeepSeek, Groq, OpenRouter, Custom/Ollama).
@@ -726,7 +757,8 @@ def call_ai_api(prompt_text, system_prompt="", inline_media=None, provider="gemi
         timeout=timeout,
         json_mode=json_mode,
         thinking_budget=thinking_budget,
-        seed=seed
+        seed=seed,
+        manifest=manifest
     )
     latency_ms = int((time.time() - t_start) * 1000)
 
@@ -2544,8 +2576,34 @@ def _optimize_image_for_ai(file_path_or_bytes, max_dim=1280, quality=80):
 # ОСНОВНА ФУНКЦІЯ ВИДОБУВАННЯ ВМІСТУ ЗДАЧІ РОБОТИ УЧНЯ
 # ═══════════════════════════════════════════════════════════════════════════════
 
+AUDIO_EVIDENCE_MIMES = {'.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.ogg': 'audio/ogg',
+                        '.m4a': 'audio/mp4', '.aac': 'audio/aac', '.flac': 'audio/flac',
+                        '.aiff': 'audio/aiff'}
+AUDIO_EVIDENCE_LIMIT = 10 * 1024 * 1024
+VIDEO_EVIDENCE_MIMES = {'.mp4': 'video/mp4', '.webm': 'video/webm', '.mov': 'video/quicktime',
+                        '.m4v': 'video/mp4', '.3gp': 'video/3gpp', '.ogv': 'video/ogg'}
+VIDEO_EVIDENCE_LIMIT = 8 * 1024 * 1024
+VIDEO_UPLOAD_LIMIT = 200 * 1024 * 1024
+
+
 @timed('extract_submission')
-def extract_submission_content(submission):
+def _video_container_recognized(path, ext):
+    """Reject renamed binaries: only real containers go to the model."""
+    try:
+        with open(path, 'rb') as handle:
+            head = handle.read(16)
+    except OSError:
+        return False
+    if ext in ('.mp4', '.m4v', '.mov', '.3gp'):
+        return len(head) >= 8 and head[4:8] == b'ftyp'
+    if ext == '.webm':
+        return head.startswith(b'\x1aE\xdf\xa3')
+    if ext == '.ogv':
+        return head.startswith(b'OggS')
+    return False
+
+
+def extract_submission_content(submission, path_overrides=None):
     """
     Видобуває текст та медіа-вміст із зданої учнем роботи:
     - Файли без розширення (детекція та відкриття як текст)
@@ -2607,32 +2665,37 @@ def extract_submission_content(submission):
     if submission.file and not any(sf.file.name == submission.file.name for sf in submission_files):
         submission_files.insert(0, submission)
 
+    overrides = path_overrides or {}
     for sf in submission_files:
         f_obj = getattr(sf, 'file', None)
-        if f_obj and hasattr(f_obj, 'path') and not os.path.exists(f_obj.path):
-            base_fname = os.path.basename(f_obj.path)
-            orig_fname = getattr(sf, 'original_name', '') or base_fname
-            for candidate_dir in ('/home/flinux/Документи', '/home/flinux/Завантажене'):
-                for name_variant in (base_fname, orig_fname, base_fname.replace('_', ' '), orig_fname.replace(' ', '_')):
-                    c_path = os.path.join(candidate_dir, name_variant)
-                    if os.path.isfile(c_path):
-                        try:
-                            os.makedirs(os.path.dirname(f_obj.path), exist_ok=True)
-                            import shutil
-                            shutil.copy2(c_path, f_obj.path)
-                            break
-                        except Exception:
-                            pass
-                if os.path.exists(f_obj.path):
-                    break
-        if not f_obj or not hasattr(f_obj, 'path') or not os.path.exists(f_obj.path):
-            filename = getattr(sf, 'original_name', '') or os.path.basename(getattr(f_obj, 'name', '') or 'файл')
-            unreadable_files.append(filename)
-            reason = 'Прикріплений файл недоступний на сервері; його вміст не перевірено.'
-            inaccessible_materials.append({'type': 'file', 'target': filename, 'reason': reason})
-            text_parts.append(f'МЕЖІ ПРОЧИТАНОГО ({filename}): {reason}')
-            continue
-        file_path = f_obj.path
+        override_path = overrides.get(str(getattr(sf, 'pk', '')))
+        if override_path and os.path.exists(override_path):
+            file_path = override_path
+        else:
+            if f_obj and hasattr(f_obj, 'path') and not os.path.exists(f_obj.path):
+                base_fname = os.path.basename(f_obj.path)
+                orig_fname = getattr(sf, 'original_name', '') or base_fname
+                for candidate_dir in ('/home/flinux/Документи', '/home/flinux/Завантажене'):
+                    for name_variant in (base_fname, orig_fname, base_fname.replace('_', ' '), orig_fname.replace(' ', '_')):
+                        c_path = os.path.join(candidate_dir, name_variant)
+                        if os.path.isfile(c_path):
+                            try:
+                                os.makedirs(os.path.dirname(f_obj.path), exist_ok=True)
+                                import shutil
+                                shutil.copy2(c_path, f_obj.path)
+                                break
+                            except Exception:
+                                pass
+                    if os.path.exists(f_obj.path):
+                        break
+            if not f_obj or not hasattr(f_obj, 'path') or not os.path.exists(f_obj.path):
+                filename = getattr(sf, 'original_name', '') or os.path.basename(getattr(f_obj, 'name', '') or 'файл')
+                unreadable_files.append(filename)
+                reason = 'Прикріплений файл недоступний на сервері; його вміст не перевірено.'
+                inaccessible_materials.append({'type': 'file', 'target': filename, 'reason': reason})
+                text_parts.append(f'МЕЖІ ПРОЧИТАНОГО ({filename}): {reason}')
+                continue
+            file_path = f_obj.path
         filename = getattr(sf, 'original_name', '') or os.path.basename(file_path)
         ext = getattr(sf, 'get_extension', lambda: os.path.splitext(file_path)[1].lower())() or os.path.splitext(file_path)[1].lower()
         file_size_kb = os.path.getsize(file_path) / 1024
@@ -2857,6 +2920,51 @@ def extract_submission_content(submission):
                     text_parts.append(f"[Прикріплено фотозображення зошита/роботи: {filename} ({file_size_kb:.1f} КБ, оптимізовано для ШІ)]")
             except Exception as e:
                 text_parts.append(f"[Помилка обробки зображення: {e}]")
+
+        # ── Й. АУДІО (голосові відповіді, усні пояснення) ─────────────────────
+        elif ext in AUDIO_EVIDENCE_MIMES:
+            if os.path.getsize(file_path) <= AUDIO_EVIDENCE_LIMIT:
+                with open(file_path, 'rb') as audio_file:
+                    inline_media.append({
+                        'mime_type': AUDIO_EVIDENCE_MIMES[ext],
+                        'data': base64.b64encode(audio_file.read()).decode('utf-8'),
+                        'source': f'Аудіо учня: {filename}',
+                    })
+                text_parts.append(f'[Аудіо ({filename}, {file_size_kb:.1f} КБ) передано на аналіз]')
+            else:
+                limitation = ('Аудіо завелике для передачі (понад 10 МБ); потрібна ручна перевірка '
+                              'або коротший фрагмент.')
+                inaccessible_materials.append({'type': 'file', 'target': filename, 'reason': limitation})
+                text_parts.append(f'МЕЖІ ПРОЧИТАНОГО ({filename}): {limitation}')
+
+        # ── І. ВІДЕО (екранні записи, короткі демонстрації) ────────────────────
+        elif ext in VIDEO_EVIDENCE_MIMES:
+            if not _video_container_recognized(file_path, ext):
+                unreadable_files.append(filename)
+                limitation = 'Контейнер відео не розпізнано; вміст не передано, потрібна ручна перевірка.'
+                inaccessible_materials.append({'type': 'file', 'target': filename, 'reason': limitation})
+                text_parts.append(f'МЕЖІ ПРОЧИТАНОГО ({filename}): {limitation}')
+            elif os.path.getsize(file_path) <= VIDEO_EVIDENCE_LIMIT:
+                with open(file_path, 'rb') as video_file:
+                    inline_media.append({
+                        'mime_type': VIDEO_EVIDENCE_MIMES[ext],
+                        'data': base64.b64encode(video_file.read()).decode('utf-8'),
+                        'source': f'Відео учня: {filename}',
+                    })
+                text_parts.append(f'[Відео ({filename}, {file_size_kb:.1f} КБ) передано на аналіз]')
+            elif os.path.getsize(file_path) <= VIDEO_UPLOAD_LIMIT:
+                inline_media.append({
+                    'mime_type': VIDEO_EVIDENCE_MIMES[ext],
+                    'upload_path': file_path,
+                    'source': f'Відео учня: {filename}',
+                })
+                text_parts.append(f'[Відео ({filename}, {file_size_kb:.1f} КБ) завелике для inline; '
+                                  f'передається через Gemini File API]')
+            else:
+                limitation = ('Відео завелике для передачі (понад 8 МБ); потрібна ручна перевірка '
+                              'або коротший фрагмент.')
+                inaccessible_materials.append({'type': 'file', 'target': filename, 'reason': limitation})
+                text_parts.append(f'МЕЖІ ПРОЧИТАНОГО ({filename}): {limitation}')
 
         # ── Ж. АРХІВИ (.zip, .tar, .gz, .tgz, .rar, .7z) ───────────────────────
         elif ext in ['.zip', '.rar', '.7z', '.tar', '.gz', '.tgz']:
@@ -6216,8 +6324,136 @@ def apply_multi_task_evaluation_guardrail(
 
 
 
+LEVEL_MARKERS = ('початков', 'середн', 'достатн', 'висок')
+
+
+def level_for_grade(grade):
+    """Deterministic NUS level from the final numeric grade."""
+    text = str(grade or '').strip()
+    if not text or text.casefold() == 'доопрацювати':
+        return 'Початковий (1-3)'
+    try:
+        value = float(text.replace(',', '.'))
+    except (TypeError, ValueError):
+        return 'Початковий (1-3)'
+    if value >= 10:
+        return 'Високий (10-12)'
+    if value >= 7:
+        return 'Достатній (7-9)'
+    if value >= 4:
+        return 'Середній (4-6)'
+    return 'Початковий (1-3)'
+
+
+def normalized_level(level, grade):
+    """Keep a meaningful model level; replace nonsense (e.g. «11 клас»)."""
+    text = str(level or '').strip()
+    if any(marker in text.casefold() for marker in LEVEL_MARKERS):
+        return text
+    return level_for_grade(grade)
+
+
+def evaluate_media_in_batches(prompt_text, system_prompt, media, *, provider, api_key, model_name,
+                              custom_url='', max_images, max_output_tokens, timeout,
+                              thinking_budget=None, connection_id=None, seed=42):
+    """Assess visual evidence in provider-sized batches, then synthesize one JSON.
+
+    Every batch sees the same plan but only its own pages; the synthesis request
+    carries the batch findings (no images) and produces the final schema. The
+    grade therefore stays model-authored instead of being averaged locally.
+    """
+    import json as _json
+    import time as _time
+    from .ai_context import media_for_provider
+    from .ai_progress import emit_event
+    from .ai_transport import evaluation_deadline
+
+    prepared = media_for_provider(media, provider)
+    limit = max(1, int(max_images or len(prepared) or 1))
+    chunks = [prepared[index:index + limit] for index in range(0, len(prepared), limit)] or [[]]
+    meta = {'batched': True, 'limit': limit, 'batch_count': len(chunks), 'batches': []}
+    findings = []
+    status, text, error, data = 0, None, 'Партії не виконано.', {}
+    def run_batch(index, chunk):
+        from django.db import close_old_connections
+        try:
+            batch_prompt = (prompt_text + f"\n\n[ПАРТІЯ {index}/{len(chunks)}] "
+                            "Оцінюй лише надані сторінки. Пункти, яких немає на цих сторінках, "
+                            "познач unverifiable; не вигадуй доказів і не роби висновків про весь файл.")
+            batch_status, batch_text, batch_error, batch_data = call_ai_api(
+                prompt_text=batch_prompt, system_prompt=system_prompt, inline_media=chunk,
+                provider=provider, api_key=api_key, model_name=model_name, custom_url=custom_url,
+                temperature=0.0, max_output_tokens=max_output_tokens, timeout=timeout,
+                json_mode=True, thinking_budget=thinking_budget, connection_id=connection_id, seed=seed)
+            parsed = (extract_json_from_text(batch_text, allow_partial=False)
+                      if batch_status == 200 and batch_text else None)
+            return {'index': index, 'status': batch_status, 'media': len(chunk),
+                    'parsed': parsed, 'text': batch_text, 'error': batch_error, 'data': batch_data}
+        except Exception as error:
+            return {'index': index, 'status': 0, 'media': len(chunk), 'parsed': None,
+                    'text': None, 'error': f'{type(error).__name__}: {error}', 'data': {}}
+        finally:
+            close_old_connections()
+
+    batch_results = []
+    runnable = []
+    deadline = evaluation_deadline.get()
+    for index, chunk in enumerate(chunks, 1):
+        if deadline is not None and _time.monotonic() >= deadline:
+            batch_results.append({'index': index, 'status': 0, 'media': len(chunk),
+                                  'parsed': None, 'error': 'deadline', 'text': None, 'data': {}})
+            continue
+        emit_event('batch_start', f'Партія {index}/{len(chunks)}: сторінок {len(chunk)}.',
+                   provider=provider, model=model_name)
+        runnable.append((index, chunk))
+    if runnable:
+        from concurrent.futures import ThreadPoolExecutor
+        from django.conf import settings as django_settings
+        import contextvars
+        workers = max(1, min(len(runnable), int(getattr(django_settings, 'AI_BATCH_CONCURRENCY', 3))))
+        if workers == 1:
+            batch_results.extend(run_batch(index, chunk) for index, chunk in runnable)
+        else:
+            contexts = [contextvars.copy_context() for _ in runnable]
+            with ThreadPoolExecutor(max_workers=workers) as pool:
+                futures = [pool.submit(contexts[position].run, run_batch, index, chunk)
+                           for position, (index, chunk) in enumerate(runnable)]
+                batch_results.extend(future.result() for future in futures)
+    batch_results.sort(key=lambda row: row['index'])
+
+    findings = []
+    status, text, error, data = 0, None, 'Партії не виконано.', {}
+    for row in batch_results:
+        status, text, error, data = row['status'], row.get('text'), row.get('error'), row.get('data') or {}
+        if isinstance(row.get('parsed'), dict):
+            findings.append(row['parsed'])
+            meta['batches'].append({'index': row['index'], 'status': row['status'], 'media': row['media']})
+        else:
+            reason = row.get('error') or f"HTTP {row['status']}"
+            findings.append({'batch_error': reason})
+            meta['batches'].append({'index': row['index'], 'status': row['status'],
+                                    'media': row['media'], 'error': reason})
+    usable = [item for item in findings if isinstance(item, dict) and 'batch_error' not in item]
+    if not usable:
+        meta['synthesis_status'] = None
+        return status, None, 'Жодна партія не дала придатного результату: ' + str(error or status), data, meta
+    synthesis_prompt = (
+        prompt_text + "\n\n[РЕЗУЛЬТАТИ ПАРТІЙ — ДОКАЗИ ЛИШЕ З НИХ]\n"
+        + _json.dumps(findings, ensure_ascii=False)
+        + "\nЗлий партії в ОДИН підсумковий JSON за схемою. Критерій вважається виконаним лише "
+          "якщо це підтверджено в партії; суперечності познач unverifiable і поясни вчителю.")
+    status, text, error, data = call_ai_api(
+        prompt_text=synthesis_prompt, system_prompt=system_prompt, inline_media=[],
+        provider=provider, api_key=api_key, model_name=model_name, custom_url=custom_url,
+        temperature=0.0, max_output_tokens=max_output_tokens, timeout=timeout,
+        json_mode=True, thinking_budget=thinking_budget, connection_id=connection_id, seed=seed)
+    meta['synthesis_status'] = status
+    emit_event('batch_done', f'Партій: {len(chunks)}; синтез: HTTP {status}.', provider=provider, model=model_name)
+    return status, text, error, data, meta
+
+
 @private_assessment
-def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=None, preset_id=None, criteria_preset=None, selected_gr_codes=None, force_thinking=None, teacher=None, ignore_strict_privacy=False):
+def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=None, preset_id=None, criteria_preset=None, selected_gr_codes=None, force_thinking=None, teacher=None, ignore_strict_privacy=False, source_overrides=None):
     """
     Виконує педагогічний аналіз та попереднє оцінювання роботи учня за допомогою Google Gemini.
     Підтримує чергу пріоритетів моделей, вибір шаблону критеріїв, вибір конкретних ГР (прапорцями)
@@ -6303,7 +6539,8 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
             active_grs = all_preset_grs
 
     # Видобуваємо вміст роботи
-    text_parts, inline_media, extract_error = extract_submission_content(submission)
+    text_parts, inline_media, extract_error = extract_submission_content(
+        submission, path_overrides=(source_overrides or {}).get('submission'))
 
     if extract_error and not text_parts and not inline_media:
         submission.ai_status = 'unsupported'
@@ -6320,349 +6557,22 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
     custom_criteria = (assignment.custom_criteria or "") if assignment else ""
     preset_name_display = selected_preset.name if selected_preset else "Критерії НУШ"
 
-    # Збираємо запит
-    prompt_lines = [
-        f"ПРЕДМЕТ: {subject_name}",
-        f"КЛАС: {class_name}",
-        f"НАЗВА ТА ТЕМА ЗАВДАННЯ: {assignment_title}",
-        f"УМОВА ТА ВИМОГИ ВЧИТЕЛЯ (ЗАВДАННЯ ДО ВИКОНАННЯ):\n{assignment_desc}\n",
-        f"ОБРАНІ КРИТЕРІЇ ПЕРЕВІРКИ: {preset_name_display}",
-    ]
-
-    # ── ІНДИВІДУАЛЬНІ КРИТЕРІЇ ОЦІНЮВАННЯ ВЧИТЕЛЯ ДЛЯ ЦЬОГО ЗАВДАННЯ ─────────
-    if assignment and assignment.custom_criteria and assignment.custom_criteria.strip():
-        prompt_lines.append("\n═══════════════════════════════════════════════════════════════════")
-        prompt_lines.append("📋 ІНДИВІДУАЛЬНІ КРИТЕРІЇ ОЦІНЮВАННЯ ВЧИТЕЛЯ ДЛЯ ЦЬОГО ЗАВДАННЯ:")
-        prompt_lines.append("Вчитель встановив спеціальні індивідуальні критерії оцінювання саме для цього завдання:")
-        prompt_lines.append(assignment.custom_criteria.strip())
-        prompt_lines.append(
-            "\n⚠️ ВАЖЛИВА ВИМОГА ДЛЯ ШІ ЩОДО ІНДИВІДУАЛЬНИХ КРИТЕРІЇВ:\n"
-            "- Оцінюй роботу суворо з урахуванням цих індивідуальних критеріїв вчителя!\n"
-            "- Якщо індивідуальні критерії вчителя визначають конкретну розбаловку, вимоги до структури відповіді чи особливі шкали — вони мають НАЙВИЩИЙ ПРІОРИТЕТ над загальними шаблонами!\n"
-            "- У 'feedback_comment' та 'summary' чітко зістав відповідь учня із цими індивідуальними критеріями вчителя."
-        )
-        prompt_lines.append("═══════════════════════════════════════════════════════════════════\n")
-
-    # ── ПРИХОВАНІ ВКАЗІВКИ ТА КОМЕНТАР ВЧИТЕЛЯ ДЛЯ ШІ (КОНФІДЕНЦІЙНО) ─────────
-    teacher_ai_instructions = getattr(assignment, 'teacher_ai_instructions', '') if assignment else ''
-    if teacher_ai_instructions and teacher_ai_instructions.strip():
-        prompt_lines.append("\n═══════════════════════════════════════════════════════════════════")
-        prompt_lines.append("🤫 ВНУТРІШНІ ВКАЗІВКИ ТА КОМЕНТАР ВЧИТЕЛЯ ДЛЯ ШІ (СУВОРО КОНФІДЕНЦІЙНО, НЕ ДЛЯ УЧНЯ):")
-        prompt_lines.append("Вчитель залишив спеціальні внутрішні педагогічні вказівки для ШІ щодо перевірки саме цього завдання:")
-        prompt_lines.append(teacher_ai_instructions.strip())
-        prompt_lines.append(
-            "\n⚠️ КАТЕГОРИЧНІ ВИМОГИ ДЛЯ ШІ ЩОДО ЦИХ ПРИХОВАНИХ ВКАЗІВОК ВЧИТЕЛЯ:\n"
-            "1. ОБОВ'ЯЗКОВЕ ВРАХУВАННЯ ПРИ ОЦІНЮВАННІ: Скоригуй оцінювання та вимоги згідно з цими вказівками вчителя (наприклад: проявити лояльність до слабшого класу, не занижувати бал за оформлення чи відсутність бюлетеня, якщо виконано зміст/пошук інформації, оцінювати лише конкретний аспект тощо).\n"
-            "2. СУВОРА ТА АБСОЛЮТНА КОНФІДЕНЦІЙНІСТЬ ВІД УЧНЯ: Учень КАТЕГОРИЧНО НЕ ПОВИНЕН бачити чи здогадуватися про цей коментар вчителя! У текстах для учня ('feedback_comment', 'summary', 'weaknesses') СУВОРО ЗАБОРОНЕНО цитувати ці вказівки, посилатися на них або писати, що вчитель зробив виняток чи дав таємну вказівку!\n"
-            "3. ПІДТВЕРДЖЕННЯ ДЛЯ ВЧИТЕЛЯ: У 'summary' або обґрунтуванні оцінки коротко зазнач врахування побажань вчителя, щоб вчитель бачив виконання його вказівки."
-        )
-        prompt_lines.append("═══════════════════════════════════════════════════════════════════\n")
-
-    # ── ПЕРЕВІРКА ВІДПОВІДНОСТІ ТЕМІ, КЛАСУ ТА СПРАВЖНЬОСТІ РОБОТИ ─────────────
-    pre_is_invalid, pre_reason, pre_code = detect_invalid_or_teacher_template_submission(submission, text_parts)
-    if pre_is_invalid:
-        prompt_lines.append(
-            f"\n🚨🚨 КРИТИЧНЕ ЗАСТЕРЕЖЕННЯ СИСТЕМИ ДЛЯ ШІ: ВИЯВЛЕНО НЕВІДПОВІДНІСТЬ ЗДАНОЇ РОБОТИ!\n"
-            f"ПРИЧИНА: {pre_reason}\n"
-            f"КАТЕГОРИЧНІ ВИМОГИ ДЛЯ ОЦІНЮВАННЯ:\n"
-            f"- КАТЕГОРИЧНО ЗАБОРОНЕНО ставити 4-12 балів (зокрема 7 балів чи інші позитивні оцінки)!\n"
-            f"- Встанови 'suggested_grade': 'Доопрацювати', 'level': 'Початковий (1-3)', 'unclear_task': true!\n"
-            f"- Для ВСІХ груп результатів (ГР) признач оцінку 1 або 2 бали (Початковий рівень)!\n"
-            f"- У 'format_warning', 'summary', 'weaknesses' та 'feedback_comment' чітко роз'ясни учневі: «{pre_reason}»!\n"
-        )
-
-    prompt_lines.append(
-        "🛑 НАЙВИЩИЙ ПРІОРИТЕТ: ПЕРЕВІРКА ВІДПОВІДНОСТІ ТЕМІ, КЛАСУ ТА СПРАВЖНЬОСТІ РОБОТИ (ANTI-EMPTY & IRRELEVANT SUBMISSION CHECK):\n"
-        "ПЕРЕД тим, як ставити будь-які оцінки чи аналізувати групи результатів, ШІ ЗОБОВ'ЯЗАНИЙ перевірити 4 КРИТИЧНІ БАР'ЄРИ:\n"
-        f"1. 🚫 ПЕРЕВІРКА КЛАСУ (ЧИ НЕ ЗДАНО РОБОТУ ДЛЯ ІНШОГО КЛАСУ):\n"
-        f"   - Поточний клас учня: «{class_name}».\n"
-        f"   - Перевір текст та колонтитули зданого файлу/роботи. Якщо у документі чітко зазначено ІНШИЙ КЛАС (наприклад: учень з 6 чи 7 класу здав практичну чи завдання для 8, 9, 10 чи 11 класу, або навпаки) — це ГРУБА НЕВІДПОВІДНІСТЬ!\n"
-        f"   - КАТЕГОРИЧНО ЗАБОРОНЕНО ставити 4-12 балів (зокрема 7 балів) за роботу для іншого класу! Встанови 'suggested_grade': 'Доопрацювати', 'level': 'Початковий (1-3)', оцінки по всіх ГР — 1-2 бали, 'unclear_task': true.\n"
-        f"2. 🚫 ПЕРЕВІРКА ВІДПОВІДНОСТІ ТЕМІ ТА ПРЕДМЕТУ:\n"
-        f"   - Тема уроку: «{assignment_title}», Предмет: «{subject_name}».\n"
-        f"   - Якщо зданий файл чи текст взагалі не стосується цієї теми або цього предмета (здано матеріал з іншого предмета, випадковий сторонній файл, документ з абсолютно іншої теми) — КАТЕГОРИЧНО ЗАБОРОНЕНО ставити оцінку лише за те, що «учень щось прикріпив»!\n"
-        f"   - Оцінка за невідповідність темі — ТІЛЬКИ 'Доопрацювати' (або 1-2 бали), 'level': 'Початковий (1-3)', усі ГР — 1-2 бали, 'unclear_task': true.\n"
-        f"3. 🚫 ПЕРЕВІРКА НА ЗДАЧУ «БЛАНКУ/ШАБЛОНУ ПРАКТИЧНОЇ ВЧИТЕЛЯ БЕЗ ВІДПОВІДЕЙ»:\n"
-        f"   - Перевір, ЧИ Є В ДОКУМЕНТІ ВЛАСНІ ВІДПОВІДІ ТА РОЗВ'ЯЗКИ УЧНЯ!\n"
-        f"   - Якщо учень просто прикріпив файл практичної роботи, інструкційної картки чи роздатки від вчителя (де є лише «Практична робота №...», «Тема», «Мета», «Хід роботи», перелік запитань/вправ вчителя), АЛЕ НЕМАЄ ВЛАСНИХ ВІДПОВІДЕЙ чи виконаного розв'язку:\n"
-        f"     * КАТЕГОРИЧНО ЗАБОРОНЕНО ставити 4-12 балів!\n"
-        f"     * 'suggested_grade': 'Доопрацювати', 'level': 'Початковий (1-3)', 'unclear_task': true.\n"
-        f"     * По всіх ГР — 1-2 бали (Початковий рівень).\n"
-        f"     * У 'format_warning', 'summary' та 'feedback_comment' чітко напиши: «Здано текст/бланк практичної роботи вчителя без власних відповідей та розв'язку. Роботу не зараховано, надішліть виконані відповіді на доопрацювання.»\n"
-        f"     * У 'weaknesses' обов'язково зазнач: «Здано інструкцію/завдання вчителя замість виконаної учнем роботи (відповіді відсутні).»\n"
-        f"4. 🚫 ПРАВИЛО «НЕ СТАВИТИ БАЛИ ЗА ПРОСТЕ ПРИКРІПЛЕННЯ ФАЙЛУ»:\n"
-        f"   - Бали (4-12) та достатній/високий рівень ставляться ВИКЛЮЧНО за реальну змістовну працю учня над темою завдання!\n"
-        f"   - Якщо файл не за темою, з іншого класу чи містить лише бланк завдань — КАТЕГОРИЧНО ЗАБОРОНЕНО виставляти 4-12 балів (зокрема 7 балів)!\n"
-    )
-
-    # ── КРИТИЧНО: ОБСЯГ ЗАВДАННЯ ВЧИТЕЛЯ ТА ПРІОРИТЕТ УМОВИ (Scope of Work) ───
-    prompt_lines.append(
-        "🎯 КРИТИЧНЕ ПРАВИЛО: ОБСЯГ РОБОТИ ТА ДЖЕРЕЛО ЗАВДАННЯ (SCOPE OF WORK):\n"
-        "1. Поле «УМОВА ТА ВИМОГИ ВЧИТЕЛЯ (ЗАВДАННЯ ДО ВИКОНАННЯ)» задає мету, контекст та конкретні вказівки вчителя.\n"
-        "2. ПРИКРІПЛЕНІ ВЧИТЕЛЕМ ФАЙЛИ (презентації .pptx/.ppt/.odp/PDF, документи, зображення, фото вправ/підручника) є ПОВНОЦІННИМ ДЖЕРЕЛОМ ЗАВДАННЯ ТА НАВЧАЛЬНОГО КОНТЕКСТУ. Вчителі дуже часто розміщують формулювання завдань безпосередньо на слайдах презентацій (особливо на останніх/фінальних слайдах під заголовками «Домашнє завдання», «Практична робота», «Завдання до уроку», «Вправи», «Питання для самоперевірки» тощо) або у прикріплених PDF/зображеннях.\n"
-        "3. ЯКЩО ВЧИТЕЛЬ У ПОЛІ «ЗАВДАННЯ ДО ВИКОНАННЯ» ВКАЗАВ ЗРОБИТИ ЛИШЕ ПЕВНЕ КОНКРЕТНЕ ЗАВДАННЯ (наприклад: «виконати тільки завдання 2 зі слайду 6», «зробити вправу 3», «розв'язати номер 4», «виконати лише одне завдання...» тощо):\n"
-        "   - ТИ ЗОБОВ'ЯЗАНИЙ ОЦІНЮВАТИ ВИКЛЮЧНО ТЕ КОНКРЕТНЕ ЗАВДАННЯ/ВПРАВУ, ЯКЕ ЗАДАВ ВЧИТЕЛЬ!\n"
-        "   - СУВОРО ТА КАТЕГОРИЧНО ЗАБОРОНЕНО знижувати оцінку, занижувати рівень досягнень або писати у «weaknesses» чи «feedback_comment», що робота неповна або що «учень не виконав інші завдання з презентації/файлу». Решта завдань з файлу вважаються незаданими!\n"
-        "   - Якщо учень якісно та правильно виконав вказане вчителем завдання (наприклад, тільки 1 вправу з 5 наявних у матеріалах), робота вважається ВИКОНАНОЮ НА 100% У ПОВНОМУ ОБСЯЗІ і заслуговує на найвищий бал (10-12 балів відповідно до якості виконання).\n"
-        "4. ЯКЩО ОПИС ВЧИТЕЛЯ КОРОТКИЙ АБО ЗАГАЛЬНИЙ (наприклад: «опрацювати презентацію», «виконати завдання», «домашнє завдання у файлі», або просто вказано назву теми уроку):\n"
-        "   - ШІ ЗОБОВ'ЯЗАНИЙ уважно проаналізувати всі слайди презентації, сторінки PDF, документи та зображення вчителя, знайти сформульовані практичні завдання/запитання/вправи та оцінити виконання учнем саме цих завдань з матеріалів вчителя!\n"
-        "5. БАГАТОЗАДАЧНІ УМОВИ ТА ПРАВИЛА ВИБОРУ ЗАВДАНЬ («виконати будь-яке завдання на вибір», «одне на вибір» тощо):\n"
-        "   - Якщо вчитель дозволив учням обрати будь-яке завдання з файлу умови чи слайдів презентації:\n"
-        "     * КРОК 1: ШІ спочатку уважно перевіряє, чи зазначив учень, яке саме завдання він виконував: у полі «ВАЖЛИВИЙ КОМЕНТАР / ПОЯСНЕННЯ УЧНЯ» (наприклад: «виконував завдання 2», «робив вправу 3», «завдання №1»), у назві прикріпленого файлу або у тексті відповіді.\n"
-        "     * КРОК 2 (якщо учень зазначив обране завдання): ШІ оцінює саме це завдання за повними критеріями без жодного зниження оцінки за вибір.\n"
-        "     * КРОК 3 (якщо учень НЕ зазначив, яке саме завдання він виконував):\n"
-        "       - ШІ повинен самостійно проаналізувати зміст зданої роботи, зіставити його із завданнями з файлу умови чи слайдів презентації та автоматично визначити найбільш імовірне завдання.\n"
-        "       - ⚠️ ОБОВ'ЯЗКОВО у полях 'weaknesses', 'feedback_comment' та 'summary' чітко зазначити: «Зверніть увагу: ви не вказали, яке саме завдання з умови на вибір ви виконували (визначено як Завдання X). Відсутність зазначення обраного завдання вплинула на оцінку (знижено бал за дотримання вимог оформлення).»\n"
-        "       - ⚠️ ЗНИЗИТИ оцінку на 1-2 бали через недотримання вимоги зазначити обране завдання.\n"
-        "6. КОЛИ ШІ НЕ ЗРОЗУМІВ, ЯКЕ ЗАВДАННЯ ВИКОНАНО АБО РОБОТА НЕ ВІДПОВІДАЄ ЖОДНОМУ ЗАВДАННЮ:\n"
-        "   - ⚠️ НАЙВАЖЛИВІШЕ ПРАВИЛО: Перед тим як зробити висновок, що завдання незрозуміле, ШІ ЗОБОВ'ЯЗАНИЙ перевірити ВСІ слайди презентацій, усі сторінки PDF та зображення від вчителя! Якщо робота учня відповідає завданням, питанням чи вправам з будь-якого слайду чи файлу вчителя — завдання ПОВНІСТЮ ЗРОЗУМІЛЕ І ЗНАЙДЕНЕ!\n"
-        "   - КАТЕГОРИЧНО ЗАБОРОНЕНО ставити 'suggested_grade': 'Доопрацювати', 'unclear_task': true або писати «Не зрозуміло, яке саме завдання виконане», якщо учень виконав завдання, знайдене у презентації, PDF або матеріалах вчителя!\n"
-        "   - Тільки якщо зміст роботи ДІЙСНО не підходить під ЖОДНЕ завдання з тексту опису, ЖОДНОГО слайду презентації та ЖОДНОГО файлу вчителя (наприклад, здано стороннє фото чи зовсім сторонній текст):\n"
-        "     * Встанови 'suggested_grade': 'Доопрацювати', 'level': 'Початковий', 'unclear_task': true.\n"
-        "     * У полі 'format_warning' ОБОВ'ЯЗКОВО поверни: «Не зрозуміло, яке саме завдання виконане. Будь ласка, вкажіть номер завдання в коментарі або перевірте прикріплений файл.»\n"
-        "     * У полях 'summary' та 'feedback_comment' розгорнуто поясни учневі, що за зданими матеріалами не вдалося визначити, яке завдання розв'язувалося, і роботу повернуто на доопрацювання.\n"
-        "7. ВИСНОВКИ В КОМЕНТАРІ УЧНЯ ДО ЗДАЧІ:\n"
-        "   - Учні мають можливість залишити висновки по своїй роботі в полі коментаря (якщо самого висновку немає у файлі або учень забув його туди дописати).\n"
-        "   - Якщо учень зазначив висновки або підсумки в коментарі до здачі роботи — ШІ ЗОБОВ'ЯЗАНИЙ повністю зарахувати їх як наявний та повноцінний висновок до завдання при оцінюванні!\n"
-        "8. ЗІСТАВЛЕННЯ ВІДПОВІДЕЙ УЧНЯ ІЗ ЗАПИТАННЯМИ ВЧИТЕЛЯ (ВІДПОВІДІ БЕЗ ПЕРЕПИСУВАННЯ ЗАПИТАНЬ):\n"
-        "   - Дуже часто учні записують у роботі ТІЛЬКИ ВІДПОВІДІ (наприклад, номери «1. ...», «2. ...» або прямий текст відповідей) і НЕ переписують самі запитання вчителя.\n"
-        "   - Також учень може надати відповіді лише на 1-2 питання із завдання (часткове виконання).\n"
-        "   - ШІ ЗОБОВ'ЯЗАНИЙ взяти формулювання запитань із завдання вчителя (з опису чи слайдів) і САМОСТІЙНО ПІДСТАВИТИ відповіді учня до кожного відповідного запитання!\n"
-        "   - 🚫 СУВОРО ТА КАТЕГОРИЧНО ЗАБОРОНЕНО стверджувати «жодної відповіді не дано», «відповіді відсутні» чи «робота порожня», якщо учень надав хоча б 1-2 відповіді чи фрагменти відповідей на запитання з умови!\n"
-        "   - ШІ зобов'язаний оцінити правильність і змістовність наданих учнем відповідей до відповідних запитань.\n"
-        "   - ⚠️ ОБОВ'ЯЗКОВО вкажи учневі про недолік оформлення («питання-відповідь») у 'weaknesses' та 'feedback_comment': порадь завжди записувати запитання разом із відповідями (формат «питання-відповідь») або чітко зазначати номери запитань, щоб робота була структурованою і легкою для перевірки.\n"
-    )
-
-    # ── КРИТИЧНО: ТОЧНЕ РОЗУМІННЯ СУТІ ЗАВДАННЯ, ЗМІСТОВА ВІДПОВІДНІСТЬ ТА ПОВНОТА ──
-    prompt_lines.append(
-        "🎯 КРИТИЧНЕ ПРАВИЛО: ТОЧНЕ РОЗУМІННЯ СУТІ ЗАВДАННЯ, ЗМІСТОВА ВІДПОВІДНІСТЬ ТА ПОВНОТА:\n"
-        "1. АНАЛІЗ ФОРМАТУ ТА ВИМОГ ЗАВДАННЯ:\n"
-        "   - Уважно проаналізуй поле «УМОВА ТА ВИМОГИ ВЧИТЕЛЯ (ЗАВДАННЯ ДО ВИКОНАННЯ)». З'ясуй, ЩО САМЕ вимагається від учнів:\n"
-        "     * Створити структурований список/перелік дат із подіями;\n"
-        "     * Написати твір-роздум або есе певної структури;\n"
-        "     * Розв'язати блок завдань/задач із записом умови, формул, обчислень і відповіді;\n"
-        "     * Скласти комп'ютерну програму, електронну таблицю, схему чи презентацію за заданими вимогами тощо.\n"
-        "   - Оцінюй відповідність зданої роботи САМЕ ЦІЙ ФОРМІ ТА ЗМІСТУ, а не випадковим ключовим словам чи побіжним фразам!\n\n"
-        "2. СУВОРІ КРИТЕРІЇ ДЛЯ ВИСОКИХ БАЛІВ (10-12 БАЛІВ):\n"
-        "   - Оцінки 10, 11 або 12 балів (Високий рівень) призначаються ВИКЛЮЧНО тоді, коли завдання виконано ПОВНІСТЮ, СТРУКТУРОВАНО, ЗМІСТОВНО ТА САМОСТІЙНО відповідно до поставлених вимог вчителя!\n"
-        "   - КАТЕГОРИЧНО ЗАБОРОНЕНО ставити 10-12 балів за окремі вирвані фрази, фрагментарні начерки чи випадкові згадки слів/дат!\n"
-        "   - НАПРИКЛАД: якщо вимагалося створити перелік/список дат, а учень здав картинку та лише одне коротке речення з датами — це ФРАГМЕНТАРНА спроба! Ставити 10-12 балів за таку роботу КАТЕГОРИЧНО ЗАБОРОНЕНО.\n"
-        "   - Роботи, де завдання виконано лише частково або поверхово (окремі речення замість повного списку/твору, картинка без належного розкриття теми чи розв'язку), оцінюються в межах СЕРЕДНЬОГО РІВНЯ (4-6 балів) або ПОЧАТКОВОГО РІВНЯ (1-3 бали / «Доопрацювати»).\n\n"
-        "3. ВІДСУТНІСТЬ НЕОБХІДНОГО МАТЕРІАЛУ АБО НЕВІДПОВІДНІСТЬ ТЕМІ:\n"
-        "   - Якщо у зданій роботі немає того навчального матеріалу, який вимагався за темою (наприклад, здано лише картинку з кількома словами без виконання розв'язку чи розкриття теми, сторонній контент тощо), оцінюй роботу об'єктивно й критично.\n"
-        "   - Якщо зміст роботи не відповідає темі або суті завдання — призначай статус 'Доопрацювати' (або 1-3 бали, якщо потрібна цифрова оцінка).\n\n"
-        "4. ОБОВ'ЯЗКОВИЙ ЗВОРОТНИЙ ЗВ'ЯЗОК ПРИ ОЦІНЦІ МЕНШЕ 10 БАЛІВ (1-9 або 'Доопрацювати'):\n"
-        "   - Якщо рекомендована оцінка менше 10 балів (або 'Доопрацювати'):\n"
-        "     * Окрім позитивних сторін («strengths»), ТИ ЗОБОВ'ЯЗАНИЙ У РОЗДІЛАХ «weaknesses» ТА «feedback_comment» ЧІТКО Й КОНСТРУКТИВНО ОПИСАТИ В ЗАГАЛЬНОМУ («але в загальному»), що саме не так і чого не вистачає в роботі для повного виконання завдання!\n"
-        "     * Зістав вимогу завдання із фактично зданим результатом: наприклад, узагальнено поясни учню: «Завдання вимагало скласти детальний хронологічний перелік дат із подіями, проте в роботі наведено лише одне речення та ілюстрацію. Для отримання вищого балу необхідно виконати роботу в повному обсязі — скласти повноцінний список ключових дат із назвами подій.»\n"
-        "     * Коментар має бути тактовним, узагальненим («в загальному»), без надмірної прискіпливості до дрібниць, але щоб учень чітко зрозумів причину оцінки та напрямок покращення."
-    )
-
-    # ── ДОСЛІДНИЦЬКІ, ПОШУКОВІ ЗАВДАННЯ ТА РОБОТА З ІНФОРМАЦІЄЮ З ІНТЕРНЕТУ ───
-    prompt_lines.append(
-        "🌐 КРИТИЧНЕ ПРАВИЛО: ДОСЛІДНИЦЬКІ, ПОШУКОВІ ЗАВДАННЯ ТА РОБОТА З ІНФОРМАЦІЄЮ З ІНТЕРНЕТУ:\n"
-        "1. Коли завдання передбачає пошук інформації в інтернеті, краєзнавство, опис населеного пункту (міста, села, селища), географічного об'єкта, історичної події чи постаті:\n"
-        "   - Вчитель зазвичай формулює загальний напрямок (наприклад: «Знайдіть в інтернеті інформацію про ваше рідне місто чи село», «Підготуйте повідомлення про населений пункт України», «Знайдіть інформацію про...»).\n"
-        "   - Умова вчителя НЕ містить назв конкретних міст чи сіл кожного учня, оскільки кожен учень самостійно обирає свій населений пункт чи об'єкт для дослідження!\n"
-        "2. ПЕРЕВІРКА ФАКТИЧНОЇ ДОСТОВІРНОСТІ ЗА ВЛАСНИМИ ЗНАННЯМИ ШІ:\n"
-        "   - ШІ ЗОБОВ'ЯЗАНИЙ перевірити правильність та достовірність наданої учнем інформації за власними знаннями (чи правдиві географічні координати, область, річки, історія заснування, пам'ятки, визначні постаті, події обраного населеного пункту/об'єкта).\n"
-        "3. 🚫 СУВОРО ТА КАТЕГОРИЧНО ЗАБОРОНЕНО:\n"
-        "   - Запитувати або писати «а що це таке?», «що це за місто/село?», «чому тут написано про Чернігів/село, якщо в умові цього не було?», «не зрозуміло, яке завдання виконане»!\n"
-        "   - Заявляти, що робота «не відповідає темі завдання», лише через те, що учень досліджував обраний ним населений пункт або навів факти, знайдені в інтернеті!\n"
-        "   - Встановлювати 'unclear_task': true, писати у 'format_warning' зауваження про незрозумілість завдання або повертати роботу на 'Доопрацювати', якщо учень надав змістовну інформацію по темі пошуку!\n"
-        "4. КРИТЕРІЇ ОЦІНЮВАННЯ ПОШУКОВИХ РОБІТ:\n"
-        "   - 10-12 балів (Високий рівень): інформація фактично достовірна, тема розкрита повно, зв'язно, структуровано (розташування, історія, цікаві факти, висновки), робота оформлена охайно.\n"
-        "   - 7-9 балів (Достатній рівень): факти правильні, але опис стислий, бракує окремих деталей або є незначні неточності.\n"
-        "   - 4-6 балів (Середній рівень): фрагментарні уривки (1-2 речення замість повідомлення).\n"
-        "   - 1-3 бали / Доопрацювати: тільки якщо здано сторонній нерелевантний спам (наприклад, кулінарний рецепт замість історії міста/села).\n"
-    )
-
-    # ── ОЦІНЮВАННЯ ПРЕЗЕНТАЦІЙ (.pptx, .ppt, .odp) ──────────────────────────
-    prompt_lines.append(
-        "📽️ ВКАЗІВКИ ДЛЯ ПЕРЕВІРКИ ПРЕЗЕНТАЦІЙ (якщо робота є презентацією):\n"
-        "- Оцінюй презентацію комплексно: змістовну глибину розкриття теми, логічну структуру (титульний слайд, вступ, основні тези, висновки), лаконічність формулювання думок на слайдах (тези замість перевантаження суцільним текстом).\n"
-        "- Враховуй візуальне наповнення (наявність ілюстрацій, схем, таблиць, зафіксованих у структурі слайдів).\n"
-        "- 📊 ДІАГРАМИ ТА ГРАФІКИ НА СЛАЙДАХ: уважно перевіряй блок «ВИЯВЛЕНІ ВБУДОВАНІ ДІАГРАМИ ТА ГРАФІКИ У ПРЕЗЕНТАЦІЇ» та передані візуальні зображення слайдів! Якщо учень побудував діаграму, графік чи схему — КАТЕГОРИЧНО ЗАБОРОНЕНО стверджувати, що діаграма відсутня! Оцінюй доцільність вибору типу діаграми, заголовки, підписи та структуру відображених даних.\n"
-        "- 🛡️ ПЕРЕВІРКА СЛАЙДІВ НА ВИКОРИСТАННЯ ШІ: обов'язково проаналізуй тексти слайдів та графіку на предмет генерації ШІ. Якщо тексти слайдів скомпільовані штучним інтелектом (ChatGPT, Gamma, Tome, Canva AI тощо) або мають ознаки синтетичної генерації — зафіксуй це у полях 'ai_generated_percent' та 'ai_generated_detected', вказавши конкретні номери слайдів у 'ai_generated_details'!\n"
-        "- У 'strengths' та 'weaknesses' відзначай як відповідність темі, так і якість оформлення презентації."
-    )
-
-    # ── ОЦІНЮВАННЯ ТЕКСТОВИХ ДОКУМЕНТІВ (.docx, .doc, .odt, .rtf) ТА ВИЯВЛЕННЯ ШІ ──
-    prompt_lines.append(
-        "📝 ВКАЗІВКИ ДЛЯ ПЕРЕВІРКИ ТЕКСТОВИХ ДОКУМЕНТІВ ТА ВИЯВЛЕННЯ ШІ:\n"
-        "- Обов'язково перевір зміст текстового документа на наявність характерних артефактів, преамбул та директив штучного інтелекту (ChatGPT, Claude, Gemini тощо)!\n"
-        "- Звертай особливу увагу на шаблонні фрази або директиви чат-бота, які згенеровано для користувача замість власного розв'язку учня (наприклад: «Дайте відповідь на запитання», «Порівняйте їхню поведінку», «Ось покроковий алгоритм», «Підсумовуючи вищевикладене» тощо).\n"
-        "- Якщо учень замість власного виконання або аналізу власної ситуації просто скопіював згенерований чат-ботом шаблон інструкцій або порад із запитаннями до користувача — це є ПРЯМИМ ДОКАЗОМ генеративного ШІ (100% ШІ). У такому разі встанови 'ai_generated_percent': 90-100, 'ai_generated_detected': true, 'ai_generated_confidence': 'high', а оцінку встанови 'Доопрацювати' або 1-3 бали (якщо ШІ заборонено вчителем)!\n"
-    )
-
-    # ── ОЦІНЮВАННЯ ЕЛЕКТРОННИХ ТАБЛИЦЬ ТА ДІАГРАМ/ГРАФІКІВ (.xlsx, .xls, .ods) ──
-    prompt_lines.append(
-        "📊 ВКАЗІВКИ ДЛЯ ПЕРЕВІРКИ ЕЛЕКТРОННИХ ТАБЛИЦЬ ТА ДІАГРАМ (Excel / Calc):\n"
-        "- Уважно перевіряй наявність побудованих діаграм, графіків, гістограм та візуалізацій (якщо в завданні вимагалося створити діаграму/графік)!\n"
-        "- Звертай особливу увагу на структурований блок «ВИЯВЛЕНІ ВБУДОВАНІ ДІАГРАМИ ТА ГРАФІКИ» у текстовому описі таблиці, а також на прикріплені візуальні зображення сторінок таблиці з графіками (передані у мультимодальному контексті).\n"
-        "- Якщо учень побудував діаграму: оцінюй правильність вибору типу діаграми (стовпчаста/гістограма, кругова, графік тощо), наявність назви (заголовка), підписів осей, легенди та коректність діапазонів даних (рядів та категорій).\n"
-        "- КАТЕГОРИЧНО ЗАБОРОНЕНО стверджувати, що діаграма відсутня, якщо вона зафіксована у структурі таблиці або на переданих зображеннях сторінок!\n"
-        "- Оцінюй також коректність розрахунків, використання формул (якщо вимагалося) та структуру таблиці."
-    )
-
     # Read the same complete teacher evidence in evaluation and in the student guide.
     from .ai_context import teacher_materials, ASSESSMENT_RULES, feedback_evidence_sections
     teacher_files_content = []
     material_coverage = []
     if assignment:
-        primary_task_content, teacher_files_content, teacher_media, material_coverage = teacher_materials(assignment)
+        primary_task_content, teacher_files_content, teacher_media, material_coverage = teacher_materials(
+            assignment, path_overrides=(source_overrides or {}).get('assignment'))
         # Keep source roles until the provider prepares its supported input.
         # Required pages must not disappear behind a blanket teacher-media cap.
         primary_media = [m for m in teacher_media if m.get('is_primary_task')]
         other_media = [m for m in teacher_media if not m.get('is_primary_task')]
         safe_teacher_media = primary_media + other_media
         inline_media.extend(safe_teacher_media)
-        if primary_task_content:
-            prompt_lines.append("\n═══════════════════════════════════════════════════════════════════")
-            prompt_lines.append("🎯 ОСНОВНИЙ ФАЙЛ З УМОВОЮ ЗАВДАННЯ ДЛЯ ШІ (ВКАЗАНО ВЧИТЕЛЕМ):")
-            prompt_lines.append("Вчитель окремо позначив цей файл як першоджерело умови завдання!")
-            prompt_lines.append("ШІ повинен оцінювати роботу учня на підставі конкретних завдань і вимог саме із цього файлу:")
-            prompt_lines.extend(primary_task_content)
-            prompt_lines.append("═══════════════════════════════════════════════════════════════════\n")
-
-        if teacher_files_content:
-            prompt_lines.append("\n═══════════════════════════════════════════════════════════════════")
-            prompt_lines.append("МАТЕРІАЛИ ДО УРОКУ / ДОВІДКОВІ ФАЙЛИ ВЧИТЕЛЯ (ПРЕЗЕНТАЦІЇ, PDF, ЗОБРАЖЕННЯ, ДОКУМЕНТИ):")
-            if not primary_task_content:
-                prompt_lines.append(
-                    "⚠️ ПОШУК ЗАВДАННЯ В ЦИХ МАТЕРІАЛАХ ВЧИТЕЛЯ ТА РОЗМЕЖУВАННЯ SCOPE OF WORK:\n"
-                    "1. КОНТЕКСТ УРОКУ: матеріали містять теоретичну інформацію, правила, зразки, ілюстрації та навчальні вправи для роботи в класі. Вони є контекстом теми, а НЕ автоматичним переліком обов'язкових завдань.\n"
-                    "2. ГОЛОВНЕ ПРАВИЛО: Кількість знайдених у презентації/файлі вправ НЕ Є кількістю обов'язкових завдань учня! Якщо вчитель задав проєкт або комплексне завдання («Робота над проєктом», «Створити презентацію», «Створити програму», «Виконати практичну роботу») — оцінюй саме проєкт за темою, а не вимагай виконання всіх вправ зі слайдів!\n"
-                    "3. Тільки якщо вчитель прямо дав вказівку виконати вправи чи домашнє завдання з файлу (наприклад, перевірити ФІНАЛЬНІ/ОСТАННІ СЛАЙДИ або виконати завдання зі слайду 15), вони входять до Scope of Work.\n"
-                    "4. ЗАБОРОНА ПОМИЛКОВОГО «ДОПРАЦЮВАННЯ»:\n"
-                    "   * Якщо відповідь учня відповідає темі або завданням із матеріалів вчителя — завдання ПОВНІСТЮ ЗРОЗУМІЛЕ! Заборонено ставити 'unclear_task: true' або повертати роботу на 'Доопрацювати' через «незрозумілість завдання».\n"
-                    "5. Якщо у файлі міститься кілька вправ, а вчитель задав конкретну чи одне комплексне завдання — оцінюй ВИКЛЮЧНО задане. Решта матеріалів вважаються незаданими!"
-                )
-            else:
-                prompt_lines.append("⚠️ УВАГА ДЛЯ ШІ: Нижче наведено додаткові матеріали уроку (презентація, роздатковий матеріал, підручник). Враховуй їхній зміст та контекст при оцінюванні роботи учня. Якщо вчитель задав конкретне завдання, решта завдань з файлу вважаються незаданими.")
-            prompt_lines.extend(teacher_files_content)
-            prompt_lines.append("═══════════════════════════════════════════════════════════════════\n")
-
-    if active_grs and (not selected_preset or selected_preset.evaluation_type in ['nus_gr', 'nus', 'custom']):
-        prompt_lines.append("\n═══════════════════════════════════════════════════════════════════")
-        prompt_lines.append("ОБРАНІ ГРУПИ РЕЗУЛЬТАТІВ (ГР) ДЛЯ ОЦІНЮВАННЯ В ЦІЙ РОБОТІ:")
-        for gr in active_grs:
-            prompt_lines.append(f"• {gr.get('code', 'ГР')}: {gr.get('name', '')}")
-        prompt_lines.append(
-            "ВАЖЛИВО щодо оцінювання:\n"
-            "- Оціни роботу ВИКЛЮЧНО за цими обраними групами результатів!\n"
-            "- У полі 'gr_results' поверни JSON масив ТІЛЬКИ для цих обраних груп з цілими оцінками (1-12 балів).\n"
-            "- Усі оцінки повинні бути ВИКЛЮЧНО цілими числами (без десятих чи дробових значень!).\n"
-            "- Загальна оцінка 'suggested_grade' повинна бути середнім арифметичним балом (1-12) серед оцінених груп результатів, обов'язково заокругленим на користь/перевагу учня до більшого цілого числа!"
-        )
-        prompt_lines.append("═══════════════════════════════════════════════════════════════════\n")
-
-    if assignment and assignment.link_url:
-        prompt_lines.append(f"Корисне посилання вчителя до уроку: {assignment.link_url}")
 
     # ── ПЕРЕВІРКА НА ДУБЛІКАТ ТА ПЛАГІАТ ──────────────────────────────────────
     dup_info = check_submission_duplicates(submission)
-    is_plagiarism_ignored = (
-        getattr(submission, 'ignore_plagiarism', False) or
-        submission.is_group_work or
-        bool(submission.primary_submission_id) or
-        dup_info.get('plagiarism_ignored', False) or
-        dup_info.get('is_coauthor', False)
-    )
-
-    if is_plagiarism_ignored and (dup_info.get('plagiarism_ignored') or dup_info.get('is_coauthor') or dup_info.get('is_duplicate_student')):
-        coauthor_name = dup_info.get('duplicate_student_name') or 'іншим учнем'
-        prompt_lines.append(
-            "\n👥 СПІЛЬНЕ / КОЛЕКТИВНЕ ВИКОНАННЯ РОБОТИ (ПЛАГІАТ ВИКЛЮЧЕНО):\n"
-            f"Встановлено однаковий або спільний вміст файлу з роботою учня ({coauthor_name}). "
-            "Вчитель або система підтвердили, що учні виконували дане завдання спільно у групі/парі (або однаковий вміст дозволено вчителем як спільний проект).\n"
-            "КАТЕГОРИЧНІ ВИМОГИ ДО ОЦІНЮВАННЯ:\n"
-            "- КАТЕГОРИЧНО ЗАБОРОНЕНО знижувати оцінку чи встановлювати штраф за плагіат або списування!\n"
-            "- Оціни якість розв'язку та повноту виконання завдання по суті за встановленими критеріями оцінювання як спільний результат.\n"
-            "- У 'summary' та 'feedback_comment' відзнач спільне виконання проекту та дай конструктивний відгук за змістом роботи.\n"
-        )
-    elif dup_info['is_duplicate_teacher'] and not is_plagiarism_ignored:
-        prompt_lines.append(
-            "\n🚨 КРИТИЧНЕ ЗАУВАЖЕННЯ СИСТЕМИ АНТИПЛАГІАТУ ТА ПЕРЕВІРКИ:\n"
-            f"Встановлено 100% збіг: прикріплений учнем файл є точною копією вихідного файлу завдання вчителя («{dup_info['teacher_file_name']}»)! "
-            "Учень НЕ виконував завдання, а просто повторно прикріпив сам файл завдання або умову від вчителя.\n"
-            "КАТЕГОРИЧНІ ВИМОГИ ДО ОЦІНЮВАННЯ:\n"
-            "- Встанови 'suggested_grade' як 'Доопрацювати' (або 1-2 бали, якщо вимагається число).\n"
-            "- У 'summary' та 'feedback_comment' прямо напиши учню: «Здано оригінальний файл завдання вчителя без виконання розв'язку. Робота не зарахована. Необхідно самостійно виконати завдання та надіслати свій результат на доопрацювання.»\n"
-            "- У 'weaknesses' обов'язково зазнач: «Здано вихідний файл завдання замість виконаної роботи».\n"
-        )
-    elif dup_info['is_duplicate_student'] and not is_plagiarism_ignored:
-        prompt_lines.append(
-            "\n🚨 КРИТИЧНЕ ЗАУВАЖЕННЯ СИСТЕМИ АНТИПЛАГІАТУ:\n"
-            f"Встановлено 100% збіг: вміст прикріпленого файлу повністю ідентичний файлу, який раніше здав інший учень ({dup_info['duplicate_student_name']})!\n"
-            "КАТЕГОРИЧНІ ВИМОГИ ДО ОЦІНЮВАННЯ:\n"
-            "- Врахуй факт плагіату/списування чужої роботи.\n"
-            "- Знизь оцінку (або признач 'Доопрацювати') та чітко зафіксуй факт плагіату у 'feedback_comment', 'summary' та 'weaknesses'.\n"
-        )
-
-    # ── КОНТЕКСТ ПЕРЕЗДАЧІ ТА РОБОТИ НАД ПОМИЛКАМИ ───────────────────────────
-    if submission.is_resubmission or submission.resubmission_attempt > 1:
-        prev = submission.previous_submission
-        prev_info = []
-        if prev:
-            prev_time = timezone.localtime(prev.submitted_at).strftime('%d.%m.%Y %H:%M') if prev.submitted_at else 'раніше'
-            prev_info.append(f"• Дата та час попередньої здачі: {prev_time}")
-            if prev.student_ai_grade:
-                prev_info.append(f"• Чернова оцінка ШІ за першу спробу: {prev.student_ai_grade} ({prev.student_ai_summary or ''})")
-                if prev.student_ai_feedback:
-                    prev_info.append(f"• Зауваження ШІ першої спроби: {prev.student_ai_feedback[:400]}")
-            if prev.grade:
-                prev_info.append(f"• Попередня оцінка вчителя: {prev.grade}")
-            if prev.teacher_comment:
-                prev_info.append(f"• Попередній коментар вчителя: {prev.teacher_comment}")
-            if prev.comment_student:
-                prev_info.append(f"• Коментар учня до попередньої спроби: {prev.comment_student}")
-
-            p_files = [getattr(pf, 'original_name', '') for pf in prev.get_files()]
-            if p_files:
-                prev_info.append(f"• Файли попередньої спроби: {', '.join(p_files)}")
-
-        prompt_lines.append("\n═══════════════════════════════════════════════════════════════════")
-        prompt_lines.append(f"🔄 КОНТЕКСТ ПЕРЕЗДАЧІ (СПРОБА #{submission.resubmission_attempt} — РОБОТА НАД ПОМИЛКАМИ):")
-        prompt_lines.append("Учень повторно здав роботу з метою виправлення помилок та покращення результату.")
-        if prev_info:
-            prompt_lines.extend(prev_info)
-        prompt_lines.append(
-            "\nПЕДАГОГІЧНІ ВКАЗІВКИ ДЛЯ ШІ ЩОДО РОБОТИ НАД ПОМИЛКАМИ:\n"
-            "- Врахуй, що це РОБОТА НАД ПОМИЛКАМИ (учень опрацював зауваження та перездав завдання).\n"
-            "- Проаналізуй, які виправлення та прогрес зробив учень у новій версії роботи.\n"
-            "- У блоках 'strengths' та 'feedback_comment' обов'язково відзнач старанність та успішне виправлення помилок.\n"
-            "- Оціни поточний розв'язок за фактичною якістю нового виконання."
-        )
-        prompt_lines.append("═══════════════════════════════════════════════════════════════════\n")
-
-    # ── ПЕРЕВІРКА НА СПІВАВТОРІВ ТА КОЛЕКТИВНУ РОБОТУ ─────────────────────────
-    if submission.is_group_work or submission.group_authors or getattr(submission, 'ignore_plagiarism', False):
-        authors_str = submission.group_authors or submission.get_student_full_name()
-        prompt_lines.append(
-            f"👥 КОЛЕКТИВНА РОБОТА / СПІВАВТОРИ: Роботу виконано спільно учнями ({authors_str}) (підтверджено вчителем або системою). "
-            "Оцінюй виконання як командний проєкт, враховуючи спільний внесок без зниження оцінки за дублювання."
-        )
-
-    # ── ВРАХУВАННЯ КОМЕНТАРЯ ТА ВИСНОВКІВ УЧНЯ («Висновки по роботі або коментар») ──
-    if submission.comment_student and submission.comment_student.strip():
-        student_comment_txt = submission.comment_student.strip()
-        prompt_lines.append(
-            f"═══════════════════════════════════════════════════════════════════\n"
-            f"💬 ПОЛЕ «Висновки по роботі або коментар для оцінювання роботи» (УЧЕНЬ):\n"
-            f"«{student_comment_txt}»\n\n"
-            f"⚠️ КРИТИЧНЕ ПРАВИЛО ДЛЯ ШІ ЩОДО ВИСНОВКУ ТА КОМЕНТАРЯ УЧНЯ:\n"
-            f"1. ШІ ЗОБОВ'ЯЗАНИЙ УВАЖНО ПРОЧИТАТИ ЦЕЙ КОМЕНТАР!\n"
-            f"2. Якщо учень написав у цьому полі висновок до практичної чи лабораторної роботи, підсумок, "
-            f"відповідь на завдання або пояснення ходу розв'язання — ВВАЖАТИ ЦЕЙ ВИСНОВОК ПОВНОЦІННИМ ВИСНОВКОМ ДО РОБОТИ!\n"
-            f"3. 🚫 КАТЕГОРИЧНО ЗАБОРОНЕНО стверджувати у 'weaknesses', 'feedback_comment' чи 'summary', "
-            f"що «висновок відсутній» або «робота не містить висновків», якщо учень надав висновок або коментар у цьому полі!\n"
-            f"4. 🚫 КАТЕГОРИЧНО ЗАБОРОНЕНО знижувати оцінку за відсутність висновку у файлі, якщо висновок сформульовано тут!\n"
-            f"5. Обов'язково відзнач наявність висновку в 'strengths' та 'feedback_comment'.\n"
-            f"═══════════════════════════════════════════════════════════════════"
-        )
-
-    prompt_lines.append(f"\nДАНІ УЧНЯ: {submission.get_student_full_name()} ({class_name})")
 
     # ── ВИЗНАЧЕННЯ ТОЧНОГО ОБСЯГУ ЗАВДАННЯ (SCOPE OF WORK — TASK RESOLUTION) ──
     scope = resolve_assignment_scope(
@@ -6698,131 +6608,6 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
     t_crit = task_interpretation.get('teacher_criteria') or []
     g_recs = task_interpretation.get('generic_recommendations') or []
 
-    # ── ПРОМПТ: SCOPE OF WORK BLOCK (НАЙВИЩИЙ ПРІОРИТЕТ) ───────────────────────
-    scope_block_lines = [
-        "═══════════════════════════════════════════════════════════════════",
-        "🎯 FINAL TASK UNDERSTANDING (ДЖЕРЕЛО ІСТИНИ ДЛЯ ОЦІНЮВАННЯ):",
-        "ЦЕ Є ВЖЕ ВИЗНАЧЕНИЙ СИСТЕМОЮ КОНТЕКСТ ЗАВДАННЯ.",
-        "Не змінюй його на основі випадкових вправ, прикладів або питань із матеріалів учителя!",
-        "",
-        f"Що задав учитель:\n{teacher_intent.get('what_teacher_asks') or assignment_desc or assignment_title}",
-        "",
-        f"Що повинен зробити учень:\n{task_interpretation.get('what_student_must_do') or assignment_desc or assignment_title}",
-        "",
-        f"Очікуваний результат:\n{final_task_understanding.get('expected_result') or teacher_intent.get('expected_result') or deliverable.get('description', '')}",
-        "",
-        f"Обов'язкові компоненти:\n{json.dumps(teacher_intent.get('required_components') or deliverable.get('required_components', ['зміст за темою']), ensure_ascii=False)}",
-        "",
-        f"Обов'язкові дії (required_actions):\n{json.dumps(teacher_intent.get('required_actions') or deliverable.get('required_actions', []), ensure_ascii=False)}",
-        "",
-        f"Обов'язкові критерії та вимоги:\n{json.dumps(mandatory_reqs or t_reqs or t_crit, ensure_ascii=False)}",
-        "",
-        f"Що НЕ є завданням (unassigned_material / навчальний контекст):\n{json.dumps(unassigned_material, ensure_ascii=False) if unassigned_material else 'Випадкові вправи, теорія або питання з файлів учителя, які вчитель не задавав'}",
-        "",
-        f"Впевненість розуміння завдання (confidence): {task_understanding_conf}",
-        f"Неоднозначності (ambiguities): {json.dumps(ambiguities, ensure_ascii=False)}",
-        "",
-        "⚠️ СУВОРЕ РОЗМЕЖУВАННЯ РОБОТИ УЧНЯ ТА ЗАВДАННЯ ВЧИТЕЛЯ:",
-        "1. STUDENT SUBMISSION ≠ TEACHER ASSIGNMENT: Учнівська робота, здані файли та коментар учня показують, що ФАКТИЧНО виконав учень.",
-        "   Але вони НЕ МОЖУТЬ підмінити собою завдання вчителя і НЕ створюють нове чи інше завдання!",
-        "2. Якщо учень у коментарі чи роботі написав «Я виконав вправу 4» або надіслав вправу 4, а вчитель задав створити презентацію — це НЕ змінює Scope завдання!",
-        "   Оцінюй здане відносно завдання вчителя («Створити презентацію»). Заборонено підміняти Scope завдання вчителя на 'Вправа 4' через коментар або дію учня!",
-        "═══════════════════════════════════════════════════════════════════",
-        "🎯 ТОЧНИЙ ОБСЯГ ЗАВДАННЯ ВІД ВЧИТЕЛЯ (SCOPE OF WORK — НАЙВИЩИЙ ПРІОРИТЕТ):",
-    ]
-    if is_single_complex_task:
-        task_desc_str = assigned_tasks_list[0]['description'] if assigned_tasks_list else (assignment_desc or assignment_title or "Комплексне завдання")
-        scope_block_lines.extend([
-            f"Вчитель визначив завдання як ОДНЕ комплексне завдання/проєкт: «{task_desc_str}».",
-            f"Кількість обов'язкових завдань: assigned_task_count = 1.",
-            "",
-            "⚠️ КАТЕГОРИЧНІ ВИМОГИ ДО ОЦІНЮВАННЯ:",
-            f"1. ✅ Об'єктом перевірки є ВИКЛЮЧНО це єдине завдання («{task_desc_str}»).",
-            "2. 🚫 КАТЕГОРИЧНО ЗАБОРОНЕНО шукати у прикріпленій презентації, PDF чи додаткових матеріалах вчителя окремі вправи, приклади, тестові питання чи домашні завдання і вимагати їх обов'язкового виконання!",
-            "3. 🚫 КАТЕГОРИЧНО ЗАБОРОНЕНО писати у feedback_comment, summary чи weaknesses:",
-            "   - «виконано 1 з 4 завдань» (або будь-які інші пропорції знайдених у презентації вправ);",
-            "   - «не виконано завдання 2 / вправу 3 / питання 5»;",
-            "   - знижувати оцінку за невиконання матеріалів або вправ зі слайдів, які вчитель не задавав окремо.",
-            "4. ✅ Оцінюй відповідність та якість наданого учнем результату саме цьому завданню (тема, зміст, самостійність, критерії).",
-            "5. ⚙️ У JSON ОБОВ'ЯЗКОВО поверни: 'tasks_total_count': 1, 'tasks_completed_count': 1 (якщо роботу надано і виконано), та заповни об'єкт 'task_resolution'.",
-        ])
-    elif teacher_specific_task_nums:
-        nums_str = ', '.join(str(n) for n in teacher_specific_task_nums)
-        scope_block_lines.extend([
-            f"Вчитель у полі «Що потрібно зробити» ЯВНО вказав виконати КОНКРЕТНЕ ЗАВДАННЯ: № {nums_str}.",
-            f"Кількість обов'язкових завдань: assigned_task_count = {len(teacher_specific_task_nums)}.",
-            "",
-            "⚠️ КАТЕГОРИЧНІ ВИМОГИ ДО ОЦІНЮВАННЯ:",
-            f"1. ✅ ОЦІНЮЙ ВИКЛЮЧНО завдання № {nums_str} — саме воно задане вчителем.",
-            "2. 🚫 КАТЕГОРИЧНО ЗАБОРОНЕНО знижувати оцінку або писати у 'weaknesses' чи 'feedback_comment', що учень 'не виконав інші завдання'. Будь-які інші номери завдань з файлів є НЕЗАДАНИМИ і не враховуються при оцінюванні!",
-            f"3. ✅ Якщо учень якісно виконав завдання № {nums_str} — робота вважається виконаною на 100% і заслуговує на найвищий бал відповідно до якості!",
-            f"4. ⚙️ У полі 'tasks_total_count' повертай {len(teacher_specific_task_nums)} (кількість ЗАДАНИХ завдань), у 'tasks_completed_count' — скільки з них виконав учень, та заповни 'task_resolution'.",
-        ])
-    else:
-        scope_block_lines.extend([
-            f"Кількість визначених обов'язкових завдань: assigned_task_count = {assigned_task_count}.",
-            "Оцінюй тільки ті завдання, які прямо задав учитель. Не створюй нових завдань із випадкових прикладів чи вправ у файлах!",
-            f"У полі 'tasks_total_count' повертай {assigned_task_count}, та заповни 'task_resolution'.",
-        ])
-
-    # ── БЛОК ТИПУ ЗАВДАННЯ ТА DELIVERABLE ──
-    task_components = task_interpretation.get('task_components') or []
-    t_reqs = task_interpretation.get('teacher_requirements') or []
-    t_crit = task_interpretation.get('teacher_criteria') or []
-    g_recs = task_interpretation.get('generic_recommendations') or []
-
-    scope_block_lines.extend([
-        "",
-        "🎯 ПОВНА СТРУКТУРА ІНТЕРПРЕТАЦІЇ ЗАВДАННЯ (TASK INTERPRETATION - ДЖЕРЕЛО ІСТИНИ):",
-        f"- Основний тип завдання (task_type): {task_type}",
-        f"- Складові компоненти (task_components): {json.dumps(task_components, ensure_ascii=False)}",
-        f"- Що учень мав зробити: {task_interpretation.get('what_student_must_do', assignment_desc or assignment_title)}",
-        f"- Очікуваний результат: {task_interpretation.get('expected_result', deliverable.get('description', ''))}",
-        f"- Deliverable: {json.dumps(deliverable, ensure_ascii=False)}",
-        f"- Обов'язкові вимоги вчителя (teacher_requirements): {json.dumps(t_reqs, ensure_ascii=False)}",
-        f"- Обов'язкові критерії вчителя (teacher_criteria): {json.dumps(t_crit, ensure_ascii=False)}",
-        f"- Загальні рекомендації до якості (generic_recommendations - НЕ ЗНИЖУЮТЬ БАЛ): {json.dumps(g_recs, ensure_ascii=False)}",
-        f"- Чи очікуються текстові відповіді на запитання (questions_expected): {'ТАК (модель питання-відповідь)' if questions_expected else 'НІ (створення файлу/продукту)'}",
-        f"- Метод оцінювання: {json.dumps(evaluation_method, ensure_ascii=False)}",
-        "",
-        "🚫 ЗАБОРОНА ВИГАДУВАННЯ НЕІСНУЮЧИХ ОБОВ'ЯЗКОВИХ ВИМОГ:",
-        "1. Категорично заборонено вважати обов'язковими: висновок, джерела, титульний слайд, фіксовану кількість слайдів чи ілюстрацій, прізвище у назві файлу, ЯКЩО вчитель явно не вказав це у teacher_requirements або інструкціях!",
-        "2. Якщо вчитель не вимагав висновку чи джерел, заборонено знижувати оцінку або додавати це у 'weaknesses' чи 'criteria_results'!",
-        "3. generic_recommendations є лише порадами щодо якості (читабельність, охайність) і ніколи не знижують бал та не стають невиконаними критеріями.",
-    ])
-    if deliverable.get('required_components'):
-        comps_str = ", ".join(deliverable['required_components'])
-        scope_block_lines.append(f"- Обов'язкові компоненти: {comps_str}")
-
-    if not questions_expected:
-        scope_block_lines.extend([
-            "",
-            "⚠️ СУВОРА ЗАБОРОНА МОДЕЛІ «ПИТАННЯ-ВІДПОВІДЬ» ДЛЯ ЦЬОГО ЗАВДАННЯ:",
-            "1. Завдання НЕ передбачає відповідей на запитання. Учень створює практичний продукт/файл!",
-            "2. 🚫 КАТЕГОРИЧНО ЗАБОРОНЕНО вимагати текстові відповіді на запитання, шукати питання у файлах чи знижувати оцінку через відсутність відповідей!",
-            "3. 🚫 КАТЕГОРИЧНО ЗАБОРОНЕНО писати у 'weaknesses', 'summary' чи 'feedback_comment':",
-            "   - «відсутні відповіді на запитання» / «не надано відповідей»;",
-            "   - «рекомендується дотримуватися формату питання-відповідь»;",
-            "   - «не виконано питання зі слайдів / PDF».",
-            "4. Якщо у матеріалах уроку є питання для обговорення чи самоперевірки, вони слугують навчальним контекстом уроку і НЕ є обов'язковими вимогами до учня.",
-            "5. ✅ Оцінюй БЕЗПОСЕРЕДНЬО якість, зміст, структуру, розрахунки, код чи висновки створеного результату (deliverable).",
-        ])
-    else:
-        scope_block_lines.extend([
-            "",
-            "📝 МОДЕЛЬ «ПИТАННЯ-ВІДПОВІДЬ» ДЛЯ ЦЬОГО ЗАВДАННЯ:",
-            "Вчитель вимагає надати відповіді на запитання. Перевір правильність та повноту кожної відповіді учня.",
-        ])
-
-    if custom_criteria:
-        scope_block_lines.extend([
-            "",
-            "📋 ІНДИВІДУАЛЬНІ КРИТЕРІЇ ВЧИТЕЛЯ (ПРІОРИТЕТ 2):",
-            "Вчитель встановив індивідуальні критерії оцінювання для цього завдання:",
-            custom_criteria.strip(),
-            "⚠️ Оцінюй виконання саме цих індивідуальних критеріїв. Вони мають вищий пріоритет над загальними критеріями!",
-        ])
-
     eval_plan_dict = scope.get('evaluation_plan') or {}
     comment_nuance = analyze_student_comment_nuance(
         comment_student=submission.comment_student,
@@ -6830,35 +6615,6 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
         custom_criteria=custom_criteria,
         format_requirements=eval_plan_dict.get('format_requirements', [])
     )
-
-    if eval_plan_dict.get('criteria'):
-        scope_block_lines.extend([
-            "",
-            "📋 ЄДИНИЙ ПЛАН ОЦІНЮВАННЯ ТА КРИТЕРІЇ (EVALUATION PLAN):",
-        ])
-        for idx, cr in enumerate(eval_plan_dict['criteria'], 1):
-            weight_str = f" [вага: {cr['weight']} б.]" if cr.get('weight') else ""
-            scope_block_lines.append(f"  {idx}. {cr['name']} (джерело: {cr['source']}){weight_str}")
-        scope_block_lines.append("⚠️ ШІ ЗОБОВ'ЯЗАНИЙ перевірити кожен зазначений критерій окремо у полі 'criteria_results'!")
-
-    if comment_nuance.get('guidance'):
-        scope_block_lines.extend([
-            "",
-            f"💬 ВКАЗІВКА ЩОДО КОМЕНТАРЯ УЧНЯ: {comment_nuance['guidance']}"
-        ])
-
-    inaccessible_list = getattr(submission, '_inaccessible_materials', [])
-    if inaccessible_list:
-        scope_block_lines.extend([
-            "",
-            "⚠️ ТЕХНІЧНЕ ОБМЕЖЕННЯ ДОСТУПУ ДО МАТЕРІАЛІВ УЧНЯ:",
-        ])
-        for im in inaccessible_list:
-            scope_block_lines.append(f"  • {im.get('reason', im.get('target', 'Невідомий матеріал'))}")
-        scope_block_lines.append("🚫 КАТЕГОРИЧНО ЗАБОРОНЕНО маскувати технічну недоступність матеріалу під доведену помилку учня в коді або стверджувати, що матеріал перевірений! Зафіксуй технічну причину у 'submission_evidence'.")
-
-    scope_block_lines.append("═══════════════════════════════════════════════════════════════════")
-    prompt_lines.append("\n".join(scope_block_lines))
 
     is_file_project = False
     if hasattr(submission, 'files') and submission.files.exists():
@@ -6882,172 +6638,51 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
             task_questions, student_combined_text, is_practical_project=is_file_project
         )
 
-    if qa_mapping_block:
-        prompt_lines.append(qa_mapping_block)
-    elif questions_expected and task_questions:
-        prompt_lines.append("═══════════════════════════════════════════════════════════════════")
-        prompt_lines.append("📋 КОНКРЕТНІ ЗАПИТАННЯ / ВПРАВИ ІЗ ЗАВДАННЯ ВЧИТЕЛЯ ДЛЯ ПІДСТАНОВКИ ВІДПОВІДЕЙ:")
-        for idx, q in enumerate(task_questions, 1):
-            prompt_lines.append(f"  {idx}. {q}")
-        prompt_lines.append(
-            "\n⚠️ ВКАЗІВКА ДЛЯ ШІ ЩОДО ВІДПОВІДЕЙ НА ЗОБРАЖЕННЯХ / У ФАЙЛАХ:\n"
-            "- Учень міг написати на фото зошита чи у файлі ТІЛЬКИ ВІДПОВІДІ (наприклад, номери «1. ...», «2. ...») БЕЗ переписування тексту самих запитань!\n"
-            "- ШІ ЗОБОВ'ЯЗАНИЙ підставити знайдені на зображенні/у файлі відповіді учня до відповідних запитань вище та оцінити їхню правильність.\n"
-            "- Навіть якщо учень відповів лише на 1-2 запитання, ШІ ЗОБОВ'ЯЗАНИЙ зарахувати їх. КАТЕГОРИЧНО ЗАБОРОНЕНО заявляти «жодної відповіді не дано»!\n"
-            "- Якщо учень не переписав запитання у текстовій відповіді: порадь у 'weaknesses' та 'feedback_comment' дотримуватися формату «питання-відповідь»."
-        )
-        prompt_lines.append("═══════════════════════════════════════════════════════════════════\n")
-
-    prompt_lines.append("ВИКОНАНА РОБОТА УЧНЯ ДЛЯ ОЦІНЮВАННЯ:")
-    if questions_expected and questions_omitted and not is_file_project:
-        prompt_lines.append(
-            "⚠️ ЗВЕРНИ УВАГУ: Учень надав відповіді без переписування тексту самих запитань. "
-            "Оціни повноту та зміст відповідей відповідно до зіставлених вище запитань вчителя, але обов'язково зазнач рекомендацію щодо формату «питання-відповідь»."
-        )
-    prompt_lines.extend(text_parts)
-    if is_traditional:
-        prompt_lines.append(f"\nПроаналізуй роботу за класичною (традиційною) 12-бальною системою ({preset_name_display}) та обов'язково поверни JSON з полями: suggested_grade (тільки ціле число 1-12 або 'Доопрацювати'), level, format_warning (рядок із зауваженням або null), unclear_task (true/false), summary, strengths (масив), weaknesses (масив), feedback_comment, task_resolution (об'єкт з scope_source, assigned_task_count, assigned_tasks, ignored_found_tasks), evaluation_plan (об'єкт з task_summary, assigned_tasks, criteria, format_requirements), submission_evidence (об'єкт з submitted_files, has_link, has_comment, inaccessible_materials), criteria_results (масив об'єктів з criterion, status ['completed'/'partial'/'missing'/'not_completed'/'unverifiable'], evidence, recommendation), revision_advice (масив рядків конкретних порад для перездачі), tasks_evaluated (масив об'єктів з task_num, task_title, status ['completed'/'partial'/'missing'/'not_completed'], comment), tasks_completed_count (число), tasks_total_count (число — УВАГА: tasks_total_count обов'язково має дорівнювати assigned_task_count з task_resolution, а не кількості вправ у презентації), ai_generated_percent (число 0-100), ai_generated_detected (true/false), ai_generated_confidence ('none'/'low'/'medium'/'high'), ai_generated_details (рядок або null). Поле 'gr_results' поверни порожнім масивом [] або null, оскільки групи результатів НЕ використовуються в класичній системі. Статус completed дозволений лише з непорожнім evidence (цитата або конкретний фрагмент). Пропущений пункт/невиконана дія — not_completed або missing, не unverifiable. unverifiable — лише технічно нечитабельний матеріал. assessment_blocked=true — лише коли основний матеріал не читається або unverifiable > половини критеріїв/ГР.")
-    else:
-        prompt_lines.append(f"\nПроаналізуй роботу згідно з обраними критеріями ({preset_name_display}) та обов'язково поверни JSON з полями: suggested_grade (тільки ціле число 1-12 або 'Доопрацювати'), level, format_warning (рядок із зауваженням або null), unclear_task (true/false), summary, strengths (масив), weaknesses (масив), feedback_comment, task_resolution (об'єкт з scope_source, assigned_task_count, assigned_tasks, ignored_found_tasks), evaluation_plan (об'єкт з task_summary, assigned_tasks, criteria, format_requirements), submission_evidence (об'єкт з submitted_files, has_link, has_comment, inaccessible_materials), criteria_results (масив об'єктів з criterion, status ['completed'/'partial'/'missing'/'not_completed'/'unverifiable'], evidence, recommendation), revision_advice (масив рядків конкретних порад для перездачі), gr_results (масив об'єктів з code, name, grade, level, status ['assessed'/'not_completed'/'unverifiable'], comment), tasks_evaluated (масив об'єктів з task_num, task_title, status ['completed'/'partial'/'missing'/'not_completed'], comment), tasks_completed_count (число), tasks_total_count (число — УВАГА: tasks_total_count обов'язково має дорівнювати assigned_task_count з task_resolution, а не кількості вправ у презентації), ai_generated_percent (число 0-100), ai_generated_detected (true/false), ai_generated_confidence ('none'/'low'/'medium'/'high'), ai_generated_details (рядок або null). Усі оцінки обов'язково мають бути цілими числами (без десятих часток), заокругленими на користь учня. Статус completed дозволений лише з непорожнім evidence (цитата або конкретний фрагмент). Пропущений пункт/невиконана дія — not_completed або missing, не unverifiable. unverifiable — лише технічно нечитабельний матеріал. assessment_blocked=true — лише коли основний матеріал не читається або unverifiable > половини критеріїв/ГР. Якщо перевірено більшість ГР, постав частковий числовий бал за перевіреними ГР.")
-
-    if custom_prompt:
-        system_instruction = custom_prompt.strip()
-    elif selected_preset:
-        system_instruction = selected_preset.get_full_prompt().strip()
-    else:
-        system_instruction = (settings.system_prompt or DEFAULT_NUS_SYSTEM_PROMPT).strip()
-
-    # Динамічна санація системного промта від прикладів з інших предметів («крилатий вислів / словник»)
     teacher_full_context = f"{assignment_title} {combined_task_for_qs} {' '.join(task_questions)}".lower()
     has_real_dict_task = any(kw in teacher_full_context for kw in ['словник', 'тлумачення', 'фразеологізм', 'крилатого'])
-    if not has_real_dict_task and 'крилатого вислову' in system_instruction:
-        system_instruction = system_instruction.replace(
-            "«Завдання 2 не виконано: відсутнє пояснення крилатого вислову в онлайн-словнику»",
-            "«Завдання 2 не виконано: відсутня обов'язкова частина роботи»"
-        )
-        system_instruction = system_instruction.replace(
-            "Якщо Завдання 2 вимагало знайти пояснення вислову в українському онлайн-словнику, а Завдання 3 — перекласти його англійською: наведення лише одного речення англійською мовою НЕ МОЖЕ вважатися виконанням обох завдань! Українське тлумачення в такому разі відсутнє (Завдання 2 НЕ виконано).",
-            "Якщо завдання містить кілька окремих кроків (наприклад, створення структури, зв'язків чи відповіді на запитання): виконання лише одного кроку не може вважатися виконанням решти завдань!"
-        )
-        system_instruction = re.sub(
-            r'пояснення\s+крилатого\s+вислову\s+в\s+онлайн[- ]словнику',
-            'обов\'язкове завдання',
-            system_instruction,
-            flags=re.IGNORECASE
-        )
-
-    if is_file_project:
-        system_instruction += (
-            "\n\nПРАВИЛО ДЛЯ ПРАКТИЧНИХ РОБІТ ТА ПРОЄКТНИХ ФАЙЛІВ (БАЗИ ДАНИХ, КОД ПРОГРАМ, ЕЛЕКТРОННІ ТАБЛИЦІ):\n"
-            "- Робота учня подана як практичний файл (наприклад, файл бази даних Microsoft Access, файл скрипта, таблиця Excel тощо).\n"
-            "- КАТЕГОРИЧНО ЗАБОРОНЕНО вимагати текстовий формат «питання-відповідь» або робити зауваження, що «відсутні запитання», «надано відповіді без самих запитань» чи «робота подана у вигляді файлу БД без пояснювального документа»!\n"
-            "- Оцінюй виконання практичного завдання безпосередньо за наданим файлом: перевіряй наявність створених сутностей/таблиць, полів, ключів, зв'язків, коду відповідно до умови.\n"
-        )
-
-    # Завжди гарантуємо правило Scope of Work в системній інструкції
-    if "SCOPE OF WORK" not in system_instruction:
-        system_instruction += (
-            "\n\nПРІОРИТЕТ ВИМОГ ВЧИТЕЛЯ ТА ОБСЯГ ЗАВДАННЯ (SCOPE OF WORK):\n"
-            "- ВЧИТЕЛЬ ВИЗНАЧАЄ, ЩО ТРЕБА ВИКОНАТИ. ШІ ВИЗНАЧАЄ, НАСКІЛЬКИ ДОБРЕ ЦЕ ВИКОНАНО.\n"
-            "- ШІ НЕ ВИЗНАЧАЄ САМ, ЩО УЧЕНЬ МАВ ВИКОНУВАТИ, НА ОСНОВІ ВИПАДКОВО ЗНАЙДЕНИХ У МАТЕРІАЛАХ ВПРАВ!\n"
-            "- Якщо вчитель дав короткий або узагальнений опис («Робота над проєктом», «Створити презентацію», «Створити програму», «Виконати практичну роботу», «Опрацювати тему»), це є ОДНИМ комплексним завданням (assigned_task_count = 1).\n"
-            "- КАТЕГОРИЧНО ЗАБОРОНЕНО вишукувати у презентаціях чи PDF вчителя теоретичні приклади, вправи або домашні завдання і перетворювати їх на окремі обов'язкові завдання для учня!\n"
-            "- Якщо вчитель вказав конкретний номер (наприклад, «Виконати вправу 2»): оцінюй ВИКЛЮЧНО це завдання. Решта завдань з файлу вважаються незаданими і НЕ можуть бути підставою для зауважень чи зниження оцінки!\n"
-            "- Робота вважається виконаною у повному обсязі (100%), якщо якісно виконано саме задане вчителем завдання.\n"
-        )
-
-    if "ПРЕЗЕНТАЦІЇ ТА PDF ВЧИТЕЛЯ ЯК ДЖЕРЕЛО ЗАВДАННЯ" not in system_instruction:
-        system_instruction += (
-            "\n\nПРЕЗЕНТАЦІЇ, PDF, ЗОБРАЖЕННЯ ТА МАТЕРІАЛИ ВЧИТЕЛЯ ЯК ДЖЕРЕЛО ЗАВДАННЯ:\n"
-            "- Матеріали вчителя слугують теоретичним та навчальним контекстом уроку.\n"
-            "- Якщо учень виконав завдання, знайдене на слайдах презентації чи у PDF/файлах вчителя, це завдання є ЧІТКИМ І ЗРОЗУМІЛИМ. КАТЕГОРИЧНО ЗАБОРОНЕНО ставити 'unclear_task': true або повертати на 'Доопрацювати' через «незрозумілість завдання»!\n"
-            "- Оцінюй роботу учня (1-12 балів) за повнотою розкриття теми та якістю виконання відповідно до Scope of Work.\n"
-        )
-
-    if "БАГАТОЗАДАЧНІ УМОВИ ТА ПРАВИЛА ВИБОРУ" not in system_instruction:
-        system_instruction += (
-            "\n\nБАГАТОЗАДАЧНІ УМОВИ ТА ПРАВИЛА ВИБОРУ ЗАВДАНЬ («виконати будь-яке завдання на вибір»):\n"
-            "- Якщо вчитель дозволив вибір: спочатку перевір, чи вказав учень номер завдання в коментарі або файлі.\n"
-            "- Якщо учень зазначив завдання — оцінюй його без зниження оцінки за вибір.\n"
-            "- Якщо учень НЕ зазначив, яке завдання обрав: автоматично визнач завдання за змістом, ОБОВ'ЯЗКОВО вкажи у відгуку, що учень не вказав завдання і це вплинуло на оцінку, та ЗНИЗЬ бал на 1-2.\n"
-            "- Якщо НЕ ЗРОЗУМІЛО, яке завдання виконане: постав 'Доопрацювати', 'unclear_task': true, у 'format_warning' напиши: «Не зрозуміло, яке саме завдання виконане. Будь ласка, вкажіть номер завдання в коментарі або перевірте прикріплений файл.»\n"
-        )
-
-    if "ТОЧНЕ РОЗУМІННЯ СУТІ ЗАВДАННЯ" not in system_instruction:
-        system_instruction += (
-            "\n\nТОЧНЕ РОЗУМІННЯ СУТІ ЗАВДАННЯ, ЗМІСТОВА ВІДПОВІДНІСТЬ ТА ЗВОРОТНИЙ ЗВ'ЯЗОК:\n"
-            "- Аналізуй, яку саме форму та зміст вимагає завдання (список дат з подіями, твір, таблиця, задачі тощо).\n"
-            "- Оцінки 10-12 балів ставляться ВИКЛЮЧНО за повне, змістовне та структуроване виконання завдання. Фрагментарні або мінімальні відповіді (одне речення замість списку дат, картинка з парою слів) категорично не можуть отримувати 10-12 балів (максимум 4-6 балів, або 1-3/'Доопрацювати').\n"
-            "- Якщо оцінка менше 10 балів (або 'Доопрацювати'): обов'язково опиши в 'weaknesses' та 'feedback_comment' в загальному, що саме виконано не так і чого не вистачає для досягнення вищого балу.\n"
-        )
-
-    if "ЗІСТАВЛЕННЯ ВІДПОВІДЕЙ УЧНЯ ІЗ ЗАПИТАННЯМИ ВЧИТЕЛЯ" not in system_instruction:
-        format_rec_line = "  * ⚠️ ОБОВ'ЯЗКОВО вкажи учневі в 'weaknesses' та 'feedback_comment' про недолік оформлення («питання-відповідь»): порадь використовувати формат «питання-відповідь» або чітку нумерацію запитань.\n" if not is_file_project else "  * Для практичних файлів (бази даних, код тощо) рекомендація щодо формату «питання-відповідь» НЕ застосовується.\n"
-        system_instruction += (
-            "\n\nЗІСТАВЛЕННЯ ВІДПОВІДЕЙ УЧНЯ ІЗ ЗАПИТАННЯМИ ВЧИТЕЛЯ (ФОРМАТ «ПИТАННЯ-ВІДПОВІДЬ»):\n"
-            "- Якщо учень здав лише відповіді (номери 1, 2... або текст без переписування запитань):\n"
-            "  * Візьми запитання з умови завдання чи матеріалів вчителя та підстав відповіді учня до кожного відповідного запитання.\n"
-            "  * 🚫 СУВОРО ЗАБОРОНЕНО писати «жодної відповіді не дано», «відповіді відсутні» чи «робота порожня», якщо учень відповів хоча б на 1-2 запитання!\n"
-            "  * Оціни зміст і правильність наданих учнем відповідей по суті запитань вчителя (навіть при частковому виконанні).\n"
-            f"{format_rec_line}"
-        )
-
-    if "РОЗДІЛЬНИЙ АНАЛІЗ КОЖНОГО ЗАВДАННЯ" not in system_instruction:
-        system_instruction += (
-            "\n\nРОЗДІЛЬНИЙ АНАЛІЗ КОЖНОГО ЗАВДАННЯ ТА СУВОРЕ ОБМЕЖЕННЯ БАЛІВ ЗА НЕПОВНИЙ ОБСЯГ (MULTI-TASK COMPLETION & STRICT CEILING):\n"
-            "- Тільки коли вчитель ЯВНО задав кілька конкретних завдань (наприклад: «виконати завдання 1, 2 та 3», або «виконати вправи 1–3»):\n"
-            "  * ШІ зобов'язаний оцінити кожне дійсно задане завдання окремо!\n"
-            "  * 🚫 СУВОРА ЗАБОРОНА ДУБЛЮВАННЯ: один фрагмент тексту чи дії не може зараховуватися за декілька різних завдань одночасно.\n"
-            "  * Якщо задано 3 завдання, а виконано 2 (66% обсягу): максимальна можлива оцінка — 7-8 балів (Достатній рівень).\n"
-            "  * Якщо задано 3 завдання, а виконано 1 (33% обсягу): максимальна оцінка — 4-5 балів (Середній рівень).\n"
-            "  * ⚠️ ЯКЩО ВЧИТЕЛЬ ЗАДАВ ОДНЕ ЗАВДАННЯ («Робота над проєктом», «Створити презентацію», «Виконати вправу 2»): multi-task ceiling НЕ ЗАСТОСОВУЄТЬСЯ, а оцінка визначається якістю виконаної роботи!\n"
-            "  * 🚫 КАТЕГОРИЧНО ЗАБОРОНЕНО писати «виконано 1 з 4 завдань» або вказувати у 'weaknesses' невиконання вправ зі слайдів, яких учитель не задавав!\n"
-        )
-
-    if "ДОСЛІДНИЦЬКІ, ПОШУКОВІ ЗАВДАННЯ" not in system_instruction:
-        system_instruction += (
-            "\n\nДОСЛІДНИЦЬКІ, ПОШУКОВІ ЗАВДАННЯ ТА РОБОТА З ІНФОРМАЦІЄЮ З ІНТЕРНЕТУ:\n"
-            "- Якщо завдання передбачає пошук в інтернеті, краєзнавство, опис населеного пункту (міста, села, селища) чи обраного об'єкта:\n"
-            "  * Учень самостійно обирає свій населений пункт/об'єкт, тому його назви не може бути в тексті завдання вчителя!\n"
-            "  * ШІ зобов'язаний перевірити фактичну достовірність наведених учнем даних за власними енциклопедичними знаннями.\n"
-            "  * 🚫 СУВОРО ЗАБОРОНЕНО запитувати «а що це таке?», «що це за місто/село?», писати «не відповідає темі завдання», встановлювати 'unclear_task': true або повертати на 'Доопрацювати' через згадку обраного учнем населеного пункту!\n"
-            "  * Оцінюй повноту, достовірність, логічність структури та самостійність викладу (10-12 балів за якісно розкриту тему).\n"
-        )
-
-    if "ANTI-EMPTY & IRRELEVANT SUBMISSION CHECK" not in system_instruction:
-        system_instruction += (
-            "\n\nПЕРЕВІРКА ВІДПОВІДНОСТІ ТЕМІ, КЛАСУ ТА СПРАВЖНЬОСТІ РОБОТИ (ANTI-EMPTY & IRRELEVANT SUBMISSION CHECK):\n"
-            "- Перед виставленням будь-якої оцінки перевір відповідність роботи класу та темі завдання:\n"
-            "  * Якщо в роботі зазначено інший клас (наприклад, завдання для 6-7 класу, а здано роботу 8-9 класу): КАТЕГОРИЧНО ЗАБОРОНЕНО ставити 4-12 балів (зокрема 7 балів)! Встанови 'Доопрацювати', 1-2 бали по всіх ГР, 'unclear_task': true.\n"
-            "  * Якщо робота не відповідає темі завдання (сторонній предмет чи тема): оцінка ТІЛЬКИ 'Доопрацювати' (1-2 бали), 'unclear_task': true.\n"
-            "  * Якщо здано бланк/шаблон практичної роботи вчителя (хід роботи, інструкцію) БЕЗ власних відповідей чи розв'язків учня: КАТЕГОРИЧНО ЗАБОРОНЕНО ставити 4-12 балів! Оцінка ТІЛЬКИ 'Доопрацювати' (1-2 бали), 'unclear_task': true.\n"
-            "  * НЕ МОЖНА ставити оцінку за те, що учень просто щось прикріпив. Оцінюються виключно реальні відповіді та праця учня!\n"
-        )
 
     scope['_duplicate_facts'] = {key: bool(dup_info.get(key)) for key in ('is_duplicate_teacher', 'is_duplicate_student', 'is_coauthor', 'plagiarism_ignored')}
     from .ai_context import build_assessment_request
     # Keep original visual sources: text focusing alone cannot prove that a
     # visual sample or an implicit dependency is irrelevant to the exercise.
-    prompt_content, system_instruction = build_assessment_request(
-        submission, selected_preset, active_grs, scope, text_parts,
-        primary_task_content if 'primary_task_content' in locals() else [],
-        teacher_files_content, material_coverage, custom_prompt=custom_prompt,
-        ai_settings=settings)
-    base_prompt_length = len(prompt_content)
-    if selected_preset and selected_preset.document_file and os.path.exists(selected_preset.document_file.path):
+    assessment_args = (submission, selected_preset, active_grs, scope, text_parts)
+    assessment_kwargs = dict(
+        primary=primary_task_content if 'primary_task_content' in locals() else [],
+        reference=teacher_files_content, coverage=material_coverage,
+        custom_prompt=custom_prompt, ai_settings=settings)
+    # Build both variants once, before the provider loop: the adapters below
+    # must choose a representation, never rebuild the context.
+    prompt_content, system_instruction = build_assessment_request(*assessment_args, **assessment_kwargs)
+    prompt_compact, system_compact = build_assessment_request(
+        *assessment_args, **dict(assessment_kwargs, compact=True))
+    rubric_tail = ''
+    rubric_path = ''
+    if selected_preset and selected_preset.document_file:
+        rubric_path = ((source_overrides or {}).get('preset') or {}).get(str(selected_preset.pk)) \
+            or selected_preset.document_file.path
+    if rubric_path and os.path.exists(rubric_path):
         from .ai_context import extract_file_evidence
-        rubric_evidence = extract_file_evidence(selected_preset.document_file.path)
+        rubric_evidence = extract_file_evidence(rubric_path)
         if not selected_preset.is_system and (rubric_evidence['text'] or '').strip() != (selected_preset.extracted_criteria_text or '').strip():
-            prompt_content += "\nПОВНИЙ ДОКУМЕНТ ОБРАНИХ КРИТЕРІЇВ:\n" + (rubric_evidence['text'] or '')
+            rubric_tail += "\nПОВНИЙ ДОКУМЕНТ ОБРАНИХ КРИТЕРІЇВ:\n" + (rubric_evidence['text'] or '')
         inline_media.extend(dict(item, source='Документ критеріїв учителя', evidence_role='rubric',
                                  text_available=bool((rubric_evidence['text'] or '').strip()) and not rubric_evidence['limitations'])
                             for item in rubric_evidence['media'])
-        prompt_content += "\n" + "\n".join(rubric_evidence['limitations'])
+        rubric_tail += "\n" + "\n".join(rubric_evidence['limitations'])
+    prompt_content += rubric_tail
+    prompt_compact += rubric_tail
 
     attempts_configs = settings.get_request_configs()
 
     attempted_errors = []
     deferred_waits = []
+    payload_info = {}
+    server_adjustments = []
+
+    def note_adjustment(field, before, after, reason):
+        if str(before) != str(after):
+            server_adjustments.append({'field': field, 'before': str(before),
+                                       'after': str(after), 'reason': reason})
 
     from .ai_progress import emit_event
 
@@ -7106,13 +6741,7 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
 
         provider_prompt, provider_system = prompt_content, system_instruction
         if c_provider in ('gemini', 'groq', 'openrouter'):
-            provider_prompt, provider_system = build_assessment_request(
-                submission, selected_preset, active_grs, scope, text_parts,
-                primary_task_content if 'primary_task_content' in locals() else [],
-                teacher_files_content, material_coverage, custom_prompt=custom_prompt,
-                ai_settings=settings, compact=True)
-            # Extra rubric extraction and its limitations are mandatory too.
-            provider_prompt += prompt_content[base_prompt_length:]
+            provider_prompt, provider_system = prompt_compact, system_compact
 
         from .ai_payload import estimate_text_tokens
         media_tokens_per_item = 1500 if clean_model_name(c_model, c_provider) == 'qwen/qwen3.8-27b' else 1000
@@ -7122,7 +6751,38 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
         convert_pdf = not (c_provider == 'gemini' or (c_provider == 'openrouter'
                           and clean_model_name(c_model, c_provider) != 'openrouter/free'))
         current_images_count = media_image_units(inline_media, convert_pdf)
+        has_other_multimodal = any(
+            (get_model_capabilities(c['model'], c['provider']).get('max_images') is None or
+             get_model_capabilities(c['model'], c['provider']).get('max_images', 0) >= current_images_count) and
+            get_model_capabilities(c['model'], c['provider']).get('supports_vision', True)
+            for i, c in enumerate(attempts_configs) if i > cfg_idx
+        )
+        # No larger multimodal model in the queue: split pages instead of refusing.
+        batching_plan = bool(max_images_allowed is not None and current_images_count > max_images_allowed
+                             and model_supports_vision and not has_other_multimodal)
         est_tokens = estimate_text_tokens(provider_prompt + provider_system) + len(inline_media or []) * media_tokens_per_item
+
+        if caps.get('media_policy') == 'text_only' and (
+                current_images_count or any((item.get('mime_type') or '').startswith(('audio/', 'video/'))
+                                            for item in inline_media)):
+            skip_msg = (f'{c_provider}/{c_model}: у цій конфігурації модель призначена лише для текстових '
+                        f'робіт (Free ITPM 7 000); візуальні докази передайте моделі з більшим бюджетом.')
+            emit_event('model_skipped', skip_msg, provider=c_provider, model=c_model,
+                       position=cfg_idx + 1, total=len(attempts_configs))
+            attempted_errors.append(f'[{c_provider}/{c_model} пропущено]: політика text_only для медіа')
+            continue
+
+        # A model whose context cannot fit the prompt plus a single page cannot
+        # be rescued by batching: say so instead of a generic context failure.
+        if (current_images_count and model_supports_vision and max_images_allowed is not None
+                and estimate_text_tokens(provider_prompt + provider_system) + media_tokens_per_item
+                > model_context_tokens):
+            skip_msg = (f'{c_provider}/{c_model}: контекст {model_context_tokens} токенів не вміщає '
+                        f'навіть одну сторінку разом із текстом; оберіть модель із більшим контекстом.')
+            emit_event('model_skipped', skip_msg, provider=c_provider, model=c_model,
+                       position=cfg_idx + 1, total=len(attempts_configs))
+            attempted_errors.append(f'[{c_provider}/{c_model} пропущено]: контекст замалий для візуальних доказів')
+            continue
 
         # 0. Перевірка зафіксованого ліміту контексту (якщо раніше виникала помилка 413 / перевищення контексту)
         if caps.get('is_context_flagged') and est_tokens > model_context_tokens:
@@ -7142,13 +6802,7 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
         # 2.5 Перевірка кількості зображень (наприклад qwen3.8-27b підтримує до 3 зображень, текстові моделі 0)
         # ВАЖЛИВО: якщо ліміт перевищено, запит НЕ відправляємо взагалі — навіть коли
         # іншої моделі в черзі немає. Інакше провайдер повертає 400 "too many images".
-        if max_images_allowed is not None and current_images_count > max_images_allowed:
-            has_other_multimodal = any(
-                (get_model_capabilities(c['model'], c['provider']).get('max_images') is None or
-                 get_model_capabilities(c['model'], c['provider']).get('max_images', 0) >= current_images_count) and
-                get_model_capabilities(c['model'], c['provider']).get('supports_vision', True)
-                for i, c in enumerate(attempts_configs) if i > cfg_idx
-            )
+        if max_images_allowed is not None and current_images_count > max_images_allowed and not batching_plan:
             if has_other_multimodal:
                 skip_msg = f"{c_provider}/{c_model}: робота містить {current_images_count} зображень/PDF-сторінок (ліміт моделі {max_images_allowed}). Перемикаюсь на мультимодальну модель."
                 emit_event('model_skipped', skip_msg, provider=c_provider, model=c_model, position=cfg_idx + 1, total=len(attempts_configs))
@@ -7217,7 +6871,14 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
         from .ai_progress import _job_id
         slot_owner = str(_job_id.get() or 'direct') + ':' + uuid4().hex
         slot_acquired = False
-        for attempt in range(max_retries + 1):
+        budget_retries = 0
+        boosted_output_budget = 0
+        output_budget_base = min(
+            10000, (2200 if c_provider == 'groq' else 4000) + 300 * len(active_grs)
+            + 180 * len(scope.get('assigned_tasks') or []))
+        # Two extra iterations are reserved for MAX_TOKENS budget growth; they do
+        # not turn network failures into additional retries.
+        for attempt in range(max_retries + 1 + 2):
             slot_acquired = acquire_model_slot(c_provider, c_model, holder_id=slot_owner,
                 timeout=django_settings.AI_JOB_TIMEOUT + 60, connection_id=c_conn_id)
             if not slot_acquired:
@@ -7232,28 +6893,59 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                     # що скорочує час очікування відповіді з 25-40 секунд до 2-4 секунд!
                     thinking_budget_val = 0 if (c_provider in ('groq', 'openrouter') or ('flash' in c_model.lower() and c_provider == 'gemini')) else None
 
-                output_budget = min(10000, (2200 if c_provider == 'groq' else 4000) + 300 * len(active_grs) + 180 * len(scope.get("assigned_tasks") or []))
+                output_budget = max(output_budget_base, boosted_output_budget)
                 if c_provider == 'openrouter' and clean_model_name(c_model, c_provider) == 'openrouter/free':
                     # Dynamic free routers may select a reasoning model. A 4K
                     # output budget is consumed by reasoning before JSON, which
                     # produced repeat MAX_TOKENS outcomes.
                     output_budget = max(output_budget, 8192)
-                status_code, raw_text, err_msg, raw_data = call_ai_api(
-                    prompt_text=provider_prompt,
-                    system_prompt=provider_system,
-                    inline_media=inline_media,
-                    provider=c_provider,
-                    api_key=c_key,
-                    model_name=c_model,
-                    custom_url=c_url,
-                    temperature=0.0,
-                    max_output_tokens=output_budget,
-                    timeout=50 if c_provider == 'gemini' else (90 if router_retry else 35),
-                    json_mode=True,
-                    thinking_budget=thinking_budget_val,
-                    connection_id=c_conn_id,
-                    seed=42
-                )
+                batch_meta = None
+                if batching_plan:
+                    status_code, raw_text, err_msg, raw_data, batch_meta = evaluate_media_in_batches(
+                        provider_prompt, provider_system, inline_media,
+                        provider=c_provider, api_key=c_key, model_name=c_model, custom_url=c_url,
+                        max_images=max_images_allowed, max_output_tokens=output_budget,
+                        timeout=50 if c_provider == 'gemini' else (90 if router_retry else 35),
+                        thinking_budget=thinking_budget_val, connection_id=c_conn_id, seed=42)
+                    from .ai_payload import payload_manifest as _payload_manifest
+                    payload_info.update(_payload_manifest(
+                        provider_prompt, provider_system, inline_media, c_provider, c_model))
+                    payload_info['batching'] = {
+                        'limit': batch_meta.get('limit'), 'batch_count': batch_meta.get('batch_count'),
+                        'synthesis_status': batch_meta.get('synthesis_status')}
+                    emit_event('batched', f'{c_provider}/{c_model}: оцінено партіями '
+                               f'({batch_meta.get("batch_count")} × до {batch_meta.get("limit")} сторінок).',
+                               provider=c_provider, model=c_model)
+                else:
+                    status_code, raw_text, err_msg, raw_data = call_ai_api(
+                        prompt_text=provider_prompt,
+                        system_prompt=provider_system,
+                        inline_media=inline_media,
+                        provider=c_provider,
+                        api_key=c_key,
+                        model_name=c_model,
+                        custom_url=c_url,
+                        temperature=0.0,
+                        max_output_tokens=output_budget,
+                        timeout=50 if c_provider == 'gemini' else (90 if router_retry else 35),
+                        json_mode=True,
+                        thinking_budget=thinking_budget_val,
+                        connection_id=c_conn_id,
+                        seed=42,
+                        manifest=payload_info
+                    )
+
+                if (not router_retry and status_code == 200 and not raw_text
+                        and 'MAX_TOKENS' in str(err_msg or '')
+                        and budget_retries < 2 and output_budget < 16000):
+                    budget_retries += 1
+                    previous_budget = output_budget
+                    boosted_output_budget = min(16000, int(output_budget * 1.6) + 500)
+                    emit_event('retry', f'{c_provider}/{c_model}: відповідь обірвано лімітом; '
+                                        f'бюджет {previous_budget} → {boosted_output_budget} токенів.',
+                               provider=c_provider, model=c_model, position=cfg_idx + 1,
+                               total=len(attempts_configs), status_code=status_code)
+                    continue
 
                 if isinstance(raw_data, dict) and raw_data.get('_schoolnet_deferred'):
                     deferred_waits.append(int(raw_data['_schoolnet_deferred']))
@@ -7390,6 +7082,8 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                     )
 
                 if result_json:
+                    if batch_meta:
+                        result_json['batched_evaluation'] = batch_meta
                     proposed_grade = result_json.get('suggested_grade')
                     model_blocked = result_json.get('assessment_blocked') is True
                     has_evidence_rows = bool(result_json.get('criteria_results')
@@ -7793,6 +7487,7 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                                     g_num = float(grade)
                                     g_int = int(min(12, max(1, math.ceil(g_num))))
                                     grade = str(g_int)
+                                    gr_level = normalized_level(gr_level, grade)
                                     numeric_gr_grades.append(float(g_int))
                                 except (ValueError, TypeError):
                                     pass
@@ -7904,6 +7599,8 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                                 unclear_task = True
 
                     if unclear_task:
+                        note_adjustment('suggested_grade', suggested_grade, 'Доопрацювати', 'task_not_understood')
+                        note_adjustment('level', level, 'Початковий (1-3)', 'task_not_understood')
                         suggested_grade = 'Доопрацювати'
                         level = 'Початковий (1-3)'
                         if not format_warning or not (('не зрозуміло' in fw_lower or 'незрозуміло' in fw_lower) and 'завдан' in fw_lower):
@@ -8137,6 +7834,7 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
 
                     # ── Педагогічний захист від завищення балів у багатозадачних роботах (Multi-task ceiling) ──
                     if not is_rejected_submission and not custom_criteria.strip() and not (selected_preset and selected_preset.evaluation_type == 'custom'):
+                        grade_before, level_before = suggested_grade, level
                         suggested_grade, level, clean_gr_results, numeric_gr_grades, avg_gr_grade, summary, strengths, weaknesses, feedback_comment = apply_multi_task_evaluation_guardrail(
                             result_json=result_json,
                             task_questions=task_questions,
@@ -8156,9 +7854,13 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                             teacher_scoped_task_nums=teacher_specific_task_nums if 'teacher_specific_task_nums' in locals() else None,
                             scope=scope if 'scope' in locals() else None,
                         )
+                        note_adjustment('suggested_grade', grade_before, suggested_grade, 'multi_task_ceiling')
+                        note_adjustment('level', level_before, level, 'multi_task_ceiling')
 
                     # Кінцева перевірка: якщо роботу відхилено — гарантуємо "Доопрацювати" та Початковий рівень (1-3)
                     if is_rejected_submission:
+                        note_adjustment('suggested_grade', suggested_grade, 'Доопрацювати', 'submission_rejected')
+                        note_adjustment('level', level, 'Початковий (1-3)', 'submission_rejected')
                         suggested_grade = 'Доопрацювати'
                         level = 'Початковий (1-3)'
                         unclear_task = True
@@ -8231,7 +7933,10 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                     result_json['unverified_reasons'] = policy['labels']
                     result_json['needs_teacher_review'] = (
                         assessment_blocked or partial_assessment
-                        or not assignment.allow_ai_usage)
+                        or not assignment.allow_ai_usage
+                        or bool(result_json.get('batched_evaluation'))
+                        or bool((scope.get('_duplicate_facts') or {}).get('is_duplicate_student')
+                                and not (scope.get('_duplicate_facts') or {}).get('plagiarism_ignored')))
                     full_feedback_parts = []
                     if assessment_blocked:
                         full_feedback_parts.append(
@@ -8297,15 +8002,22 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                         if (not is_traditional and numeric_gr_grades and avg_gr_grade is not None
                                 and not custom_criteria.strip()):
                             # Для ГР підсумковий бал дорівнює середньому за ГР.
+                            note_adjustment('suggested_grade', suggested_grade, str(avg_gr_grade), 'gr_average')
                             suggested_grade = str(avg_gr_grade)
                         elif suggested_grade and suggested_grade != 'Доопрацювати':
+                            grade_before_round = suggested_grade
                             try:
                                 s_num = float(str(suggested_grade).replace(',', '.'))
                                 suggested_grade = str(int(min(12, max(1, math.ceil(s_num)))))
                             except (ValueError, TypeError):
                                 pass
+                            note_adjustment('suggested_grade', grade_before_round, suggested_grade, 'rounding')
                         if not suggested_grade:
                             suggested_grade = str(avg_gr_grade) if avg_gr_grade is not None else 'Доопрацювати'
+
+                    level_before_normalize = level
+                    level = normalized_level(level, suggested_grade)
+                    note_adjustment('level', level_before_normalize, level, 'level_normalized')
 
                     # Формуємо чистий відгук для публічних коментарів учневі (БЕЗ оцінок ГР)
                     from .ai_student_feedback import compact_student_feedback
@@ -8400,6 +8112,11 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                         'ambiguities': result_json.get('ambiguities') or scope.get('ambiguities') or [],
                         'model_used': model_name,
                         'request_metadata': metadata,
+                        'batched_evaluation': result_json.get('batched_evaluation'),
+                        'server_adjustments': server_adjustments,
+                        'payload_manifest': dict(payload_info, sources=[
+                            {'target': item.get('file'), 'limitations': item.get('limitations') or []}
+                            for item in (material_coverage or [])]),
                         'fallback_activated': fallback_happened
                     }
                 else:
@@ -8957,7 +8674,7 @@ def generate_age_appropriate_student_guide(
     return "\n".join(lines)
 
 
-def analyze_assignment_task_understanding(assignment, force_refresh=False) -> dict:
+def analyze_assignment_task_understanding(assignment, force_refresh=False, source_overrides=None) -> dict:
     """
     Аналізує навчальне завдання за допомогою ШІ та формує звіт для вчителя та учнів:
     - Тема, мета уроку та змістовий контекст
@@ -9005,7 +8722,9 @@ def analyze_assignment_task_understanding(assignment, force_refresh=False) -> di
         except Exception:
             pass
 
-    primary, reference, inline_media, material_coverage = teacher_materials(assignment, force_refresh_links=force_refresh)
+    primary, reference, inline_media, material_coverage = teacher_materials(
+        assignment, force_refresh_links=force_refresh,
+        path_overrides=(source_overrides or {}).get('assignment'))
     files_content_parts = primary + reference
 
     scope = resolve_assignment_scope(
@@ -9042,9 +8761,11 @@ def analyze_assignment_task_understanding(assignment, force_refresh=False) -> di
             if preset.system_prompt.strip() not in {p.strip() for p in (DEFAULT_NUS_SYSTEM_PROMPT, DEFAULT_NUS_GR_SYSTEM_PROMPT, DEFAULT_TRADITIONAL_SYSTEM_PROMPT)}:
                 prompt_lines.append(f'ВКАЗІВКИ ШАБЛОНУ {preset.name}:\n{preset.system_prompt}')
             prompt_lines.append(f'ДОКУМЕНТ КРИТЕРІЇВ {preset.name}:\n{preset.extracted_criteria_text}')
-            if preset.document_file and os.path.exists(preset.document_file.path):
+            rubric_path = ((source_overrides or {}).get('preset') or {}).get(str(preset.pk)) \
+                or (preset.document_file.path if preset.document_file else '')
+            if rubric_path and os.path.exists(rubric_path):
                 from .ai_context import extract_file_evidence
-                rubric = extract_file_evidence(preset.document_file.path)
+                rubric = extract_file_evidence(rubric_path)
                 prompt_lines.append((rubric['text'] or '') + '\n' + '\n'.join(rubric['limitations']))
                 inline_media.extend(dict(item, source=f'Критерії класу {class_group.name}') for item in rubric['media'])
 

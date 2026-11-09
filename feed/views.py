@@ -3083,7 +3083,7 @@ def student_ai_self_check(request, submission_id):
     return job_response(job, request=request)
 
 
-def _evaluate_student_submission(submission):
+def _evaluate_student_submission(submission, source_overrides=None):
     assignment = submission.assignment
     from .gemini_service import evaluate_submission_with_gemini
     from .models import AISettings, AICriteriaPreset
@@ -3097,6 +3097,7 @@ def _evaluate_student_submission(submission):
         ai_settings=ai_settings,
         criteria_preset=preset,
         selected_gr_codes=selected_gr_codes or [],
+        source_overrides=source_overrides,
     )
 
 
@@ -3984,6 +3985,12 @@ def view_file(request, submission_id):
         'back_label': back_label,
         'class_students': list(Student.objects.filter(class_group=submission.class_group).order_by('last_name', 'first_name')) if submission.class_group else [],
     }
+    from .models import AIJob
+    payload_job = AIJob.objects.filter(submission=submission).order_by('-created_at').first()
+    payload_manifest = (payload_job.result or {}).get('payload_manifest') if payload_job else None
+    if payload_manifest:
+        context['payload_manifest'] = payload_manifest
+        context['payload_manifest_url'] = reverse('ai_job_payload', args=[payload_job.pk])
     return render(request, 'feed/file_viewer.html', context)
 
 
@@ -9323,6 +9330,80 @@ def import_assignments_zip(request):
             messages.success(request, f'Імпортовано {count} завдань та {files} файлів. Класи, дати, уроки й налаштування відновлено.')
     return redirect('teacher_dashboard')
 
+
+
+def ai_job_payload_view(request, job_id):
+    """Read-only: what the model actually received (manifest, sources, events)."""
+    from django.http import Http404
+    from .models import AIJob
+    job = get_object_or_404(AIJob.objects.select_related('submission', 'assignment'), pk=job_id)
+    if not request.user.is_authenticated:
+        raise Http404
+    allowed = False
+    if job.submission_id:
+        allowed = can_manage_submission(request, job.submission)
+    elif job.assignment_id:
+        allowed = bool(request.user.is_superuser or
+                       getattr(request.user, 'teacher_profile', None) == job.assignment.teacher)
+    if not allowed:
+        raise Http404
+    manifest = (job.result or {}).get('payload_manifest') or {}
+    return render(request, 'feed/ai_job_payload.html', {
+        'job': job,
+        'manifest': manifest,
+        'sources': manifest.get('sources') or [],
+        'adjustments': (job.result or {}).get('server_adjustments') or [],
+        'events': job.events or [],
+        'submission': job.submission,
+    })
+
+
+def ai_job_repeat_view(request, job_id):
+    """Queue a fresh check that reuses the frozen source package of an old job."""
+    from django.conf import settings as django_settings
+    from django.contrib import messages
+    from django.db import transaction
+    from django.http import Http404, HttpResponseNotAllowed
+    from uuid import uuid4
+    from .models import AIJob, Submission
+    from .ai_jobs import (clone_snapshot_files, execute_job, snapshot_submission_files,
+                          source_snapshot)
+    if request.method != 'POST':
+        return HttpResponseNotAllowed(['POST'])
+    job = get_object_or_404(AIJob.objects.select_related('submission'), pk=job_id)
+    if not request.user.is_authenticated or not job.submission_id:
+        raise Http404
+    if not can_manage_submission(request, job.submission):
+        raise Http404
+    if job.kind not in ('teacher_check', 'batch_check'):
+        messages.error(request, 'Повторити можна лише перевірку вчителя.')
+        return redirect('view_file', job.submission_id)
+    submission = job.submission
+    active = AIJob.objects.filter(submission=submission, status__in=['queued', 'running']).exists()
+    if active:
+        messages.warning(request, 'Для цієї роботи вже є активна перевірка; дочекайтеся результату.')
+        return redirect('view_file', submission.pk)
+    old = dict(job.parameters or {})
+    parameters = {key: value for key, value in old.items()
+                  if key not in ('snapshot', 'snapshot_files', 'repeat_of')}
+    new_id = uuid4()
+    files = clone_snapshot_files(old.get('snapshot_files') or {}, new_id)
+    if not files:
+        files = snapshot_submission_files(new_id, submission)
+    parameters['snapshot_files'] = files
+    parameters['snapshot'] = old.get('snapshot') or source_snapshot(submission)
+    parameters['repeat_of'] = str(job.pk)
+    with transaction.atomic():
+        Submission.objects.select_for_update().get(pk=submission.pk)
+        if AIJob.objects.filter(submission=submission, status__in=['queued', 'running']).exists():
+            messages.warning(request, 'Для цієї роботи вже є активна перевірка.')
+            return redirect('view_file', submission.pk)
+        new_job = AIJob.objects.create(id=new_id, kind=job.kind, submission=submission,
+                                       requested_by=request.user, parameters=parameters)
+    if getattr(django_settings, 'AI_JOBS_EAGER', False):
+        execute_job(new_job.pk)
+    messages.success(request, 'Перевірку поставлено в чергу з тим самим пакетом джерел.')
+    return redirect('view_file', submission.pk)
 
 
 def ai_job_status(request, job_id):

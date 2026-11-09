@@ -17,6 +17,21 @@ from .ai_metrics import timed
 REVISION = 'assessment-2026-11-08-private-complete-evidence'
 OFFICE = {'.docx', '.doc', '.odt', '.rtf', '.pptx', '.ppt', '.odp', '.pptm', '.ppsx', '.pps', '.potx', '.xlsx', '.xls', '.ods'}
 IMAGES = {'.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif', '.tiff', '.tif'}
+# Evidence that must travel as media, never as a "text" extract: decoding raw
+# bytes of a raster or an audio/video container produces prompt-filling noise.
+MEDIA_ONLY = IMAGES | {'.heic', '.heif', '.mp3', '.wav', '.ogg', '.flac', '.aac',
+                       '.mp4', '.webm', '.ogv', '.mov', '.m4v', '.mkv', '.avi', '.3gp'}
+
+
+def looks_like_text(value, sample_size=20000):
+    """False for binary payloads decoded by a lossy fallback reader."""
+    sample = str(value or '')[:sample_size]
+    if not sample:
+        return True
+    if '\x00' in sample:
+        return False
+    printable = sum(1 for char in sample if char.isprintable() or char in '\n\r\t')
+    return printable / len(sample) > 0.9
 
 
 def file_cache_key(path, purpose='evidence', options=''):
@@ -121,7 +136,13 @@ def _full_text(path, ext):
     if service.is_text_file(path):
         # Do not truncate an exercise or a program at the end of a file.
         return service.read_text_file(path, max_chars=None)
-    return service.get_normalized_file_content(path, path)
+    if ext in MEDIA_ONLY:
+        # The visual/audio original is attached through evidence['media'].
+        return ''
+    # Unknown binary formats: a normalized reader may still recover text (for
+    # example legacy .doc), but never accept decoded bytes as a document.
+    text = service.get_normalized_file_content(path, path)
+    return text if looks_like_text(text) else ''
 
 
 @evidence_lock
@@ -138,6 +159,9 @@ def extract_file_evidence(path, ext=None, visual=True):
     data = {'text': '', 'media': [], 'limitations': [], 'extension': ext}
     try:
         data['text'] = _full_text(path, ext)
+        if data['text'] and not looks_like_text(data['text']):
+            data['text'] = ''
+            data['limitations'].append('Текстовий витяг відкинуто як бінарний; використано візуальні сторінки.')
     except Exception:
         data['limitations'].append('Текст або структура файлу не прочитані повністю.')
     if visual:
@@ -294,9 +318,39 @@ def compact_reference_material(text, filename='', theory_budget=1500, task_numbe
             res.append('[Довідкові слайди скорочено; незадані нумеровані вправи вилучено лише за наявності основної умови.]')
         return '\n\n'.join(res)
 
-    # If other long reference text (> 3500 chars)
+    # If other long reference text (> theory_budget). DOCX/ODT extracts join
+    # paragraphs with a single newline, so splitting on blank lines alone would
+    # turn the whole document into one "paragraph" and discard all of it.
     if len(cleaned) > theory_budget:
-        paragraphs = re.split(r'\n\s*\n', cleaned)
+        blocks = [block.strip() for block in re.split(r'\n\s*\n', cleaned) if block.strip()]
+        if len(blocks) > 1:
+            paragraphs = blocks
+        else:
+            # One block means paragraph breaks were lost. Treat each line as a
+            # paragraph, but keep a task heading with its short continuation
+            # lines ("Повна умова.") so a requirement is never cut in half.
+            heading = re.compile(
+                r'(?i)^\s*(?:[|•]\s*)?(?:завдання|вправа|критерії|вимоги|оцінювання|розбаловка)\b')
+            paragraphs, current = [], None
+            for line in (part.strip() for part in cleaned.split('\n')):
+                if not line:
+                    if current:
+                        paragraphs.append(current)
+                        current = None
+                    continue
+                if heading.match(line):
+                    if current:
+                        paragraphs.append(current)
+                    current = line
+                elif current is not None and len(line) <= 240:
+                    current += '\n' + line
+                else:
+                    if current:
+                        paragraphs.append(current)
+                        current = None
+                    paragraphs.append(line)
+            if current:
+                paragraphs.append(current)
         kept = []
         cur_len = 0
         task_kw = TASK_CONTENT
@@ -313,6 +367,9 @@ def compact_reference_material(text, filename='', theory_budget=1500, task_numbe
                 kept.append(p_strip)
                 if not is_task:
                     cur_len += len(p_strip)
+        if not kept:
+            # Never replace an entire reference document with a placeholder.
+            kept = [cleaned[:max(400, theory_budget)]]
         if len(kept) < len(paragraphs):
             kept.append('[...довідковий теоретичний матеріал скорочено для ШІ...]')
         return '\n\n'.join(kept)
@@ -320,8 +377,9 @@ def compact_reference_material(text, filename='', theory_budget=1500, task_numbe
 
 
 @timed('teacher_materials')
-def teacher_materials(assignment, force_refresh_links=False):
+def teacher_materials(assignment, force_refresh_links=False, path_overrides=None):
     primary, reference, media, coverage = [], [], [], []
+    overrides = path_overrides or {}
     files = list(assignment.files.all()) if assignment and hasattr(assignment, 'files') else []
 
     # Detect primary task file if teacher has not explicitly set is_task_source_for_ai
@@ -345,11 +403,13 @@ def teacher_materials(assignment, force_refresh_links=False):
 
     for file in files:
         name = file.original_name or os.path.basename(file.file.name)
-        if not file.file or not os.path.exists(file.file.path):
+        resolved_path = overrides.get(str(getattr(file, 'pk', ''))) or (
+            file.file.path if file.file else '')
+        if not file.file or not resolved_path or not os.path.exists(resolved_path):
             coverage.append({'file': name, 'limitations': ['Файл недоступний на сервері.']})
             continue
         is_primary = bool(file.is_task_source_for_ai or (file.pk == auto_primary_id))
-        evidence = extract_file_evidence(file.file.path, file.get_extension())
+        evidence = extract_file_evidence(resolved_path, file.get_extension())
         coverage.append({'file': name, 'limitations': evidence['limitations']})
 
         raw_text = evidence['text'] or ''
@@ -763,16 +823,24 @@ def build_assessment_request(submission, preset, active_grs, scope, text_parts, 
     primary_results = [focus_assigned_material(text, assigned_numbers) for text in primary]
     primary = [text for text, _ in primary_results]
     reference = [focus_assigned_material(text, assigned_numbers)[0] for text in reference]
-    reference = [compact_reference_material(text, theory_budget=0 if compact else 1500,
+    reference = [compact_reference_material(text, theory_budget=1200 if compact else 1500,
                  task_numbers=assigned_numbers, task_source_resolved=any(selected for _, selected in primary_results))
                  for text in reference]
     if compact and any(selected for _, selected in primary_results):
-        # The authoritative task is complete. A second copy of that exercise and
-        # other lecture activities are unnecessary; preserve rubric sections and
-        # the resolver's teacher requirements/criteria in the JSON context below.
-        reference = [paragraph for text in reference for paragraph in re.split(r'\n\s*\n', text)
-                     if re.search(r'(?i)критері\w*|розбалов\w*|(?m:^\s*вимоги\b)', paragraph)]
-        reference.append('[Довідкову теорію й повторні вправи не передано: повна задана умова є в основному файлі; вимоги та критерії наведені окремо.]')
+        # The authoritative task is complete. A second copy of that exercise is
+        # unnecessary, but reference theory still supports the criteria: cap the
+        # total instead of replacing the material with a marker.
+        capped, total = [], 0
+        for text in reference:
+            room = 1800 - total
+            if room <= 0:
+                break
+            piece = text[:room].strip()
+            if piece:
+                capped.append(piece)
+                total += len(piece)
+        reference = capped or [text[:600] for text in reference[:1]]
+        reference.append('[Довідку обмежено бюджетом: повна умова є в основному файлі; вимоги та критерії наведені окремо.]')
     from .ai_provenance import submission_provenance
     if not ai_settings:
         ai_settings = AISettings.objects.first()
@@ -925,6 +993,19 @@ def build_assessment_request(submission, preset, active_grs, scope, text_parts, 
             lines.append('ДОКУМЕНТ ОБРАНИХ КРИТЕРІЇВ:\n' + preset.extracted_criteria_text)
     if context['plagiarism_ignored']:
         lines.append('Вчитель виключив зауваження про збіг: не застосовуй штраф за однаковий файл.')
+    else:
+        duplicate = context.get('duplicate_facts') or {}
+        if duplicate.get('is_duplicate_student'):
+            lines.append(
+                'ВСТАНОВЛЕНО ПОВНИЙ ЗБІГ із роботою іншого учня (duplicate_facts). '
+                'Політика: не став 10–12 балів; познач збіг у weaknesses та submission_evidence; '
+                'орієнтовна стеля — 4 бали. Остаточне рішення про порушення ухвалює вчитель, '
+                'тому не звинувачуй учня категорично.')
+        elif duplicate.get('is_duplicate_teacher'):
+            lines.append(
+                'Файл учня збігається з файлом умови вчителя (duplicate_facts). '
+                'Якщо це не виконана робота, а повторно прикріплена умова — suggested_grade '
+                '«Доопрацювати», поясни причину в weaknesses.')
     if context['is_group_work']:
         lines.append('СПІЛЬНЕ / КОЛЕКТИВНЕ ВИКОНАННЯ РОБОТИ: однакова робота співавторів очікувана; не знижуй оцінку за збіг між учасниками цієї групи.')
     if scope.get('questions_expected'):

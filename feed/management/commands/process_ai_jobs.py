@@ -39,8 +39,17 @@ class Command(BaseCommand):
             start_worker()
 
         launched = False
+        last_cleanup = 0.0
         while True:
             close_old_connections()
+            if not options['once'] and time.monotonic() - last_cleanup > 6 * 3600:
+                last_cleanup = time.monotonic()
+                try:
+                    from django.core.management import call_command
+                    call_command('ai_job_cleanup_snapshots',
+                                 days=getattr(settings, 'AI_SNAPSHOT_RETENTION_DAYS', 14), verbosity=0)
+                except Exception:
+                    pass
             if not options['once']:
                 Path('/tmp/schoolnet-ai-worker-heartbeat').touch()
             for identity, (child, job, started) in list(children.items()):

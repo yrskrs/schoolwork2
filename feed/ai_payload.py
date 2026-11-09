@@ -91,6 +91,24 @@ def groq_output_budget(model, prompt, system, media, requested):
     return min(requested, max(3500, available))
 
 
+def payload_manifest(prompt, system, media, provider='', model=''):
+    """Describe the request that actually leaves the process (no secrets)."""
+    items = media or []
+    encoded = ''.join(str(item.get('data') or '') for item in items if isinstance(item, dict))
+    return {
+        'builder': 'assessment-v5',
+        'rules_version': '2026-11-09.1',
+        'provider': provider,
+        'model': model,
+        'prompt_chars': len(prompt or ''),
+        'system_chars': len(system or ''),
+        'media_count': len(items),
+        'media_bytes': len(encoded),
+        'est_tokens': estimate_text_tokens((prompt or '') + (system or '')) + len(items) * 1000,
+        'sha256': hashlib.sha256(((prompt or '') + '\x00' + (system or '')).encode('utf-8')).hexdigest(),
+    }
+
+
 def encode_payload(payload):
     return json.dumps(payload, ensure_ascii=False, separators=(',', ':')).encode('utf-8')
 

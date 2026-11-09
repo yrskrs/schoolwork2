@@ -1,0 +1,92 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Що побачила модель — {{ job.get_kind_display|default:job.kind }}{% endblock %}
+
+{% block content %}
+<div class="page-wrapper" style="max-width:980px;margin:0 auto;padding:24px;">
+  <div class="page-hero" style="margin-bottom:18px;">
+    <div class="page-hero-kicker">Діагностика перевірки ШІ</div>
+    <h1>Що побачила модель</h1>
+    <p style="max-width:760px;color:var(--color-text-secondary);margin:6px 0 0;">
+      Це точний опис пакета, який пішов постачальнику: обсяг, медіа, джерела та обмеження.
+      Сторінка нічого не викликає і не змінює.
+    </p>
+  </div>
+
+  {% if not manifest %}
+    <div class="alert alert-warning" style="padding:16px;border-radius:12px;background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.3);">
+      Для цієї перевірки маніфест не збережено: вона виконана до появи журналу або ще не завершилася.
+    </div>
+  {% else %}
+    <section style="background:var(--color-bg-secondary);border:1px solid rgba(99,102,241,.25);border-radius:14px;padding:16px 18px;margin-bottom:16px;">
+      <h2 style="margin:0 0 10px;font-size:17px;">Пакет</h2>
+      <table style="width:100%;border-collapse:collapse;font-size:14px;">
+        <tr><td style="padding:4px 0;color:var(--color-text-secondary);">Постачальник / модель</td><td>{{ manifest.provider|upper }} / {{ manifest.model }}</td></tr>
+        <tr><td style="padding:4px 0;color:var(--color-text-secondary);">Текст запиту</td><td>{{ manifest.prompt_chars }} символів</td></tr>
+        <tr><td style="padding:4px 0;color:var(--color-text-secondary);">Системні правила</td><td>{{ manifest.system_chars }} символів</td></tr>
+        <tr><td style="padding:4px 0;color:var(--color-text-secondary);">Оцінка токенів</td><td>~{{ manifest.est_tokens }}</td></tr>
+        <tr><td style="padding:4px 0;color:var(--color-text-secondary);">Медіа</td><td>{{ manifest.media_count }} об'єкт(ів), {{ manifest.media_bytes }} байт base64</td></tr>
+        <tr><td style="padding:4px 0;color:var(--color-text-secondary);">Збирач / правила</td><td>{{ manifest.builder }} · {{ manifest.rules_version }}</td></tr>
+        <tr><td style="padding:4px 0;color:var(--color-text-secondary);">Відбиток</td><td style="font-family:monospace;font-size:11.5px;word-break:break-all;">{{ manifest.sha256 }}</td></tr>
+      </table>
+    </section>
+
+    {% if sources %}
+    <section style="background:var(--color-bg-secondary);border:1px solid rgba(99,102,241,.25);border-radius:14px;padding:16px 18px;margin-bottom:16px;">
+      <h2 style="margin:0 0 10px;font-size:17px;">Джерела</h2>
+      <ul style="margin:0;padding-left:18px;font-size:14px;">
+        {% for source in sources %}
+        <li style="margin-bottom:6px;">
+          <strong>{{ source.target }}</strong>
+          {% if source.limitations %}<div style="color:var(--color-text-secondary);font-size:12.5px;">{{ source.limitations|join:"; " }}</div>{% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endif %}
+  {% endif %}
+
+  {% if adjustments %}
+  <section style="background:var(--color-bg-secondary);border:1px solid rgba(245,158,11,.35);border-radius:14px;padding:16px 18px;margin-bottom:16px;">
+    <h2 style="margin:0 0 10px;font-size:17px;">Серверні зміни результату</h2>
+    <table style="width:100%;border-collapse:collapse;font-size:13.5px;">
+      <thead><tr style="text-align:left;color:var(--color-text-secondary);"><th>Поле</th><th>Було</th><th>Стало</th><th>Причина</th></tr></thead>
+      <tbody>
+      {% for row in adjustments %}
+        <tr><td>{{ row.field }}</td><td>{{ row.before }}</td><td>{{ row.after }}</td><td>{{ row.reason }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <p style="font-size:12px;color:var(--color-text-secondary);margin:8px 0 0;">Це рішення сервера, а не моделі. Вони пояснюють, чому фінальний бал може відрізнятися від відповіді ШІ.</p>
+  </section>
+  {% endif %}
+
+  <section style="background:var(--color-bg-secondary);border:1px solid rgba(99,102,241,.25);border-radius:14px;padding:16px 18px;">
+    <h2 style="margin:0 0 10px;font-size:17px;">Події перевірки</h2>
+    {% if events %}
+      <ol style="margin:0;padding-left:18px;font-size:13px;">
+        {% for event in events %}
+        <li style="margin-bottom:5px;"><strong>{{ event.kind }}</strong> — {{ event.message }}</li>
+        {% endfor %}
+      </ol>
+    {% else %}
+      <p style="color:var(--color-text-secondary);font-size:14px;margin:0;">Подій не збережено.</p>
+    {% endif %}
+  </section>
+
+  {% if submission and job.kind == 'teacher_check' or submission and job.kind == 'batch_check' %}
+  <form method="post" action="{% url 'ai_job_repeat' job.pk %}" style="margin-top:18px;">
+    {% csrf_token %}
+    <button type="submit" style="padding:9px 14px;border-radius:8px;border:1px solid rgba(99,102,241,.5);background:rgba(99,102,241,.12);color:var(--color-primary);font-weight:700;cursor:pointer;">
+      ↻ Повторити перевірку з цим пакетом
+    </button>
+    <span style="font-size:12px;color:var(--color-text-secondary);margin-left:8px;">Нова перевірка використає ті самі зафіксовані джерела.</span>
+  </form>
+  {% endif %}
+
+  <p style="margin-top:18px;font-size:13px;">
+    {% if submission %}<a href="{% url 'view_file' submission.pk %}">← Повернутися до роботи</a>{% else %}<a href="{% url 'teacher_dashboard' %}">← До панелі</a>{% endif %}
+  </p>
+</div>
+{% endblock %}

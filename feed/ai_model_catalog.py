@@ -43,7 +43,7 @@ PROVIDER_CATALOG = [
             {'name': 'openai/gpt-oss-120b', 'description': 'Текстова модель GPT OSS (Free TPM ліміт ~8 000).', 'quota': 'Free: 30 RPM · 1 000 RPD · 8 000 TPM', 'supports_vision': False, 'context_tokens': 6500, 'context_display': '6 500 токенів (Free TPM ліміт, тільки текст)', 'max_images': 0},
             {'name': 'openai/gpt-oss-20b', 'description': 'Компактна текстова модель GPT OSS.', 'quota': 'Free: 30 RPM · 1 000 RPD · 8 000 TPM', 'supports_vision': False, 'context_tokens': 6500, 'context_display': '6 500 токенів (Free TPM ліміт, тільки текст)', 'max_images': 0},
             {'name': 'llama-3.3-70b-versatile', 'description': 'Швидка мовна модель LLaMA 3.3 від Meta.', 'quota': 'Free: 30 RPM · 6 000 TPM', 'supports_vision': False, 'context_tokens': 6000, 'context_display': '6 000 токенів (Free TPM ліміт, тільки текст)', 'max_images': 0},
-            {'name': 'qwen/qwen3.8-27b', 'description': 'Мультимодальна модель Qwen із підтримкою зображень (до 3 фото).', 'quota': 'Free: 30 RPM · 7 000 ITPM', 'supports_vision': True, 'context_tokens': 6000, 'context_display': '6 000 токенів (Free ITPM ліміт, до 3 фото)', 'max_images': 3},
+            {'name': 'qwen/qwen3.8-27b', 'description': 'Qwen із підтримкою зображень (до 3 фото), але 6 000-токенний бюджет Free ITPM не вміщає текст і сторінку; у цій конфігурації — лише текстові роботи.', 'quota': 'Free: 30 RPM · 7 000 ITPM', 'supports_vision': True, 'context_tokens': 6000, 'context_display': '6 000 токенів (Free ITPM ліміт, до 3 фото)', 'max_images': 3, 'media_policy': 'text_only'},
         ]
     },
     {
@@ -113,6 +113,7 @@ def get_model_capabilities(model_name, provider=None):
                         'context_tokens': m.get('context_tokens', 128000),
                         'context_display': m.get('context_display', '128 000 токенів'),
                         'max_images': m.get('max_images'),
+                        'media_policy': m.get('media_policy'),
                     }
                     break
             if base_caps:

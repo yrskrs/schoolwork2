@@ -2391,6 +2391,15 @@ class Submission(models.Model):
                 'prompt_tokens': self.ai_prompt_tokens, 'completion_tokens': self.ai_completion_tokens,
                 'total_tokens': self.ai_total_tokens}
 
+    @staticmethod
+    def _name_component_in(name, members):
+        """Exact surname match: «Лис» must not match «Лисенко» as a coauthor."""
+        value = str(name or '').strip()
+        if not value:
+            return False
+        pattern = re.compile(rf'(?<!\w){re.escape(value)}(?!\w)', re.IGNORECASE)
+        return any(pattern.search(member or '') for member in members)
+
     def is_coauthor_with(self, other_sub):
         """
         Перевіряє, чи є інша робота співавторською (колективною) відносно поточної:
@@ -2419,14 +2428,14 @@ class Submission(models.Model):
         other_name = other_sub.get_student_full_name().strip().lower()
         if other_name in self_members:
             return True
-        if other_sub.last_name.strip().lower() and any(other_sub.last_name.strip().lower() in m for m in self_members):
+        if self._name_component_in(other_sub.last_name, self_members):
             return True
 
         other_members = [m.strip().lower() for m in other_sub.get_group_members_display() if m.strip()]
         self_name = self.get_student_full_name().strip().lower()
         if self_name in other_members:
             return True
-        if self.last_name.strip().lower() and any(self.last_name.strip().lower() in m for m in other_members):
+        if self._name_component_in(self.last_name, other_members):
             return True
 
         # Перевірка через розпізнавання співавторів у коментарях

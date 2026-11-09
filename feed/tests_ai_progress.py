@@ -98,6 +98,49 @@ class EvaluationProgressTests(TestCase):
         self.sub.refresh_from_db()
         self.assertFalse(self.sub.ai_suggested_grade)
 
+    @patch('feed.gemini_service.call_ai_api')
+    def test_snapshot_files_keep_original_bytes_after_live_edit(self, call):
+        from django.test import override_settings
+        self.add_connection('gemini', 'snapshot-model')
+        call.return_value = self.answer()
+        with override_settings(AI_JOBS_EAGER=False):
+            job = enqueue_submission_job(self.sub, 'teacher_check', user=self.user)
+        files = (job.parameters or {}).get('snapshot_files') or {}
+        self.assertTrue(files.get('submission'))
+        with open(self.sub.file.path, 'w', encoding='utf-8') as handle:
+            handle.write('Змінений вміст після постановки в чергу.')
+        execute_job(job.pk)
+        job.refresh_from_db()
+        self.assertEqual(job.status, 'succeeded')
+        prompt = call.call_args.kwargs['prompt_text']
+        self.assertIn('складні паролі', prompt)
+        self.assertNotIn('Змінений вміст', prompt)
+
+    @patch('feed.gemini_service.call_ai_api')
+    def test_nonsense_level_is_replaced_by_grade_band(self, call):
+        self.add_connection('gemini', 'level-model')
+        data = json.loads(self.answer()[1])
+        data['level'] = '11 клас'
+        data['suggested_grade'] = '9'
+        call.return_value = (200, json.dumps(data), '', {})
+        result = evaluate_submission_with_gemini(self.sub)
+        self.assertEqual(result['status'], 'success')
+        self.assertIn('Достатній', result['level'])
+        self.sub.refresh_from_db()
+        self.assertIn('Достатній', self.sub.ai_score_level)
+
+    @patch('feed.gemini_service.call_ai_api')
+    def test_max_tokens_grows_budget_and_retries_same_model(self, call):
+        self.add_connection('gemini', 'budget-model')
+        call.side_effect = [(200, '', 'MAX_TOKENS: відповідь неповна; оцінку не збережено.', {}),
+                            self.answer()]
+        result = evaluate_submission_with_gemini(self.sub)
+        self.assertEqual(result['status'], 'success')
+        self.assertEqual(call.call_count, 2)
+        budgets = [item.kwargs['max_output_tokens'] for item in call.call_args_list]
+        self.assertGreater(budgets[1], budgets[0])
+        self.assertEqual({item.kwargs['model_name'] for item in call.call_args_list}, {'budget-model'})
+
     @patch('feed.gemini_service.time.sleep')
     @patch('feed.gemini_service.call_ai_api')
     def test_free_router_retries_empty_cold_start_once_then_succeeds(self,call,sleep):

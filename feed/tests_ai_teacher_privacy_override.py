@@ -86,7 +86,9 @@ class TeacherPrivacyOverrideTests(TestCase):
         self.assertEqual(response.status_code, 202)
         job = AIJob.objects.get(pk=response.json()['job_id'])
         self.assertEqual(job.kind, 'student_check')
-        self.assertEqual(job.parameters, {})
+        self.assertNotIn('ignore_strict_privacy', job.parameters)
+        self.assertNotIn('privacy_mode', job.parameters)
+        self.assertEqual(set(job.parameters) - {'snapshot', 'snapshot_files'}, set())
 
     @patch('feed.gemini_service._http_post_json')
     def test_direct_override_without_teacher_identity_is_denied(self, post):

@@ -141,7 +141,10 @@ def record_model_context_limit(provider: str, model: str, error_message: str, es
     # 2. Зберігаємо у базі даних (AISettings)
     try:
         from .models import AISettings
-        settings = AISettings.get_solo()
+        # Reading settings must not create a row from a worker thread.
+        settings = AISettings.objects.filter(pk=1).first()
+        if not settings:
+            return None
         raw_list = settings.saved_models_list or '[]'
         models_data = json.loads(raw_list) if raw_list else []
         updated = False
@@ -175,7 +178,10 @@ def get_model_context_limit(provider: str, model: str) -> Optional[Dict]:
     # Перевірка з AISettings
     try:
         from .models import AISettings
-        settings = AISettings.get_solo()
+        # Reading settings must not create a row from a worker thread.
+        settings = AISettings.objects.filter(pk=1).first()
+        if not settings:
+            return None
         raw_list = settings.saved_models_list or '[]'
         models_data = json.loads(raw_list) if raw_list else []
         for m in models_data:
