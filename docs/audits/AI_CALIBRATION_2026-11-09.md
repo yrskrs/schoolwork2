@@ -103,3 +103,12 @@ Gemini — 5, DeepSeek — блок, DeepSeek — 4. Тобто **модель �
 - Fallback: 8/14 → **5/14**; точних: 1 → **3**; MAE: 2.15 → **1.85**.
 - Залишок: 5 текстових робіт пішли на Gemini через `model_busy` закріпленого DeepSeek.
 - Деталі: [AI_LAB_GRADING_SPOTCHECK_V2_2026-11-09.md](AI_LAB_GRADING_SPOTCHECK_V2_2026-11-09.md).
+
+
+## 11. R6b — очікування закріпленої моделі (09.11.2026)
+
+- При `model_busy`/cooldown закріпленої моделі job більше не перемикається одразу на резерв:
+  подія `pinned_wait`, `status=queued`, повтор до `AI_PIN_MAX_WAITS` (3).
+- Перевірка: примусово виставлено cooldown `deepseek-chat` → робота 1082 відкладена (`pinned_wait 1`);
+  після зняття cooldown виконана на `deepseek-chat`, `model_fallback=false`, бал 5.
+- Після 3 очікувань fallback дозволений і позначається `model_fallback=true`.
