@@ -12,7 +12,8 @@ from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 from PIL import Image
 
-from .ai_context import _full_text, build_assessment_request, compact_reference_material, extract_file_evidence
+from .ai_context import (_full_text, assessment_policy, build_assessment_request,
+                         compact_reference_material, complete_result_groups, extract_file_evidence)
 from .ai_model_catalog import get_model_capabilities
 from .gemini_service import level_for_grade, normalized_level
 from .ai_files import upload_gemini_file, validate_upload_media, wait_gemini_file
@@ -570,3 +571,25 @@ class FileApiLimitTests(SimpleTestCase):
             os.unlink(path)
         self.assertEqual(status, 0)
         delete.assert_called_once_with('files/abc', 'k')
+
+
+class PolicyTests(SimpleTestCase):
+    def test_confirmed_missing_is_not_blocked_by_unverifiable_groups(self):
+        criteria = [{'status': 'missing'}] * 4 + [{'status': 'unverifiable'}] * 2
+        groups = [{'status': 'unverifiable'}] * 4
+        policy = assessment_policy(criteria, groups)
+        self.assertFalse(policy['blocked'])
+        self.assertEqual(policy['missing'], 4)
+
+    def test_not_applicable_is_excluded_from_the_denominator(self):
+        groups = [{'status': 'not_applicable'}] * 5 + [{'status': 'completed'}]
+        policy = assessment_policy([], groups)
+        self.assertEqual(policy['total'], 1)
+        self.assertFalse(policy['blocked'])
+
+    def test_complete_result_groups_keeps_not_applicable_without_a_mark(self):
+        rows = complete_result_groups(
+            [{'code': 'ГР 3', 'status': 'not_applicable', 'comment': 'не стосується'}],
+            [{'code': 'ГР 3', 'name': 'Алгоритми'}])
+        self.assertEqual(rows[0]['status'], 'not_applicable')
+        self.assertIsNone(rows[0]['grade'])

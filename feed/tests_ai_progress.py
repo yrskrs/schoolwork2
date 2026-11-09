@@ -117,6 +117,23 @@ class EvaluationProgressTests(TestCase):
         self.assertNotIn('Змінений вміст', prompt)
 
     @patch('feed.gemini_service.call_ai_api')
+    def test_confirmed_missing_work_gets_minimum_numeric_grade(self, call):
+        self.add_connection('gemini', 'missing-model')
+        data = json.loads(self.answer()[1])
+        data['suggested_grade'] = 'Доопрацювати'
+        data['criteria_results'] = [
+            {'criterion': 'Зміст', 'status': 'missing', 'evidence': 'немає', 'recommendation': 'дописати'},
+            {'criterion': 'Формат', 'status': 'missing', 'evidence': 'немає', 'recommendation': 'оформити'},
+        ]
+        call.return_value = (200, json.dumps(data), '', {})
+        result = evaluate_submission_with_gemini(self.sub)
+        self.assertEqual(result['status'], 'success')
+        self.assertEqual(result['suggested_grade'], '1')
+        self.assertFalse(result['assessment_blocked'])
+        self.sub.refresh_from_db()
+        self.assertEqual(self.sub.ai_suggested_grade, '1')
+
+    @patch('feed.gemini_service.call_ai_api')
     def test_nonsense_level_is_replaced_by_grade_band(self, call):
         self.add_connection('gemini', 'level-model')
         data = json.loads(self.answer()[1])

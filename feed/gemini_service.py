@@ -7941,6 +7941,14 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                     partial_labels = policy['labels'] if policy['partial'] else []
                     assessment_blocked = policy['blocked']
                     partial_assessment = policy['partial']
+                    if (not assessment_blocked and suggested_grade == 'Доопрацювати'
+                            and policy.get('missing', 0) > 0
+                            and not is_rejected_submission and not unclear_task):
+                        # A confirmed missing requirement is evidence for the
+                        # minimum numeric mark, not for withholding the grade.
+                        note_adjustment('suggested_grade', suggested_grade, '1', 'missing_work_numeric')
+                        suggested_grade = '1'
+                        level = 'Початковий (1-3)'
                     result_json['assessment_blocked'] = assessment_blocked
                     result_json['partial_assessment'] = partial_assessment
                     result_json['blocked_reasons'] = blocked_labels
@@ -7975,6 +7983,8 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                     if clean_gr_results and not is_traditional:
                         gr_lines = []
                         for gr in clean_gr_results:
+                            if str(gr.get('status') or '') == 'not_applicable':
+                                continue
                             g_val = gr.get('grade') or '—'
                             l_val = f" ({gr.get('level')})" if gr.get('level') else ""
                             c_val = f": {gr.get('comment')}" if gr.get('comment') else ""
