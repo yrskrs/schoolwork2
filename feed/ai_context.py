@@ -954,6 +954,11 @@ def build_assessment_request(submission, preset, active_grs, scope, text_parts, 
     if cached and cached.get('analysis_mode') == 'ai' and cached.get('_source_fingerprint') == assignment_fingerprint(assignment):
         context['verified_teacher_task_guide'] = {k: cached.get(k) for k in (
             'tasks', 'tasks_total_count', 'submission_format_expected', 'deliverable', 'teacher_requirements')}
+        # The verified guide already carries tasks and teacher requirements;
+        # do not send the same raw scope fields a second time.
+        for duplicate_key in ('assigned_tasks', 'task_questions', 'teacher_requirements',
+                              'mandatory_requirements'):
+            context['preliminary_task_scope'].pop(duplicate_key, None)
     schema = {
         'ai_generated_percent': 0, 'ai_generated_detected': False, 'ai_generated_confidence': 'none/low/medium/high',
         'ai_generated_details': 'конкретні ознаки використання ШІ або порожньо',

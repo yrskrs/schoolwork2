@@ -723,7 +723,26 @@ def submission_provenance(submission):
     return output
 
 
-def normalize_authorship(result, allowed, provenance=(), tolerance_percent=25):
+def _normalise_for_match(text):
+    return re.sub(r'\s+', ' ', str(text or '').casefold()).strip()
+
+
+def _model_evidence_verified(item, student_text, file_names):
+    """Accept model evidence only when its source and quoted fragment are real."""
+    source = str(item.get('source') or '').strip()
+    if source and file_names:
+        known = {_normalise_for_match(name) for name in file_names}
+        if _normalise_for_match(source) not in known:
+            return False
+    quotes = re.findall(r'[«"“]([^»"”]{8,240})[»"”]', str(item.get('observation') or ''))
+    if not quotes or not str(student_text or '').strip():
+        return False
+    haystack = _normalise_for_match(student_text)
+    return any(_normalise_for_match(quote) in haystack for quote in quotes)
+
+
+def normalize_authorship(result, allowed, provenance=(), tolerance_percent=25,
+                        student_text='', file_names=()):
     """Turn uncalibrated model claims and file metadata into an evidence report.
 
     The output never lowers the grade. States are:
@@ -757,15 +776,20 @@ def normalize_authorship(result, allowed, provenance=(), tolerance_percent=25):
 
     signals = []
     for item in model_evidence:
+        verified = _model_evidence_verified(item, student_text, file_names)
         basis = str(item.get('basis') or 'model_style')
         if basis not in {'self_disclosure', 'text_analysis'}:
             basis = 'model_style'
+        observation = str(item.get('observation'))
+        if not verified:
+            observation += ' [не підтверджено в тексті роботи]'
         signals.append({
             'source': str(item.get('source') or ''),
             'location': str(item.get('location') or ''),
             'basis': basis,
-            'strength': 'medium' if basis == 'self_disclosure' else 'weak',
-            'observation': str(item.get('observation')),
+            'strength': 'medium' if verified and basis == 'self_disclosure' else 'weak',
+            'verified': verified,
+            'observation': observation,
         })
     limitations = []
     checked_files = 0

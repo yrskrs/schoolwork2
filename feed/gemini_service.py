@@ -6466,6 +6466,28 @@ def evaluate_media_in_batches(prompt_text, system_prompt, media, *, provider, ap
     return status, text, error, data, meta
 
 
+def normalize_model_grade(value):
+    """Accept common model wording for "rework" and numeric variants.
+
+    A single rejected synonym used to fail validation and trigger a retry or a
+    slow fallback. This maps only unambiguous cases; it never invents a mark.
+    """
+    text = '' if value is None else str(value).strip()
+    if not text:
+        return ''
+    low = text.casefold().replace('’', "'")
+    if any(marker in low for marker in (
+            'доопрац', 'не зарахован', 'не виконан', 'потребує дороб',
+            'потрібно доопрацювати', 'роботу не зараховано')):
+        return 'Доопрацювати'
+    if low in {'0', '0.0', '0,0', 'нуль', 'нуль балів'}:
+        return 'Доопрацювати'
+    match = re.search(r'(?<!\d)(\d{1,2})(?:[.,](\d+))?(?!\d)', text)
+    if match:
+        return match.group(0).replace(',', '.')
+    return text
+
+
 @private_assessment
 def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=None, preset_id=None, criteria_preset=None, selected_gr_codes=None, force_thinking=None, teacher=None, ignore_strict_privacy=False, source_overrides=None, pinned_model=None):
     """
@@ -7150,7 +7172,7 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                             attempted_errors.append(f'[{c_provider}/{c_model}]: {reason}')
                             break
                     else:
-                        suggested_grade = str(proposed_grade).strip()
+                        suggested_grade = normalize_model_grade(proposed_grade)
                     if suggested_grade != 'Доопрацювати':
                         try:
                             numeric_grade = float(suggested_grade.replace(',', '.'))
@@ -8028,7 +8050,15 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
 
                     tolerance = getattr(settings, 'ai_detector_tolerance_percent', 25) or 25
                     from .ai_provenance import normalize_authorship, submission_provenance
-                    authorship = normalize_authorship(result_json, assignment.allow_ai_usage, submission_provenance(submission), tolerance_percent=tolerance)
+                    file_names = [getattr(f, 'original_name', '') or os.path.basename(getattr(f, 'file', None).name)
+                                  for f in submission.get_files() if getattr(f, 'file', None)]
+                    if assignment:
+                        file_names.extend(getattr(f, 'original_name', '') or os.path.basename(getattr(f, 'file', None).name)
+                                          for f in assignment.files.all() if getattr(f, 'file', None))
+                    authorship = normalize_authorship(
+                        result_json, assignment.allow_ai_usage, submission_provenance(submission),
+                        tolerance_percent=tolerance, student_text=student_combined_text,
+                        file_names=file_names)
                     ai_generated_detected = authorship['ai_generated_detected']
                     ai_generated_percent = authorship['ai_generated_percent']
                     ai_generated_confidence = authorship['ai_generated_confidence']

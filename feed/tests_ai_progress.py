@@ -169,6 +169,17 @@ class EvaluationProgressTests(TestCase):
         self.assertTrue(result['needs_teacher_review'])
 
     @patch('feed.gemini_service.call_ai_api')
+    def test_rework_synonym_is_accepted_without_retry(self, call):
+        self.add_connection('gemini', 'rework-model')
+        data = json.loads(self.answer()[1])
+        data['suggested_grade'] = 'Потребує доопрацювання'
+        call.return_value = (200, json.dumps(data), '', {})
+        result = evaluate_submission_with_gemini(self.sub)
+        self.assertEqual(result['status'], 'success')
+        self.assertEqual(result['suggested_grade'], 'Доопрацювати')
+        self.assertEqual(call.call_count, 1)
+
+    @patch('feed.gemini_service.call_ai_api')
     def test_confirmed_missing_work_gets_minimum_numeric_grade(self, call):
         self.add_connection('gemini', 'missing-model')
         data = json.loads(self.answer()[1])

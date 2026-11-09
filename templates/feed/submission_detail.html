@@ -122,6 +122,22 @@
                     {% endif %}
                 </div>
 
+                        <!-- Перевірка на плагіат / дублікат -->
+                        {% if dup_info and dup_info.is_duplicate %}
+                        <div style="margin-bottom:12px;padding:12px 16px;background:{% if dup_info.type == 'teacher_duplicate' %}rgba(239,68,68,0.09){% else %}rgba(245,158,11,0.09){% endif %};border:1.5px solid {% if dup_info.type == 'teacher_duplicate' %}#ef4444{% else %}#f59e0b{% endif %};border-radius:var(--radius-sm);display:flex;align-items:flex-start;gap:10px;">
+                            <span style="font-size:22px;line-height:1;flex-shrink:0;">{% if dup_info.type == 'teacher_duplicate' %}🚫{% else %}⚠️{% endif %}</span>
+                            <div>
+                                <div style="font-weight:800;font-size:13px;color:{% if dup_info.type == 'teacher_duplicate' %}var(--color-danger){% else %}var(--color-warning){% endif %};margin-bottom:2px;">
+                                    {% if dup_info.type == 'teacher_duplicate' %}Увага: Здано вихідний файл завдання замість розв'язку!{% else %}Увага: Виявлено збіг або схожість із роботою іншого учня!{% endif %}
+                                </div>
+                                <div style="font-size:12px;color:var(--color-text-secondary);line-height:1.4;">
+                                    {{ dup_info.warning_message }}
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+
+
                 <!-- 🤖 САМОПЕРЕВІРКА УЧНЕМ ШІ -->
                 {% if can_student_ai_check %}
                 <div id="student-selfcheck-block" style="background:linear-gradient(135deg,rgba(99,102,241,0.08) 0%,rgba(139,92,246,0.08) 100%);border:2px solid #6366f1;border-radius:var(--radius-md);padding:14px 18px;margin-bottom:18px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;">
@@ -242,21 +258,6 @@
                         {% if submission.ai_authorship_state == 'insufficient' and is_teacher and submission.ai_status == 'success' %}
                         <div style="margin-bottom:12px;padding:10px 14px;background:rgba(148,163,184,0.10);border:1px solid rgba(148,163,184,0.35);border-radius:var(--radius-sm);font-size:12px;color:var(--color-text-secondary);">
                             ❔ <strong>Походження не встановлено:</strong> у матеріалах немає перевірюваних метаданих (типовий випадок — звичайний текст). Це не означає «без ШІ» і не є підставою для звинувачення.
-                        </div>
-                        {% endif %}
-
-                        <!-- Перевірка на плагіат / дублікат -->
-                        {% if dup_info and dup_info.is_duplicate %}
-                        <div style="margin-bottom:12px;padding:12px 16px;background:{% if dup_info.type == 'teacher_duplicate' %}rgba(239,68,68,0.09){% else %}rgba(245,158,11,0.09){% endif %};border:1.5px solid {% if dup_info.type == 'teacher_duplicate' %}#ef4444{% else %}#f59e0b{% endif %};border-radius:var(--radius-sm);display:flex;align-items:flex-start;gap:10px;">
-                            <span style="font-size:22px;line-height:1;flex-shrink:0;">{% if dup_info.type == 'teacher_duplicate' %}🚫{% else %}⚠️{% endif %}</span>
-                            <div>
-                                <div style="font-weight:800;font-size:13px;color:{% if dup_info.type == 'teacher_duplicate' %}var(--color-danger){% else %}var(--color-warning){% endif %};margin-bottom:2px;">
-                                    {% if dup_info.type == 'teacher_duplicate' %}Увага: Здано вихідний файл завдання замість розв'язку!{% else %}Увага: Виявлено збіг або схожість із роботою іншого учня!{% endif %}
-                                </div>
-                                <div style="font-size:12px;color:var(--color-text-secondary);line-height:1.4;">
-                                    {{ dup_info.warning_message }}
-                                </div>
-                            </div>
                         </div>
                         {% endif %}
 

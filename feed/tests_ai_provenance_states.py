@@ -41,6 +41,25 @@ class AuthorshipStateTests(SimpleTestCase):
         self.assertEqual(result['ai_authorship_state'], 'suspected')
         self.assertEqual(result['ai_generated_confidence'], 'high')
 
+    def test_verified_quote_is_kept(self):
+        result = normalize_authorship(
+            {'ai_authorship_analysis': {'status': 'signs', 'evidence': [{
+                'source': 'work.txt', 'location': 'абзац 2', 'basis': 'text_style',
+                'observation': 'Фраза «Це речення справді є в роботі» виглядає шаблонно.'}]}},
+            False, student_text='Тут є це речення справді є в роботі у тексті.',
+            file_names=['work.txt'])
+        self.assertTrue(result['ai_provenance_report'])
+
+    def test_hallucinated_quote_is_dropped(self):
+        result = normalize_authorship(
+            {'ai_authorship_analysis': {'status': 'signs', 'evidence': [{
+                'source': 'work.txt', 'location': 'абзац 2', 'basis': 'text_style',
+                'observation': 'Фраза «Цього речення немає в роботі взагалі» виглядає шаблонно.'}]}},
+            False, student_text='Зовсім інший текст.', file_names=['work.txt'])
+        self.assertTrue(result['ai_provenance_report']['signals'])
+        self.assertFalse(any(s.get('verified') for s in result['ai_provenance_report']['signals']))
+        self.assertEqual(result['ai_authorship_state'], 'insufficient')
+
     def test_percent_below_tolerance_without_evidence_does_not_accuse(self):
         result = normalize_authorship({'ai_generated_percent': 10}, False)
         self.assertFalse(result['ai_generated_detected'])
