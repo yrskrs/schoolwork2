@@ -6467,7 +6467,7 @@ def evaluate_media_in_batches(prompt_text, system_prompt, media, *, provider, ap
 
 
 @private_assessment
-def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=None, preset_id=None, criteria_preset=None, selected_gr_codes=None, force_thinking=None, teacher=None, ignore_strict_privacy=False, source_overrides=None):
+def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=None, preset_id=None, criteria_preset=None, selected_gr_codes=None, force_thinking=None, teacher=None, ignore_strict_privacy=False, source_overrides=None, pinned_model=None):
     """
     Виконує педагогічний аналіз та попереднє оцінювання роботи учня за допомогою Google Gemini.
     Підтримує чергу пріоритетів моделей, вибір шаблону критеріїв, вибір конкретних ГР (прапорцями)
@@ -6687,6 +6687,18 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
     prompt_compact += rubric_tail
 
     attempts_configs = settings.get_request_configs()
+    pinned = pinned_model or {}
+
+    def _matches_pinned(config):
+        return bool(pinned and config.get('provider') == pinned.get('provider')
+                    and config.get('model') == pinned.get('model')
+                    and (not pinned.get('connection_id')
+                         or config.get('connection_id') == pinned.get('connection_id')))
+
+    if pinned:
+        # Keep a cohort on one model; fallbacks are allowed but explicitly flagged.
+        attempts_configs = ([cfg for cfg in attempts_configs if _matches_pinned(cfg)]
+                            + [cfg for cfg in attempts_configs if not _matches_pinned(cfg)])
 
     attempted_errors = []
     deferred_waits = []
@@ -7953,9 +7965,11 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                     result_json['partial_assessment'] = partial_assessment
                     result_json['blocked_reasons'] = blocked_labels
                     result_json['unverified_reasons'] = policy['labels']
+                    model_fallback = bool(pinned) and not _matches_pinned(cfg)
                     result_json['needs_teacher_review'] = (
                         assessment_blocked or partial_assessment
                         or not assignment.allow_ai_usage
+                        or model_fallback
                         or bool(result_json.get('batched_evaluation'))
                         or bool((scope.get('_duplicate_facts') or {}).get('is_duplicate_student')
                                 and not (scope.get('_duplicate_facts') or {}).get('plagiarism_ignored')))
@@ -8137,6 +8151,8 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                         'model_used': model_name,
                         'request_metadata': metadata,
                         'batched_evaluation': result_json.get('batched_evaluation'),
+                        'pinned_model': pinned or None,
+                        'model_fallback': model_fallback,
                         'server_adjustments': server_adjustments,
                         'payload_manifest': dict(payload_info, sources=[
                             {'target': item.get('file'), 'limitations': item.get('limitations') or []}

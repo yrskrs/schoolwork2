@@ -14,6 +14,14 @@
     </p>
   </div>
 
+  {% if job.result.model_fallback %}
+  <div style="margin-bottom:16px;padding:12px 14px;border-radius:12px;background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.35);font-size:13.5px;">
+    ⚠️ Використано <strong>резервну модель</strong>, відмінну від закріпленої за завданням.
+    Закріплена: {{ job.result.pinned_model.model|default:"—" }} ({{ job.result.pinned_model.provider|default:"—" }}).
+    Результат позначено для перевірки вчителем, щоб не змішувати його з основними.
+  </div>
+  {% endif %}
+
   {% if not manifest %}
     <div class="alert alert-warning" style="padding:16px;border-radius:12px;background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.3);">
       Для цієї перевірки маніфест не збережено: вона виконана до появи журналу або ще не завершилася.

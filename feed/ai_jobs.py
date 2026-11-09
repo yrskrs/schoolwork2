@@ -118,10 +118,24 @@ def snapshot_assignment_files(job_id, assignment):
     return mapping
 
 
+def pinned_model_for_assessment():
+    """Stable model choice for a cohort: first enabled model in the queue."""
+    from .models import AISettings
+    settings = AISettings.objects.filter(pk=1).first()
+    if not settings:
+        return {}
+    configs = settings.get_request_configs()
+    if not configs:
+        return {}
+    first = configs[0]
+    return {'provider': first.get('provider'), 'model': first.get('model'),
+            'connection_id': first.get('connection_id') or ''}
+
+
 def _parameters_key(parameters):
     """Snapshot is diagnostic metadata and must not break job deduplication."""
     return {key: value for key, value in (parameters or {}).items()
-            if key not in ('snapshot', 'snapshot_files')}
+            if key not in ('snapshot', 'snapshot_files', 'pinned_model')}
 
 
 def source_snapshot(submission):
@@ -216,6 +230,9 @@ def enqueue_submission_job(submission, kind, user=None, parameters=None):
                 reservations.append(reservation)
         parameters = dict(parameters or {})
         parameters['snapshot'] = source_snapshot(submission)
+        pinned = pinned_model_for_assessment()
+        if pinned:
+            parameters['pinned_model'] = pinned
         import uuid as _uuid
         job_id = _uuid.uuid4()
         job = AIJob.objects.create(id=job_id, kind=kind, submission=submission,
@@ -434,7 +451,7 @@ def _execute_job(job_id):
 
         def call_parameters():
             return {key: value for key, value in (job.parameters or {}).items()
-                    if key not in ('snapshot', 'snapshot_files')}
+                    if key not in ('snapshot', 'snapshot_files', 'pinned_model')}
 
         if job.kind in ('student_check', 'teacher_check', 'batch_check'):
             from .models import AISettings

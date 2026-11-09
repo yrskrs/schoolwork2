@@ -117,6 +117,27 @@ class EvaluationProgressTests(TestCase):
         self.assertNotIn('Змінений вміст', prompt)
 
     @patch('feed.gemini_service.call_ai_api')
+    def test_pinned_model_is_used_first(self, call):
+        self.add_connection('groq', 'fallback-model')
+        self.add_connection('gemini', 'pinned-model')
+        call.return_value = self.answer()
+        result = evaluate_submission_with_gemini(
+            self.sub, pinned_model={'provider': 'gemini', 'model': 'pinned-model'})
+        self.assertEqual(result['status'], 'success')
+        self.assertEqual(call.call_args.kwargs['model_name'], 'pinned-model')
+        self.assertFalse(result['model_fallback'])
+
+    @patch('feed.gemini_service.call_ai_api')
+    def test_missing_pinned_model_is_flagged_as_fallback(self, call):
+        self.add_connection('groq', 'fallback-model')
+        call.return_value = self.answer()
+        result = evaluate_submission_with_gemini(
+            self.sub, pinned_model={'provider': 'gemini', 'model': 'absent-model'})
+        self.assertEqual(result['status'], 'success')
+        self.assertTrue(result['model_fallback'])
+        self.assertTrue(result['needs_teacher_review'])
+
+    @patch('feed.gemini_service.call_ai_api')
     def test_confirmed_missing_work_gets_minimum_numeric_grade(self, call):
         self.add_connection('gemini', 'missing-model')
         data = json.loads(self.answer()[1])

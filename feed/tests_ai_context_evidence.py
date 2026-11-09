@@ -24,7 +24,8 @@ from .ai_privacy import PrivacyBlocked, Redactor, _current
 from .gemini_service import (_raw_call_ai_api, evaluate_media_in_batches, extract_submission_content,
                             resolve_assignment_scope)
 from .middleware import set_has_admin
-from .models import AICriteriaPreset, AIJob, Assignment, ClassGroup, School, Submission, Teacher
+from .models import (AICriteriaPreset, AIJob, AISettings, Assignment, ClassGroup, School,
+                     Submission, Teacher)
 
 
 def jpeg_bytes(size=(640, 480), quality=92):
@@ -593,3 +594,14 @@ class PolicyTests(SimpleTestCase):
             [{'code': 'ГР 3', 'name': 'Алгоритми'}])
         self.assertEqual(rows[0]['status'], 'not_applicable')
         self.assertIsNone(rows[0]['grade'])
+
+
+class PinnedModelTests(TestCase):
+    @patch('feed.models.AISettings.get_request_configs')
+    def test_pinned_model_uses_first_queue_config(self, configs):
+        AISettings.objects.create(id=1, unified_model_queue=True, saved_models_list='[]')
+        configs.return_value = [{'provider': 'gemini', 'model': 'first-model', 'connection_id': 'c1'},
+                                {'provider': 'groq', 'model': 'second-model', 'connection_id': 'c2'}]
+        from .ai_jobs import pinned_model_for_assessment
+        self.assertEqual(pinned_model_for_assessment(),
+                         {'provider': 'gemini', 'model': 'first-model', 'connection_id': 'c1'})
