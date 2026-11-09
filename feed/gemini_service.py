@@ -8049,16 +8049,19 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                         full_feedback_parts.append("📊 **Оцінювання за групами результатів (ГР НУШ):**\n" + "\n".join(gr_lines))
 
                     tolerance = getattr(settings, 'ai_detector_tolerance_percent', 25) or 25
-                    from .ai_provenance import normalize_authorship, submission_provenance
-                    file_names = [getattr(f, 'original_name', '') or os.path.basename(getattr(f, 'file', None).name)
-                                  for f in submission.get_files() if getattr(f, 'file', None)]
+                    from .ai_provenance import document_limits, normalize_authorship, submission_provenance
+                    file_objects = [f for f in submission.get_files() if getattr(f, 'file', None)]
                     if assignment:
-                        file_names.extend(getattr(f, 'original_name', '') or os.path.basename(getattr(f, 'file', None).name)
-                                          for f in assignment.files.all() if getattr(f, 'file', None))
+                        file_objects.extend(f for f in assignment.files.all() if getattr(f, 'file', None))
+                    file_names = [getattr(f, 'original_name', '') or os.path.basename(f.file.name)
+                                  for f in file_objects]
+                    file_paths = [f.file.path for f in file_objects if hasattr(f.file, 'path')]
+                    limits = document_limits(file_paths)
                     authorship = normalize_authorship(
                         result_json, assignment.allow_ai_usage, submission_provenance(submission),
                         tolerance_percent=tolerance, student_text=student_combined_text,
-                        file_names=file_names)
+                        file_names=file_names, slide_count=limits.get('slides'),
+                        page_count=limits.get('pages'))
                     ai_generated_detected = authorship['ai_generated_detected']
                     ai_generated_percent = authorship['ai_generated_percent']
                     ai_generated_confidence = authorship['ai_generated_confidence']

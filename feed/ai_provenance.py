@@ -723,17 +723,52 @@ def submission_provenance(submission):
     return output
 
 
+def document_limits(paths):
+    """Return the largest slide/page count among the inspected files."""
+    slides = 0
+    pages = 0
+    for path in paths or ():
+        try:
+            suffix = Path(path).suffix.lower()
+            if suffix in {'.pptx', '.pptm', '.ppsx', '.potx'}:
+                with zipfile.ZipFile(path) as package:
+                    slides = max(slides, sum(
+                        1 for name in package.namelist()
+                        if re.match(r'ppt/slides/slide\d+\.xml$', name)))
+            elif suffix == '.pdf':
+                from pypdf import PdfReader
+                pages = max(pages, len(PdfReader(str(path)).pages))
+            elif suffix == '.docx':
+                with zipfile.ZipFile(path) as package:
+                    if 'docProps/app.xml' in package.namelist():
+                        with package.open('docProps/app.xml') as stream:
+                            text = stream.read().decode('utf-8', errors='replace')
+                        match = re.search(r'<Pages>(\d+)</Pages>', text)
+                        if match:
+                            pages = max(pages, int(match.group(1)))
+        except Exception:
+            continue
+    return {'slides': slides or None, 'pages': pages or None}
+
+
 def _normalise_for_match(text):
     return re.sub(r'\s+', ' ', str(text or '').casefold()).strip()
 
 
-def _model_evidence_verified(item, student_text, file_names):
+def _model_evidence_verified(item, student_text, file_names, slide_count=None, page_count=None):
     """Accept model evidence only when its source and quoted fragment are real."""
     source = str(item.get('source') or '').strip()
     if source and file_names:
         known = {_normalise_for_match(name) for name in file_names}
         if _normalise_for_match(source) not in known:
             return False
+    location = str(item.get('location') or '')
+    slide_match = re.search(r'(?:слайд|slide)\s*(\d+)', location, re.IGNORECASE)
+    if slide_match and slide_count and int(slide_match.group(1)) > int(slide_count):
+        return False
+    page_match = re.search(r'(?:сторінк\w*|page)\s*(\d+)', location, re.IGNORECASE)
+    if page_match and page_count and int(page_match.group(1)) > int(page_count):
+        return False
     quotes = re.findall(r'[«"“]([^»"”]{8,240})[»"”]', str(item.get('observation') or ''))
     if not quotes or not str(student_text or '').strip():
         return False
@@ -742,7 +777,7 @@ def _model_evidence_verified(item, student_text, file_names):
 
 
 def normalize_authorship(result, allowed, provenance=(), tolerance_percent=25,
-                        student_text='', file_names=()):
+                        student_text='', file_names=(), slide_count=None, page_count=None):
     """Turn uncalibrated model claims and file metadata into an evidence report.
 
     The output never lowers the grade. States are:
@@ -776,7 +811,8 @@ def normalize_authorship(result, allowed, provenance=(), tolerance_percent=25,
 
     signals = []
     for item in model_evidence:
-        verified = _model_evidence_verified(item, student_text, file_names)
+        verified = _model_evidence_verified(item, student_text, file_names,
+                                             slide_count=slide_count, page_count=page_count)
         basis = str(item.get('basis') or 'model_style')
         if basis not in {'self_disclosure', 'text_analysis'}:
             basis = 'model_style'
