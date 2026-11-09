@@ -118,18 +118,55 @@ def snapshot_assignment_files(job_id, assignment):
     return mapping
 
 
-def pinned_model_for_assessment():
-    """Stable model choice for a cohort: first enabled model in the queue."""
+VISUAL_EVIDENCE_EXTS = {
+    '.pdf', '.docx', '.doc', '.odt', '.rtf', '.pptx', '.ppt', '.odp', '.pptm', '.ppsx', '.pps', '.potx',
+    '.xlsx', '.xls', '.ods', '.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif', '.tiff', '.tif',
+}
+
+
+def assessment_requires_vision(submission):
+    """True when the frozen package will contain pages/images, not just text."""
+    import os
+    paths = []
+    for file_obj in submission.get_files():
+        paths.append(getattr(file_obj, 'original_name', '') or
+                     getattr(getattr(file_obj, 'file', None), 'name', ''))
+    assignment = submission.assignment
+    if assignment:
+        for file_obj in assignment.files.all():
+            paths.append(file_obj.original_name or getattr(file_obj.file, 'name', ''))
+        try:
+            preset, _ = assignment.get_ai_policy(submission.class_group)
+            if preset and preset.document_file:
+                paths.append(preset.document_file.name)
+        except Exception:
+            pass
+    return any(os.path.splitext(str(path))[1].lower() in VISUAL_EVIDENCE_EXTS
+               for path in paths if path)
+
+
+def pinned_model_for_assessment(submission=None):
+    """Pin a model compatible with the evidence: vision for visual works."""
     from .models import AISettings
+    from .ai_model_catalog import get_model_capabilities
     settings = AISettings.objects.filter(pk=1).first()
     if not settings:
         return {}
     configs = settings.get_request_configs()
     if not configs:
         return {}
-    first = configs[0]
-    return {'provider': first.get('provider'), 'model': first.get('model'),
-            'connection_id': first.get('connection_id') or ''}
+    needs_vision = bool(submission and assessment_requires_vision(submission))
+    chosen = None
+    if needs_vision:
+        for config in configs:
+            caps = get_model_capabilities(config.get('model'), config.get('provider'))
+            if caps.get('supports_vision', True) and caps.get('max_images') != 0:
+                chosen = config
+                break
+    chosen = chosen or configs[0]
+    return {'provider': chosen.get('provider'), 'model': chosen.get('model'),
+            'connection_id': chosen.get('connection_id') or '',
+            'requires_vision': needs_vision}
 
 
 def _parameters_key(parameters):
@@ -230,7 +267,7 @@ def enqueue_submission_job(submission, kind, user=None, parameters=None):
                 reservations.append(reservation)
         parameters = dict(parameters or {})
         parameters['snapshot'] = source_snapshot(submission)
-        pinned = pinned_model_for_assessment()
+        pinned = pinned_model_for_assessment(submission)
         if pinned:
             parameters['pinned_model'] = pinned
         import uuid as _uuid

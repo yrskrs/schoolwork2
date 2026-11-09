@@ -603,5 +603,45 @@ class PinnedModelTests(TestCase):
         configs.return_value = [{'provider': 'gemini', 'model': 'first-model', 'connection_id': 'c1'},
                                 {'provider': 'groq', 'model': 'second-model', 'connection_id': 'c2'}]
         from .ai_jobs import pinned_model_for_assessment
-        self.assertEqual(pinned_model_for_assessment(),
-                         {'provider': 'gemini', 'model': 'first-model', 'connection_id': 'c1'})
+        pinned = pinned_model_for_assessment()
+        self.assertEqual(pinned['provider'], 'gemini')
+        self.assertEqual(pinned['model'], 'first-model')
+        self.assertEqual(pinned['connection_id'], 'c1')
+        self.assertFalse(pinned['requires_vision'])
+
+
+class MediaAwarePinningTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user('pin_teacher', password='test-password')
+        self.teacher = Teacher.objects.create(user=self.user, full_name='Вчитель Піна')
+        self.group = ClassGroup.objects.create(name='8-П', grade=8)
+        self.assignment = Assignment.objects.create(
+            teacher=self.teacher, title='Пін', description='Завдання.', status='published')
+        self.group and self.assignment.classes.add(self.group)
+        AISettings.objects.create(id=1, unified_model_queue=True, saved_models_list='[]')
+        self.configs = [
+            {'provider': 'deepseek', 'model': 'deepseek-chat', 'connection_id': 'd1'},
+            {'provider': 'gemini', 'model': 'gemini-3.1-flash-lite', 'connection_id': 'g1'},
+        ]
+
+    def _submission(self, name):
+        return Submission.objects.create(
+            assignment=self.assignment, teacher=self.teacher, class_group=self.group,
+            first_name='У', last_name='Пін', file=SimpleUploadedFile(name, b'data'))
+
+    @patch('feed.models.AISettings.get_request_configs')
+    def test_visual_docx_pins_vision_model(self, configs):
+        configs.return_value = self.configs
+        from .ai_jobs import pinned_model_for_assessment
+        pinned = pinned_model_for_assessment(self._submission('work.docx'))
+        self.assertEqual(pinned['model'], 'gemini-3.1-flash-lite')
+        self.assertTrue(pinned['requires_vision'])
+
+    @patch('feed.models.AISettings.get_request_configs')
+    def test_text_file_keeps_first_model(self, configs):
+        configs.return_value = self.configs
+        from .ai_jobs import pinned_model_for_assessment
+        pinned = pinned_model_for_assessment(self._submission('work.txt'))
+        self.assertEqual(pinned['model'], 'deepseek-chat')
+        self.assertFalse(pinned['requires_vision'])
