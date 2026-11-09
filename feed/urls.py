@@ -51,6 +51,7 @@ urlpatterns = [
     path('assignment/<int:pk>/submit/', views.submit_assignment, name='submit_assignment'),
     path('assignment/<int:pk>/submit/success/', views.submit_success, name='submit_success'),
     path('submission/<int:submission_id>/', views.submission_detail, name='submission_detail'),
+    path('teacher/submission/<int:submission_id>/authorship-label/', views.submission_authorship_label, name='submission_authorship_label'),
     path('my-submissions/', views.student_submissions_portal, name='student_submissions_portal'),
     path('my-submissions/alias/', views.student_submissions_portal, name='my_submissions'),
 

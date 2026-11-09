@@ -52,7 +52,8 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
 from django.contrib import messages
-from django.http import JsonResponse, HttpResponse, HttpResponseForbidden, FileResponse, Http404
+from django.http import (JsonResponse, HttpResponse, HttpResponseBadRequest, HttpResponseForbidden,
+                         FileResponse, Http404)
 from django.utils import timezone
 from django.db.models import Q, Sum, Count
 from django.db import transaction
@@ -3327,6 +3328,24 @@ def accept_student_ai_grade(request, sub_id):
     return JsonResponse({'ok': True, 'grade': submission.grade, 'coauthors_graded': coauthors_graded})
 
 
+
+
+@teacher_required
+@require_POST
+def submission_authorship_label(request, submission_id):
+    """Teacher label used to calibrate AI-authorship detection (P3)."""
+    submission = get_object_or_404(Submission, pk=submission_id)
+    if not can_manage_submission(request, submission):
+        return HttpResponseForbidden('Немає доступу до цієї роботи.')
+    label = (request.POST.get('label') or '').strip()
+    if label not in {'unknown', 'ai', 'not_ai'}:
+        return HttpResponseBadRequest('Некоректна мітка.')
+    submission.ai_authorship_teacher_label = label
+    submission.ai_authorship_teacher_note = (request.POST.get('note') or '').strip()[:2000]
+    submission.ai_authorship_labeled_at = timezone.now() if label != 'unknown' else None
+    submission.save(update_fields=[
+        'ai_authorship_teacher_label', 'ai_authorship_teacher_note', 'ai_authorship_labeled_at'])
+    return redirect('submission_detail', submission_id=submission.pk)
 
 
 def submission_detail(request, submission_id):

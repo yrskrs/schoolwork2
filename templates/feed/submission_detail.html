@@ -261,6 +261,27 @@
                         </div>
                         {% endif %}
 
+                        {% if is_teacher %}
+                        <form method="post" action="{% url 'submission_authorship_label' submission.pk %}"
+                              style="margin-bottom:12px;padding:10px 14px;background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:var(--radius-sm);font-size:12.5px;">
+                            {% csrf_token %}
+                            <strong>Мітка походження для калібрування:</strong>
+                            <span style="color:var(--color-text-secondary);">{{ submission.get_ai_authorship_teacher_label_display }}</span>
+                            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;align-items:center;">
+                                <select name="label" style="padding:5px 8px;border-radius:6px;border:1px solid var(--color-border);background:var(--color-surface);">
+                                    <option value="unknown" {% if submission.ai_authorship_teacher_label == 'unknown' %}selected{% endif %}>Не визначено</option>
+                                    <option value="ai" {% if submission.ai_authorship_teacher_label == 'ai' %}selected{% endif %}>Підтверджую ШІ</option>
+                                    <option value="not_ai" {% if submission.ai_authorship_teacher_label == 'not_ai' %}selected{% endif %}>Самостійна робота</option>
+                                </select>
+                                <input type="text" name="note" maxlength="2000" placeholder="Коротко: чому саме так"
+                                       value="{{ submission.ai_authorship_teacher_note }}"
+                                       style="flex:1;min-width:180px;padding:5px 8px;border-radius:6px;border:1px solid var(--color-border);background:var(--color-surface);">
+                                <button type="submit" class="btn btn-secondary btn-sm">Зберегти мітку</button>
+                            </div>
+                            <div style="color:var(--color-text-muted);margin-top:4px;">Мітка не змінює бал; вона потрібна для калібрування точності.</div>
+                        </form>
+                        {% endif %}
+
                         {% with sections=submission.get_student_ai_sections %}
                         {% if sections %}
                         <div class="student-ai-feedback-grid" style="display:flex;flex-direction:column;gap:10px;">

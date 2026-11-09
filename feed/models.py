@@ -2358,6 +2358,23 @@ class Submission(models.Model):
     ai_provenance_report = models.JSONField(
         'Структурований звіт походження', default=dict, blank=True
     )
+    ai_authorship_teacher_label = models.CharField(
+        'Мітка вчителя щодо походження',
+        max_length=10,
+        default='unknown',
+        db_index=True,
+        choices=[
+            ('unknown', 'Не визначено'),
+            ('ai', 'Підтверджено використання ШІ'),
+            ('not_ai', 'Самостійна робота'),
+        ],
+    )
+    ai_authorship_teacher_note = models.TextField(
+        'Коментар учителя до мітки походження', blank=True, default=''
+    )
+    ai_authorship_labeled_at = models.DateTimeField(
+        'Коли вчитель позначив походження', null=True, blank=True
+    )
 
     # ── Повторна здача (робота над помилками / перездача) ────────────────────
     is_resubmission = models.BooleanField(
