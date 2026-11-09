@@ -2397,7 +2397,8 @@ class Submission(models.Model):
         value = str(name or '').strip()
         if not value:
             return False
-        pattern = re.compile(rf'(?<!\w){re.escape(value)}(?!\w)', re.IGNORECASE)
+        # A hyphen joins a compound surname: «Коваль» is not «Коваль-Мельник».
+        pattern = re.compile(rf'(?<![\w-]){re.escape(value)}(?![\w-])', re.IGNORECASE)
         return any(pattern.search(member or '') for member in members)
 
     def is_coauthor_with(self, other_sub):

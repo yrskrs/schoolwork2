@@ -500,3 +500,9 @@ class RepeatJobTests(TestCase):
     def test_anonymous_cannot_repeat(self):
         response = self.client.post(reverse('ai_job_repeat', args=[self.job.pk]))
         self.assertEqual(response.status_code, 404)
+
+
+class CoauthorNameTests(SimpleTestCase):
+    def test_hyphenated_surname_is_not_a_coauthor_match(self):
+        self.assertFalse(Submission._name_component_in('Коваль', ['коваль-мельник іван']))
+        self.assertTrue(Submission._name_component_in('Коваль', ['коваль іван']))
