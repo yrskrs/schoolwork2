@@ -128,6 +128,10 @@
 (`pinned_wait`, `defer`) до `AI_PIN_MAX_WAITS` (типово 3), і лише після цього дозволено fallback.
 Перевірено: примусовий cooldown DeepSeek → job у `queued` з `pinned_wait`; після зняття cooldown —
 та сама робота виконана на DeepSeek, `fallback=false`, бал 5.
+
+**Контрольний зріз 14 робіт:** fallback 5/14 → **3/14**, сумарно 17 `pinned_wait`;
+11 із 14 — закріплена модель. Залишкові fallback: помилка DeepSeek та вичерпання 3 очікувань.
+Дані: [AI_LAB_GRADING_SPOTCHECK_V3_2026-11-09.md](AI_LAB_GRADING_SPOTCHECK_V3_2026-11-09.md).
 Дані: [AI_LAB_GRADING_SPOTCHECK_V2_2026-11-09.md](AI_LAB_GRADING_SPOTCHECK_V2_2026-11-09.md).
 
 ## Порядок

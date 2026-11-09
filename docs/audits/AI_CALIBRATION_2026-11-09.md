@@ -112,3 +112,12 @@ Gemini — 5, DeepSeek — блок, DeepSeek — 4. Тобто **модель �
 - Перевірка: примусово виставлено cooldown `deepseek-chat` → робота 1082 відкладена (`pinned_wait 1`);
   після зняття cooldown виконана на `deepseek-chat`, `model_fallback=false`, бал 5.
 - Після 3 очікувань fallback дозволений і позначається `model_fallback=true`.
+
+
+## 12. Контрольний зріз після R6b (09.11.2026)
+
+- Fallback: 5/14 → **3/14**; 11 із 14 робіт — закріплена модель; 17 `pinned_wait`.
+- MAE: 1.85 → **2.00** (DeepSeek нижче за Gemini на тих самих роботах).
+- Точних: 3 → 2; «Доопрацювати»: 1; блоків: 0.
+- Залишкові fallback: помилка DeepSeek (1) і вичерпання 3 очікувань (2).
+- Деталі: [AI_LAB_GRADING_SPOTCHECK_V3_2026-11-09.md](AI_LAB_GRADING_SPOTCHECK_V3_2026-11-09.md).
