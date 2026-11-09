@@ -589,25 +589,34 @@ def unverifiable_labels(criteria_results, gr_results):
 
 
 def assessment_policy(criteria_results, gr_results, main_unreadable=False, threshold=0.5):
-    """Allow a partial numeric grade unless most items are genuinely unreadable.
+    """Allow a partial numeric grade unless most applicable items are unreadable.
 
-    A single unverifiable item is not enough to withhold the whole mark. The
-    numeric grade is blocked only when the main material is unreadable or more
-    than half of the active criteria/GR could not be verified.
+    A single unverifiable item does not withhold the whole mark. The numeric
+    grade is blocked only when the main material is unreadable or more than
+    half of the applicable criteria/GR could not be verified. A confirmed
+    «missing» is evidence of non-performance, so it never blocks on its own.
     """
     excluded = {'not_applicable', 'not applicable', 'n/a', 'не застосовується'}
-    rows = [row for row in list(criteria_results or []) + list(gr_results or [])
-            if isinstance(row, dict)
-            and str(row.get('status') or '').strip().lower() not in excluded]
-    labels = unverifiable_labels(rows, [])
+
+    def applicable(rows):
+        return [row for row in (rows or [])
+                if isinstance(row, dict)
+                and str(row.get('status') or '').strip().lower() not in excluded]
+
+    criteria = applicable(criteria_results)
+    groups = applicable(gr_results)
+    labels = unverifiable_labels(criteria, groups)
     missing_statuses = {'missing', 'not_completed', 'not completed', 'не виконано', 'пропущено'}
-    missing = sum(1 for row in rows
+    missing = sum(1 for row in criteria + groups
                   if str(row.get('status') or '').strip().lower() in missing_statuses)
-    total = len(rows)
+    total = len(criteria) + len(groups)
     ratio = (len(labels) / total) if total else 0.0
-    # A confirmed non-performance (missing) is enough evidence for a low mark:
-    # unverifiable groups cannot turn it into "no grade" on their own.
-    blocked = bool(main_unreadable or (total and ratio > threshold and missing == 0))
+    criteria_ratio = (sum(1 for row in criteria if str(row.get('status')).lower() == 'unverifiable')
+                      / len(criteria)) if criteria else 0.0
+    groups_ratio = (sum(1 for row in groups if str(row.get('status')).lower() == 'unverifiable')
+                    / len(groups)) if groups else 0.0
+    blocked = bool(main_unreadable or (missing == 0 and (
+        (criteria and criteria_ratio > threshold) or (groups and groups_ratio > threshold))))
     return {
         'blocked': blocked,
         'partial': bool(labels) and not blocked,
