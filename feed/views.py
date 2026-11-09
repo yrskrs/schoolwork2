@@ -8334,6 +8334,56 @@ def teacher_settings_view(request):
 
 
 @teacher_required
+@teacher_required
+def ai_quality_view(request):
+    """Teacher-facing summary: current AI policy, calibration and known limitations."""
+    from collections import Counter
+    from django.conf import settings as django_settings
+    from .models import AIJob, AISettings, School
+    from .ai_jobs import pinned_model_for_assessment
+
+    teacher = request.user.teacher_profile
+    school = School.objects.first()
+    recent = list(AIJob.objects.filter(kind__in=('teacher_check', 'batch_check'))
+                  .order_by('-created_at')[:50])
+    model_counter = Counter((job.result or {}).get('model_used') or '—' for job in recent)
+    live = {
+        'checked': len(recent),
+        'fallback': sum(1 for job in recent if (job.result or {}).get('model_fallback')),
+        'blocked': sum(1 for job in recent if (job.result or {}).get('assessment_blocked')),
+        'rework': sum(1 for job in recent
+                      if (job.result or {}).get('suggested_grade') == 'Доопрацювати'),
+        'models': model_counter.most_common(5),
+    }
+    calibration = {
+        'date': '09.11.2026', 'works': 14, 'exact': 2, 'within1': 3, 'within2': 2,
+        'far': 6, 'rework': 1, 'blocked': 0, 'fallback': 3, 'mae': 2.00, 'bias': -2.00,
+    }
+    backlog = [
+        {'id': 'R1', 'title': 'Підтверджене missing дає 1–3, а не блок', 'status': 'done'},
+        {'id': 'R2', 'title': 'Незастосовні ГР (not_applicable) не блокують', 'status': 'done'},
+        {'id': 'R6', 'title': 'Фіксація моделі за завданням', 'status': 'done'},
+        {'id': 'R6b', 'title': 'Очікування закріпленої моделі замість fallback', 'status': 'done'},
+        {'id': 'R3', 'title': 'Семантика «Доопрацювати» vs 1–5', 'status': 'next'},
+        {'id': 'R4', 'title': 'Калібрування на оцінках учителя', 'status': 'next'},
+        {'id': 'R5', 'title': 'Evidence gate для масових unverifiable', 'status': 'planned'},
+    ]
+    policy = {
+        'pinned': pinned_model_for_assessment(),
+        'privacy': AISettings.get_solo().privacy_mode,
+        'pin_waits': getattr(django_settings, 'AI_PIN_MAX_WAITS', 3),
+        'batch': getattr(django_settings, 'AI_BATCH_CONCURRENCY', 3),
+        'max_files': getattr(django_settings, 'AI_FILE_API_MAX_FILES', 4),
+        'max_file_mb': getattr(django_settings, 'AI_FILE_API_MAX_FILE_MB', 200),
+        'max_total_mb': getattr(django_settings, 'AI_FILE_API_MAX_TOTAL_MB', 400),
+        'retention': getattr(django_settings, 'AI_SNAPSHOT_RETENTION_DAYS', 14),
+    }
+    return render(request, 'feed/ai_quality.html', {
+        'teacher': teacher, 'school': school, 'live': live, 'calibration': calibration,
+        'backlog': backlog, 'policy': policy,
+    })
+
+
 def ai_settings_view(request):
     """
     Сумісність: перенаправлення або відображення налаштувань ШІ у Єдиному центрі.

@@ -145,6 +145,7 @@ urlpatterns = [
 
     # ── Модуль штучного інтелекту Google Gemini AI ─────────────────────────────
     path('teacher/ai-settings/', views.ai_settings_view, name='ai_settings'),
+    path('teacher/ai/quality/', views.ai_quality_view, name='ai_quality'),
     path('teacher/ai/batch-check/', views.ai_batch_check_view, name='ai_batch_check'),
     path('teacher/ai/check/<int:submission_id>/', views.ai_check_single_submission, name='ai_check_single_submission'),
     path('teacher/ai/job/<uuid:job_id>/payload/', views.ai_job_payload_view, name='ai_job_payload'),

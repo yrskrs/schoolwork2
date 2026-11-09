@@ -645,3 +645,24 @@ class MediaAwarePinningTests(TestCase):
         pinned = pinned_model_for_assessment(self._submission('work.txt'))
         self.assertEqual(pinned['model'], 'deepseek-chat')
         self.assertFalse(pinned['requires_vision'])
+
+
+class QualityPageTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user('quality_teacher', password='test-password')
+        School.objects.create(name='Школа якості', admin=self.user)
+        self.teacher = Teacher.objects.create(user=self.user, full_name='Вчитель Якості')
+        self.client.force_login(self.user)
+
+    def test_quality_page_renders_for_teacher(self):
+        response = self.client.get(reverse('ai_quality'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Калібрування')
+        self.assertContains(response, 'Беклог')
+
+    def test_quality_page_requires_teacher_login(self):
+        self.client.logout()
+        response = self.client.get(reverse('ai_quality'))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/teacher/login/', response.url)
