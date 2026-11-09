@@ -216,12 +216,12 @@
                         {% endif %}
 
                         <!-- Перевірка на ШІ -->
-                        {% if submission.ai_generated_detected %}
+                        {% if submission.ai_authorship_state == 'suspected' %}
                         <div style="margin-bottom:12px;padding:12px 16px;background:{% if submission.is_ai_allowed %}rgba(16,185,129,0.08){% else %}rgba(239,68,68,0.08){% endif %};border:1.5px solid {% if submission.is_ai_allowed %}#10b981{% else %}#ef4444{% endif %};border-radius:var(--radius-sm);">
                             <div style="font-weight:800;font-size:13px;color:{% if submission.is_ai_allowed %}#065f46{% else %}var(--color-danger){% endif %};display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;margin-bottom:4px;">
                                 <span style="display:inline-flex;align-items:center;gap:6px;">
                                     <span>🤖</span>
-                                    <span>{% if submission.is_ai_allowed %}У роботі зафіксовано використання штучного інтелекту (ШІ){% if is_teacher and submission.ai_generated_percent is not None %}: {{ submission.ai_generated_percent }}%{% endif %} (дозволено вчителем){% else %}У роботі виявлено ознаки використання штучного інтелекту (ШІ){% if is_teacher and submission.ai_generated_percent is not None %}: {{ submission.ai_generated_percent }}%{% endif %}{% endif %}</span>
+                                    <span>{% if submission.is_ai_allowed %}Є ознаки використання ШІ (дозволено вчителем){% else %}Є ознаки використання ШІ{% endif %}{% if is_teacher and submission.ai_generated_percent is not None %} · оцінка моделі {{ submission.ai_generated_percent }}% (некалібрована){% endif %}</span>
                                 </span>
                             </div>
                             {% if is_teacher and submission.ai_generated_details %}
@@ -234,9 +234,14 @@
                                 {% if submission.is_ai_allowed %}
                                 💡 Вчитель дозволив використання ШІ для виконання цього завдання.
                                 {% else %}
-                                ⚠️ Для цього завдання вчитель вимагав повністю самостійного виконання учнем! Перевищено допустимий поріг ШІ.
+                                ⚠️ Для цього завдання вчитель вимагав самостійного виконання. Це ознаки, а не доведений факт: уточніть у учня кроки та джерела.
                                 {% endif %}
                             </div>
+                        </div>
+                        {% endif %}
+                        {% if submission.ai_authorship_state == 'insufficient' and is_teacher and submission.ai_status == 'success' %}
+                        <div style="margin-bottom:12px;padding:10px 14px;background:rgba(148,163,184,0.10);border:1px solid rgba(148,163,184,0.35);border-radius:var(--radius-sm);font-size:12px;color:var(--color-text-secondary);">
+                            ❔ <strong>Походження не встановлено:</strong> у матеріалах немає перевірюваних метаданих (типовий випадок — звичайний текст). Це не означає «без ШІ» і не є підставою для звинувачення.
                         </div>
                         {% endif %}
 
@@ -411,11 +416,11 @@
                 </div>
 
                 <!-- Повідомлення про виявлення використання ШІ -->
-                {% if submission.ai_generated_detected %}
+                {% if submission.ai_authorship_state == 'suspected' %}
                 <div style="margin-bottom:20px;padding:16px 20px;background:{% if submission.is_ai_allowed %}rgba(16,185,129,0.08){% else %}rgba(239,68,68,0.08){% endif %};border:1.5px solid {% if submission.is_ai_allowed %}#10b981{% else %}#ef4444{% endif %};border-radius:var(--radius-md);">
                     <div style="display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;color:{% if submission.is_ai_allowed %}#065f46{% else %}var(--color-danger){% endif %};margin-bottom:4px;">
                         <span>🤖</span>
-                        <span>{% if submission.is_ai_allowed %}У роботі зафіксовано використання штучного інтелекту (ШІ) (дозволено вчителем){% else %}У роботі виявлено ознаки використання штучного інтелекту (ШІ){% endif %}</span>
+                        <span>{% if submission.is_ai_allowed %}Є ознаки використання ШІ (дозволено вчителем){% else %}Є ознаки використання ШІ{% endif %}</span>
                     </div>
                     {% if is_teacher and submission.ai_generated_details %}
                     <div style="font-size:12.5px;color:var(--color-text-secondary);line-height:1.4;margin-bottom:6px;padding:8px 12px;background:rgba(0,0,0,0.04);border-radius:var(--radius-sm);">
@@ -427,7 +432,7 @@
                         {% if submission.is_ai_allowed %}
                         💡 Вчитель дозволив використання ШІ для виконання цього завдання.
                         {% else %}
-                        ⚠️ Для цього завдання вчитель вимагав повністю самостійне виконання учнем.
+                        ⚠️ Це ознаки, а не доведений факт: уточніть у учня кроки та джерела.
                         {% endif %}
                     </div>
                 </div>
@@ -525,15 +530,15 @@ function runStudentAICheck(subId) {
             : 'background:#fef3c7;color:#d97706;border:1px solid #fcd34d;';
 
         var aiDetectionHtml = '';
-        if (data.ai_generated_detected) {
+        if (data.ai_authorship_state === 'suspected') {
             var isAllowed = data.allow_ai_usage;
             var alertBg = isAllowed ? 'rgba(16,185,129,0.08)' : 'rgba(239,68,68,0.08)';
             var alertBorder = isAllowed ? '#10b981' : '#ef4444';
             var alertColor = isAllowed ? '#065f46' : '#b91c1c';
             var isTeacher = {% if is_teacher %}true{% else %}false{% endif %};
             var pctText = (isTeacher && data.ai_generated_percent !== null && data.ai_generated_percent !== undefined) ? ': ' + data.ai_generated_percent + '%' : '';
-            var alertTitle = isAllowed ? 'У роботі зафіксовано використання штучного інтелекту (ШІ)' + pctText + ' (дозволено вчителем)' : 'У роботі виявлено ознаки використання штучного інтелекту (ШІ)' + pctText;
-            var alertNote = isAllowed ? '💡 Вчитель дозволив використання ШІ для виконання цього завдання.' : '⚠️ Для цього завдання вчитель вимагав повністю самостійного виконання учнем! Перевищено допустимий поріг ШІ.';
+            var alertTitle = isAllowed ? 'Є ознаки використання ШІ (дозволено вчителем)' + pctText : 'Є ознаки використання ШІ' + pctText;
+            var alertNote = isAllowed ? '💡 Вчитель дозволив використання ШІ для виконання цього завдання.' : '⚠️ Це ознаки, а не доведений факт: уточніть у учня кроки та джерела.';
 
             var detailsText = '';
 

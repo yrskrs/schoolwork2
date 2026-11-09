@@ -55,6 +55,39 @@
     {% endif %}
   {% endif %}
 
+  {% if job.result.ai_provenance_report %}
+  <section style="background:var(--color-bg-secondary);border:1px solid rgba(99,102,241,.25);border-radius:14px;padding:16px 18px;margin-bottom:16px;">
+    <h2 style="margin:0 0 8px;font-size:17px;">Походження роботи</h2>
+    {% with report=job.result.ai_provenance_report %}
+    <p style="margin:0 0 8px;font-size:14px;">
+      {% if report.state == 'suspected' %}<strong style="color:var(--color-danger);">Є ознаки використання ШІ</strong>
+      {% elif report.state == 'none' %}<strong style="color:var(--color-success);">Ознак не знайдено</strong>
+      {% else %}<strong style="color:var(--color-text-secondary);">Недостатньо даних</strong>{% endif %}
+      · впевненість: {{ report.confidence }} · перевірено файлів: {{ report.checked_files }}
+    </p>
+    <p style="margin:0 0 8px;font-size:12px;color:var(--color-text-secondary);">
+      Це ознаки, а не доведений факт авторства. Відсутність ознак не підтверджує самостійність.
+    </p>
+    {% if report.signals %}
+    <ul style="margin:0 0 8px;padding-left:18px;font-size:13px;">
+      {% for signal in report.signals %}
+      <li style="margin-bottom:5px;">
+        <strong>[{{ signal.strength }}]</strong>
+        {% if signal.source %}{{ signal.source }}{% if signal.location %} → {% endif %}{% endif %}{{ signal.location }}:
+        {{ signal.observation }}
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+    {% if report.limitations %}
+    <p style="margin:0;font-size:12px;color:var(--color-text-secondary);">
+      Обмеження: {{ report.limitations|join:"; " }}
+    </p>
+    {% endif %}
+    {% endwith %}
+  </section>
+  {% endif %}
+
   {% if adjustments %}
   <section style="background:var(--color-bg-secondary);border:1px solid rgba(245,158,11,.35);border-radius:14px;padding:16px 18px;margin-bottom:16px;">
     <h2 style="margin:0 0 10px;font-size:17px;">Серверні зміни результату</h2>

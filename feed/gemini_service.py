@@ -8033,6 +8033,8 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                     ai_generated_percent = authorship['ai_generated_percent']
                     ai_generated_confidence = authorship['ai_generated_confidence']
                     ai_generated_details = authorship['ai_generated_details']
+                    ai_authorship_state = authorship.get('ai_authorship_state', 'insufficient')
+                    ai_provenance_report = authorship.get('ai_provenance_report') or {}
 
                     # Origin observations are reviewed separately by the teacher.
                     # An unverified percentage must never lower the content grade.
@@ -8096,6 +8098,8 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                     submission.ai_generated_confidence = ai_generated_confidence
                     submission.ai_generated_details = ai_generated_details
                     submission.ai_generated_percent = ai_generated_percent
+                    submission.ai_authorship_state = ai_authorship_state
+                    submission.ai_provenance_report = ai_provenance_report
                     submission.ai_model_used = model_name
                     from .ai_request_metadata import request_metadata
                     metadata = request_metadata(c_provider, c_model, raw_data)
@@ -8111,7 +8115,8 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                     submission.save(update_fields=[
                         'ai_suggested_grade', 'ai_score_level', 'ai_feedback', 'ai_gr_results',
                         'ai_generated_detected', 'ai_generated_confidence', 'ai_generated_details',
-                        'ai_generated_percent', 'ai_model_used', 'ai_provider_used', 'ai_request_model',
+                        'ai_generated_percent', 'ai_authorship_state', 'ai_provenance_report',
+                        'ai_model_used', 'ai_provider_used', 'ai_request_model',
                         'ai_connection_id',
                         'ai_prompt_tokens', 'ai_completion_tokens', 'ai_total_tokens',
                         'ai_status', 'ai_error_reason', 'ai_reviewed_at'
@@ -8153,6 +8158,8 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                         'ai_generated_percent': ai_generated_percent,
                         'ai_generated_confidence': ai_generated_confidence,
                         'ai_generated_details': ai_generated_details,
+                        'ai_authorship_state': ai_authorship_state,
+                        'ai_provenance_report': ai_provenance_report,
                         'strengths': strengths,
                         'weaknesses': weaknesses,
                         'feedback_comment': feedback_comment,

@@ -3143,6 +3143,10 @@ def _perform_student_ai_check(submission, result):
         submission.ai_generated_confidence = result.get('ai_generated_confidence') or 'none'
     if 'ai_generated_details' in result:
         submission.ai_generated_details = result.get('ai_generated_details') or ''
+    if 'ai_authorship_state' in result:
+        submission.ai_authorship_state = result.get('ai_authorship_state') or 'insufficient'
+    if 'ai_provenance_report' in result:
+        submission.ai_provenance_report = result.get('ai_provenance_report') or {}
 
     teacher_fb = result.get('feedback') or result.get('feedback_comment') or clean_fb
     submission.ai_suggested_grade = submission.student_ai_grade
@@ -3166,6 +3170,7 @@ def _perform_student_ai_check(submission, result):
         'student_ai_feedback', 'student_ai_gr_results',
         'ai_generated_detected', 'ai_generated_percent',
         'ai_generated_confidence', 'ai_generated_details',
+        'ai_authorship_state', 'ai_provenance_report',
         'ai_suggested_grade', 'ai_score_level', 'ai_feedback', 'ai_gr_results',
         'ai_status', 'ai_error_reason', 'ai_reviewed_at', 'ai_model_used',
         'ai_provider_used', 'ai_request_model', 'ai_prompt_tokens', 'ai_completion_tokens', 'ai_total_tokens'
@@ -3192,6 +3197,8 @@ def _perform_student_ai_check(submission, result):
             ai_generated_percent=submission.ai_generated_percent,
             ai_generated_confidence=submission.ai_generated_confidence,
             ai_generated_details=submission.ai_generated_details,
+            ai_authorship_state=submission.ai_authorship_state,
+            ai_provenance_report=submission.ai_provenance_report,
             ai_suggested_grade=submission.ai_suggested_grade,
             ai_score_level=submission.ai_score_level,
             ai_feedback=submission.ai_feedback,
@@ -3249,6 +3256,8 @@ def _perform_student_ai_check(submission, result):
         'ai_generated_percent': None,
         'ai_generated_confidence': submission.ai_generated_confidence,
         'ai_generated_details': submission.ai_generated_details,
+        'ai_authorship_state': submission.ai_authorship_state,
+        'ai_provenance_report': submission.ai_provenance_report or {},
         'allow_ai_usage': bool(assignment.allow_ai_usage),
         'duplicate_info': {
             'is_duplicate': bool(dup_info.get('is_duplicate')),
@@ -8693,9 +8702,14 @@ def api_ai_get_batch_queue(request):
             'ai_grade': s.ai_suggested_grade or '—',
             'ai_feedback': s.ai_feedback or '',
             'ai_generated_detected': bool(s.ai_generated_detected),
+            'ai_authorship_state': s.ai_authorship_state,
+            'ai_authorship_state_display': s.get_ai_authorship_state_display(),
             'ai_generated_percent': s.ai_generated_percent,
             'ai_generated_confidence': s.get_ai_generated_confidence_display() if hasattr(s, 'get_ai_generated_confidence_display') else s.ai_generated_confidence,
             'ai_generated_details': s.ai_generated_details or '',
+            'ai_authorship_state': s.ai_authorship_state,
+            'ai_authorship_state_display': s.get_ai_authorship_state_display(),
+            'ai_provenance_report': s.ai_provenance_report or {},
             'is_ai_allowed': bool(s.is_ai_allowed),
             'gr_results': s.get_ai_gr_results_list(),
             'gr_avg': s.get_ai_gr_average(),

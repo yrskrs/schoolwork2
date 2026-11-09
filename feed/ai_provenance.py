@@ -108,7 +108,7 @@ def _image_signals(stream, location):
 
 
 def _openxml_signals(package, filename):
-    signals = []
+    signals = _office_metadata_signals(package, filename)
     names = package.namelist()
     prop_files = [
         f for f in names
@@ -501,8 +501,115 @@ def _binary_ppt_signals(path):
     return signals
 
 
+def _c2pa_signals(path):
+    """Verify a Content Credentials manifest; a mere 'c2pa' string is not proof."""
+    try:
+        import c2pa
+    except Exception:
+        return [], ['C2PA-перевірка недоступна: бібліотеку не встановлено.']
+    try:
+        reader = c2pa.Reader.from_file(str(path))
+        store = json.loads(reader.json())
+    except Exception:
+        return [], ['C2PA-маніфест не знайдено або підпис не валідний.']
+    manifests = store.get('manifests') if isinstance(store, dict) else None
+    active_id = store.get('active_manifest') if isinstance(store, dict) else None
+    manifest = (manifests or {}).get(active_id) if isinstance(manifests, dict) else None
+    if not isinstance(manifest, dict):
+        return [], ['C2PA-маніфест не знайдено.']
+    generator = manifest.get('claim_generator') or manifest.get('claim_generator_info') or ''
+    if isinstance(generator, (dict, list)):
+        generator = json.dumps(generator, ensure_ascii=False)[:200]
+    ai_action = False
+    for assertion in manifest.get('assertions') or []:
+        data = assertion.get('data') if isinstance(assertion, dict) else None
+        if not isinstance(data, dict):
+            continue
+        for action in data.get('actions') or []:
+            if not isinstance(action, dict):
+                continue
+            source_type = str(action.get('digitalSourceType') or '')
+            if 'trainedAlgorithmicMedia' in source_type:
+                ai_action = True
+    if ai_action:
+        return [{
+            'location': 'C2PA маніфест',
+            'basis': 'c2pa',
+            'strength': 'strong',
+            'observation': f'Валідний підписаний C2PA-маніфест вказує на генеративне створення (claim_generator: {generator or "—"}).',
+        }], []
+    return [], ['C2PA-маніфест валідний, але не вказує на генеративне створення.']
+
+
+def _office_metadata_signals(package, filename):
+    """Inspect core/app properties beyond a raw generator-name search."""
+    signals = []
+    props = {}
+    for name in ('docProps/core.xml', 'docProps/app.xml'):
+        if name not in package.namelist():
+            continue
+        try:
+            with package.open(name) as stream:
+                text = stream.read().decode('utf-8', errors='replace')
+            for field in ('creator', 'lastModifiedBy', 'revision', 'created', 'modified',
+                          'Application', 'Company', 'Template', 'TotalTime', 'Words', 'Pages', 'Slides'):
+                match = re.search(rf'<[^>]*{field}[^>]*>([^<]*)</', text)
+                if match:
+                    props[field] = match.group(1).strip()
+        except Exception:
+            continue
+    application = ' '.join(str(props.get(k) or '') for k in ('Application', 'Company', 'Template'))
+    match = GENERATORS.search(application)
+    if match:
+        signals.append({
+            'location': 'docProps/app.xml',
+            'basis': 'metadata',
+            'strength': 'medium',
+            'observation': f'Застосунок/шаблон документа згадує {match.group(0)}. Це змінюване поле, але разом з іншими ознаками підсилює підозру.',
+        })
+    creator = props.get('creator') or ''
+    editor = props.get('lastModifiedBy') or ''
+    if creator and editor and creator.strip().casefold() != editor.strip().casefold():
+        signals.append({
+            'location': 'docProps/core.xml',
+            'basis': 'metadata',
+            'strength': 'weak',
+            'observation': f'Автор створення ({creator}) і останній редактор ({editor}) різні. Це може бути спільна робота або сторонній текст, але не доказ.',
+        })
+    return signals
+
+
 def _pdf_signals(path):
     signals = []
+    try:
+        from pypdf import PdfReader
+        reader = PdfReader(str(path))
+        metadata = reader.metadata or {}
+        for key in ('/Producer', '/Creator', '/Author', '/Title'):
+            value = str(metadata.get(key) or '')
+            match = GENERATORS.search(value)
+            if match:
+                signals.append({
+                    'location': f'PDF {key}',
+                    'basis': 'metadata',
+                    'strength': 'medium',
+                    'observation': f'Поле {key} PDF згадує {match.group(0)}. Це змінюване поле, а не доказ авторства.',
+                })
+        xmp = ''
+        try:
+            xmp = str(reader.xmp_metadata) if reader.xmp_metadata else ''
+        except Exception:
+            pass
+        match = GENERATORS.search(xmp)
+        if match:
+            signals.append({
+                'location': 'PDF XMP',
+                'basis': 'metadata',
+                'strength': 'medium',
+                'observation': f'XMP-метадані PDF згадують {match.group(0)}. Це змінюване поле.',
+            })
+    except Exception:
+        pass
     try:
         with open(path, 'rb') as f:
             header = f.read(65536).decode('latin1', errors='replace')
@@ -526,16 +633,21 @@ def _pdf_signals(path):
 
 def file_provenance(path):
     from .ai_context import evidence_cache, file_cache_key
-    key = file_cache_key(path, purpose='provenance', options='4.1.14')
+    key = file_cache_key(path, purpose='provenance', options='2026-11-09-states')
     cached = evidence_cache().get(key)
     if cached is not None:
         return cached
-    result = {'signals': [], 'limitations': ['Відсутність метаданих не доводить самостійне авторство. C2PA/SynthID та авторство не верифіковано.']}
+    result = {'signals': [], 'checked': False, 'limitations': ['Відсутність метаданих не доводить самостійне авторство. C2PA/SynthID та авторство не верифіковано.']}
     suffix = Path(path).suffix.lower()
     try:
         if suffix in IMAGE_SUFFIXES:
+            result['checked'] = True
             result['signals'] = _image_signals(path, 'зображення')
+            c2pa_signals, c2pa_limits = _c2pa_signals(path)
+            result['signals'].extend(c2pa_signals)
+            result['limitations'].extend(c2pa_limits)
         elif suffix in {'.docx', '.pptx', '.xlsx', '.pptm', '.ppsx', '.potx'}:
+            result['checked'] = True
             with zipfile.ZipFile(path) as package:
                 result['signals'].extend(_openxml_signals(package, Path(path).name))
                 if suffix in {'.pptx', '.pptm', '.ppsx', '.potx'}:
@@ -548,6 +660,7 @@ def file_provenance(path):
                         except Exception:
                             result['limitations'].append(f'Не прочитано метадані зображення: {entry.filename}.')
         elif suffix in {'.odt', '.odp', '.ods'}:
+            result['checked'] = True
             with zipfile.ZipFile(path) as package:
                 if suffix == '.odp':
                     result['signals'].extend(_odp_signals(package))
@@ -572,8 +685,10 @@ def file_provenance(path):
                         except Exception:
                             result['limitations'].append(f'Не прочитано метадані зображення: {entry.filename}.')
         elif suffix in {'.ppt', '.pps'}:
+            result['checked'] = True
             result['signals'].extend(_binary_ppt_signals(path))
         elif suffix == '.sb3':
+            result['checked'] = True
             with zipfile.ZipFile(path) as package:
                 for entry in package.infolist():
                     if Path(entry.filename).suffix.lower() in IMAGE_SUFFIXES:
@@ -583,7 +698,11 @@ def file_provenance(path):
                         except Exception:
                             pass
         elif suffix == '.pdf':
+            result['checked'] = True
             result['signals'].extend(_pdf_signals(path))
+            c2pa_signals, c2pa_limits = _c2pa_signals(path)
+            result['signals'].extend(c2pa_signals)
+            result['limitations'].extend(c2pa_limits)
         else:
             result['limitations'].append('Доступні текстові/візуальні ознаки в прочитаному вмісті; походження цього формату не встановлено.')
     except Exception:
@@ -605,11 +724,17 @@ def submission_provenance(submission):
 
 
 def normalize_authorship(result, allowed, provenance=(), tolerance_percent=25):
-    """Calibrate AI detection percentage, tolerance threshold, and inspectable evidence."""
+    """Turn uncalibrated model claims and file metadata into an evidence report.
+
+    The output never lowers the grade. States are:
+    - suspected: at least one verifiable/medium signal, or the model threshold fired;
+    - none: files were inspected and no signals were found (not proof of authorship);
+    - insufficient: no inspectable provenance (e.g. plain text) or no evidence at all.
+    """
     analysis = result.get('ai_authorship_analysis') or {}
     analysis = analysis if isinstance(analysis, dict) else {}
-    evidence = analysis.get('evidence') or []
-    evidence = [item for item in evidence if isinstance(item, dict) and item.get('observation')] if isinstance(evidence, list) else []
+    model_evidence = analysis.get('evidence') or []
+    model_evidence = [item for item in model_evidence if isinstance(item, dict) and item.get('observation')] if isinstance(model_evidence, list) else []
 
     raw_flag = result.get('ai_generated_detected')
     legacy_detected = raw_flag is True or raw_flag == 1 or str(raw_flag).lower() == 'true'
@@ -619,78 +744,105 @@ def normalize_authorship(result, allowed, provenance=(), tolerance_percent=25):
     if raw_ai_percent is not None:
         try:
             clean_p_str = str(raw_ai_percent).replace('%', '').strip()
-            ai_percent = int(float(clean_p_str))
-            ai_percent = max(0, min(100, ai_percent))
+            ai_percent = max(0, min(100, int(float(clean_p_str))))
         except (ValueError, TypeError):
             ai_percent = None
 
     tol = 25 if tolerance_percent is None else tolerance_percent
     percent_exceeds = (ai_percent is not None and ai_percent > tol)
 
-    if analysis.get('status') in {'none', 'unknown'} and not legacy_detected and not percent_exceeds:
-        evidence = []
-
-    for file in provenance:
-        evidence.extend(dict(signal, source=file['source']) for signal in file.get('signals', []))
-
     details = str(result.get('ai_generated_details') or '').strip()
     if details.lower() in {'none', 'null', 'false', 'ok', 'none.', 'null.', 'лише ознаки, не доведений факт'}:
         details = ''
 
+    signals = []
+    for item in model_evidence:
+        signals.append({
+            'source': str(item.get('source') or ''),
+            'location': str(item.get('location') or ''),
+            'basis': 'model_style',
+            'strength': 'weak',
+            'observation': str(item.get('observation')),
+        })
+    limitations = []
+    checked_files = 0
+    for file in provenance:
+        source = file.get('source') or ''
+        if file.get('checked'):
+            checked_files += 1
+        limitations.extend(file.get('limitations') or [])
+        for signal in file.get('signals', []):
+            basis = str(signal.get('basis') or 'metadata')
+            strength = str(signal.get('strength') or ('strong' if basis == 'c2pa' else
+                                                      'medium' if basis == 'metadata' else 'weak'))
+            signals.append({
+                'source': source,
+                'location': str(signal.get('location') or ''),
+                'basis': basis,
+                'strength': strength,
+                'observation': str(signal.get('observation') or ''),
+            })
+
+    strongest = 'weak'
+    if any(s['strength'] == 'strong' for s in signals):
+        strongest = 'strong'
+    elif any(s['strength'] == 'medium' for s in signals):
+        strongest = 'medium'
+
+    detected = bool(percent_exceeds or legacy_detected or strongest in {'strong', 'medium'})
+    if detected:
+        state = 'suspected'
+    elif checked_files:
+        state = 'none'
+    else:
+        state = 'insufficient'
+
+    if detected and strongest == 'strong' and any(s['basis'] == 'c2pa' for s in signals):
+        confidence = 'high'
+    elif detected and (strongest in {'strong', 'medium'} or 'self_disclosure' in {s['basis'] for s in signals}):
+        confidence = 'medium'
+    elif detected:
+        confidence = 'low'
+    else:
+        confidence = 'none'
+
     note = ('ШІ дозволено вчителем: використання інструмента саме по собі не знижує бал.' if allowed else
             'ШІ не дозволено вчителем. Підозра потребує уточнення; самостійність оцінюється за критеріями завдання, без автоматичного штрафу за стиль чи метадані.')
-
-    # Empty claim without details or evidence is uncalibrated and not proof
-    if not details and not evidence and not any(file.get('signals') for file in provenance):
-        lines = ['Походження роботи не встановлено. Виразних ознак ШІ не знайдено, але це не підтверджує самостійність. ' + note]
-        if not allowed:
-            lines.append('Бал оцінює наданий результат. Перед остаточним рішенням учитель може попросити пояснити кроки або показати чернетку.')
-        return {
-            'ai_generated_detected': False,
-            'ai_generated_percent': None,
-            'ai_generated_confidence': 'none',
-            'ai_generated_details': '\n'.join(lines)
-        }
-
-    # If details exist and legacy_detected or percent_exceeds, synthesize evidence item
-    if details and not evidence and (legacy_detected or percent_exceeds):
-        evidence = [{'observation': details, 'basis': 'text_analysis'}]
-
-    # Do not manufacture percentages from editable metadata or generic markers.
-    # Any returned percentage is an uncalibrated model estimate, not a verdict.
-
-    # Determine detection against tolerance
-    if ai_percent is not None:
-        if ai_percent > tol:
-            detected = True
-        else:
-            detected = False
-    else:
-        detected = legacy_detected or bool(evidence)
 
     lines = []
-    for item in evidence:
-        source = ' — '.join(str(item.get(k) or '') for k in ('source', 'location') if item.get(k))
-        line = (source + ': ' if source else '') + str(item['observation'])
+    for item in signals:
+        if not item['observation']:
+            continue
+        where = ' — '.join(part for part in (item['source'], item['location']) if part)
+        line = (where + ': ' if where else '') + item['observation']
         if line not in lines:
             lines.append(line)
-    if details and details not in lines and not any(details in l for l in lines):
+    if details and details not in lines and not any(details in line for line in lines):
         lines.insert(0, details)
 
-    basis = {item.get('basis') for item in evidence}
-    # Independent process evidence may support stronger confidence; style and
-    # editable metadata alone never justify "high" confidence.
-    confidence = 'medium' if detected and 'self_disclosure' in basis else ('low' if detected else 'none')
-
-    note = ('ШІ дозволено вчителем: використання інструмента саме по собі не знижує бал.' if allowed else
-            'ШІ не дозволено вчителем. Підозра потребує уточнення; самостійність оцінюється за критеріями завдання, без автоматичного штрафу за стиль чи метадані.')
-    if detected:
+    if state == 'suspected':
         lines.extend(['Це ознаки, а не доведений факт авторства. ' + note,
                       'Для уточнення поясни свої кроки, покажи проміжні результати та вкажи використані інструменти.'])
+    elif state == 'none':
+        lines = ['Ознак використання ШІ не знайдено. Це не підтверджує самостійність: метадані могли бути видалені. ' + note]
     else:
-        lines = ['Походження роботи не встановлено. Виразних ознак ШІ не знайдено, але це не підтверджує самостійність. ' + note]
+        lines = ['Походження роботи не встановлено. Недостатньо даних: у файлі немає перевірюваних метаданих. Це не підтверджує самостійність. ' + note]
         if not allowed:
             lines.append('Бал оцінює наданий результат. Перед остаточним рішенням учитель може попросити пояснити кроки або показати чернетку.')
-    return {'ai_generated_detected': detected, 'ai_generated_percent': ai_percent,
-            'ai_generated_confidence': confidence, 'ai_generated_details': '\n'.join(lines)}
 
+    report = {
+        'version': 'provenance-2026-11-09',
+        'state': state,
+        'confidence': confidence,
+        'checked_files': checked_files,
+        'signals': signals,
+        'limitations': list(dict.fromkeys(limitations))[:12],
+    }
+    return {
+        'ai_generated_detected': detected,
+        'ai_generated_percent': ai_percent,
+        'ai_generated_confidence': confidence,
+        'ai_generated_details': '\n'.join(lines),
+        'ai_authorship_state': state,
+        'ai_provenance_report': report,
+    }

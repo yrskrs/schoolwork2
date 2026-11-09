@@ -122,13 +122,13 @@
                                     🔄 Спроба #{{ sub.resubmission_attempt }} (Актуальна)
                                 </span>
                                 {% endif %}
-                                {% if sub.ai_generated_detected %}
+                                {% if sub.ai_authorship_state == 'suspected' %}
                                     {% if sub.is_ai_allowed %}
                                     <span class="badge" style="background:var(--color-success-light);color:var(--color-success);border:1px solid #a7f3d0;font-size:11px;font-weight:700;padding:2px 7px;border-radius:12px;" title="У роботі зафіксовано використання ШІ (дозволено вчителем)">
                                         🤖 ШІ (дозволено)
                                     </span>
                                     {% else %}
-                                    <span class="badge" style="background:var(--color-danger-light);color:var(--color-danger);border:1px solid #fecaca;font-size:11px;font-weight:700;padding:2px 7px;border-radius:12px;" title="У роботі виявлено ознаки використання ШІ (самостійна робота)">
+                                    <span class="badge" style="background:var(--color-danger-light);color:var(--color-danger);border:1px solid #fecaca;font-size:11px;font-weight:700;padding:2px 7px;border-radius:12px;" title="Є ознаки використання ШІ (самостійна робота)">
                                         🤖 Виявлено ШІ (самостійна робота)
                                     </span>
                                     {% endif %}
@@ -229,13 +229,13 @@
                     {% endif %}
 
                     <!-- Інформація про використання ШІ для учня (загальна інформація без деталей) -->
-                    {% if sub.ai_generated_detected %}
+                    {% if sub.ai_authorship_state == 'suspected' %}
                     <div style="padding:10px 14px;background:{% if sub.is_ai_allowed %}rgba(16,185,129,0.08){% else %}rgba(239,68,68,0.08){% endif %};border:1px solid {% if sub.is_ai_allowed %}#10b981{% else %}#ef4444{% endif %};border-radius:var(--radius-md);margin-bottom:12px;font-size:12.5px;display:flex;align-items:flex-start;gap:8px;">
                         <span style="font-size:18px;line-height:1;flex-shrink:0;">🤖</span>
                         <div>
                             <div style="font-weight:800;color:{% if sub.is_ai_allowed %}#065f46{% else %}var(--color-danger){% endif %};">
                                 {% if sub.is_ai_allowed %}
-                                У роботі зафіксовано використання штучного інтелекту (ШІ) — дозволено вчителем
+                                Є ознаки використання ШІ — дозволено вчителем
                                 {% else %}
                                 У роботі виявлено ознаки використання штучного інтелекту (ШІ)
                                 {% endif %}

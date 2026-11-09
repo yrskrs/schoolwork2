@@ -3,6 +3,7 @@ Django==6.1.2
 asgiref==3.12.1
 backports.zstd==1.7.0
 brotli==1.2.0
+c2pa-python==0.6.1
 charset-normalizer==3.5.2
 cobble==0.1.4
 defusedxml==0.7.1

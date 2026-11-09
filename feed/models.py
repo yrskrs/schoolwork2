@@ -2344,6 +2344,20 @@ class Submission(models.Model):
     ai_generated_percent = models.IntegerField(
         'Історична оцінка частки ШІ (не доказ авторства)', default=None, null=True, blank=True
     )
+    ai_authorship_state = models.CharField(
+        'Стан походження роботи',
+        max_length=20,
+        default='insufficient',
+        db_index=True,
+        choices=[
+            ('none', 'Ознак не знайдено'),
+            ('suspected', 'Є ознаки використання ШІ'),
+            ('insufficient', 'Недостатньо даних'),
+        ],
+    )
+    ai_provenance_report = models.JSONField(
+        'Структурований звіт походження', default=dict, blank=True
+    )
 
     # ── Повторна здача (робота над помилками / перездача) ────────────────────
     is_resubmission = models.BooleanField(

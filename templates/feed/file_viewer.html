@@ -1229,14 +1229,14 @@ function runSingleAICheck(subId) {
             }
 
             var aiDetectionBanner = '';
-            if (data.ai_generated_detected) {
+            if (data.ai_authorship_state === 'suspected') {
                 var confMap = {'high': 'Висока ймовірність', 'medium': 'Середня ймовірність', 'low': 'Низька ймовірність', 'none': 'Не виявлено'};
                 var confText = confMap[data.ai_generated_confidence] || data.ai_generated_confidence || 'Ознаки ШІ';
                 var isAllowed = {% if submission.is_ai_allowed %}true{% else %}false{% endif %};
                 var bgStyle = isAllowed ? 'rgba(16,185,129,0.08)' : 'rgba(239,68,68,0.08)';
                 var borderStyle = isAllowed ? '#10b981' : '#ef4444';
                 var titleColor = isAllowed ? 'var(--color-success)' : 'var(--color-danger)';
-                var pctText = (data.ai_generated_percent !== null && data.ai_generated_percent !== undefined) ? ': ' + data.ai_generated_percent + '%' : '';
+                var pctText = '';
                 var noteText = isAllowed ? '💡 Дозволено вчителем для цього завдання.' : '⚠️ ШІ не дозволено вчителем. Ознаки походження потребують уточнення; вони не означають автоматичного зниження змістового бала.';
                 var detailsHtml = data.ai_generated_details ? '<div style="color:var(--color-text-secondary);line-height:1.35;margin-bottom:3px;">' + data.ai_generated_details.replace(/\n/g, '<br>') + '</div>' : '';
 

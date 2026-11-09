@@ -45,3 +45,6 @@ qrcode==8.2
 
 # Safe rendering of teacher criteria (Markdown tables, lists and headings).
 markdown-it-py==4.2.0
+
+# Cryptographic Content Credentials (C2PA) verification for provenance reports.
+c2pa-python>=0.6.1

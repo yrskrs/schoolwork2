@@ -102,11 +102,11 @@
                         </div>
 
                         <!-- Ознаки використання ШІ у роботі (якщо виявлено) -->
-                        {% if submission.ai_generated_detected %}
+                        {% if submission.ai_authorship_state == 'suspected' %}
                         <div style="background:{% if submission.is_ai_allowed %}rgba(16,185,129,0.08){% else %}rgba(239,68,68,0.08){% endif %};border:1.5px solid {% if submission.is_ai_allowed %}#10b981{% else %}#ef4444{% endif %};border-radius:var(--radius-sm);padding:8px 10px;font-size:11.5px;margin-top:6px;">
                             <div style="font-weight:800;color:{% if submission.is_ai_allowed %}var(--color-success){% else %}var(--color-danger){% endif %};display:flex;align-items:center;gap:6px;margin-bottom:3px;">
                                 <span>🤖</span>
-                                <span>Виявлено ознаки використання ШІ{% if submission.ai_generated_percent is not None %}: {{ submission.ai_generated_percent }}%{% endif %} ({{ submission.get_ai_generated_confidence_display|default:submission.ai_generated_confidence }})</span>
+                                <span>Є ознаки використання ШІ ({{ submission.get_ai_generated_confidence_display|default:submission.ai_generated_confidence }})</span>
                             </div>
                             {% if submission.ai_generated_details %}
                             <div style="color:var(--color-text-secondary);line-height:1.35;margin-bottom:4px;">{{ submission.ai_generated_details }}</div>

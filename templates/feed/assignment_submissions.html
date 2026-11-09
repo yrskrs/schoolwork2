@@ -179,9 +179,9 @@
                                     </span>
                                     {% endif %}
                                 {% endif %}
-                                {% if submission.ai_generated_detected %}
-                                    <span class="badge" style="background:{% if submission.is_ai_allowed %}#ecfdf5;color:var(--color-success);border:1px solid #a7f3d0;{% else %}#fef2f2;color:var(--color-danger);border:1px solid #fecaca;{% endif %}font-size:10.5px;font-weight:700;padding:2px 6px;" title="{% if submission.is_ai_allowed %}Виявлено ознаки ШІ (дозволено вчителем){% else %}Виявлено ознаки ШІ (самостійна робота, заборонено){% endif %}: {{ submission.ai_generated_details }}">
-                                        🤖 Ознаки ШІ{% if submission.ai_generated_percent is not None %} {{ submission.ai_generated_percent }}%{% endif %} ({{ submission.get_ai_generated_confidence_display|default:submission.ai_generated_confidence }})
+                                {% if submission.ai_authorship_state == 'suspected' %}
+                                    <span class="badge" style="background:{% if submission.is_ai_allowed %}#ecfdf5;color:var(--color-success);border:1px solid #a7f3d0;{% else %}#fef2f2;color:var(--color-danger);border:1px solid #fecaca;{% endif %}font-size:10.5px;font-weight:700;padding:2px 6px;" title="{% if submission.is_ai_allowed %}Є ознаки ШІ (дозволено вчителем). Це не доказ авторства.{% else %}Є ознаки ШІ (самостійна робота). Це не доказ авторства.{% endif %} {{ submission.ai_generated_details }}">
+                                        🤖 Є ознаки ШІ ({{ submission.get_ai_generated_confidence_display|default:submission.ai_generated_confidence }})
                                     </span>
                                 {% endif %}
                                 {% if submission.is_collective_work %}
