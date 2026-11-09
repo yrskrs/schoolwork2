@@ -757,11 +757,14 @@ def normalize_authorship(result, allowed, provenance=(), tolerance_percent=25):
 
     signals = []
     for item in model_evidence:
+        basis = str(item.get('basis') or 'model_style')
+        if basis not in {'self_disclosure', 'text_analysis'}:
+            basis = 'model_style'
         signals.append({
             'source': str(item.get('source') or ''),
             'location': str(item.get('location') or ''),
-            'basis': 'model_style',
-            'strength': 'weak',
+            'basis': basis,
+            'strength': 'medium' if basis == 'self_disclosure' else 'weak',
             'observation': str(item.get('observation')),
         })
     limitations = []
