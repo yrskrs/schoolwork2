@@ -184,4 +184,20 @@
                             🗑️ Видалити цю здачу
                         </button>
                     </form>
-                </div>
+                
+                    <form method="post" action="{% url 'submission_authorship_label' submission.pk %}"
+                          style="border-top:1px solid var(--color-border);padding-top:8px;font-size:11.5px;">
+                        {% csrf_token %}
+                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                        <div style="font-weight:800;color:var(--color-text-secondary);margin-bottom:4px;">🏷️ Походження для калібрування</div>
+                        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+                            <select name="label" style="padding:3px 6px;border-radius:6px;border:1px solid var(--color-border);background:var(--color-surface);font-size:11.5px;">
+                                <option value="unknown" {% if submission.ai_authorship_teacher_label == 'unknown' %}selected{% endif %}>Не визначено</option>
+                                <option value="ai" {% if submission.ai_authorship_teacher_label == 'ai' %}selected{% endif %}>Підтверджую ШІ</option>
+                                <option value="not_ai" {% if submission.ai_authorship_teacher_label == 'not_ai' %}selected{% endif %}>Самостійна робота</option>
+                            </select>
+                            <button type="submit" class="btn btn-secondary btn-sm" style="font-size:11.5px;padding:3px 8px;">Зберегти</button>
+                        </div>
+                        <div style="color:var(--color-text-muted);margin-top:3px;">Не змінює бал; потрібно для калібрування.</div>
+                    </form>
+</div>

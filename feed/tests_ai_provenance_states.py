@@ -133,6 +133,13 @@ class TeacherAuthorshipLabelTests(TestCase):
         self.assertEqual(self.submission.ai_authorship_teacher_note, 'є слід C2PA')
         self.assertIsNotNone(self.submission.ai_authorship_labeled_at)
 
+    def test_label_returns_to_viewer(self):
+        response = self.client.post(
+            reverse('submission_authorship_label', args=[self.submission.pk]),
+            {'label': 'not_ai', 'next': '/teacher/view-file/%s/' % self.submission.pk})
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.url.startswith('/teacher/view-file/'))
+
     def test_invalid_label_is_rejected(self):
         response = self.client.post(
             reverse('submission_authorship_label', args=[self.submission.pk]), {'label': 'yes'})

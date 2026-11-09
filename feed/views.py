@@ -3345,6 +3345,11 @@ def submission_authorship_label(request, submission_id):
     submission.ai_authorship_labeled_at = timezone.now() if label != 'unknown' else None
     submission.save(update_fields=[
         'ai_authorship_teacher_label', 'ai_authorship_teacher_note', 'ai_authorship_labeled_at'])
+    from django.utils.http import url_has_allowed_host_and_scheme
+    next_url = (request.POST.get('next') or '').strip()
+    if next_url and url_has_allowed_host_and_scheme(
+            next_url, allowed_hosts={request.get_host()}, require_https=request.is_secure()):
+        return redirect(next_url)
     return redirect('submission_detail', submission_id=submission.pk)
 
 
