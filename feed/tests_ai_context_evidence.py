@@ -8,14 +8,14 @@ from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import SimpleTestCase, TestCase
+from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 from PIL import Image
 
 from .ai_context import _full_text, build_assessment_request, compact_reference_material, extract_file_evidence
 from .ai_model_catalog import get_model_capabilities
 from .gemini_service import level_for_grade, normalized_level
-from .ai_files import upload_gemini_file, wait_gemini_file
+from .ai_files import upload_gemini_file, validate_upload_media, wait_gemini_file
 from .ai_jobs import (_parameters_key, clone_snapshot_files, snapshot_drift,
                       snapshot_submission_files, source_snapshot)
 from .ai_payload import payload_manifest
@@ -399,11 +399,12 @@ class GeminiFileApiTests(SimpleTestCase):
             os.unlink(path)
         self.assertEqual(request.call_count, 3)
 
+    @patch('feed.ai_files.delete_gemini_file')
     @patch('feed.ai_files.wait_gemini_file', return_value={'state': 'ACTIVE'})
     @patch('feed.ai_files.upload_gemini_file', return_value={
         'name': 'files/abc', 'uri': 'https://files/abc', 'mime_type': 'video/mp4'})
     @patch('feed.gemini_service._http_post_json')
-    def test_raw_call_sends_file_data_for_large_video(self, post, upload, wait):
+    def test_raw_call_sends_file_data_for_large_video(self, post, upload, wait, delete):
         post.return_value = (200, {'candidates': [{'content': {'parts': [{'text': '{}'}]},
                                                    'finishReason': 'STOP'}]}, '')
         with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as handle:
@@ -419,6 +420,7 @@ class GeminiFileApiTests(SimpleTestCase):
         parts = post.call_args.args[1]['contents'][0]['parts']
         self.assertTrue(any('file_data' in part and part['file_data']['file_uri'] == 'https://files/abc'
                             for part in parts))
+        delete.assert_called_once_with('files/abc', 'synthetic')
 
     @patch('feed.ai_files.upload_gemini_file')
     def test_non_gemini_provider_rejects_upload_media(self, upload):
@@ -506,3 +508,65 @@ class CoauthorNameTests(SimpleTestCase):
     def test_hyphenated_surname_is_not_a_coauthor_match(self):
         self.assertFalse(Submission._name_component_in('Коваль', ['коваль-мельник іван']))
         self.assertTrue(Submission._name_component_in('Коваль', ['коваль іван']))
+
+
+class FileApiLimitTests(SimpleTestCase):
+    def _file(self, size):
+        handle = tempfile.NamedTemporaryFile(suffix='.mp4', delete=False)
+        handle.write(b'\x00' * size)
+        handle.close()
+        return handle.name
+
+    @override_settings(AI_FILE_API_MAX_FILES=1, AI_FILE_API_MAX_FILE_MB=10, AI_FILE_API_MAX_TOTAL_MB=20)
+    def test_too_many_upload_files_returns_413(self):
+        paths = [self._file(10) for _ in range(2)]
+        try:
+            result = validate_upload_media([{'upload_path': p, 'mime_type': 'video/mp4'} for p in paths])
+        finally:
+            for path in paths:
+                os.unlink(path)
+        self.assertEqual(result[0], 413)
+
+    @override_settings(AI_FILE_API_MAX_FILES=4, AI_FILE_API_MAX_FILE_MB=1, AI_FILE_API_MAX_TOTAL_MB=20)
+    def test_single_file_over_limit_returns_413(self):
+        path = self._file(2 * 1024 * 1024)
+        try:
+            result = validate_upload_media([{'upload_path': path, 'mime_type': 'video/mp4'}])
+        finally:
+            os.unlink(path)
+        self.assertEqual(result[0], 413)
+
+    def test_missing_upload_file_returns_422(self):
+        result = validate_upload_media([{'upload_path': '/tmp/does-not-exist-probe.mp4',
+                                          'mime_type': 'video/mp4'}])
+        self.assertEqual(result[0], 422)
+
+    @override_settings(AI_FILE_API_MAX_FILES=1)
+    @patch('feed.ai_files.upload_gemini_file')
+    def test_raw_call_blocks_before_upload_when_limit_exceeded(self, upload):
+        paths = [self._file(10) for _ in range(2)]
+        try:
+            status, *_ = _raw_call_ai_api(
+                'p', 's', [{'mime_type': 'video/mp4', 'upload_path': path} for path in paths],
+                provider='gemini', api_key='k', model_name='gemini-3.6-flash')
+        finally:
+            for path in paths:
+                os.unlink(path)
+        self.assertEqual(status, 413)
+        upload.assert_not_called()
+
+    @patch('feed.ai_files.delete_gemini_file')
+    @patch('feed.ai_files.wait_gemini_file', return_value={'state': 'ACTIVE'})
+    @patch('feed.ai_files.upload_gemini_file', return_value={
+        'name': 'files/abc', 'uri': 'https://files/abc', 'mime_type': 'video/mp4'})
+    @patch('feed.gemini_service._http_post_json', side_effect=RuntimeError('boom'))
+    def test_uploaded_file_is_deleted_even_when_request_fails(self, post, upload, wait, delete):
+        path = self._file(10)
+        try:
+            status, *_ = _raw_call_ai_api(
+                'p', 's', [{'mime_type': 'video/mp4', 'upload_path': path}],
+                provider='gemini', api_key='k', model_name='gemini-3.6-flash')
+        finally:
+            os.unlink(path)
+        self.assertEqual(status, 0)
+        delete.assert_called_once_with('files/abc', 'k')

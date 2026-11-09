@@ -90,3 +90,31 @@ def delete_gemini_file(name, api_key):
         _request(f'{FILES_URL}/{name}', None, {'x-goog-api-key': api_key}, 'DELETE', timeout=30)
     except Exception:
         pass
+
+
+def validate_upload_media(items):
+    """Provider-side limits before any byte leaves the server."""
+    from django.conf import settings
+    max_files = max(1, int(getattr(settings, 'AI_FILE_API_MAX_FILES', 4)))
+    max_file = max(1, int(getattr(settings, 'AI_FILE_API_MAX_FILE_MB', 200))) * 1024 * 1024
+    max_total = max(1, int(getattr(settings, 'AI_FILE_API_MAX_TOTAL_MB', 400))) * 1024 * 1024
+    items = [item for item in (items or []) if isinstance(item, dict)]
+    if len(items) > max_files:
+        return 413, f'Забагато файлів для Gemini File API: {len(items)} > {max_files}.'
+    total = 0
+    for item in items:
+        path = item.get('upload_path')
+        if not path or not os.path.exists(path):
+            return 422, 'Файл для завантаження зник; потрібна повторна підготовка.'
+        try:
+            size = os.path.getsize(path)
+        except OSError:
+            return 422, 'Не вдалося прочитати файл для завантаження.'
+        if size > max_file:
+            return 413, (f'Файл {os.path.basename(path)} завеликий для File API '
+                         f'({size // (1024 * 1024)} МБ > {max_file // (1024 * 1024)} МБ).')
+        total += size
+    if total > max_total:
+        return 413, (f'Сумарний обсяг медіа завеликий для одного запиту '
+                     f'({total // (1024 * 1024)} МБ > {max_total // (1024 * 1024)} МБ).')
+    return None

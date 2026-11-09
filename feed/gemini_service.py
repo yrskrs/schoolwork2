@@ -352,6 +352,11 @@ def _raw_call_ai_api(prompt_text, system_prompt="", inline_media=None, provider=
     if upload_media and provider != 'gemini':
         return 415, None, ('Медіа завелике для цього провайдера; потрібен Gemini File API. '
                            'Докази збережено.'), {'_schoolnet_local_preflight': True}
+    if upload_media:
+        from .ai_files import validate_upload_media
+        violation = validate_upload_media(upload_media)
+        if violation:
+            return violation[0], None, violation[1], {'_schoolnet_local_preflight': True}
     from .ai_context import media_for_provider
     from .ai_payload import optimize_media
     try:
@@ -387,216 +392,225 @@ def _raw_call_ai_api(prompt_text, system_prompt="", inline_media=None, provider=
     url, headers, model = get_provider_endpoint(provider, model_name=model_name, api_key=api_key, custom_url=custom_url)
 
     if provider == 'gemini':
-        # Збільшений таймаут для Gemini для запобігання read timeouts (рекомендація: >= 50с)
-        gemini_timeout = max(timeout, 60) if timeout <= 35 else max(timeout, 60)
+        from .ai_files import delete_gemini_file
+        uploaded_names = []
 
-        parts = []
-        if prompt_text and str(prompt_text).strip():
-            parts.append({"text": str(prompt_text).strip()})
+        def _perform_gemini_request():
+            # Збільшений таймаут для Gemini для запобігання read timeouts (рекомендація: >= 50с)
+            gemini_timeout = max(timeout, 60) if timeout <= 35 else max(timeout, 60)
 
-        _GEMINI_ALLOWED_MIMES = {
-            'image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif',
-            'application/pdf', 'audio/mp3', 'audio/mpeg', 'audio/wav', 'audio/ogg',
-            'audio/mp4', 'audio/aac', 'audio/flac', 'audio/aiff',
-            'video/mp4', 'video/webm', 'video/quicktime', 'video/3gpp', 'video/ogg',
-            'text/plain', 'text/csv', 'text/html'
-        }
+            parts = []
+            if prompt_text and str(prompt_text).strip():
+                parts.append({"text": str(prompt_text).strip()})
 
-        if inline_media:
-            for item in inline_media:
-                if not isinstance(item, dict):
-                    continue
-                if item.get("source") and str(item["source"]).strip():
-                    parts.append({"text": str(item["source"]).strip()})
-                m_type = (item.get("mime_type") or '').lower().strip()
-                b64_data = (item.get("data") or '').strip()
-                if b64_data.startswith('data:'):
-                    b64_data = re.sub(r'^data:[^;]+;base64,', '', b64_data)
-
-                # Перевіряємо валідність MIME-типу та наявність даних перед додаванням
-                if m_type in _GEMINI_ALLOWED_MIMES and b64_data:
-                    parts.append({
-                        "inlineData": {
-                            "mimeType": m_type,
-                            "data": b64_data
-                        }
-                    })
-
-        if upload_media:
-            from .ai_files import (FileApiError, delete_gemini_file, upload_gemini_file,
-                                   wait_gemini_file)
-            uploaded_names = []
-            try:
-                for item in upload_media:
-                    info = upload_gemini_file(item['upload_path'], item['mime_type'], api_key,
-                                              item.get('source', ''))
-                    wait_gemini_file(info['name'], api_key)
-                    uploaded_names.append(info['name'])
-                    parts.append({'file_data': {'mime_type': info['mime_type'],
-                                                'file_uri': info['uri']}})
-            except FileApiError as error:
-                for name in uploaded_names:
-                    delete_gemini_file(name, api_key)
-                return 503, None, f'Не вдалося завантажити медіа у Gemini File API: {error}', {
-                    '_schoolnet_local_preflight': True}
-
-        # Gemini API вимагає непорожній список parts у contents
-        if not parts:
-            parts = [{"text": (prompt_text or "").strip() or "Оціни надані матеріали."}]
-
-        generation_config = {
-            "temperature": temperature,
-            "maxOutputTokens": max_output_tokens
-        }
-        if seed is not None:
-            generation_config["seed"] = seed
-        if thinking_budget is not None:
-            generation_config["thinkingConfig"] = {"thinkingBudget": thinking_budget}
-        if json_mode:
-            generation_config["responseMimeType"] = "application/json"
-
-        payload = {
-            "contents": [
-                {
-                    "role": "user",
-                    "parts": parts
-                }
-            ],
-            "generationConfig": generation_config
-        }
-        if system_prompt and str(system_prompt).strip():
-            payload["systemInstruction"] = {
-                "parts": [{"text": str(system_prompt).strip()}]
+            _GEMINI_ALLOWED_MIMES = {
+                'image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif',
+                'application/pdf', 'audio/mp3', 'audio/mpeg', 'audio/wav', 'audio/ogg',
+                'audio/mp4', 'audio/aac', 'audio/flac', 'audio/aiff',
+                'video/mp4', 'video/webm', 'video/quicktime', 'video/3gpp', 'video/ogg',
+                'text/plain', 'text/csv', 'text/html'
             }
 
-        from .ai_compatibility import GeminiOptions
-        api_options = GeminiOptions(url, model)
-        api_options.apply(payload)
+            if inline_media:
+                for item in inline_media:
+                    if not isinstance(item, dict):
+                        continue
+                    if item.get("source") and str(item["source"]).strip():
+                        parts.append({"text": str(item["source"]).strip()})
+                    m_type = (item.get("mime_type") or '').lower().strip()
+                    b64_data = (item.get("data") or '').strip()
+                    if b64_data.startswith('data:'):
+                        b64_data = re.sub(r'^data:[^;]+;base64,', '', b64_data)
 
-        def _log_gemini_400(err_text, cur_payload):
-            try:
-                debug_payload = {
-                    "contents_count": len(cur_payload.get("contents", [])),
-                    "parts_types": [
-                        "text" if "text" in p else f"inlineData({p.get('inlineData', {}).get('mimeType')})"
-                        for p in cur_payload.get("contents", [{}])[0].get("parts", [])
-                    ],
-                    "has_system": bool(cur_payload.get("systemInstruction")),
-                    "gen_config": cur_payload.get("generationConfig"),
+                    # Перевіряємо валідність MIME-типу та наявність даних перед додаванням
+                    if m_type in _GEMINI_ALLOWED_MIMES and b64_data:
+                        parts.append({
+                            "inlineData": {
+                                "mimeType": m_type,
+                                "data": b64_data
+                            }
+                        })
+
+            if upload_media:
+                from .ai_files import (FileApiError, delete_gemini_file, upload_gemini_file,
+                                       wait_gemini_file)
+                try:
+                    for item in upload_media:
+                        info = upload_gemini_file(item['upload_path'], item['mime_type'], api_key,
+                                                  item.get('source', ''))
+                        wait_gemini_file(info['name'], api_key)
+                        uploaded_names.append(info['name'])
+                        parts.append({'file_data': {'mime_type': info['mime_type'],
+                                                    'file_uri': info['uri']}})
+                except FileApiError as error:
+                    for name in uploaded_names:
+                        delete_gemini_file(name, api_key)
+                    return 503, None, f'Не вдалося завантажити медіа у Gemini File API: {error}', {
+                        '_schoolnet_local_preflight': True}
+
+            # Gemini API вимагає непорожній список parts у contents
+            if not parts:
+                parts = [{"text": (prompt_text or "").strip() or "Оціни надані матеріали."}]
+
+            generation_config = {
+                "temperature": temperature,
+                "maxOutputTokens": max_output_tokens
+            }
+            if seed is not None:
+                generation_config["seed"] = seed
+            if thinking_budget is not None:
+                generation_config["thinkingConfig"] = {"thinkingBudget": thinking_budget}
+            if json_mode:
+                generation_config["responseMimeType"] = "application/json"
+
+            payload = {
+                "contents": [
+                    {
+                        "role": "user",
+                        "parts": parts
+                    }
+                ],
+                "generationConfig": generation_config
+            }
+            if system_prompt and str(system_prompt).strip():
+                payload["systemInstruction"] = {
+                    "parts": [{"text": str(system_prompt).strip()}]
                 }
-                logger.warning("Gemini 400 Invalid Argument | Payload structure: %s", debug_payload)
-            except Exception:
-                pass
+
+            from .ai_compatibility import GeminiOptions
+            api_options = GeminiOptions(url, model)
+            api_options.apply(payload)
+
+            def _log_gemini_400(err_text, cur_payload):
+                try:
+                    debug_payload = {
+                        "contents_count": len(cur_payload.get("contents", [])),
+                        "parts_types": [
+                            "text" if "text" in p else f"inlineData({p.get('inlineData', {}).get('mimeType')})"
+                            for p in cur_payload.get("contents", [{}])[0].get("parts", [])
+                        ],
+                        "has_system": bool(cur_payload.get("systemInstruction")),
+                        "gen_config": cur_payload.get("generationConfig"),
+                    }
+                    logger.warning("Gemini 400 Invalid Argument | Payload structure: %s", debug_payload)
+                except Exception:
+                    pass
+
+            try:
+                status_code, data, text = _http_post_json(url, payload, headers=headers, timeout=gemini_timeout)
+
+                # Каскадне відновлення при 400 (Invalid argument).
+                # Gemini часто повертає загальне "Request contains an invalid argument."
+                # без назви поля, або скаржиться на конкретну опцію ("thinkingConfig is
+                # not supported"). У таких випадках має сенс прибрати необов'язкові
+                # опції (thinkingConfig / responseMimeType / systemInstruction).
+                # Але помилки, що стосуються самої моделі, ключа чи квоти (invalid model,
+                # not found, permission, api key, quota, billing, location), НЕ пов'язані
+                # з формою запиту — повтор із видозміненим payload лише марнує квоту й
+                # час, тому їх не чіпаємо.
+                _err_lower = (text or "").lower()
+
+                def _recoverable_400(err_text):
+                    """True, якщо 400 можна спробувати виправити зміною опцій запиту."""
+                    low = (err_text or "").lower()
+                    # Помилки про модель/ключ/квоту — не лікуються зміною опцій.
+                    if any(w in low for w in (
+                        "invalid model", "model not found", "model_not_found",
+                        "does not exist", "permission", "forbidden", "api key",
+                        "api_key", "unauthenticated", "quota", "billing",
+                        "location", "unsupported model", "deprecated",
+                    )):
+                        return False
+                    # Порожнє або загальне повідомлення — пробуємо відновлення.
+                    if not low.strip():
+                        return True
+                    # Явна скарга на опцію запиту — пробуємо відновлення.
+                    if any(w in low for w in (
+                        "invalid argument", "invalid_argument", "bad request",
+                        "invalid request", "malformed", "not supported",
+                        "unsupported", "unknown field", "unknown name",
+                        "thinkingconfig", "responsemimetype", "systeminstruction",
+                    )):
+                        return True
+                    return False
+
+                _generic_invalid = status_code == 400 and _recoverable_400(text)
+
+                # 1. Повтор без seed, якщо конкретна Gemini-модель його не приймає.
+                if _generic_invalid and "seed" in payload.get("generationConfig", {}):
+                    _log_gemini_400(text, payload)
+                    api_options.remember("seed", payload["generationConfig"]["seed"])
+                    del payload["generationConfig"]["seed"]
+                    status_code, data, text = _http_post_json(url, payload, headers=headers, timeout=gemini_timeout)
+                    _generic_invalid = status_code == 400 and _recoverable_400(text)
+
+                # 2. Повтор без thinkingConfig (thinkingBudget=0 часто відхиляється
+                #    моделями, що вимагають мінімальний бюджет міркувань).
+                if _generic_invalid and "thinkingConfig" in payload.get("generationConfig", {}):
+                    _log_gemini_400(text, payload)
+                    api_options.remember("thinkingConfig", payload["generationConfig"]["thinkingConfig"])
+                    del payload["generationConfig"]["thinkingConfig"]
+                    status_code, data, text = _http_post_json(url, payload, headers=headers, timeout=gemini_timeout)
+                    _generic_invalid = status_code == 400 and _recoverable_400(text)
+
+                # 2. Повтор без responseMimeType, якщо модель не підтримує JSON mode
+                if _generic_invalid and "responseMimeType" in payload.get("generationConfig", {}):
+                    _log_gemini_400(text, payload)
+                    api_options.remember("responseMimeType", payload["generationConfig"]["responseMimeType"])
+                    del payload["generationConfig"]["responseMimeType"]
+                    status_code, data, text = _http_post_json(url, payload, headers=headers, timeout=gemini_timeout)
+                    _generic_invalid = status_code == 400 and _recoverable_400(text)
+
+                # 3. Повтор без окремого systemInstruction (вбудовуємо в user prompt)
+                if _generic_invalid and "systemInstruction" in payload:
+                    _log_gemini_400(text, payload)
+                    api_options.remember("systemInstruction", None)
+                    sys_text = payload.pop("systemInstruction", {}).get("parts", [{}])[0].get("text", "")
+                    if sys_text and payload.get("contents") and payload["contents"][0].get("parts"):
+                        first_part = payload["contents"][0]["parts"][0]
+                        if "text" in first_part:
+                            first_part["text"] = f"[SYSTEM INSTRUCTION]\n{sys_text}\n\n[USER REQUEST]\n{first_part['text']}"
+                        else:
+                            payload["contents"][0]["parts"].insert(0, {"text": f"[SYSTEM INSTRUCTION]\n{sys_text}"})
+                    status_code, data, text = _http_post_json(url, payload, headers=headers, timeout=gemini_timeout)
+
+                if status_code == 400:
+                    _log_gemini_400(text, payload)
+
+                if status_code == 200 and data:
+                    candidates = data.get('candidates', [])
+                    if candidates:
+                        cand = candidates[0]
+                        if cand.get('finishReason') == 'MAX_TOKENS':
+                            return status_code, '', 'MAX_TOKENS: відповідь неповна; оцінку не збережено.', data
+                        c_parts = cand.get('content', {}).get('parts', [])
+                        if c_parts:
+                            # Фільтруємо частини роздумів ШІ (thinking)
+                            text_parts = [p.get('text', '') for p in c_parts if not p.get('thought')]
+                            if not text_parts:
+                                text_parts = [p.get('text', '') for p in c_parts]
+                            raw_reply = "\n".join([t for t in text_parts if t]).strip()
+                            if raw_reply:
+                                return status_code, raw_reply, None, data
+
+                        finish_reason = cand.get('finishReason', '')
+                        if finish_reason == 'MAX_TOKENS':
+                            return status_code, "", "Модель досягла ліміту токенів (MAX_TOKENS) під час формування відповіді. Збільште ліміт вихідних токенів.", data
+                        elif finish_reason == 'SAFETY':
+                            return status_code, "", "Відповідь заблоковано фільтром безпеки Gemini (SAFETY)", data
+                    return status_code, "", "Порожня відповідь від Gemini", data
+                else:
+                    err_data = data or {}
+                    err_msg = api_error_message(err_data, text, api_key)
+                    return status_code, None, err_msg, data
+            except Exception as e:
+                return 0, None, str(e), None
 
         try:
-            status_code, data, text = _http_post_json(url, payload, headers=headers, timeout=gemini_timeout)
-
-            # Каскадне відновлення при 400 (Invalid argument).
-            # Gemini часто повертає загальне "Request contains an invalid argument."
-            # без назви поля, або скаржиться на конкретну опцію ("thinkingConfig is
-            # not supported"). У таких випадках має сенс прибрати необов'язкові
-            # опції (thinkingConfig / responseMimeType / systemInstruction).
-            # Але помилки, що стосуються самої моделі, ключа чи квоти (invalid model,
-            # not found, permission, api key, quota, billing, location), НЕ пов'язані
-            # з формою запиту — повтор із видозміненим payload лише марнує квоту й
-            # час, тому їх не чіпаємо.
-            _err_lower = (text or "").lower()
-
-            def _recoverable_400(err_text):
-                """True, якщо 400 можна спробувати виправити зміною опцій запиту."""
-                low = (err_text or "").lower()
-                # Помилки про модель/ключ/квоту — не лікуються зміною опцій.
-                if any(w in low for w in (
-                    "invalid model", "model not found", "model_not_found",
-                    "does not exist", "permission", "forbidden", "api key",
-                    "api_key", "unauthenticated", "quota", "billing",
-                    "location", "unsupported model", "deprecated",
-                )):
-                    return False
-                # Порожнє або загальне повідомлення — пробуємо відновлення.
-                if not low.strip():
-                    return True
-                # Явна скарга на опцію запиту — пробуємо відновлення.
-                if any(w in low for w in (
-                    "invalid argument", "invalid_argument", "bad request",
-                    "invalid request", "malformed", "not supported",
-                    "unsupported", "unknown field", "unknown name",
-                    "thinkingconfig", "responsemimetype", "systeminstruction",
-                )):
-                    return True
-                return False
-
-            _generic_invalid = status_code == 400 and _recoverable_400(text)
-
-            # 1. Повтор без seed, якщо конкретна Gemini-модель його не приймає.
-            if _generic_invalid and "seed" in payload.get("generationConfig", {}):
-                _log_gemini_400(text, payload)
-                api_options.remember("seed", payload["generationConfig"]["seed"])
-                del payload["generationConfig"]["seed"]
-                status_code, data, text = _http_post_json(url, payload, headers=headers, timeout=gemini_timeout)
-                _generic_invalid = status_code == 400 and _recoverable_400(text)
-
-            # 2. Повтор без thinkingConfig (thinkingBudget=0 часто відхиляється
-            #    моделями, що вимагають мінімальний бюджет міркувань).
-            if _generic_invalid and "thinkingConfig" in payload.get("generationConfig", {}):
-                _log_gemini_400(text, payload)
-                api_options.remember("thinkingConfig", payload["generationConfig"]["thinkingConfig"])
-                del payload["generationConfig"]["thinkingConfig"]
-                status_code, data, text = _http_post_json(url, payload, headers=headers, timeout=gemini_timeout)
-                _generic_invalid = status_code == 400 and _recoverable_400(text)
-
-            # 2. Повтор без responseMimeType, якщо модель не підтримує JSON mode
-            if _generic_invalid and "responseMimeType" in payload.get("generationConfig", {}):
-                _log_gemini_400(text, payload)
-                api_options.remember("responseMimeType", payload["generationConfig"]["responseMimeType"])
-                del payload["generationConfig"]["responseMimeType"]
-                status_code, data, text = _http_post_json(url, payload, headers=headers, timeout=gemini_timeout)
-                _generic_invalid = status_code == 400 and _recoverable_400(text)
-
-            # 3. Повтор без окремого systemInstruction (вбудовуємо в user prompt)
-            if _generic_invalid and "systemInstruction" in payload:
-                _log_gemini_400(text, payload)
-                api_options.remember("systemInstruction", None)
-                sys_text = payload.pop("systemInstruction", {}).get("parts", [{}])[0].get("text", "")
-                if sys_text and payload.get("contents") and payload["contents"][0].get("parts"):
-                    first_part = payload["contents"][0]["parts"][0]
-                    if "text" in first_part:
-                        first_part["text"] = f"[SYSTEM INSTRUCTION]\n{sys_text}\n\n[USER REQUEST]\n{first_part['text']}"
-                    else:
-                        payload["contents"][0]["parts"].insert(0, {"text": f"[SYSTEM INSTRUCTION]\n{sys_text}"})
-                status_code, data, text = _http_post_json(url, payload, headers=headers, timeout=gemini_timeout)
-
-            if status_code == 400:
-                _log_gemini_400(text, payload)
-
-            if status_code == 200 and data:
-                candidates = data.get('candidates', [])
-                if candidates:
-                    cand = candidates[0]
-                    if cand.get('finishReason') == 'MAX_TOKENS':
-                        return status_code, '', 'MAX_TOKENS: відповідь неповна; оцінку не збережено.', data
-                    c_parts = cand.get('content', {}).get('parts', [])
-                    if c_parts:
-                        # Фільтруємо частини роздумів ШІ (thinking)
-                        text_parts = [p.get('text', '') for p in c_parts if not p.get('thought')]
-                        if not text_parts:
-                            text_parts = [p.get('text', '') for p in c_parts]
-                        raw_reply = "\n".join([t for t in text_parts if t]).strip()
-                        if raw_reply:
-                            return status_code, raw_reply, None, data
-
-                    finish_reason = cand.get('finishReason', '')
-                    if finish_reason == 'MAX_TOKENS':
-                        return status_code, "", "Модель досягла ліміту токенів (MAX_TOKENS) під час формування відповіді. Збільште ліміт вихідних токенів.", data
-                    elif finish_reason == 'SAFETY':
-                        return status_code, "", "Відповідь заблоковано фільтром безпеки Gemini (SAFETY)", data
-                return status_code, "", "Порожня відповідь від Gemini", data
-            else:
-                err_data = data or {}
-                err_msg = api_error_message(err_data, text, api_key)
-                return status_code, None, err_msg, data
-        except Exception as e:
-            return 0, None, str(e), None
+            return _perform_gemini_request()
+        finally:
+            for _uploaded_name in uploaded_names:
+                delete_gemini_file(_uploaded_name, api_key)
 
     else:
         # OpenAI Chat Completions формат
