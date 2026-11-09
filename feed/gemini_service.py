@@ -6821,6 +6821,25 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
         # Busy/cooling models do not block unrelated providers or hold a worker asleep.
         is_cooldown, cooldown_rem, _ = get_model_cooldown(c_provider, c_model)
         if is_cooldown or is_model_busy(c_provider, c_model, c_conn_id):
+            wait_seconds = max(1, cooldown_rem) if is_cooldown else 5
+            if pinned and _matches_pinned(cfg):
+                from django.conf import settings as django_settings
+                from .ai_progress import _job_id
+                from .models import AIJob
+                job_id = _job_id.get()
+                waits = 0
+                if job_id:
+                    events = AIJob.objects.filter(pk=job_id).values_list('events', flat=True).first() or []
+                    waits = sum(1 for event in events if event.get('kind') == 'pinned_wait')
+                max_waits = max(1, int(getattr(django_settings, 'AI_PIN_MAX_WAITS', 3)))
+                if job_id and waits < max_waits:
+                    emit_event('pinned_wait',
+                               f'{c_provider}/{c_model}: закріплена модель зайнята; відкладаю, '
+                               f'щоб не змішувати моделі (очікування {waits + 1}/{max_waits}).',
+                               provider=c_provider, model=c_model, position=cfg_idx + 1,
+                               total=len(attempts_configs))
+                    return {'status': 'deferred', 'retry_after': max(5, min(120, wait_seconds)),
+                            'error': 'Очікує закріплену модель; перевірку відкладено.'}
             deferred_waits.append(max(1, cooldown_rem) if is_cooldown else 2)
             emit_event('model_busy', f'{c_provider}/{c_model}: очікує доступного слота або квоти.', provider=c_provider, model=c_model)
             continue

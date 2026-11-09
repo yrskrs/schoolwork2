@@ -116,6 +116,37 @@ class EvaluationProgressTests(TestCase):
         self.assertIn('складні паролі', prompt)
         self.assertNotIn('Змінений вміст', prompt)
 
+    @patch('feed.ai_concurrency.is_model_busy', side_effect=lambda provider, model, *a, **k: model == 'deepseek-chat')
+    @patch('feed.gemini_service.call_ai_api')
+    def test_busy_pinned_model_defers_instead_of_falling_back(self, call, busy):
+        from .ai_progress import track_job
+        self.add_connection('deepseek', 'deepseek-chat')
+        self.add_connection('gemini', 'vision-model')
+        job = AIJob.objects.create(kind='teacher_check', submission=self.sub, requested_by=self.user,
+                                   parameters={'pinned_model': {'provider': 'deepseek', 'model': 'deepseek-chat'}})
+        with track_job(job.pk):
+            result = evaluate_submission_with_gemini(
+                self.sub, pinned_model={'provider': 'deepseek', 'model': 'deepseek-chat'})
+        self.assertEqual(result['status'], 'deferred')
+        call.assert_not_called()
+
+    @patch('feed.ai_concurrency.is_model_busy', side_effect=lambda provider, model, *a, **k: model == 'deepseek-chat')
+    @patch('feed.gemini_service.call_ai_api')
+    def test_after_max_pin_waits_fallback_is_allowed(self, call, busy):
+        from .ai_progress import track_job
+        self.add_connection('deepseek', 'deepseek-chat')
+        self.add_connection('gemini', 'vision-model')
+        job = AIJob.objects.create(kind='teacher_check', submission=self.sub, requested_by=self.user,
+                                   parameters={'pinned_model': {'provider': 'deepseek', 'model': 'deepseek-chat'}},
+                                   events=[{'kind': 'pinned_wait'} for _ in range(3)])
+        call.return_value = self.answer()
+        with track_job(job.pk):
+            result = evaluate_submission_with_gemini(
+                self.sub, pinned_model={'provider': 'deepseek', 'model': 'deepseek-chat'})
+        self.assertEqual(result['status'], 'success')
+        self.assertTrue(result['model_fallback'])
+        self.assertEqual(call.call_args.kwargs['model_name'], 'vision-model')
+
     @patch('feed.gemini_service.call_ai_api')
     def test_pinned_model_is_used_first(self, call):
         self.add_connection('groq', 'fallback-model')
