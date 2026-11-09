@@ -135,7 +135,7 @@ def pinned_model_for_assessment():
 def _parameters_key(parameters):
     """Snapshot is diagnostic metadata and must not break job deduplication."""
     return {key: value for key, value in (parameters or {}).items()
-            if key not in ('snapshot', 'snapshot_files', 'pinned_model')}
+            if key not in ('snapshot', 'snapshot_files')}
 
 
 def source_snapshot(submission):
@@ -451,7 +451,7 @@ def _execute_job(job_id):
 
         def call_parameters():
             return {key: value for key, value in (job.parameters or {}).items()
-                    if key not in ('snapshot', 'snapshot_files', 'pinned_model')}
+                    if key not in ('snapshot', 'snapshot_files')}
 
         if job.kind in ('student_check', 'teacher_check', 'batch_check'):
             from .models import AISettings
@@ -481,7 +481,9 @@ def _execute_job(job_id):
                 'assignment', 'assignment__default_ai_preset', 'class_group').get(pk=job.submission_id)
             if not submission.assignment.allow_student_ai_check:
                 raise SelfCheckUnavailable('Самоперевірку вимкнено вчителем')
-            evaluation = _evaluate_student_submission(submission, source_overrides=source_overrides)
+            evaluation = _evaluate_student_submission(
+                submission, source_overrides=source_overrides,
+                pinned_model=(job.parameters or {}).get('pinned_model'))
             if evaluation.get('status') == 'deferred':
                 defer_job(job_id, evaluation.get('retry_after', 2))
                 return

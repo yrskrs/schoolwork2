@@ -3083,7 +3083,7 @@ def student_ai_self_check(request, submission_id):
     return job_response(job, request=request)
 
 
-def _evaluate_student_submission(submission, source_overrides=None):
+def _evaluate_student_submission(submission, source_overrides=None, pinned_model=None):
     assignment = submission.assignment
     from .gemini_service import evaluate_submission_with_gemini
     from .models import AISettings, AICriteriaPreset
@@ -3098,6 +3098,7 @@ def _evaluate_student_submission(submission, source_overrides=None):
         criteria_preset=preset,
         selected_gr_codes=selected_gr_codes or [],
         source_overrides=source_overrides,
+        pinned_model=pinned_model,
     )
 
 
