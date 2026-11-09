@@ -2406,7 +2406,7 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
         sub_detail_resp = self.client.get(reverse('submission_detail', args=[sub.id]))
         self.assertEqual(sub_detail_resp.status_code, 200)
         # Учень бачить лише загальне повідомлення (без деталей)
-        self.assertContains(sub_detail_resp, 'У роботі зафіксовано використання штучного інтелекту (ШІ)')
+        self.assertContains(sub_detail_resp, 'Є ознаки використання ШІ (дозволено вчителем)')
         self.assertContains(sub_detail_resp, '(дозволено вчителем)')
         # Деталі аналізу ШІ приховані від учня — видно лише вчителю
         self.assertNotContains(sub_detail_resp, 'Виявлено характерні шаблонні формулювання нейромереж')
@@ -2415,11 +2415,11 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
         self.client.login(username='teacher1', password='password123')
         asg_subs_resp = self.client.get(reverse('assignment_submissions', args=[ai_asg.id]))
         self.assertEqual(asg_subs_resp.status_code, 200)
-        self.assertContains(asg_subs_resp, 'Ознаки ШІ')
+        self.assertContains(asg_subs_resp, 'Є ознаки ШІ')
 
         fv_resp = self.client.get(reverse('view_file', args=[sub.id]))
         self.assertEqual(fv_resp.status_code, 200)
-        self.assertContains(fv_resp, 'Виявлено ознаки використання ШІ')
+        self.assertContains(fv_resp, 'Є ознаки використання ШІ')
         self.assertContains(fv_resp, 'Дозволено вчителем')
 
         # Деталі аналізу ШІ видно лише вчителю у view_file

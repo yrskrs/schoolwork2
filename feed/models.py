@@ -2987,6 +2987,11 @@ class Submission(models.Model):
         adding = self._state.adding
         if not self.teacher and self.assignment:
             self.teacher = self.assignment.teacher
+        if self.ai_generated_detected and self.ai_authorship_state == 'insufficient':
+            self.ai_authorship_state = 'suspected'
+            update_fields = kwargs.get('update_fields')
+            if update_fields is not None:
+                kwargs['update_fields'] = set(update_fields) | {'ai_authorship_state'}
         super().save(*args, **kwargs)
         if adding and self.is_group_work and self.primary_submission_id:
             # Adding an author is not another upload. auto_now_add runs during

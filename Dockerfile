@@ -34,7 +34,7 @@ COPY . /app/
 RUN mkdir -p /app/media /app/staticfiles /app/logs
 RUN chmod -R 755 /app/media /app/staticfiles /app/logs
 ARG VCS_REF=local
-ARG APP_VERSION=4.8.16
+ARG APP_VERSION=4.8.17
 ARG SOURCE_DIGEST=unknown
 RUN python -c 'import json,os,pathlib; pathlib.Path("/app/build-info.json").write_text(json.dumps({"revision":os.environ.get("VCS_REF","local"),"source_digest":os.environ.get("SOURCE_DIGEST","unknown")}))'
 

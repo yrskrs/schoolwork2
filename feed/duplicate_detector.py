@@ -184,6 +184,30 @@ def check_submission_duplicates(submission):
         return result
 
     sub_hash = get_file_sha256(file_path)
+
+    dup_cache_key = None
+    if submission.pk and sub_hash:
+        ignore_flag = int(getattr(submission, 'ignore_plagiarism', False))
+        dup_cache_key = f"dup_info_v3_{submission.pk}_{submission.assignment_id}_{sub_hash}_{ignore_flag}"
+        try:
+            from .ai_context import evidence_cache
+            cached_dup = evidence_cache().get(dup_cache_key)
+            if cached_dup is not None:
+                submission._cached_dup_info = cached_dup
+                return cached_dup
+        except Exception:
+            pass
+
+    def _finalize(res):
+        submission._cached_dup_info = res
+        if dup_cache_key:
+            try:
+                from .ai_context import evidence_cache
+                evidence_cache().set(dup_cache_key, res, 3600)
+            except Exception:
+                pass
+        return res
+
     sub_norm_text = get_normalized_file_content(file_path, submission.file.name)
     sub_text_len = len(sub_norm_text)
 
@@ -211,8 +235,7 @@ def check_submission_duplicates(submission):
                         f"Схоже, що ви здали вихідний файл завдання замість виконаної роботи!"
                     )
                 })
-                submission._cached_dup_info = result
-                return result
+                return _finalize(result)
 
             # Текстовий/нормалізований збіг (якщо текст не порожній і довший 20 символів)
             if sub_text_len >= 20:
@@ -228,8 +251,7 @@ def check_submission_duplicates(submission):
                             f"Перевірте, чи ви не здали умову завдання без розв'язку!"
                         )
                     })
-                    submission._cached_dup_info = result
-                    return result
+                    return _finalize(result)
 
         # Перевірка на збіг із файлами вчителя до інших завдань (іншого класу або іншої теми)
         try:
@@ -237,7 +259,8 @@ def check_submission_duplicates(submission):
             other_af_qs = AssignmentFile.objects.exclude(assignment=assignment).filter(file__isnull=False)
             if getattr(assignment, 'teacher_id', None):
                 other_af_qs = other_af_qs.filter(assignment__teacher_id=assignment.teacher_id)
-            for o_af in other_af_qs[:100]:
+            sub_ext = os.path.splitext(file_path)[1].lower()
+            for o_af in other_af_qs[:50]:
                 if not o_af.file or not os.path.exists(o_af.file.path):
                     continue
                 o_path = o_af.file.path
@@ -247,9 +270,11 @@ def check_submission_duplicates(submission):
                 if sub_hash and o_hash and sub_hash == o_hash:
                     is_match = True
                 elif sub_text_len >= 20:
-                    o_norm_text = get_normalized_file_content(o_path, o_af.file.name)
-                    if o_norm_text and sub_norm_text == o_norm_text:
-                        is_match = True
+                    o_ext = os.path.splitext(o_path)[1].lower()
+                    if o_ext == sub_ext or (o_ext in ['.doc', '.docx', '.odt', '.rtf', '.txt'] and sub_ext in ['.doc', '.docx', '.odt', '.rtf', '.txt']):
+                        o_norm_text = get_normalized_file_content(o_path, o_af.file.name)
+                        if o_norm_text and sub_norm_text == o_norm_text:
+                            is_match = True
                 if is_match:
                     other_title = o_af.assignment.title if o_af.assignment else "іншого завдання"
                     result.update({
@@ -262,8 +287,7 @@ def check_submission_duplicates(submission):
                             f"Ви здали практичну роботу/завдання вчителя замість виконаної учнем роботи!"
                         )
                     })
-                    submission._cached_dup_info = result
-                    return result
+                    return _finalize(result)
         except Exception:
             pass
 
@@ -288,19 +312,6 @@ def check_submission_duplicates(submission):
            other.class_group_id == submission.class_group_id:
             continue
 
-        # Перевірка: чи є учень дійсним співавтором
-        is_coauthor = (
-            (hasattr(submission, 'is_coauthor_with') and submission.is_coauthor_with(other)) or
-            (hasattr(other, 'is_coauthor_with') and other.is_coauthor_with(submission)) or
-            (submission.primary_submission_id and submission.primary_submission_id == other.primary_submission_id) or
-            (submission.primary_submission_id and submission.primary_submission_id == other.id) or
-            (other.primary_submission_id and other.primary_submission_id == submission.id)
-        )
-        is_plagiarism_explicitly_ignored = (
-            getattr(submission, 'ignore_plagiarism', False) or
-            getattr(other, 'ignore_plagiarism', False)
-        )
-
         is_binary_match = bool(sub_hash and other_hash and sub_hash == other_hash)
         is_text_match = False
         if not is_binary_match and sub_text_len >= 30:
@@ -309,6 +320,19 @@ def check_submission_duplicates(submission):
                 is_text_match = True
 
         if is_binary_match or is_text_match:
+            # Перевірка: чи є учень дійсним співавтором
+            is_coauthor = (
+                (hasattr(submission, 'is_coauthor_with') and submission.is_coauthor_with(other)) or
+                (hasattr(other, 'is_coauthor_with') and other.is_coauthor_with(submission)) or
+                (submission.primary_submission_id and submission.primary_submission_id == other.primary_submission_id) or
+                (submission.primary_submission_id and submission.primary_submission_id == other.id) or
+                (other.primary_submission_id and other.primary_submission_id == submission.id)
+            )
+            is_plagiarism_explicitly_ignored = (
+                getattr(submission, 'ignore_plagiarism', False) or
+                getattr(other, 'ignore_plagiarism', False)
+            )
+
             if is_coauthor:
                 # Встановлено спільну роботу: не вважаємо плагіатом!
                 result.update({
@@ -328,8 +352,7 @@ def check_submission_duplicates(submission):
                         f"Плагіат виключено (робота оцінюється за спільний результат)."
                     )
                 })
-                submission._cached_dup_info = result
-                return result
+                return _finalize(result)
             elif is_plagiarism_explicitly_ignored:
                 # Вчитель або система увімкнули ігнорування плагіату для цієї роботи (не спільна група, але перевірка без штрафу)
                 result.update({
@@ -348,8 +371,7 @@ def check_submission_duplicates(submission):
                         f"ℹ️ Збіг файлу з роботою {other_name} ({other_class}) проігноровано вчителем."
                     )
                 })
-                submission._cached_dup_info = result
-                return result
+                return _finalize(result)
             else:
                 # Звичайний дублікат / плагіат
                 match_reason = "вміст прикріпленого файлу повністю збігається з файлом" if is_binary_match else "текстовий вміст вашої роботи на 100% збігається з роботою"
@@ -368,8 +390,6 @@ def check_submission_duplicates(submission):
                         f"Система зафіксувала однаковий вміст файлу як підозру на дублікат або списування!"
                     )
                 })
-                submission._cached_dup_info = result
-                return result
+                return _finalize(result)
 
-    submission._cached_dup_info = result
-    return result
+    return _finalize(result)

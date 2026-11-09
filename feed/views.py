@@ -3358,7 +3358,7 @@ def submission_detail(request, submission_id):
     Публічний або учнівський перегляд статусу здачі роботи (з історією коментарів вчителя).
     """
     submission = get_object_or_404(
-        Submission.objects.select_related('assignment', 'class_group', 'teacher'),
+        Submission.objects.select_related('assignment', 'class_group', 'teacher').prefetch_related('files'),
         id=submission_id
     )
     comments = submission.comments.all().select_related('author').order_by('created_at')
@@ -4671,7 +4671,7 @@ def assignment_submissions(request, pk):
 
     submissions_qs = Submission.objects.filter(
         assignment=assignment
-    ).select_related('class_group', 'teacher', 'previous_submission').prefetch_related('comments', 'files', 'subsequent_submissions').order_by('-submitted_at')
+    ).select_related('assignment', 'class_group', 'teacher', 'previous_submission').prefetch_related('comments', 'files', 'subsequent_submissions').order_by('-submitted_at')
 
     # Не дублювати колективні роботи: показуємо одну основну здачу групи зі списком усіх співавторів
     submissions_qs = submissions_qs.filter(primary_submission__isnull=True)
@@ -8731,8 +8731,6 @@ def api_ai_get_batch_queue(request):
             'ai_generated_percent': s.ai_generated_percent,
             'ai_generated_confidence': s.get_ai_generated_confidence_display() if hasattr(s, 'get_ai_generated_confidence_display') else s.ai_generated_confidence,
             'ai_generated_details': s.ai_generated_details or '',
-            'ai_authorship_state': s.ai_authorship_state,
-            'ai_authorship_state_display': s.get_ai_authorship_state_display(),
             'ai_provenance_report': s.ai_provenance_report or {},
             'is_ai_allowed': bool(s.is_ai_allowed),
             'gr_results': s.get_ai_gr_results_list(),
