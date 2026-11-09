@@ -29,6 +29,7 @@ class Command(BaseCommand):
         parser.add_argument('--json-out', default='', help='Записати результат у JSON-файл')
         parser.add_argument('--include-failed', action='store_true', help='Врахувати невдалі перевірки')
         parser.add_argument('--include-ungraded', action='store_true', help='Додати роботи без жодної перевірки')
+        parser.add_argument('--submission-ids', default='', help='Лише вказані submission_id через кому')
 
     def handle(self, *args, **options):
         path = Path(options['labels'])
@@ -39,6 +40,9 @@ class Command(BaseCommand):
         rows = list(csv.DictReader(path.open(encoding='utf-8-sig')))
         if options['class_name']:
             rows = [row for row in rows if row.get('class_name') == options['class_name']]
+        if options['submission_ids']:
+            wanted = {_as_int(part) for part in options['submission_ids'].split(',') if part.strip()}
+            rows = [row for row in rows if _as_int(row.get('submission_id')) in wanted]
         if options['limit']:
             rows = rows[:options['limit']]
 
