@@ -1,0 +1,20 @@
+{
+  "database": "temporary SQLite; Docker not yet available",
+  "seed_runs": 2,
+  "classes": {
+    "5-А": 5,
+    "6-А": 5,
+    "7-А": 5,
+    "8-А": 5,
+    "9-А": 5,
+    "10-А": 5,
+    "11-А": 5
+  },
+  "students": 35,
+  "assignments": 0,
+  "authenticated_pages": {
+    "/teacher/": 200,
+    "/teacher/assignment/create/": 200,
+    "/teacher/settings/": 200
+  }
+}

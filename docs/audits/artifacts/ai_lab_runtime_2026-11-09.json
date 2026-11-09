@@ -1,0 +1,37 @@
+{
+  "base_url": "http://127.0.0.1:8010",
+  "real_http_login": "passed with CSRF and session cookie",
+  "authenticated_http_pages": {
+    "/teacher/": 200,
+    "/teacher/assignment/create/": 200,
+    "/teacher/settings/": 200
+  },
+  "health_http_status": 200,
+  "containers": [
+    {
+      "name": "schoolwork2-ai-lab-app-1",
+      "health": "healthy",
+      "restart_policy": "no"
+    },
+    {
+      "name": "schoolwork2-ai-lab-ai_worker-1",
+      "health": "healthy",
+      "restart_policy": "no"
+    },
+    {
+      "name": "schoolwork2-ai-lab-postgres-1",
+      "health": "healthy",
+      "restart_policy": "no"
+    },
+    {
+      "name": "schoolwork2-ai-lab-code_runner-1",
+      "health": "healthy",
+      "restart_policy": "no"
+    }
+  ],
+  "classes": 7,
+  "students_per_class": 5,
+  "students_total": 35,
+  "assignments_created": 0,
+  "credentials_saved": ".env.ai-lab.local (excluded from git; mode 600)"
+}

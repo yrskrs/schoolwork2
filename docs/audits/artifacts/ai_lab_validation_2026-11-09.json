@@ -1,0 +1,19 @@
+{
+  "context_tests": {
+    "count": 68,
+    "result": "passed",
+    "settings": "schoolnet.test_settings",
+    "real_api_calls": false
+  },
+  "compose_yaml": "parsed; 4 services; restart=no; loopback-only web port; separate volumes",
+  "shell_syntax": "bash -n passed",
+  "docker_runtime": "passed: 4 healthy containers, restart=no on each; PostgreSQL and isolated volumes",
+  "docker_context_tests": {
+    "count": 68,
+    "result": "passed",
+    "settings": "schoolnet.test_settings",
+    "database": "temporary SQLite",
+    "real_api_calls": false
+  },
+  "http_verification": "passed: real teacher login with CSRF and session; dashboard, assignment creation, settings HTTP 200"
+}
