@@ -181,6 +181,38 @@
                 }
             });
         }
+        // Whole-row navigation for record lists: the explicit link stays for keyboard users.
+        document.querySelectorAll('tr[data-row-href]').forEach(function (row) {
+            row.addEventListener('click', function (event) {
+                if (event.target.closest('a, button, input, select, textarea, label, summary, details')) return;
+                if (window.getSelection && String(window.getSelection()).length) return;
+                window.location.assign(row.dataset.rowHref);
+            });
+        });
+
+        // Filter panels: expanded on desktop, collapsed on phones to keep content above the fold.
+        var filterPanels = document.querySelectorAll('details[data-mobile-collapsed]');
+        if (filterPanels.length) {
+            var narrow = window.matchMedia('(max-width: 960px)');
+            function syncFilterPanels() {
+                filterPanels.forEach(function (panel) {
+                    if (narrow.matches) {
+                        if (!panel.dataset.userToggled) panel.open = false;
+                    } else if (panel.classList.contains('filter-panel')) {
+                        // Filters stay visible on desktop; other disclosures keep their authored state.
+                        panel.open = true;
+                    }
+                });
+            }
+            syncFilterPanels();
+            filterPanels.forEach(function (panel) {
+                panel.addEventListener('toggle', function () {
+                    if (narrow.matches) panel.dataset.userToggled = 'true';
+                });
+            });
+            if (narrow.addEventListener) narrow.addEventListener('change', syncFilterPanels);
+        }
+
         // Bring validation failures into view without hiding server error messages.
         var submitForm = document.getElementById('submit-form');
         if (submitForm) {

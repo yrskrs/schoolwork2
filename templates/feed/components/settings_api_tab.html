@@ -13,12 +13,12 @@
 <details class="form-card mb-4"><summary style="padding:16px">Керування ключами та розширена документація API</summary>
     <!-- Банер про щойно створений API ключ -->
     {% if just_created_api_key and not journal_connection_code %}
-    <div class="form-card mb-4" style="background:linear-gradient(135deg, rgba(16,185,129,0.12), rgba(99,102,241,0.08));border:1.5px solid #10b981;animation:fadeIn 0.3s ease-in-out;">
+    <div class="form-card mb-4" style="background:linear-gradient(135deg, rgba(var(--ok-rgb),0.12), rgba(var(--accent-rgb),0.08));border:1.5px solid var(--ok);animation:fadeIn 0.3s ease-in-out;">
         <div class="form-card-body" style="padding:18px 20px;">
             <div style="display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap;">
                 <span style="font-size:32px;line-height:1;">🎉</span>
                 <div style="flex:1;min-width:240px;">
-                    <div style="font-weight:800;font-size:16px;color:#10b981;margin-bottom:4px;">
+                    <div style="font-weight:800;font-size:16px;color:var(--ok);margin-bottom:4px;">
                         Новий API ключ для «{{ just_created_api_key_name|default:'Локального журналу' }}» успішно створено!
                     </div>
                     <div style="font-size:13px;color:var(--color-text-secondary);margin-bottom:12px;">
@@ -89,7 +89,7 @@
                             <td style="padding:12px 8px;">
                                 <div style="display:flex;flex-direction:column;gap:3px;">
                                     {% if k.can_export_grades %}
-                                    <span style="font-size:11px;color:#10b981;font-weight:700;display:inline-flex;align-items:center;gap:3px;">
+                                    <span style="font-size:11px;color:var(--ok);font-weight:700;display:inline-flex;align-items:center;gap:3px;">
                                         <span>📥</span> <span>Вивантаження оцінок</span>
                                     </span>
                                     {% endif %}
@@ -129,7 +129,7 @@
                                         {% csrf_token %}
                                         <input type="hidden" name="action" value="delete_journal_api_key">
                                         <input type="hidden" name="key_id" value="{{ k.id }}">
-                                        <button type="submit" class="btn btn-secondary btn-sm" style="color:var(--color-danger);border-color:rgba(239,68,68,0.3);font-size:11px;padding:3px 8px;" title="Видалити API ключ">
+                                        <button type="submit" class="btn btn-secondary btn-sm" style="color:var(--color-danger);border-color:rgba(var(--danger-rgb),0.3);font-size:11px;padding:3px 8px;" title="Видалити API ключ">
                                             🗑️
                                         </button>
                                     </form>
@@ -195,7 +195,7 @@
                     Готові приклади запитів для підключення вашого локального журналу
                 </div>
             </div>
-            <div style="font-size:12px;color:var(--color-primary);font-weight:700;background:rgba(99,102,241,0.08);padding:4px 10px;border-radius:12px;">
+            <div style="font-size:12px;color:var(--color-primary);font-weight:700;background:rgba(var(--accent-rgb),0.08);padding:4px 10px;border-radius:12px;">
                 Базовий URL: <code>{{ api_base_url }}</code>
             </div>
         </div>
@@ -220,7 +220,7 @@
             <!-- Документація 1: Експорт оцінок -->
             <div id="doc-section-grades" class="api-doc-pane">
                 <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
-                    <span style="font-size:11px;font-weight:800;background:#10b981;color:#fff;padding:2px 8px;border-radius:4px;">GET</span>
+                    <span style="font-size:11px;font-weight:800;background:var(--fill-success);color:#fff;padding:2px 8px;border-radius:4px;">GET</span>
                     <code style="font-weight:800;font-size:13.5px;color:var(--color-text-primary);">/api/v1/journal/grades/</code>
                 </div>
                 <p style="font-size:13px;color:var(--color-text-secondary);margin-bottom:12px;">
@@ -332,7 +332,7 @@
             <!-- Документація 3: Перегляд ростеру -->
             <div id="doc-section-roster-get" class="api-doc-pane" style="display:none;">
                 <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
-                    <span style="font-size:11px;font-weight:800;background:#10b981;color:#fff;padding:2px 8px;border-radius:4px;">GET</span>
+                    <span style="font-size:11px;font-weight:800;background:var(--fill-success);color:#fff;padding:2px 8px;border-radius:4px;">GET</span>
                     <code style="font-weight:800;font-size:13.5px;color:var(--color-text-primary);">/api/v1/journal/roster/</code>
                 </div>
                 <p style="font-size:13px;color:var(--color-text-secondary);margin-bottom:12px;">
@@ -463,7 +463,7 @@ function copyTextToClipboard(text, btnEl) {
         if (btnEl) {
             var orig = btnEl.innerHTML;
             btnEl.innerHTML = '✅ Скопійовано!';
-            btnEl.style.borderColor = '#10b981';
+            btnEl.style.borderColor = 'var(--ok)';
             setTimeout(function() {
                 btnEl.innerHTML = orig;
                 btnEl.style.borderColor = '';

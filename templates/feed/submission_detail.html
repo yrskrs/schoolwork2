@@ -18,7 +18,7 @@
                 <div style="padding:16px;display:flex;flex-direction:column;gap:10px;text-align:center;">
                     {% if submission.grade %}
                     <div>
-                        <span class="badge badge-success" style="font-size:14px;padding:8px 18px;display:inline-block;border-radius:24px;font-weight:800;background:rgba(16,185,129,0.15);color:var(--color-success);border:1px solid rgba(16,185,129,0.3);">
+                        <span class="badge badge-success" style="font-size:14px;padding:8px 18px;display:inline-block;border-radius:24px;font-weight:800;background:rgba(var(--ok-rgb),0.15);color:var(--color-success);border:1px solid rgba(var(--ok-rgb),0.3);">
                             ✅ Оцінено вчителем
                         </span>
                         {% if submission.graded_at %}
@@ -56,7 +56,7 @@
                         <span style="font-weight:600;">{{ submission.submitted_at|date:"d.m.Y H:i" }}</span>
                     </div>
                     {% if submission.is_collective_work %}
-                    <div style="background:rgba(99,102,241,0.08);border:1.5px solid rgba(99,102,241,0.25);border-radius:var(--radius-sm);padding:8px 10px;margin-top:4px;">
+                    <div style="background:rgba(var(--accent-rgb),0.08);border:1.5px solid rgba(var(--accent-rgb),0.25);border-radius:var(--radius-sm);padding:8px 10px;margin-top:4px;">
                         <div style="font-weight:800;color:var(--color-primary);font-size:12px;display:flex;align-items:center;gap:5px;margin-bottom:3px;">
                             <span>👥</span> <span>Колективна робота</span>
                         </div>
@@ -124,7 +124,7 @@
 
                         <!-- Перевірка на плагіат / дублікат -->
                         {% if dup_info and dup_info.is_duplicate %}
-                        <div style="margin-bottom:12px;padding:12px 16px;background:{% if dup_info.type == 'teacher_duplicate' %}rgba(239,68,68,0.09){% else %}rgba(245,158,11,0.09){% endif %};border:1.5px solid {% if dup_info.type == 'teacher_duplicate' %}#ef4444{% else %}#f59e0b{% endif %};border-radius:var(--radius-sm);display:flex;align-items:flex-start;gap:10px;">
+                        <div style="margin-bottom:12px;padding:12px 16px;background:{% if dup_info.type == 'teacher_duplicate' %}rgba(var(--danger-rgb),0.09){% else %}rgba(var(--warn-rgb),0.09){% endif %};border:1.5px solid {% if dup_info.type == 'teacher_duplicate' %}var(--danger){% else %}var(--warn){% endif %};border-radius:var(--radius-sm);display:flex;align-items:flex-start;gap:10px;">
                             <span style="font-size:22px;line-height:1;flex-shrink:0;">{% if dup_info.type == 'teacher_duplicate' %}🚫{% else %}⚠️{% endif %}</span>
                             <div>
                                 <div style="font-weight:800;font-size:13px;color:{% if dup_info.type == 'teacher_duplicate' %}var(--color-danger){% else %}var(--color-warning){% endif %};margin-bottom:2px;">
@@ -161,7 +161,7 @@
 
                 <!-- 🤖 САМОПЕРЕВІРКА УЧНЕМ ШІ -->
                 {% if can_student_ai_check %}
-                <div id="student-selfcheck-block" style="background:linear-gradient(135deg,rgba(99,102,241,0.08) 0%,rgba(139,92,246,0.08) 100%);border:2px solid #6366f1;border-radius:var(--radius-md);padding:14px 18px;margin-bottom:18px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;">
+                <div id="student-selfcheck-block" style="background:var(--ai-soft);border:1px solid var(--ai);border-radius:var(--radius-md);padding:14px 18px;margin-bottom:18px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;">
                     <div style="display:flex;align-items:center;gap:12px;min-width:240px;flex:1;">
                         <span style="font-size:28px;flex-shrink:0;">🤖</span>
                         <div>
@@ -175,15 +175,15 @@
                     </div>
                     <button type="button" id="student-ai-check-btn"
                             onclick="runStudentAICheck({{ submission.id }})"
-                            style="padding:10px 20px;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:white;border:none;border-radius:var(--radius-md);font-weight:800;font-size:13px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;box-shadow:0 3px 12px rgba(99,102,241,0.35);">
+                            style="padding:10px 20px;background:var(--ai-fill);color:var(--on-fill);border:none;border-radius:var(--radius-md);font-weight:800;font-size:13px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;">
                         <span>⚡</span> Перевірити ШІ
                     </button>
                 </div>
                 <div id="student-ai-result" style="display:none;margin-bottom:18px;"></div>
                 {% elif submission.student_ai_checked %}
                 {% with gg=submission.get_ai_grade_group_info %}
-                <div style="margin-bottom:18px;background:var(--color-surface);border:2px solid {% if gg %}{{ gg.border_color }}{% else %}rgba(99,102,241,0.3){% endif %};border-radius:var(--radius-lg);overflow:hidden;box-shadow:0 4px 18px rgba(0,0,0,0.06);">
-                    <div style="padding:14px 20px;background:linear-gradient(135deg,rgba(99,102,241,0.08),rgba(139,92,246,0.08));border-bottom:1.5px solid var(--color-border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+                <div style="margin-bottom:18px;background:var(--color-surface);border:2px solid {% if gg %}{{ gg.border_color }}{% else %}var(--ai){% endif %};border-radius:var(--radius-lg);overflow:hidden;box-shadow:0 4px 18px rgba(0,0,0,0.06);">
+                    <div style="padding:14px 20px;background:var(--ai-soft);border-bottom:1.5px solid var(--color-border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
                         <div style="font-weight:800;font-size:15px;color:var(--color-text-primary);display:flex;align-items:center;gap:8px;">
                             <span style="font-size:20px;">🤖</span>
                             <span>Попередня оцінка ШІ (за критеріями НУШ)</span>
@@ -224,16 +224,16 @@
                                 <span style="font-weight:850;color:var(--color-text-primary);">Ваша оцінка <strong>{{ gg.raw_grade }}</strong> належить до групи «{{ gg.group_name }}»</span>
                             </div>
                             <div style="display:grid;grid-template-columns:repeat(4, 1fr);gap:6px;">
-                                <div style="padding:7px 8px;border-radius:var(--radius-sm);text-align:center;font-size:11.5px;transition:all 0.2s;{% if gg.level_code == 'low' %}background:rgba(239,68,68,0.18);border:2px solid #ef4444;font-weight:900;color:var(--color-danger);box-shadow:0 2px 8px rgba(239,68,68,0.2);{% else %}background:var(--color-bg-secondary);border:1px solid var(--color-border);color:var(--color-text-muted);opacity:0.65;{% endif %}">
+                                <div style="padding:7px 8px;border-radius:var(--radius-sm);text-align:center;font-size:11.5px;transition:all 0.2s;{% if gg.level_code == 'low' %}background:rgba(var(--danger-rgb),0.18);border:2px solid var(--danger);font-weight:900;color:var(--color-danger);box-shadow:0 2px 8px rgba(var(--danger-rgb),0.2);{% else %}background:var(--color-bg-secondary);border:1px solid var(--color-border);color:var(--color-text-muted);opacity:0.65;{% endif %}">
                                     <div>1–3 бали</div><div style="font-size:10.5px;margin-top:1px;">Початковий</div>{% if gg.level_code == 'low' %}<div style="font-size:9.5px;margin-top:2px;">⭐ Ваша оцінка</div>{% endif %}
                                 </div>
-                                <div style="padding:7px 8px;border-radius:var(--radius-sm);text-align:center;font-size:11.5px;transition:all 0.2s;{% if gg.level_code == 'avg' %}background:rgba(245,158,11,0.18);border:2px solid #f59e0b;font-weight:900;color:var(--color-warning);box-shadow:0 2px 8px rgba(245,158,11,0.2);{% else %}background:var(--color-bg-secondary);border:1px solid var(--color-border);color:var(--color-text-muted);opacity:0.65;{% endif %}">
+                                <div style="padding:7px 8px;border-radius:var(--radius-sm);text-align:center;font-size:11.5px;transition:all 0.2s;{% if gg.level_code == 'avg' %}background:rgba(var(--warn-rgb),0.18);border:2px solid var(--warn);font-weight:900;color:var(--color-warning);box-shadow:0 2px 8px rgba(var(--warn-rgb),0.2);{% else %}background:var(--color-bg-secondary);border:1px solid var(--color-border);color:var(--color-text-muted);opacity:0.65;{% endif %}">
                                     <div>4–6 балів</div><div style="font-size:10.5px;margin-top:1px;">Середній</div>{% if gg.level_code == 'avg' %}<div style="font-size:9.5px;margin-top:2px;">⭐ Ваша оцінка</div>{% endif %}
                                 </div>
-                                <div style="padding:7px 8px;border-radius:var(--radius-sm);text-align:center;font-size:11.5px;transition:all 0.2s;{% if gg.level_code == 'good' %}background:rgba(37,99,235,0.18);border:2px solid #3b82f6;font-weight:900;color:var(--color-info);box-shadow:0 2px 8px rgba(37,99,235,0.2);{% else %}background:var(--color-bg-secondary);border:1px solid var(--color-border);color:var(--color-text-muted);opacity:0.65;{% endif %}">
+                                <div style="padding:7px 8px;border-radius:var(--radius-sm);text-align:center;font-size:11.5px;transition:all 0.2s;{% if gg.level_code == 'good' %}background:rgba(var(--info-rgb),0.18);border:2px solid var(--info);font-weight:900;color:var(--color-info);box-shadow:0 2px 8px rgba(var(--info-rgb),0.2);{% else %}background:var(--color-bg-secondary);border:1px solid var(--color-border);color:var(--color-text-muted);opacity:0.65;{% endif %}">
                                     <div>7–9 балів</div><div style="font-size:10.5px;margin-top:1px;">Достатній</div>{% if gg.level_code == 'good' %}<div style="font-size:9.5px;margin-top:2px;">⭐ Ваша оцінка</div>{% endif %}
                                 </div>
-                                <div style="padding:7px 8px;border-radius:var(--radius-sm);text-align:center;font-size:11.5px;transition:all 0.2s;{% if gg.level_code == 'high' %}background:rgba(16,185,129,0.18);border:2px solid #10b981;font-weight:900;color:var(--color-success);box-shadow:0 2px 8px rgba(16,185,129,0.2);{% else %}background:var(--color-bg-secondary);border:1px solid var(--color-border);color:var(--color-text-muted);opacity:0.65;{% endif %}">
+                                <div style="padding:7px 8px;border-radius:var(--radius-sm);text-align:center;font-size:11.5px;transition:all 0.2s;{% if gg.level_code == 'high' %}background:rgba(var(--ok-rgb),0.18);border:2px solid var(--ok);font-weight:900;color:var(--color-success);box-shadow:0 2px 8px rgba(var(--ok-rgb),0.2);{% else %}background:var(--color-bg-secondary);border:1px solid var(--color-border);color:var(--color-text-muted);opacity:0.65;{% endif %}">
                                     <div>10–12 балів</div><div style="font-size:10.5px;margin-top:1px;">Високий</div>{% if gg.level_code == 'high' %}<div style="font-size:9.5px;margin-top:2px;">⭐ Ваша оцінка</div>{% endif %}
                                 </div>
                             </div>
@@ -243,7 +243,7 @@
 
                     <div style="padding:14px 16px;">
                         {% if "не зрозуміло" in submission.student_ai_summary|lower or "незрозуміло" in submission.student_ai_summary|lower or "не зрозуміло" in submission.student_ai_feedback|lower or "незрозуміло" in submission.student_ai_feedback|lower %}
-                        <div style="margin-bottom:12px;padding:12px 14px;background:var(--color-warning-light);border:1.5px solid #f59e0b;border-radius:var(--radius-sm);display:flex;align-items:flex-start;gap:10px;">
+                        <div style="margin-bottom:12px;padding:12px 14px;background:var(--color-warning-light);border:1.5px solid var(--warn);border-radius:var(--radius-sm);display:flex;align-items:flex-start;gap:10px;">
                             <span style="font-size:20px;line-height:1;">⚠️</span>
                             <div>
                                 <div style="font-weight:800;font-size:13px;color:var(--color-warning);margin-bottom:2px;">Не зрозуміло, яке завдання виконане</div>
@@ -254,8 +254,8 @@
 
                         <!-- Перевірка на ШІ -->
                         {% if submission.ai_authorship_state == 'suspected' %}
-                        <div style="margin-bottom:12px;padding:12px 16px;background:{% if submission.is_ai_allowed %}rgba(16,185,129,0.08){% else %}rgba(239,68,68,0.08){% endif %};border:1.5px solid {% if submission.is_ai_allowed %}#10b981{% else %}#ef4444{% endif %};border-radius:var(--radius-sm);">
-                            <div style="font-weight:800;font-size:13px;color:{% if submission.is_ai_allowed %}#065f46{% else %}var(--color-danger){% endif %};display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;margin-bottom:4px;">
+                        <div style="margin-bottom:12px;padding:12px 16px;background:{% if submission.is_ai_allowed %}rgba(var(--ok-rgb),0.08){% else %}rgba(var(--danger-rgb),0.08){% endif %};border:1.5px solid {% if submission.is_ai_allowed %}var(--ok){% else %}var(--danger){% endif %};border-radius:var(--radius-sm);">
+                            <div style="font-weight:800;font-size:13px;color:{% if submission.is_ai_allowed %}var(--ok){% else %}var(--color-danger){% endif %};display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;margin-bottom:4px;">
                                 <span style="display:inline-flex;align-items:center;gap:6px;">
                                     <span>🤖</span>
                                     <span>{% if submission.is_ai_allowed %}Є ознаки використання ШІ (дозволено вчителем){% else %}Є ознаки використання ШІ{% endif %}{% if is_teacher and submission.ai_generated_percent is not None %} · оцінка моделі {{ submission.ai_generated_percent }}% (некалібрована){% endif %}</span>
@@ -288,7 +288,7 @@
                         {% if sections %}
                         <div class="student-ai-feedback-grid" style="display:flex;flex-direction:column;gap:10px;">
                             {% if sections.praise %}
-                            <div style="background:linear-gradient(135deg,rgba(16,185,129,0.08) 0%,rgba(99,102,241,0.08) 100%);border:1.5px solid rgba(16,185,129,0.35);border-radius:var(--radius-md);padding:12px 16px;display:flex;align-items:flex-start;gap:12px;">
+                            <div style="background:linear-gradient(135deg,rgba(var(--ok-rgb),0.08) 0%,rgba(var(--accent-rgb),0.08) 100%);border:1.5px solid rgba(var(--ok-rgb),0.35);border-radius:var(--radius-md);padding:12px 16px;display:flex;align-items:flex-start;gap:12px;">
                                 <span style="font-size:24px;line-height:1;flex-shrink:0;">👏</span>
                                 <div>
                                     <div style="font-weight:800;font-size:12px;color:var(--color-success);margin-bottom:3px;text-transform:uppercase;letter-spacing:0.4px;">
@@ -302,7 +302,7 @@
                             {% endif %}
 
                             {% if sections.grade_reason %}
-                            <div style="background:var(--color-surface);border:1.5px solid rgba(99,102,241,0.25);border-left:4px solid var(--color-primary);border-radius:var(--radius-md);padding:12px 16px;">
+                            <div style="background:var(--color-surface);border:1.5px solid rgba(var(--accent-rgb),0.25);border-left:4px solid var(--color-primary);border-radius:var(--radius-md);padding:12px 16px;">
                                 <div style="font-weight:800;font-size:12.5px;color:var(--color-primary);margin-bottom:3px;display:flex;align-items:center;gap:6px;">
                                     <span>🎯</span> <span>Чому така оцінка:</span>
                                 </div>
@@ -313,8 +313,8 @@
                             {% endif %}
 
                             {% if sections.recommendation %}
-                            <div style="background:var(--color-surface);border:1.5px solid rgba(59,130,246,0.25);border-left:4px solid #3b82f6;border-radius:var(--radius-md);padding:12px 16px;">
-                                <div style="font-weight:800;font-size:12.5px;color:#2563eb;margin-bottom:3px;display:flex;align-items:center;gap:6px;">
+                            <div style="background:var(--color-surface);border:1.5px solid rgba(var(--info-rgb),0.25);border-left:4px solid var(--info);border-radius:var(--radius-md);padding:12px 16px;">
+                                <div style="font-weight:800;font-size:12.5px;color:var(--info);margin-bottom:3px;display:flex;align-items:center;gap:6px;">
                                     <span>💬</span> <span>Рекомендація учню:</span>
                                 </div>
                                 <div style="font-size:13px;color:var(--color-text-primary);line-height:1.45;">
@@ -324,8 +324,8 @@
                             {% endif %}
 
                             {% if sections.improvement %}
-                            <div style="background:var(--color-surface);border:1.5px solid rgba(245,158,11,0.3);border-left:4px solid #f59e0b;border-radius:var(--radius-md);padding:12px 16px;">
-                                <div style="font-weight:800;font-size:12.5px;color:#d97706;margin-bottom:4px;display:flex;align-items:center;gap:6px;">
+                            <div style="background:var(--color-surface);border:1.5px solid rgba(var(--warn-rgb),0.3);border-left:4px solid var(--warn);border-radius:var(--radius-md);padding:12px 16px;">
+                                <div style="font-weight:800;font-size:12.5px;color:var(--warn);margin-bottom:4px;display:flex;align-items:center;gap:6px;">
                                     <span>💡</span> <span>Як покращити роботу:</span>
                                 </div>
                                 <div style="font-size:13px;color:var(--color-text-primary);line-height:1.45;">
@@ -347,7 +347,7 @@
                         {% endif %}
                         {% endwith %}
                     </div>
-                    <div style="padding:10px 16px;background:rgba(16,185,129,0.05);border-top:1px solid var(--color-border);font-size:11.5px;color:var(--color-text-muted);">ℹ️ Попередня оцінка від ШІ. Остаточну оцінку виставляє вчитель.</div>
+                    <div style="padding:10px 16px;background:rgba(var(--ok-rgb),0.05);border-top:1px solid var(--color-border);font-size:11.5px;color:var(--color-text-muted);">ℹ️ Попередня оцінка від ШІ. Остаточну оцінку виставляє вчитель.</div>
                 </div>
                 {% endwith %}
                 {% endif %}
@@ -441,8 +441,8 @@
 
                 <!-- Повідомлення про виявлення використання ШІ -->
                 {% if submission.ai_authorship_state == 'suspected' %}
-                <div style="margin-bottom:20px;padding:16px 20px;background:{% if submission.is_ai_allowed %}rgba(16,185,129,0.08){% else %}rgba(239,68,68,0.08){% endif %};border:1.5px solid {% if submission.is_ai_allowed %}#10b981{% else %}#ef4444{% endif %};border-radius:var(--radius-md);">
-                    <div style="display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;color:{% if submission.is_ai_allowed %}#065f46{% else %}var(--color-danger){% endif %};margin-bottom:4px;">
+                <div style="margin-bottom:20px;padding:16px 20px;background:{% if submission.is_ai_allowed %}rgba(var(--ok-rgb),0.08){% else %}rgba(var(--danger-rgb),0.08){% endif %};border:1.5px solid {% if submission.is_ai_allowed %}var(--ok){% else %}var(--danger){% endif %};border-radius:var(--radius-md);">
+                    <div style="display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;color:{% if submission.is_ai_allowed %}var(--ok){% else %}var(--color-danger){% endif %};margin-bottom:4px;">
                         <span>🤖</span>
                         <span>{% if submission.is_ai_allowed %}Є ознаки використання ШІ (дозволено вчителем){% else %}Є ознаки використання ШІ{% endif %}</span>
                     </div>
@@ -470,7 +470,7 @@
 
                     <div style="display:flex;flex-direction:column;gap:10px;">
                         {% for comment in comments %}
-                        <div style="padding:14px 18px;background:rgba(99,102,241,0.06);border-left:4px solid var(--color-primary);border-radius:var(--radius-sm);">
+                        <div style="padding:14px 18px;background:rgba(var(--accent-rgb),0.06);border-left:4px solid var(--color-primary);border-radius:var(--radius-sm);">
                             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
                                 <strong style="color:var(--color-primary);font-size:14px;">{{ comment.get_author_name }}</strong>
                                 <span style="font-size:11px;color:var(--color-text-muted);">{{ comment.created_at|date:"d.m.Y H:i" }}</span>
@@ -534,8 +534,8 @@ function runStudentAICheck(subId) {
             grHtml = '<div style="display:flex;flex-direction:column;gap:8px;margin-top:10px;">';
             data.gr_results.forEach(function(gr) {
                 var isGood = gr.grade && gr.grade !== 'Доопрацювати';
-                var badgeColor = isGood ? '#059669' : '#d97706';
-                var badgeBg = isGood ? 'rgba(16,185,129,0.12)' : '#fef3c7';
+                var badgeColor = isGood ? 'var(--ok)' : 'var(--warn)';
+                var badgeBg = isGood ? 'rgba(var(--ok-rgb),0.12)' : 'var(--tint-warning)';
                 grHtml += '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:8px 12px;">' +
                     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px;">' +
                     '<strong style="color:var(--color-primary);font-size:12.5px;">' + gr.code + '</strong>' +
@@ -550,15 +550,15 @@ function runStudentAICheck(subId) {
 
         var gradeIsGood = data.grade && data.grade !== 'Доопрацювати';
         var gradeBadgeStyle = gradeIsGood
-            ? 'background:rgba(16,185,129,0.15);color:#059669;'
-            : 'background:#fef3c7;color:#d97706;border:1px solid #fcd34d;';
+            ? 'background:rgba(var(--ok-rgb),0.15);color:var(--ok);'
+            : 'background:var(--tint-warning);color:var(--warn);border:1px solid color-mix(in srgb, var(--warn) 40%, transparent);';
 
         var aiDetectionHtml = '';
         if (data.ai_authorship_state === 'suspected') {
             var isAllowed = data.allow_ai_usage;
-            var alertBg = isAllowed ? 'rgba(16,185,129,0.08)' : 'rgba(239,68,68,0.08)';
-            var alertBorder = isAllowed ? '#10b981' : '#ef4444';
-            var alertColor = isAllowed ? '#065f46' : '#b91c1c';
+            var alertBg = isAllowed ? 'rgba(var(--ok-rgb),0.08)' : 'rgba(var(--danger-rgb),0.08)';
+            var alertBorder = isAllowed ? 'var(--ok)' : 'var(--danger)';
+            var alertColor = isAllowed ? 'var(--ok)' : 'var(--danger)';
             var isTeacher = {% if is_teacher %}true{% else %}false{% endif %};
             var pctText = (isTeacher && data.ai_generated_percent !== null && data.ai_generated_percent !== undefined) ? ': ' + data.ai_generated_percent + '%' : '';
             var alertTitle = isAllowed ? 'Є ознаки використання ШІ (дозволено вчителем)' + pctText : 'Є ознаки використання ШІ' + pctText;
@@ -579,9 +579,9 @@ function runStudentAICheck(subId) {
         if (data.duplicate_info && data.duplicate_info.is_duplicate) {
             var dup = data.duplicate_info;
             var isTeacher = dup.type === 'teacher_duplicate';
-            var dupBg = isTeacher ? 'rgba(239,68,68,0.09)' : 'rgba(245,158,11,0.09)';
-            var dupBorder = isTeacher ? '#ef4444' : '#f59e0b';
-            var dupColor = isTeacher ? '#b91c1c' : '#b45309';
+            var dupBg = isTeacher ? 'rgba(var(--danger-rgb),0.09)' : 'rgba(var(--warn-rgb),0.09)';
+            var dupBorder = isTeacher ? 'var(--danger)' : 'var(--warn)';
+            var dupColor = isTeacher ? 'var(--danger)' : 'var(--warn)';
             var dupIcon = isTeacher ? '🚫' : '⚠️';
             var dupTitle = isTeacher ? 'Увага: Здано вихідний файл завдання замість розв\'язку!' : 'Увага: Виявлено збіг або схожість із роботою іншого учня!';
 
@@ -606,7 +606,7 @@ function runStudentAICheck(subId) {
         );
         if (isUnclear) {
             var warnDetail = data.format_warning || (data.summary && data.summary.toLowerCase().indexOf('не зрозуміло') !== -1 ? data.summary : 'ШІ не зміг визначити, яке саме завдання з наданої вчителем умови ви виконували.');
-            unclearTaskHtml = '<div style="margin-bottom:12px;padding:12px 14px;background:var(--color-warning-light);border:1.5px solid #f59e0b;border-radius:var(--radius-sm);display:flex;align-items:flex-start;gap:10px;">' +
+            unclearTaskHtml = '<div style="margin-bottom:12px;padding:12px 14px;background:var(--color-warning-light);border:1.5px solid var(--warn);border-radius:var(--radius-sm);display:flex;align-items:flex-start;gap:10px;">' +
                 '<span style="font-size:22px;line-height:1;">⚠️</span>' +
                 '<div>' +
                     '<div style="font-weight:800;font-size:13px;color:var(--color-warning);margin-bottom:2px;">Не зрозуміло, яке завдання виконане</div>' +
@@ -626,32 +626,32 @@ function runStudentAICheck(subId) {
                     group_name: 'Потребує доопрацювання',
                     range_str: 'Роботу не зараховано',
                     level_code: 'rework',
-                    color: '#d97706',
-                    bg_color: 'rgba(245, 158, 11, 0.12)',
-                    border_color: '#f59e0b',
+                    color: 'var(--warn)',
+                    bg_color: 'rgba(var(--warn-rgb), 0.12)',
+                    border_color: 'var(--warn)',
                     icon: '⚠️',
                     description: 'Робота виконана частково або має суттєві неточності. Ознайомтеся з зауваженнями нижче та надішліть виправлену версію.',
                     raw_grade: raw
                 };
             } else if (!isNaN(val)) {
                 if (val >= 10) {
-                    gg = { group_name: 'Високий рівень', range_str: '10–12 балів', level_code: 'high', color: '#059669', bg_color: 'rgba(16, 185, 129, 0.12)', border_color: '#10b981', icon: '🏆', description: 'Глибокі знання та бездоганне володіння матеріалом.', raw_grade: String(val) };
+                    gg = { group_name: 'Високий рівень', range_str: '10–12 балів', level_code: 'high', color: 'var(--ok)', bg_color: 'rgba(var(--ok-rgb), 0.12)', border_color: 'var(--ok)', icon: '🏆', description: 'Глибокі знання та бездоганне володіння матеріалом.', raw_grade: String(val) };
                 } else if (val >= 7) {
-                    gg = { group_name: 'Достатній рівень', range_str: '7–9 балів', level_code: 'good', color: '#2563eb', bg_color: 'rgba(37, 99, 235, 0.1)', border_color: '#3b82f6', icon: '📘', description: 'Впевнене володіння матеріалом, незначні неточності.', raw_grade: String(val) };
+                    gg = { group_name: 'Достатній рівень', range_str: '7–9 балів', level_code: 'good', color: 'var(--info)', bg_color: 'rgba(var(--info-rgb), 0.1)', border_color: 'var(--info)', icon: '📘', description: 'Впевнене володіння матеріалом, незначні неточності.', raw_grade: String(val) };
                 } else if (val >= 4) {
-                    gg = { group_name: 'Середній рівень', range_str: '4–6 балів', level_code: 'avg', color: '#d97706', bg_color: 'rgba(245, 158, 11, 0.12)', border_color: '#f59e0b', icon: '📙', description: 'Базове розуміння матеріалу, є прогалини або помилки.', raw_grade: String(val) };
+                    gg = { group_name: 'Середній рівень', range_str: '4–6 балів', level_code: 'avg', color: 'var(--warn)', bg_color: 'rgba(var(--warn-rgb), 0.12)', border_color: 'var(--warn)', icon: '📙', description: 'Базове розуміння матеріалу, є прогалини або помилки.', raw_grade: String(val) };
                 } else {
-                    gg = { group_name: 'Початковий рівень', range_str: '1–3 бали', level_code: 'low', color: '#dc2626', bg_color: 'rgba(239, 68, 68, 0.1)', border_color: '#ef4444', icon: '📕', description: 'Завдання виконано частково або з грубими помилками.', raw_grade: String(val) };
+                    gg = { group_name: 'Початковий рівень', range_str: '1–3 бали', level_code: 'low', color: 'var(--danger)', bg_color: 'rgba(var(--danger-rgb), 0.1)', border_color: 'var(--danger)', icon: '📕', description: 'Завдання виконано частково або з грубими помилками.', raw_grade: String(val) };
                 }
             }
         }
 
         var heroGradeHtml = '';
         if (gg) {
-            var sLow = (gg.level_code === 'low') ? 'background:rgba(239,68,68,0.18);border:2px solid #ef4444;font-weight:900;color:#b91c1c;box-shadow:0 2px 8px rgba(239,68,68,0.2);' : 'background:var(--color-bg-secondary);border:1px solid var(--color-border);color:var(--color-text-muted);opacity:0.65;';
-            var sAvg = (gg.level_code === 'avg') ? 'background:rgba(245,158,11,0.18);border:2px solid #f59e0b;font-weight:900;color:#b45309;box-shadow:0 2px 8px rgba(245,158,11,0.2);' : 'background:var(--color-bg-secondary);border:1px solid var(--color-border);color:var(--color-text-muted);opacity:0.65;';
-            var sGood = (gg.level_code === 'good') ? 'background:rgba(37,99,235,0.18);border:2px solid #3b82f6;font-weight:900;color:#1d4ed8;box-shadow:0 2px 8px rgba(37,99,235,0.2);' : 'background:var(--color-bg-secondary);border:1px solid var(--color-border);color:var(--color-text-muted);opacity:0.65;';
-            var sHigh = (gg.level_code === 'high') ? 'background:rgba(16,185,129,0.18);border:2px solid #10b981;font-weight:900;color:#047857;box-shadow:0 2px 8px rgba(16,185,129,0.2);' : 'background:var(--color-bg-secondary);border:1px solid var(--color-border);color:var(--color-text-muted);opacity:0.65;';
+            var sLow = (gg.level_code === 'low') ? 'background:rgba(var(--danger-rgb),0.18);border:2px solid var(--danger);font-weight:900;color:var(--danger);box-shadow:0 2px 8px rgba(var(--danger-rgb),0.2);' : 'background:var(--color-bg-secondary);border:1px solid var(--color-border);color:var(--color-text-muted);opacity:0.65;';
+            var sAvg = (gg.level_code === 'avg') ? 'background:rgba(var(--warn-rgb),0.18);border:2px solid var(--warn);font-weight:900;color:var(--warn);box-shadow:0 2px 8px rgba(var(--warn-rgb),0.2);' : 'background:var(--color-bg-secondary);border:1px solid var(--color-border);color:var(--color-text-muted);opacity:0.65;';
+            var sGood = (gg.level_code === 'good') ? 'background:rgba(var(--info-rgb),0.18);border:2px solid var(--info);font-weight:900;color:var(--info);box-shadow:0 2px 8px rgba(var(--info-rgb),0.2);' : 'background:var(--color-bg-secondary);border:1px solid var(--color-border);color:var(--color-text-muted);opacity:0.65;';
+            var sHigh = (gg.level_code === 'high') ? 'background:rgba(var(--ok-rgb),0.18);border:2px solid var(--ok);font-weight:900;color:var(--ok);box-shadow:0 2px 8px rgba(var(--ok-rgb),0.2);' : 'background:var(--color-bg-secondary);border:1px solid var(--color-border);color:var(--color-text-muted);opacity:0.65;';
 
             heroGradeHtml = '<div style="padding:18px 20px;background:var(--color-surface);border-bottom:1px solid var(--color-border);">' +
                 '<div style="display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap;">' +
@@ -687,8 +687,8 @@ function runStudentAICheck(subId) {
             '</div>';
         }
 
-        var html = '<div style="background:var(--color-surface);border:2px solid ' + (gg ? gg.border_color : 'rgba(99,102,241,0.3)') + ';border-radius:var(--radius-lg);overflow:hidden;box-shadow:0 4px 18px rgba(0,0,0,0.06);margin-bottom:18px;">' +
-            '<div style="padding:14px 20px;background:linear-gradient(135deg,rgba(99,102,241,0.08),rgba(139,92,246,0.08));border-bottom:1.5px solid var(--color-border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">' +
+        var html = '<div style="background:var(--color-surface);border:2px solid ' + (gg ? gg.border_color : 'rgba(var(--accent-rgb),0.3)') + ';border-radius:var(--radius-lg);overflow:hidden;box-shadow:0 4px 18px rgba(0,0,0,0.06);margin-bottom:18px;">' +
+            '<div style="padding:14px 20px;background:var(--ai-soft);border-bottom:1.5px solid var(--color-border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">' +
             '<div style="font-weight:800;font-size:15px;color:var(--color-text-primary);display:flex;align-items:center;gap:6px;">' +
             '<span>🤖</span> <span>Попередня оцінка ШІ (за критеріями НУШ)</span>' +
             '</div>' +
@@ -701,7 +701,7 @@ function runStudentAICheck(subId) {
             aiDetectionHtml +
             feedbackCommentHtml +
             '</div>' +
-            '<div style="padding:10px 20px;background:rgba(16,185,129,0.05);border-top:1px solid var(--color-border);font-size:11.5px;color:var(--color-text-muted);">ℹ️ Попередня оцінка від ШІ. Остаточну оцінку виставляє вчитель.</div>' +
+            '<div style="padding:10px 20px;background:rgba(var(--ok-rgb),0.05);border-top:1px solid var(--color-border);font-size:11.5px;color:var(--color-text-muted);">ℹ️ Попередня оцінка від ШІ. Остаточну оцінку виставляє вчитель.</div>' +
             '</div>';
 
         if (resultBox) {

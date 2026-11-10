@@ -72,7 +72,7 @@
 
                 <!-- Таблиця логів -->
                 <div class="submissions-table-wrapper" style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);overflow-x:auto;">
-                    <table class="submissions-table">
+                    <table class="submissions-table" data-record-compact="true">
                         <thead>
                             <tr>
                                 <th>Час</th>
@@ -85,30 +85,30 @@
                         <tbody>
                             {% for log in page_obj %}
                             <tr>
-                                <td style="white-space:nowrap;font-size:12px;color:var(--color-text-muted);">
+                                <td data-record="secondary" style="white-space:nowrap;font-size:12.5px;color:var(--color-text-muted);">
                                     {{ log.timestamp|date:"d.m.Y H:i:s" }}
                                 </td>
-                                <td>
+                                <td data-record="secondary wide">
                                     {% if log.actor %}
                                     <span style="font-weight:700;">{{ log.actor.username }}</span>
                                     {% else %}
                                     <span style="color:var(--color-text-muted);">Система / Анонім</span>
                                     {% endif %}
                                 </td>
-                                <td>
-                                    <span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:12px;
-                                        {% if log.action_type == 'submission' %}background:rgba(16,185,129,0.15);color:var(--color-success);
-                                        {% elif log.action_type == 'grading' %}background:rgba(99,102,241,0.15);color:var(--color-primary);
+                                <td data-record="secondary wide">
+                                    <span style="font-size:12px;font-weight:700;padding:2px 8px;border-radius:12px;
+                                        {% if log.action_type == 'submission' %}background:rgba(var(--ok-rgb),0.15);color:var(--color-success);
+                                        {% elif log.action_type == 'grading' %}background:rgba(var(--accent-rgb),0.15);color:var(--color-primary);
                                         {% elif log.action_type == 'comment' %}background:rgba(14,165,233,0.15);color:var(--color-info);
-                                        {% elif log.action_type == 'delete' %}background:rgba(239,68,68,0.15);color:var(--color-danger);
+                                        {% elif log.action_type == 'delete' %}background:rgba(var(--danger-rgb),0.15);color:var(--color-danger);
                                         {% else %}background:var(--color-bg-secondary);color:var(--color-text-muted);{% endif %}">
                                         {{ log.get_action_type_display }}
                                     </span>
                                 </td>
-                                <td style="font-size:13px;line-height:1.4;">{{ log.description }}</td>
-                                <td>
+                                <td data-record="wide" style="font-size:13px;line-height:1.4;">{{ log.description }}</td>
+                                <td data-record="secondary wide">
                                     {% if log.submission %}
-                                    <a href="{% url 'view_file' log.submission.id %}" class="btn btn-secondary btn-sm" style="font-size:11px;padding:2px 6px;">
+                                    <a href="{% url 'view_file' log.submission.id %}" class="btn btn-secondary btn-sm" style="font-size:12px;padding:2px 6px;">
                                         👁️ До роботи #{{ log.submission.id }}
                                     </a>
                                     {% else %}—{% endif %}
@@ -165,8 +165,8 @@
                             {% for arch in logs_archives %}
                             <tr>
                                 <td><span style="font-weight:700;">📄 {{ arch.filename }}</span></td>
-                                <td style="font-size:12px;color:var(--color-text-muted);">{{ arch.size|filesizeformat }}</td>
-                                <td style="font-size:12px;color:var(--color-text-muted);">{{ arch.created_at|date:"d.m.Y H:i" }}</td>
+                                <td style="font-size:12.5px;color:var(--color-text-muted);">{{ arch.size|filesizeformat }}</td>
+                                <td style="font-size:12.5px;color:var(--color-text-muted);">{{ arch.created_at|date:"d.m.Y H:i" }}</td>
                                 <td style="display:flex;gap:6px;">
                                     <a href="{% url 'view_log_archive' arch.filename %}" class="btn btn-secondary btn-sm">👁️ Переглянути</a>
                                     <a href="{% url 'download_log_archive' arch.filename %}" download class="btn btn-primary btn-sm">⬇️ Завантажити</a>

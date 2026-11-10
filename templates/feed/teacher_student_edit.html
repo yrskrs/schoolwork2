@@ -22,7 +22,7 @@
             <div class="submit-form-card" style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:24px 28px;box-shadow:0 4px 20px rgba(0,0,0,0.05);max-width:680px;">
                 
                 <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px;">
-                    <div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,var(--color-primary),#8b5cf6);color:#fff;font-weight:800;font-size:16px;display:flex;align-items:center;justify-content:center;">
+                    <div style="width:44px;height:44px;border-radius:50%;background:var(--fill-accent);color:#fff;font-weight:800;font-size:16px;display:flex;align-items:center;justify-content:center;">
                         {{ student.get_initials }}
                     </div>
                     <div>
@@ -61,7 +61,7 @@
                         {{ form.notes }}
                     </div>
 
-                    <div style="margin-bottom:20px;background:rgba(99,102,241,0.06);padding:14px;border-radius:var(--radius-md);border:1px solid rgba(99,102,241,0.2);">
+                    <div style="margin-bottom:20px;background:rgba(var(--accent-rgb),0.06);padding:14px;border-radius:var(--radius-md);border:1px solid rgba(var(--accent-rgb),0.2);">
                         <label style="display:flex;align-items:flex-start;gap:10px;font-size:13px;cursor:pointer;font-weight:600;color:var(--color-text-primary);">
                             {{ form.sync_submissions }}
                             <span>🔄 <strong>Синхронізувати всі здані роботи учня</strong>: оновити ім'я, прізвище та перенести всі попередні оцінки і здачі в обраний клас.</span>

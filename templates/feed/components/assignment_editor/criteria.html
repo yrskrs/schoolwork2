@@ -6,17 +6,17 @@
             <span>Індивідуальні критерії оцінювання для цього завдання (необов'язково)</span>
         </label>
         <button type="button" id="btn-toggle-ai-criteria-helper" class="btn btn-sm"
-                style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;padding:5px 13px;border-radius:20px;background:linear-gradient(135deg,#2563eb,#7c3aed);color:#fff;border:none;cursor:pointer;box-shadow:0 2px 8px rgba(37,99,235,0.25);transition:transform 0.15s ease,box-shadow 0.15s ease;">
+                style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;padding:5px 13px;border-radius:20px;background:var(--ai-fill);color:var(--on-fill);border:none;cursor:pointer;box-shadow:var(--shadow-sm);transition:transform 0.15s ease,box-shadow 0.15s ease;">
             <span>✨</span>
             <span>Помічник ШІ: скласти критерії за описом</span>
         </button>
     </div>
 
     <!-- Панель ШІ-помічника для генерації критеріїв -->
-    <div id="ai-criteria-assistant-panel" style="display:none;background:var(--color-bg-secondary, #f8fafc);border:1.5px solid #3b82f6;border-radius:12px;padding:16px;margin-bottom:14px;box-shadow:0 6px 20px rgba(59,130,246,0.12);">
+    <div id="ai-criteria-assistant-panel" style="display:none;background:var(--color-bg-secondary, #f8fafc);border:1.5px solid var(--info);border-radius:12px;padding:16px;margin-bottom:14px;box-shadow:0 6px 20px rgba(var(--info-rgb),0.12);">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px;">
             <div style="display:flex;align-items:flex-start;gap:10px;">
-                <div style="font-size:24px;line-height:1;background:rgba(59,130,246,0.12);padding:8px;border-radius:10px;">🤖</div>
+                <div style="font-size:24px;line-height:1;background:rgba(var(--info-rgb),0.12);padding:8px;border-radius:10px;">🤖</div>
                 <div>
                     <div style="font-weight:700;font-size:14.5px;color:var(--color-text-primary, #1e293b);">Помічник ШІ для формування критеріїв оцінювання</div>
                     <div style="font-size:12px;color:var(--color-text-muted, #64748b);margin-top:2px;">Опишіть своїми словами звичайною мовою, що саме учень має зробити або які вимоги до роботи. ШІ перетворить ваші слова на структуровані критерії за 12-бальною шкалою НУШ.</div>
@@ -34,12 +34,12 @@
         </div>
 
         <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;">
-            <button type="button" id="btn-copy-from-assignment" class="btn btn-sm" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;background:var(--color-bg-primary, #fff);border:1px solid var(--color-border, #cbd5e1);color:var(--color-text-primary, #1e293b);padding:6px 11px;border-radius:6px;cursor:pointer;">
+            <button type="button" id="btn-copy-from-assignment" class="btn btn-sm" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;background:var(--surface);border:1px solid var(--color-border, #cbd5e1);color:var(--color-text-primary, #1e293b);padding:6px 11px;border-radius:6px;cursor:pointer;">
                 <span>📋</span>
                 <span>Взяти опис із цього завдання</span>
             </button>
             <div style="display:flex;gap:8px;">
-                <button type="button" id="btn-run-generate-criteria" class="btn btn-sm btn-primary" style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;padding:6px 15px;border-radius:6px;background:linear-gradient(135deg,#2563eb,#7c3aed);color:#fff;border:none;cursor:pointer;box-shadow:0 2px 6px rgba(37,99,235,0.3);">
+                <button type="button" id="btn-run-generate-criteria" class="btn btn-sm btn-primary" style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;padding:6px 15px;border-radius:6px;background:var(--ai-fill);color:var(--on-fill);border:none;cursor:pointer;box-shadow:var(--shadow-sm);">
                     <span id="ai-criteria-spinner" style="display:none;width:14px;height:14px;border:2px solid #fff;border-top-color:transparent;border-radius:50%;animation:criteriaSpin 0.8s linear infinite;"></span>
                     <span id="ai-criteria-btn-icon">✨</span>
                     <span id="ai-criteria-btn-text">Згенерувати критерії (12 балів)</span>
@@ -48,10 +48,10 @@
         </div>
 
         <!-- Повідомлення про помилку -->
-        <div id="ai-criteria-error-box" style="display:none;margin-top:10px;padding:9px 13px;background:var(--color-danger-light);border:1px solid #fecaca;color:var(--color-danger);border-radius:6px;font-size:12.5px;"></div>
+        <div id="ai-criteria-error-box" style="display:none;margin-top:10px;padding:9px 13px;background:var(--color-danger-light);border:1px solid color-mix(in srgb, var(--danger) 40%, transparent);color:var(--color-danger);border-radius:6px;font-size:12.5px;"></div>
 
         <!-- Блок згенерованого результату -->
-        <div id="ai-criteria-result-box" style="display:none;margin-top:14px;background:var(--color-bg-primary, #fff);border:1.5px solid #93c5fd;border-radius:8px;padding:14px;">
+        <div id="ai-criteria-result-box" style="display:none;margin-top:14px;background:var(--surface);border:1.5px solid var(--ai);border-radius:8px;padding:14px;">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
                 <div style="font-weight:700;font-size:13.5px;color:var(--color-info);display:flex;align-items:center;gap:6px;">
                     <span>✅</span> Згенеровані критерії оцінювання:
@@ -63,7 +63,7 @@
                 <button type="button" id="btn-append-criteria" class="btn btn-sm" style="background:var(--color-bg-secondary, #f1f5f9);border:1px solid var(--color-border, #cbd5e1);font-size:12px;padding:6px 13px;border-radius:6px;cursor:pointer;">
                     ➕ Додати до існуючого тексту
                 </button>
-                <button type="button" id="btn-apply-criteria" class="btn btn-sm btn-success" style="background:#16a34a;color:#fff;border:none;font-weight:600;font-size:12.5px;padding:6px 15px;border-radius:6px;cursor:pointer;">
+                <button type="button" id="btn-apply-criteria" class="btn btn-sm btn-success" style="background:var(--ok);color:#fff;border:none;font-weight:600;font-size:12.5px;padding:6px 15px;border-radius:6px;cursor:pointer;">
                     📥 Вставити в критерії завдання
                 </button>
             </div>
@@ -75,13 +75,13 @@
     <p class="form-hint">Власні критерії мають найвищий пріоритет для ШІ та будуть доступні учням для ознайомлення перед виконанням роботи.</p>
 
     <!-- Окреме поле для коментаря/вказівок вчителя безпосередньо для ШІ (приховано від учнів) -->
-    <div class="form-group" style="margin-top:20px;padding:16px;background:var(--color-bg-secondary);border:1.5px dashed rgba(99,102,241,0.4);border-radius:var(--radius-md);">
+    <div class="form-group" style="margin-top:20px;padding:16px;background:var(--color-bg-secondary);border:1.5px dashed rgba(var(--accent-rgb),0.4);border-radius:var(--radius-md);">
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:6px;">
             <label class="form-label" for="id_teacher_ai_instructions" style="display:flex;align-items:center;gap:6px;font-weight:700;margin-bottom:0;color:var(--color-text-primary);">
                 <span>🤫</span>
                 <span>Коментар та вказівки для ШІ (приховано від учнів)</span>
             </label>
-            <span class="badge" style="background:rgba(99,102,241,0.15);color:var(--color-primary);font-weight:700;font-size:11px;padding:3px 9px;border-radius:12px;display:inline-flex;align-items:center;gap:4px;">
+            <span class="badge badge-accent">
                 <span>🔒</span> Тільки для вчителя та ШІ
             </span>
         </div>

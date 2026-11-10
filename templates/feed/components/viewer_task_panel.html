@@ -15,9 +15,9 @@
         <h3 id="fv-ai-notes-title" style="margin-bottom:0;display:flex;align-items:center;gap:6px;">
             <span>🤫</span> <span>Вказівки для ШІ (приховано від учнів)</span>
         </h3>
-        <span class="badge" style="background:#6366f1;color:#fff;font-size:10px;padding:2px 7px;border-radius:10px;font-weight:700;">Не видно учням</span>
+        <span class="badge badge-ai">Не видно учням</span>
     </div>
-    <div style="background:var(--color-bg-secondary);border:1.5px dashed rgba(99,102,241,0.35);border-radius:var(--radius-sm);padding:10px 12px;font-size:12.5px;color:var(--color-text-primary);line-height:1.45;white-space:pre-wrap;">{{ submission.assignment.teacher_ai_instructions }}</div>
+    <div style="background:var(--color-bg-secondary);border:1.5px dashed rgba(var(--accent-rgb),0.35);border-radius:var(--radius-sm);padding:10px 12px;font-size:12.5px;color:var(--color-text-primary);line-height:1.45;white-space:pre-wrap;">{{ submission.assignment.teacher_ai_instructions }}</div>
 </section>
 {% endif %}
 <section class="fv-task-section" aria-labelledby="fv-materials-title">

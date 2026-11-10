@@ -1,0 +1,339 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   SchoolNet — ЄДИНЕ ДЖЕРЕЛО ТЕМИ (design tokens)
+
+   Це єдиний файл, де визначено кольори, типографіку, відступи, радіуси,
+   тіні та рух. Решта CSS-файлів споживає ці змінні й не має власних :root
+   палітр. Правило просте: новий колір у проєкті з'являється лише тут.
+
+   Ролі кольору розділені на дві групи, і це принципово:
+
+     • «чорнило» (ink)  — колір ТЕКСТУ/іконки на поверхні: --ink, --accent,
+       --ok, --warn, --danger, --info. У темній темі вони СВІТЛІ, бо лежать
+       на темній поверхні.
+
+     • «заливка» (fill) — колір ФОНУ під білим текстом: --fill-accent,
+       --fill-success, --fill-danger… Кожна заливка гарантує контраст
+       ≥ 4.5:1 з --on-fill в обох темах.
+
+   Плутанина «ink як fill» і була причиною білого тексту на світло-бірюзовому
+   фоні в темній темі (контраст 1.72:1). Використовуйте:
+     color: var(--accent)        — для тексту/посилань
+     background: var(--fill-accent); color: var(--on-fill) — для кнопок/бейджів
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ─── СВІТЛА ТЕМА (типова) ─────────────────────────────────────────────────── */
+:root {
+  color-scheme: light;
+
+  /* Поверхні */
+  --bg-app: #f3f6f7;
+  --bg-subtle: #edf2f4;
+  --surface: #ffffff;
+  --surface-hover: #f6f9fa;
+  --surface-active: #e9f1f3;
+  --overlay: rgba(9, 24, 32, 0.48);
+
+  /* Межі */
+  --border: #d5dfe4;
+  --border-subtle: #e6ecef;
+  --border-strong: #b7c8d1;
+
+  /* Чорнило (текст) */
+  --ink: #192e3b;
+  --ink-secondary: #465e6c;
+  --ink-muted: #536a77;
+  --ink-inverse: #ffffff;
+
+  /* Акцент системи (бірюза) */
+  --accent: #146c78;
+  --accent-hover: #105762;
+  --accent-strong: #105e68;
+  --accent-soft: #e2f2f2;
+  --accent-rgb: 20, 108, 120;
+  --info-rgb: 36, 90, 165;
+  --ok-rgb: 33, 100, 67;
+  --warn-rgb: 134, 85, 9;
+  --danger-rgb: 174, 52, 58;
+
+  /* Заливки під білий текст (AA ≥ 4.5:1 з --on-fill) */
+  --fill-accent: #146c78;         /* 6.09:1 */
+  --fill-accent-hover: #105762;   /* 8.20:1 */
+  --fill-success: #216443;        /* 7.07:1 */
+  --fill-success-hover: #174d32;
+  --fill-danger: #ae343a;         /* 6.26:1 */
+  --fill-danger-hover: #8f2a2f;
+  --fill-warning: #865509;        /* 6.33:1 */
+  --fill-warning-hover: #6b4307;
+  --fill-info: #245aa5;           /* 6.82:1 */
+  --fill-info-hover: #1c4782;
+  --on-fill: #ffffff;
+
+  /* Ніжні заливки (tint) для чипів: фон + відповідне чорнило */
+  --tint-accent: #e2f2f2;
+  --tint-success: #e4f3e9;
+  --tint-warning: #fff3d8;
+  --tint-danger: #fdebec;
+  --tint-info: #e7effb;
+
+  /* Статуси як текст */
+  --ok: #216443;
+  --warn: #865509;
+  --danger: #ae343a;
+  --info: #245aa5;
+
+  /* Акцент ШІ-функцій (фіолетовий) — відрізняє AI від системних дій */
+  --ai: #5b21b6;
+  --ai-strong: #4c1d95;
+  --ai-soft: #ede9fe;
+  --ai-rgb: 109, 40, 217;
+  --ai-fill: #6d28d9;
+
+  /* Фокус і виділення */
+  --focus: rgba(20, 108, 120, 0.38);
+  --selection-bg: #cfe9ec;
+  --selection-ink: #0d3f46;
+
+  /* Тіні */
+  --shadow-sm: 0 1px 2px rgba(24, 53, 70, 0.06);
+  --shadow-md: 0 2px 8px rgba(24, 53, 70, 0.08);
+  --shadow-lg: 0 12px 32px rgba(24, 53, 70, 0.12);
+  --shadow-glow: 0 0 0 3px var(--focus);
+
+  /* Геометрія */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 9999px;
+
+  /* Відступи (крок 4px) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+
+  /* Висоти контролів */
+  --control-sm: 32px;
+  --control-md: 40px;
+  --control-lg: 44px;
+
+  /* Типографіка */
+  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, Ubuntu, Cantarell, 'Noto Sans', sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-md: 13px;
+  --text-base: 14px;
+  --text-lg: 15px;
+  --text-xl: 17px;
+  --text-2xl: 20px;
+  --text-3xl: 26px;
+  --text-4xl: 30px;
+  --leading-tight: 1.25;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.65;
+  --weight-normal: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+  --weight-heavy: 750;
+
+  /* Рух */
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --duration-fast: 0.12s;
+  --duration-normal: 0.22s;
+  --transition-fast: var(--duration-fast) var(--ease);
+  --transition-normal: var(--duration-normal) var(--ease);
+  --transition-slow: 0.4s var(--ease);
+
+  /* Каркас */
+  --layout-page-width: 1240px;
+  --layout-sidebar-width: 240px;
+  --layout-gap: 24px;
+  --layout-page-gutter: 16px;
+  --sidebar-width: var(--layout-sidebar-width);
+  --navbar-bg: #ffffff;
+  --navbar-border: var(--border);
+
+  /* Навбар */
+  --navbar-height: 60px;
+
+  /* Блок опису завдання */
+  --desc-card-bg: var(--surface);
+  --desc-card-border: var(--border);
+  --desc-card-accent: var(--accent);
+  --desc-header-bg: var(--bg-subtle);
+  --desc-header-border: var(--border);
+  --desc-header-text: var(--ink);
+  --desc-header-badge-bg: var(--tint-accent);
+  --desc-header-badge-text: var(--accent-strong);
+  --desc-body-text: var(--ink);
+  --desc-shadow: none;
+}
+
+/* ─── ТЕМНА ТЕМА ───────────────────────────────────────────────────────────── */
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg-app: #111b23;
+  --bg-subtle: #1c2c37;
+  --surface: #182630;
+  --surface-hover: #20333f;
+  --surface-active: #263b48;
+  --overlay: rgba(3, 9, 13, 0.62);
+
+  --border: #354b59;
+  --border-subtle: #293e4b;
+  --border-strong: #46606f;
+
+  --ink: #e7eff3;
+  --ink-secondary: #b5c7d0;
+  --ink-muted: #a4bac6;
+  --ink-inverse: #0f172a;
+
+  --accent: #86d2d7;
+  --accent-hover: #a4e0e3;
+  --accent-strong: #a4e0e3;
+  --accent-soft: #203e46;
+  --accent-rgb: 134, 210, 215;
+  --info-rgb: 168, 200, 250;
+  --ok-rgb: 155, 214, 178;
+  --warn-rgb: 240, 206, 139;
+  --danger-rgb: 255, 176, 180;
+
+  --fill-accent: #246f7b;        /* 5.78:1 */
+  --fill-accent-hover: #2b808d;  /* 4.59:1 */
+  --fill-success: #276c49;       /* 6.31:1 */
+  --fill-success-hover: #308057;
+  --fill-danger: #a33a3f;        /* 6.1:1 */
+  --fill-danger-hover: #8f3237;
+  --fill-warning: #7a5a12;
+  --fill-warning-hover: #654b0f;
+  --fill-info: #2d5c94;
+  --fill-info-hover: #264e7e;
+  --on-fill: #ffffff;
+
+  --tint-accent: #203e46;
+  --tint-success: #203f30;
+  --tint-warning: #403421;
+  --tint-danger: #442b32;
+  --tint-info: #21374f;
+
+  --ok: #9bd6b2;
+  --warn: #f0ce8b;
+  --danger: #ffb0b4;
+  --info: #a8c8fa;
+
+  --ai: #c4b5fd;
+  --ai-strong: #ddd6fe;
+  --ai-soft: #2e1065;
+  --ai-rgb: 196, 181, 253;
+  --ai-fill: #6d28d9;
+
+  --focus: rgba(134, 210, 215, 0.45);
+  --selection-bg: #1f4d55;
+  --selection-ink: #eaf7f8;
+
+  --shadow-sm: none;
+  --shadow-md: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.45);
+  --shadow-glow: 0 0 0 3px var(--focus);
+
+  --navbar-bg: var(--surface);
+  --navbar-border: var(--border);
+
+  --desc-card-bg: var(--surface);
+  --desc-card-border: var(--border);
+  --desc-card-accent: var(--accent);
+  --desc-header-bg: var(--bg-subtle);
+  --desc-header-border: var(--border);
+  --desc-header-text: var(--ink);
+  --desc-header-badge-bg: var(--tint-accent);
+  --desc-header-badge-text: var(--accent-strong);
+  --desc-body-text: var(--ink);
+  --desc-shadow: none;
+}
+
+/* ─── Застарілі назви (сумісність) ─────────────────────────────────────────────
+   Компоненти й шаблони досі звертаються до --color-*, --action-*, --desc-*.
+   Нижче вони переприв'язані до нових ролей, тому старі правила працюють без
+   змін, але отримують узгоджені значення. Нові правила мають використовувати
+   токени з верхньої частини файлу. */
+
+:root,
+[data-theme="dark"] {
+  --color-bg: var(--bg-app);
+  --color-bg-secondary: var(--bg-subtle);
+  --color-surface: var(--surface);
+  --color-surface-hover: var(--surface-hover);
+  --color-border: var(--border);
+  --color-border-light: var(--border-subtle);
+
+  --color-text-primary: var(--ink);
+  --color-text-secondary: var(--ink-secondary);
+  --color-text-muted: var(--ink-muted);
+  --color-text-inverse: var(--ink-inverse);
+
+  --color-primary: var(--accent);
+  --color-primary-hover: var(--accent-hover);
+  --color-primary-light: var(--accent-soft);
+  --color-primary-text: var(--accent-strong);
+  --color-primary-rgb: var(--accent-rgb);
+
+  --color-success: var(--ok);
+  --color-success-light: var(--tint-success);
+  --color-warning: var(--warn);
+  --color-warning-light: var(--tint-warning);
+  --color-danger: var(--danger);
+  --color-danger-light: var(--tint-danger);
+  --color-info: var(--info);
+  --color-info-light: var(--tint-info);
+
+  --action-primary-bg: var(--fill-accent);
+  --action-primary-hover: var(--fill-accent-hover);
+  --action-success-bg: var(--fill-success);
+  --action-success-hover: var(--fill-success-hover);
+  --action-danger-bg: var(--fill-danger);
+  --action-warning-bg: var(--fill-warning);
+  --action-text: var(--on-fill);
+}
+
+/* ─── Базовий шар документа ────────────────────────────────────────────────── */
+html {
+  -webkit-text-size-adjust: 100%;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: var(--text-lg);
+  line-height: var(--leading-normal);
+  background-color: var(--bg-app);
+  color: var(--ink);
+}
+
+::selection {
+  background: var(--selection-bg);
+  color: var(--selection-ink);
+}
+
+:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Тонший, але видимий скролбар; колір підлаштовується під тему. */
+* {
+  scrollbar-width: thin;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}

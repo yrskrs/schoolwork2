@@ -24,7 +24,7 @@
             </div>
 
             {% if not ai_settings.has_usable_models %}
-            <div class="alert alert-warning" style="margin-bottom:20px;padding:16px 20px;border-radius:var(--radius-md);background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.3);color:var(--color-warning);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+            <div class="alert alert-warning" style="margin-bottom:20px;padding:16px 20px;border-radius:var(--radius-md);background:rgba(var(--warn-rgb),0.12);border:1px solid rgba(var(--warn-rgb),0.3);color:var(--color-warning);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
                 <div>
                     <strong>⚠️ Немає доступної моделі для перевірки.</strong>
                     <div style="font-size:13px;margin-top:2px;">Додайте підключення та ввімкнену модель на вкладці «Моделі» у налаштуваннях ШІ.</div>
@@ -34,7 +34,7 @@
                 </a>
             </div>
             {% elif not ai_settings.is_enabled %}
-            <div class="alert alert-warning" style="margin-bottom:20px;padding:16px 20px;border-radius:var(--radius-md);background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.3);color:var(--color-warning);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+            <div class="alert alert-warning" style="margin-bottom:20px;padding:16px 20px;border-radius:var(--radius-md);background:rgba(var(--warn-rgb),0.12);border:1px solid rgba(var(--warn-rgb),0.3);color:var(--color-warning);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
                 <div>
                     <strong>⚠️ Модуль ШІ вимкнено в налаштуваннях.</strong>
                     <div style="font-size:13px;margin-top:2px;">API ключ налаштовано, але галочку «Увімкнути модуль» знято.</div>
@@ -56,7 +56,7 @@
                     <div style="font-size:24px;font-weight:800;color:var(--color-warning);">{{ ungraded_submissions }}</div>
                     <div class="text-muted text-sm" style="font-weight:600;">⏳ Очікують перевірки</div>
                 </div>
-                <div class="sidebar-card" style="padding:14px;text-align:center;border-top:3px solid #10b981;">
+                <div class="sidebar-card" style="padding:14px;text-align:center;border-top:3px solid var(--ok);">
                     <div style="font-size:24px;font-weight:800;color:var(--color-success);">{{ ai_evaluated_submissions }}</div>
                     <div class="text-muted text-sm" style="font-weight:600;">🤖 Перевірено ШІ</div>
                 </div>
@@ -106,7 +106,7 @@
                 </div>
 
                 <!-- Блок вибору груп результатів (ГР) прапорцями -->
-                <div id="batch-gr-selector" style="margin-bottom:16px;background:var(--color-bg-secondary);border:1px solid rgba(99,102,241,0.25);border-radius:var(--radius-md);padding:12px 16px;">
+                <div id="batch-gr-selector" style="margin-bottom:16px;background:var(--color-bg-secondary);border:1px solid rgba(var(--accent-rgb),0.25);border-radius:var(--radius-md);padding:12px 16px;">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:8px;">
                         <span style="font-size:12px;font-weight:800;color:var(--color-primary);text-transform:uppercase;display:flex;align-items:center;gap:6px;">
                             <span>☑️</span> <span>Оберіть групи результатів (ГР) для пакетної перевірки:</span>
@@ -151,7 +151,7 @@
                     </div>
 
                     <div style="display:flex;gap:10px;flex-wrap:wrap;">
-                        <button type="button" class="btn btn-primary" id="btn-start-batch" onclick="startBatchProcessing()" style="font-weight:800;padding:10px 24px;box-shadow:0 2px 10px rgba(99,102,241,0.3);">
+                        <button type="button" class="btn btn-primary" id="btn-start-batch" onclick="startBatchProcessing()" style="font-weight:800;padding:10px 24px;box-shadow:0 2px 10px rgba(var(--accent-rgb),0.3);">
                             🚀 Запустити перевірку ШІ
                         </button>
                         <button type="button" class="btn btn-danger" id="btn-stop-batch" onclick="stopBatchProcessing()" style="display:none;font-weight:700;">
@@ -169,7 +169,7 @@
                 </div>
 
                 <div style="height:12px;background:var(--color-bg-secondary);border-radius:6px;overflow:hidden;margin-bottom:12px;">
-                    <div id="progress-bar-fill" style="height:100%;width:0%;background:linear-gradient(90deg,#6366f1,#10b981);transition:width 0.3s ease;"></div>
+                    <div id="progress-bar-fill" style="height:100%;width:0%;background:linear-gradient(90deg,var(--ai-fill),var(--fill-success));transition:width 0.3s ease;"></div>
                 </div>
 
                 <div style="display:flex;gap:16px;font-size:13px;flex-wrap:wrap;">
@@ -421,13 +421,13 @@ function renderQueueTable() {
         item = SchoolNetAI.escapeResult(item);
         var globalIdx = startIdx + i + 1;
         var statusBadge = '';
-        var formatBadge = item.has_format_warning ? '<div style="margin-top:2px;"><span class="badge" style="background:var(--color-warning-light);color:var(--color-warning);border:1px solid #fde68a;font-size:10px;font-weight:700;">⚠️ Не той формат</span></div>' : '';
+        var formatBadge = item.has_format_warning ? '<div style="margin-top:2px;"><span class="badge" style="background:var(--color-warning-light);color:var(--color-warning);border:1px solid color-mix(in srgb, var(--warn) 40%, transparent);font-size:10px;font-weight:700;">⚠️ Не той формат</span></div>' : '';
 
         var grPills = '';
         if (item.gr_results && Array.isArray(item.gr_results) && item.gr_results.length > 0) {
             grPills = '<div style="display:flex;flex-wrap:wrap;gap:3px;margin-top:4px;justify-content:center;">';
             item.gr_results.forEach(function(gr) {
-                grPills += '<span class="badge" style="background:rgba(99,102,241,0.12);color:var(--color-primary);font-size:9.5px;padding:1px 5px;font-weight:700;" title="' + (gr.name || '') + ': ' + (gr.comment || '') + '">' +
+                grPills += '<span class="badge" style="background:rgba(var(--accent-rgb),0.12);color:var(--color-primary);font-size:9.5px;padding:1px 5px;font-weight:700;" title="' + (gr.name || '') + ': ' + (gr.comment || '') + '">' +
                     (gr.code || 'ГР') + ': ' + (gr.grade || '—') +
                 '</span>';
             });
@@ -437,23 +437,23 @@ function renderQueueTable() {
         var aiProvenanceBadge = '';
         if (item.ai_authorship_state === 'suspected') {
             var confText = item.ai_generated_confidence ? ' (' + item.ai_generated_confidence + ')' : '';
-            var aiBadgeBg = item.is_ai_allowed ? '#ecfdf5' : '#fef2f2';
+            var aiBadgeBg = item.is_ai_allowed ? 'var(--tint-success)' : 'var(--tint-danger)';
             var aiBadgeColor = item.is_ai_allowed ? 'var(--color-success)' : 'var(--color-danger)';
-            var aiBadgeBorder = item.is_ai_allowed ? '#a7f3d0' : '#fecaca';
+            var aiBadgeBorder = item.is_ai_allowed ? 'color-mix(in srgb, var(--ok) 40%, transparent)' : 'color-mix(in srgb, var(--danger) 40%, transparent)';
             var aiTooltip = (item.is_ai_allowed ? 'Дозволено вчителем. ' : 'Самостійна робота. ') + 'Це ознаки, а не доказ. ' + (item.ai_generated_details || '');
             aiProvenanceBadge = '<div style="margin-top:3px;"><span class="badge" style="background:' + aiBadgeBg + ';color:' + aiBadgeColor + ';border:1px solid ' + aiBadgeBorder + ';font-size:10px;font-weight:700;padding:2px 5px;" title="' + aiTooltip.replace(/"/g, '&quot;') + '">🤖 Є ознаки' + confText + '</span></div>';
         }
 
         if (item.ai_status === 'success') {
             if (item.ai_grade === 'Доопрацювати') {
-                statusBadge = '<span class="badge" style="background:var(--color-warning-light);color:var(--color-warning);border:1px solid #fcd34d;font-weight:700;font-size:11px;">🔄 Доопрацювати</span>' + formatBadge + aiProvenanceBadge + grPills;
+                statusBadge = '<span class="badge" style="background:var(--color-warning-light);color:var(--color-warning);border:1px solid color-mix(in srgb, var(--warn) 40%, transparent);font-weight:700;font-size:11px;">🔄 Доопрацювати</span>' + formatBadge + aiProvenanceBadge + grPills;
             } else {
-                statusBadge = '<span class="badge" style="background:rgba(16,185,129,0.15);color:var(--color-success);font-weight:800;font-size:13px;">🤖 ' + item.ai_grade + '</span>' + formatBadge + aiProvenanceBadge + grPills;
+                statusBadge = '<span class="badge" style="background:rgba(var(--ok-rgb),0.15);color:var(--color-success);font-weight:800;font-size:13px;">🤖 ' + item.ai_grade + '</span>' + formatBadge + aiProvenanceBadge + grPills;
             }
         } else if (item.ai_status === 'failed') {
-            statusBadge = '<span class="badge" style="background:rgba(239,68,68,0.15);color:var(--color-danger);font-size:11px;">❌ Помилка</span>';
+            statusBadge = '<span class="badge" style="background:rgba(var(--danger-rgb),0.15);color:var(--color-danger);font-size:11px;">❌ Помилка</span>';
         } else if (item.ai_status === 'unsupported') {
-            statusBadge = '<span class="badge" style="background:rgba(245,158,11,0.15);color:var(--color-warning);font-size:11px;">⚠️ Формат</span>';
+            statusBadge = '<span class="badge" style="background:rgba(var(--warn-rgb),0.15);color:var(--color-warning);font-size:11px;">⚠️ Формат</span>';
         } else if (item.ai_status === 'processing') {
             statusBadge = '<span style="font-size:12px;color:var(--color-primary);font-weight:700;">⏳ Аналіз...</span>';
         } else {
@@ -472,7 +472,7 @@ function renderQueueTable() {
             '</a>';
 
         if (item.ai_status === 'success' && requestMetadata) {
-            actionButtons += '<button type="button" class="btn btn-secondary btn-sm" onclick="openAiMetadataModal(' + item.id + ')" style="font-size:11px;padding:4px 8px;white-space:nowrap;display:inline-flex;align-items:center;justify-content:center;gap:4px;color:var(--color-primary);border-color:rgba(99,102,241,0.3);background:rgba(99,102,241,0.06);font-weight:700;" title="Показати модель, токени та дані запиту ШІ">' +
+            actionButtons += '<button type="button" class="btn btn-secondary btn-sm" onclick="openAiMetadataModal(' + item.id + ')" style="font-size:11px;padding:4px 8px;white-space:nowrap;display:inline-flex;align-items:center;justify-content:center;gap:4px;color:var(--color-primary);border-color:rgba(var(--accent-rgb),0.3);background:rgba(var(--accent-rgb),0.06);font-weight:700;" title="Показати модель, токени та дані запиту ШІ">' +
                 '<span>📊</span> <span>Деталі ШІ</span>' +
             '</button>';
         }
@@ -480,7 +480,7 @@ function renderQueueTable() {
         actionButtons += '</div>';
 
         var isProcessingRow = (item.ai_status === 'processing');
-        var rowBg = isProcessingRow ? 'background:rgba(99,102,241,0.06);' : '';
+        var rowBg = isProcessingRow ? 'background:rgba(var(--accent-rgb),0.06);' : '';
 
         html += '<tr id="queue-row-' + item.id + '" style="' + rowBg + '">' +
             '<td style="text-align:center;color:var(--color-text-muted);font-size:11px;">' + globalIdx + '</td>' +
@@ -627,9 +627,9 @@ function openAiMetadataModal(subId) {
     var gradeBadge = '';
     if (item.ai_status === 'success') {
         if (item.ai_grade === 'Доопрацювати') {
-            gradeBadge = '<span class="badge" style="background:var(--color-warning-light);color:var(--color-warning);border:1px solid #fcd34d;font-weight:700;font-size:11px;">🔄 Доопрацювати</span>';
+            gradeBadge = '<span class="badge" style="background:var(--color-warning-light);color:var(--color-warning);border:1px solid color-mix(in srgb, var(--warn) 40%, transparent);font-weight:700;font-size:11px;">🔄 Доопрацювати</span>';
         } else {
-            gradeBadge = '<span class="badge" style="background:rgba(16,185,129,0.15);color:var(--color-success);font-weight:800;font-size:13px;">🤖 ' + item.ai_grade + '</span>';
+            gradeBadge = '<span class="badge" style="background:rgba(var(--ok-rgb),0.15);color:var(--color-success);font-weight:800;font-size:13px;">🤖 ' + item.ai_grade + '</span>';
         }
     }
 

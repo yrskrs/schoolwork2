@@ -19,7 +19,7 @@
             <!-- Оригінальне завдання + Назва копії -->
             <div style="display:flex;flex-direction:column;gap:5px;">
                 <div style="display:flex;align-items:center;gap:8px;">
-                    <span id="duplicate-modal-orig-subject" style="display:none;background:rgba(99,102,241,0.12);color:var(--color-primary);padding:2px 8px;border-radius:8px;font-size:11px;font-weight:700;white-space:nowrap;flex-shrink:0;"></span>
+                    <span id="duplicate-modal-orig-subject" style="display:none;background:rgba(var(--accent-rgb),0.12);color:var(--color-primary);padding:2px 8px;border-radius:8px;font-size:11px;font-weight:700;white-space:nowrap;flex-shrink:0;"></span>
                     <span id="duplicate-modal-orig-title" style="font-size:12px;color:var(--color-text-muted);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">—</span>
                 </div>
                 <input type="text" name="duplicate_title" id="duplicate-title" class="form-input"
@@ -103,7 +103,7 @@
     to { opacity: 1; transform: scale(1) translateY(0); }
 }
 .duplicate-class-label.is-checked {
-    background: rgba(99, 102, 241, 0.12) !important;
+    background: rgba(var(--accent-rgb), 0.12) !important;
     border-color: var(--color-primary) !important;
     color: var(--color-primary) !important;
 }

@@ -47,7 +47,7 @@
                             🚪 Вийти з режиму супер-адміна
                         </a>
                         {% else %}
-                        <a href="{% url 'enter_superadmin_mode' %}" class="btn btn-primary btn-sm" style="background:linear-gradient(135deg,#f59e0b,#d97706);border:none;">
+                        <a href="{% url 'enter_superadmin_mode' %}" class="btn btn-primary btn-sm" style="background:linear-gradient(135deg,var(--warn),var(--warn));border:none;">
                             👑 Увійти в режим супер-адміна
                         </a>
                         {% endif %}
@@ -128,7 +128,7 @@
                         <p style="font-size:13px;color:var(--color-text-muted);margin:0 0 16px;">
                             Щоб додавати нових вчителів або адмініструвати школу — увійдіть у режим супер-адміна.
                         </p>
-                        <a href="{% url 'enter_superadmin_mode' %}" class="btn btn-primary" style="width:100%;background:linear-gradient(135deg,#f59e0b,#d97706);border:none;font-weight:700;padding:10px;text-align:center;">
+                        <a href="{% url 'enter_superadmin_mode' %}" class="btn btn-primary" style="width:100%;background:linear-gradient(135deg,var(--warn),var(--warn));border:none;font-weight:700;padding:10px;text-align:center;">
                             Увійти в режим супер-адміна
                         </a>
                     </div>

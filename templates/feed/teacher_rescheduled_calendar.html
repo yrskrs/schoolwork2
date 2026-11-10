@@ -72,15 +72,15 @@
 }
 .calendar-day-card.today {
     border: 2px solid var(--color-primary);
-    background: rgba(99,102,241,0.05);
+    background: rgba(var(--accent-rgb),0.05);
 }
 .calendar-day-card.weekend {
     background: var(--color-bg-secondary);
     opacity: 0.9;
 }
 .calendar-day-card.has-events {
-    border-color: #f59e0b;
-    background: rgba(245, 158, 11, 0.05);
+    border-color:var(--warn);
+    background: rgba(var(--warn-rgb), 0.05);
 }
 .calendar-day-header {
     display: flex;
@@ -149,14 +149,14 @@
     white-space: nowrap;
 }
 .event-rescheduled-to {
-    background: rgba(239, 68, 68, 0.12);
-    color: #dc2626;
-    border: 1px solid rgba(239, 68, 68, 0.25);
+    background: rgba(var(--danger-rgb), 0.12);
+    color:var(--danger);
+    border: 1px solid rgba(var(--danger-rgb), 0.25);
 }
 .event-rescheduled-from {
-    background: rgba(245, 158, 11, 0.12);
-    color: #d97706;
-    border: 1px solid rgba(245, 158, 11, 0.25);
+    background: rgba(var(--warn-rgb), 0.12);
+    color:var(--warn);
+    border: 1px solid rgba(var(--warn-rgb), 0.25);
 }
 .stat-pill {
     padding: 8px 14px;
@@ -170,12 +170,12 @@
     box-sizing: border-box;
 }
 tr:target td {
-    background: rgba(99, 102, 241, 0.15) !important;
+    background: rgba(var(--accent-rgb), 0.15) !important;
     animation: highlightTargetRow 2.5s ease-out;
 }
 @keyframes highlightTargetRow {
-    0% { background: rgba(99, 102, 241, 0.4) !important; }
-    100% { background: rgba(99, 102, 241, 0.15) !important; }
+    0% { background: rgba(var(--accent-rgb), 0.4) !important; }
+    100% { background: rgba(var(--accent-rgb), 0.15) !important; }
 }
 </style>
 {% endblock %}
@@ -267,7 +267,7 @@ tr:target td {
                 </div>
 
                 {% for r_code, r_stat in reason_stats.items %}
-                <div class="stat-pill" style="border-left:4px solid {% if r_code == 'air_raid' %}#ef4444{% elif r_code == 'illness' %}#3b82f6{% elif r_code == 'holiday' %}#10b981{% else %}#f59e0b{% endif %};">
+                <div class="stat-pill" style="border-left:4px solid {% if r_code == 'air_raid' %}var(--danger){% elif r_code == 'illness' %}var(--info){% elif r_code == 'holiday' %}var(--ok){% else %}var(--warn){% endif %};">
                     <div>
                         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
                             <span style="font-weight:800;font-size:13px;color:var(--color-text-primary);">{{ r_stat.title }}</span>
@@ -293,11 +293,11 @@ tr:target td {
                     </div>
                     <div style="display:flex;gap:12px;font-size:12px;color:var(--color-text-muted);flex-wrap:wrap;">
                         <span style="display:inline-flex;align-items:center;gap:4px;">
-                            <span style="width:10px;height:10px;border-radius:2px;background:rgba(239,68,68,0.3);display:inline-block;"></span>
+                            <span style="width:10px;height:10px;border-radius:2px;background:rgba(var(--danger-rgb),0.3);display:inline-block;"></span>
                             Нова дата уроку
                         </span>
                         <span style="display:inline-flex;align-items:center;gap:4px;">
-                            <span style="width:10px;height:10px;border-radius:2px;background:rgba(245,158,11,0.3);display:inline-block;"></span>
+                            <span style="width:10px;height:10px;border-radius:2px;background:rgba(var(--warn-rgb),0.3);display:inline-block;"></span>
                             Урок перенесено звідси
                         </span>
                     </div>
@@ -409,7 +409,7 @@ tr:target td {
                                     {% endif %}
                                 </td>
                                 <td>
-                                    <span style="display:inline-flex;align-items:center;gap:5px;font-weight:700;font-size:12px;padding:3px 8px;border-radius:4px;background:rgba(239,68,68,0.08);color:var(--color-danger);border:1px solid rgba(239,68,68,0.2);">
+                                    <span style="display:inline-flex;align-items:center;gap:5px;font-weight:700;font-size:12px;padding:3px 8px;border-radius:4px;background:rgba(var(--danger-rgb),0.08);color:var(--color-danger);border:1px solid rgba(var(--danger-rgb),0.2);">
                                         {{ log.reason_icon }} {{ log.get_reason_type_display }}
                                     </span>
                                 </td>

@@ -4,7 +4,7 @@
                         <label for="single-ai-preset" style="font-size:11px;font-weight:800;color:var(--color-text-secondary);text-transform:uppercase;display:block;margin-bottom:4px;">
                             📋 Критерії оцінювання:
                         </label>
-                        <select id="single-ai-preset" class="form-input" onchange="onViewerPresetChanged()" style="font-size:12px;padding:6px 10px;font-weight:700;width:100%;border-color:rgba(99,102,241,0.4);background:var(--color-bg-secondary);">
+                        <select id="single-ai-preset" class="form-input" onchange="onViewerPresetChanged()" style="font-size:12px;padding:6px 10px;font-weight:700;width:100%;border-color:rgba(var(--accent-rgb),0.4);background:var(--color-bg-secondary);">
                             {% for p in criteria_presets %}
                             <option value="{{ p.id }}"
                                 {% if viewer_preset.id == p.id %}selected{% endif %}>
@@ -16,12 +16,12 @@
 
                     <!-- Приховані вказівки вчителя для ШІ (якщо задані) -->
                     {% if submission.assignment.teacher_ai_instructions %}
-                    <div class="fv-teacher-ai-note" style="margin-bottom:12px;background:rgba(99,102,241,0.08);border:1.5px dashed rgba(99,102,241,0.35);border-radius:var(--radius-sm);padding:9px 12px;font-size:12px;">
+                    <div class="fv-teacher-ai-note" style="margin-bottom:12px;background:rgba(var(--accent-rgb),0.08);border:1.5px dashed rgba(var(--accent-rgb),0.35);border-radius:var(--radius-sm);padding:9px 12px;font-size:12px;">
                         <div style="font-weight:750;color:var(--color-primary);display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:4px;">
                             <span style="display:inline-flex;align-items:center;gap:5px;">
                                 <span>🤫</span> <span>Ваші вказівки для ШІ:</span>
                             </span>
-                            <span class="badge" style="background:#6366f1;color:#fff;font-size:9.5px;padding:1px 6px;border-radius:8px;font-weight:700;">Приховано від учня</span>
+                            <span class="badge badge-ai">Приховано від учня</span>
                         </div>
                         <div style="color:var(--color-text-primary);line-height:1.4;white-space:pre-wrap;font-size:11.5px;">{{ submission.assignment.teacher_ai_instructions }}</div>
                         <div style="font-size:10.5px;color:var(--color-text-muted);margin-top:4px;">💡 ШІ враховує ці вказівки при перевірці та виставленні оцінки.</div>
@@ -46,7 +46,7 @@
                     </div>
 <details class="fv-ai-options"><summary>⚙️ Групи результатів і глибоке мислення</summary>
 <!-- Інтерактивний вибір ГР (прапорці) -->
-                    <div id="viewer-gr-selector" style="{% if submission.is_traditional_grading %}display:none;{% endif %}margin-bottom:12px;background:var(--color-bg-secondary);border:1px solid rgba(99,102,241,0.25);border-radius:var(--radius-sm);padding:8px 10px;">
+                    <div id="viewer-gr-selector" style="{% if submission.is_traditional_grading %}display:none;{% endif %}margin-bottom:12px;background:var(--color-bg-secondary);border:1px solid rgba(var(--accent-rgb),0.25);border-radius:var(--radius-sm);padding:8px 10px;">
                         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
                             <span style="font-size:11px;font-weight:800;color:var(--color-primary);text-transform:uppercase;display:flex;align-items:center;gap:4px;">
                                 <span>☑️</span> <span>Оберіть ГР для оцінювання:</span>
@@ -67,7 +67,7 @@
 
                     <!-- Опція Thinking Mode (Глибоке мислення) -->
                     <div style="margin-bottom:10px;padding:8px 12px;background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:space-between;gap:8px;">
-                        <label for="force-thinking-checkbox" style="display:flex;align-items:center;gap:7px;font-size:12px;font-weight:600;color:var(--color-text);cursor:pointer;margin:0;" title="Увімкніть для складних завдань, поглибленого аналізу або якщо маєте сумніви щодо швидкої перевірки">
+                        <label for="force-thinking-checkbox" style="display:flex;align-items:center;gap:7px;font-size:12px;font-weight:600;color:var(--ink);cursor:pointer;margin:0;" title="Увімкніть для складних завдань, поглибленого аналізу або якщо маєте сумніви щодо швидкої перевірки">
                             <span style="font-size:15px;">🧠</span>
                             <span>Глибоке мислення (Thinking mode)</span>
                         </label>
@@ -84,15 +84,15 @@
                             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
                                 <span style="font-size:11px;font-weight:700;color:var(--color-text-muted);text-transform:uppercase;">Попередня оцінка:</span>
                                 {% if submission.ai_suggested_grade == 'Доопрацювати' %}
-                                <span class="badge" style="font-size:12px;font-weight:700;background:var(--color-warning-light);color:var(--color-warning);border:1px solid #fcd34d;">
+                                <span class="badge" style="font-size:12px;font-weight:700;background:var(--color-warning-light);color:var(--color-warning);border:1px solid color-mix(in srgb, var(--warn) 40%, transparent);">
                                     🔄 Доопрацювати
                                 </span>
                                 {% elif not submission.ai_suggested_grade %}
-                                <span class="badge" style="font-size:12px;font-weight:700;background:rgba(239,68,68,0.12);color:#dc2626;border:1px solid #fca5a5;" title="Числовий бал не збережено: частину критеріїв не підтверджено. Потрібна ручна перевірка вчителем.">
+                                <span class="badge" style="font-size:12px;font-weight:700;background:rgba(var(--danger-rgb),0.12);color:var(--danger);border:1px solid var(--danger);" title="Числовий бал не збережено: частину критеріїв не підтверджено. Потрібна ручна перевірка вчителем.">
                                     ⛔ Оцінку заблоковано — потрібна перевірка вчителя
                                 </span>
                                 {% else %}
-                                <span class="badge" style="font-size:13px;font-weight:800;background:rgba(16,185,129,0.15);color:var(--color-success);">
+                                <span class="badge" style="font-size:13px;font-weight:800;background:rgba(var(--ok-rgb),0.15);color:var(--color-success);">
                                     🤖 {{ submission.ai_suggested_grade|default:"Оцінено" }}{% if submission.ai_score_level %} ({{ submission.ai_score_level }}){% endif %}
                                 </span>
                                 {% endif %}
@@ -113,7 +113,7 @@
                                 </div>
                                 <div style="display:grid;grid-template-columns:1fr;gap:6px;">
                                     {% for gr in submission.get_ai_gr_results_list %}
-                                    <div style="background:var(--color-bg-secondary);border:1px solid rgba(99,102,241,0.2);border-radius:6px;padding:6px 10px;font-size:11.5px;">
+                                    <div style="background:var(--color-bg-secondary);border:1px solid rgba(var(--accent-rgb),0.2);border-radius:6px;padding:6px 10px;font-size:11.5px;">
                                         <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
                                             <strong style="color:var(--color-primary);font-size:12px;">{{ gr.code }}: {{ gr.name }}</strong>
                                             <span class="badge" style="background:var(--color-primary-light);color:var(--color-primary-text);font-weight:800;font-size:11px;white-space:nowrap;">
@@ -130,7 +130,7 @@
                             {% endif %}
 
                             {% if 'Зауваження до формату файлу' in submission.ai_feedback %}
-                            <div style="background:var(--color-warning-light);border:1px solid #fde68a;border-radius:6px;padding:8px 10px;margin-bottom:8px;font-size:12px;color:var(--color-warning);display:flex;align-items:flex-start;gap:6px;">
+                            <div style="background:var(--color-warning-light);border:1px solid color-mix(in srgb, var(--warn) 40%, transparent);border-radius:6px;padding:8px 10px;margin-bottom:8px;font-size:12px;color:var(--color-warning);display:flex;align-items:flex-start;gap:6px;">
                                 <span style="font-size:14px;">⚠️</span>
                                 <div>
                                     <strong style="color:var(--color-warning);">Невідповідний формат файлу:</strong>
@@ -140,7 +140,7 @@
                             {% endif %}
 
                             {% if submission.ai_authorship_state == 'suspected' %}
-                            <div style="background:{% if submission.is_ai_allowed %}rgba(16,185,129,0.08){% else %}rgba(239,68,68,0.08){% endif %};border:1px solid {% if submission.is_ai_allowed %}#10b981{% else %}#ef4444{% endif %};border-radius:6px;padding:8px 10px;margin-bottom:8px;font-size:11.5px;">
+                            <div style="background:{% if submission.is_ai_allowed %}rgba(var(--ok-rgb),0.08){% else %}rgba(var(--danger-rgb),0.08){% endif %};border:1px solid {% if submission.is_ai_allowed %}var(--ok){% else %}var(--danger){% endif %};border-radius:6px;padding:8px 10px;margin-bottom:8px;font-size:11.5px;">
                                 <div style="font-weight:800;color:{% if submission.is_ai_allowed %}var(--color-success){% else %}var(--color-danger){% endif %};display:flex;align-items:center;gap:5px;margin-bottom:3px;">
                                     <span>🤖</span>
                                     <span>Є ознаки використання ШІ ({{ submission.get_ai_generated_confidence_display|default:submission.ai_generated_confidence }})</span>
@@ -182,7 +182,7 @@
                                                 <span>{{ grp.title }}</span>
                                             </span>
                                             {% if grp.badge %}
-                                            <span class="badge" style="font-size:9.5px;padding:1px 5px;background:rgba(99,102,241,0.12);color:var(--color-primary);font-weight:750;">{{ grp.badge }}</span>
+                                            <span class="badge" style="font-size:9.5px;padding:1px 5px;background:rgba(var(--accent-rgb),0.12);color:var(--color-primary);font-weight:750;">{{ grp.badge }}</span>
                                             {% endif %}
                                         </summary>
                                         <div style="padding:8px 10px;border-top:1px dashed var(--color-border);background:var(--color-surface);font-size:11.5px;color:var(--color-text-secondary);line-height:1.45;white-space:pre-wrap;">{{ grp.content }}</div>
@@ -202,7 +202,7 @@
                         </button>
 
                         {% elif submission.ai_status == 'failed' or submission.ai_status == 'unsupported' %}
-                        <div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);border-radius:var(--radius-sm);padding:8px 10px;font-size:12px;color:var(--color-danger);margin-bottom:6px;">
+                        <div style="background:rgba(var(--danger-rgb),0.08);border:1px solid rgba(var(--danger-rgb),0.25);border-radius:var(--radius-sm);padding:8px 10px;font-size:12px;color:var(--color-danger);margin-bottom:6px;">
                             <strong>⚠️ {% if submission.ai_status == 'unsupported' %}Не підтримується:{% else %}Помилка ШІ:{% endif %}</strong>
                             <div style="margin-top:2px;">{{ submission.ai_error_reason }}</div>
                         </div>
@@ -217,7 +217,7 @@
 {% if submission.student_ai_checked %}<details class="fv-student-ai"><summary>Учнівська самоперевірка</summary>
 <!-- 🤖 УЧЕНЬ СКОРИСТАВСЯ САМОПЕРЕВІРКОЮ ШІ (чернова оцінка) -->
                 {% if submission.student_ai_checked %}
-                <div id="student-ai-draft-block" style="margin-bottom:16px;background:{% if submission.student_ai_accepted %}rgba(16,185,129,0.07){% else %}rgba(245,158,11,0.07){% endif %};border:2px solid {% if submission.student_ai_accepted %}#10b981{% else %}#f59e0b{% endif %};border-radius:var(--radius-lg);padding:14px 16px;overflow:hidden;">
+                <div id="student-ai-draft-block" style="margin-bottom:16px;background:{% if submission.student_ai_accepted %}rgba(var(--ok-rgb),0.07){% else %}rgba(var(--warn-rgb),0.07){% endif %};border:2px solid {% if submission.student_ai_accepted %}var(--ok){% else %}var(--warn){% endif %};border-radius:var(--radius-lg);padding:14px 16px;overflow:hidden;">
                     <div style="font-weight:800;font-size:13px;color:{% if submission.student_ai_accepted %}var(--color-success){% else %}var(--color-warning){% endif %};margin-bottom:8px;display:flex;align-items:center;gap:6px;">
                         <span>🤖</span>
                         <span>{% if submission.student_ai_accepted %}Учнівська самоперевірка прийнята{% else %}Учень(-иця) перевірив(-ла) роботу самостійно{% endif %}</span>
@@ -230,9 +230,9 @@
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
                         <span style="font-size:12px;color:var(--color-text-secondary);font-weight:700;">Чернова оцінка ШІ:</span>
                         {% if submission.student_ai_grade == 'Доопрацювати' %}
-                        <span class="badge" style="font-size:12px;font-weight:800;background:var(--color-warning-light);color:var(--color-warning);border:1px solid #fcd34d;">🔄 Доопрацювати</span>
+                        <span class="badge" style="font-size:12px;font-weight:800;background:var(--color-warning-light);color:var(--color-warning);border:1px solid color-mix(in srgb, var(--warn) 40%, transparent);">🔄 Доопрацювати</span>
                         {% else %}
-                        <span class="badge" style="font-size:13px;font-weight:800;background:rgba(16,185,129,0.15);color:var(--color-success);">
+                        <span class="badge" style="font-size:13px;font-weight:800;background:rgba(var(--ok-rgb),0.15);color:var(--color-success);">
                             {{ submission.student_ai_grade }}{% if submission.student_ai_level %} ({{ submission.student_ai_level }}){% endif %}
                         </span>
                         {% endif %}

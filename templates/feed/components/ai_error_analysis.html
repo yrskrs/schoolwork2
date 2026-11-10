@@ -1,18 +1,18 @@
 <!-- 3.4. ЖУРНАЛ ТА АНАЛІЗ ПОМИЛОК І ЗБОЇВ ШІ (AI ERROR LOG & ANALYSIS) -->
-<div class="form-card mb-4" id="ai-error-logs-section" style="border-color:{% if total_ai_errors_count %}rgba(239,68,68,0.4){% else %}var(--color-border){% endif %};">
+<div class="form-card mb-4" id="ai-error-logs-section" style="border-color:{% if total_ai_errors_count %}rgba(var(--danger-rgb),0.4){% else %}var(--color-border){% endif %};">
     
     <!-- Шапка розділу з перемикачем вкладок -->
-    <div class="form-card-header" style="background:{% if total_ai_errors_count %}rgba(239,68,68,0.06){% else %}var(--color-bg-secondary){% endif %};padding:16px 20px;">
+    <div class="form-card-header" style="background:{% if total_ai_errors_count %}rgba(var(--danger-rgb),0.06){% else %}var(--color-bg-secondary){% endif %};padding:16px 20px;">
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:12px;">
             <div>
                 <h2 class="form-card-title" style="display:flex;align-items:center;gap:8px;color:{% if total_ai_errors_count %}var(--color-danger){% else %}var(--color-text-primary){% endif %};font-size:18px;">
                     <span>⚠️</span>
                     <span>Журнал помилок та збоїв ШІ</span>
-                    <span class="badge" style="background:{% if total_ai_errors_count %}#ef4444{% else %}#6b7280{% endif %};color:#fff;font-size:12px;font-weight:800;padding:2px 8px;border-radius:12px;" title="Всього помилок">
+                    <span class="badge" style="background:{% if total_ai_errors_count %}var(--danger){% else %}#6b7280{% endif %};color:#fff;font-size:12px;font-weight:800;padding:2px 8px;border-radius:12px;" title="Всього помилок">
                         {{ total_ai_errors_count }}
                     </span>
                     {% if unread_ai_errors_count %}
-                    <span class="badge" style="background:#dc2626;color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:12px;" title="Незчитаних помилок для аналізу">
+                    <span class="badge" style="background:var(--fill-danger);color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:12px;" title="Незчитаних помилок для аналізу">
                         {{ unread_ai_errors_count }} нових
                     </span>
                     {% endif %}
@@ -28,7 +28,7 @@
                 <form method="POST" style="margin:0;" onsubmit="return confirm('Ви дійсно бажаєте очистити весь журнал помилок ШІ?');">
                     {% csrf_token %}
                     <input type="hidden" name="action" value="clear_ai_error_logs">
-                    <button type="submit" class="btn btn-secondary btn-sm" style="color:var(--color-danger);font-weight:700;border-color:rgba(239,68,68,0.3);background:var(--color-surface);font-size:12px;padding:5px 12px;">
+                    <button type="submit" class="btn btn-secondary btn-sm" style="color:var(--color-danger);font-weight:700;border-color:rgba(var(--danger-rgb),0.3);background:var(--color-surface);font-size:12px;padding:5px 12px;">
                         🗑️ Очистити журнал
                     </button>
                 </form>
@@ -51,7 +51,7 @@
                style="font-size:12.5px;padding:5px 14px;border-radius:var(--radius-md);text-decoration:none;display:inline-flex;align-items:center;gap:6px;">
                 <span>🔬 Збір і аналіз помилок</span>
                 {% if unread_ai_errors_count %}
-                <span class="badge" style="background:#ef4444;color:#fff;font-size:11px;animation:pulse 2s infinite;">{{ unread_ai_errors_count }} незчитаних</span>
+                <span class="badge" style="background:var(--fill-danger);color:#fff;font-size:11px;animation:pulse 2s infinite;">{{ unread_ai_errors_count }} незчитаних</span>
                 {% elif latest_ai_error_report %}
                 <span class="badge" style="background:rgba(255,255,255,0.25);font-size:11px;">Є звіт</span>
                 {% endif %}
@@ -112,7 +112,7 @@
                     </thead>
                     <tbody>
                         {% for log in ai_error_logs %}
-                        <tr style="border-bottom:1px solid var(--color-border);vertical-align:top;{% if not log.is_read %}background:rgba(239,68,68,0.03);{% endif %}">
+                        <tr style="border-bottom:1px solid var(--color-border);vertical-align:top;{% if not log.is_read %}background:rgba(var(--danger-rgb),0.03);{% endif %}">
                             <td style="padding:10px 14px;white-space:nowrap;font-size:11.5px;color:var(--color-text-muted);">
                                 {{ log.created_at|date:"d.m.Y H:i:s" }}
                             </td>
@@ -122,7 +122,7 @@
                                     ✓ Зчитано
                                 </span>
                                 {% else %}
-                                <span class="badge" style="background:rgba(239,68,68,0.15);color:#dc2626;border:1px solid rgba(239,68,68,0.3);font-size:10.5px;font-weight:800;" title="Нова незчитана помилка">
+                                <span class="badge" style="background:rgba(var(--danger-rgb),0.15);color:var(--danger);border:1px solid rgba(var(--danger-rgb),0.3);font-size:10.5px;font-weight:800;" title="Нова незчитана помилка">
                                     🔴 Нова
                                 </span>
                                 {% endif %}
@@ -146,7 +146,7 @@
                                 {% endif %}
                             </td>
                             <td style="padding:10px 14px;white-space:nowrap;">
-                                <span class="badge" style="background:rgba(239,68,68,0.12);color:var(--color-danger);border:1px solid rgba(239,68,68,0.25);font-size:11px;font-weight:700;">
+                                <span class="badge" style="background:rgba(var(--danger-rgb),0.12);color:var(--color-danger);border:1px solid rgba(var(--danger-rgb),0.25);font-size:11px;font-weight:700;">
                                     {% if log.status_code %}HTTP {{ log.status_code }}{% else %}{{ log.error_type|default:"Error" }}{% endif %}
                                 </span>
                             </td>
@@ -161,7 +161,7 @@
                             </td>
                             <td style="padding:10px 14px;text-align:center;white-space:nowrap;">
                                 {% if log.failover_triggered %}
-                                <span class="badge" style="background:var(--color-warning-light);color:var(--color-warning);border:1px solid #fcd34d;font-size:11px;font-weight:700;" title="Система перейшла до наступної моделі у черзі">
+                                <span class="badge" style="background:var(--color-warning-light);color:var(--color-warning);border:1px solid color-mix(in srgb, var(--warn) 40%, transparent);font-size:11px;font-weight:700;" title="Система перейшла до наступної моделі у черзі">
                                     🔄 Резерв
                                 </span>
                                 {% else %}
@@ -205,7 +205,7 @@
                     <form method="POST" style="margin:0;">
                         {% csrf_token %}
                         <input type="hidden" name="action" value="generate_ai_error_report">
-                        <button type="submit" class="btn btn-primary" id="btn-generate-ai-error-report" style="font-size:13.5px;font-weight:800;padding:10px 18px;display:inline-flex;align-items:center;gap:8px;box-shadow:0 2px 8px rgba(99,102,241,0.25);">
+                        <button type="submit" class="btn btn-primary" id="btn-generate-ai-error-report" style="font-size:13.5px;font-weight:800;padding:10px 18px;display:inline-flex;align-items:center;gap:8px;box-shadow:0 2px 8px rgba(var(--accent-rgb),0.25);">
                             <span>⚡</span>
                             <span>Зчитати помилки та згенерувати звіт для ШІ</span>
                         </button>
@@ -221,7 +221,7 @@
                 </div>
                 <div style="background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:12px 14px;">
                     <div style="font-size:11.5px;color:var(--color-text-muted);font-weight:600;text-transform:uppercase;">Незчитаних (нових)</div>
-                    <div style="font-size:22px;font-weight:800;color:{% if unread_ai_errors_count %}#dc2626{% else %}var(--color-success){% endif %};margin-top:4px;">
+                    <div style="font-size:22px;font-weight:800;color:{% if unread_ai_errors_count %}var(--danger){% else %}var(--color-success){% endif %};margin-top:4px;">
                         {{ unread_ai_errors_count }}
                     </div>
                 </div>
@@ -245,11 +245,11 @@
             <!-- Вердиктна плашка -->
             <div style="border-radius:var(--radius-md);padding:14px 18px;margin-bottom:18px;display:flex;align-items:flex-start;gap:12px;
                 {% if selected_ai_error_report.verdict == 'external_issue' %}
-                background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3);color:#065f46;
+                background:rgba(var(--ok-rgb),0.1);border:1px solid rgba(var(--ok-rgb),0.3);color:var(--ok);
                 {% elif selected_ai_error_report.verdict == 'needs_fix' %}
-                background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);color:#991b1b;
+                background:rgba(var(--danger-rgb),0.1);border:1px solid rgba(var(--danger-rgb),0.3);color:var(--danger);
                 {% else %}
-                background:rgba(99,102,241,0.1);border:1px solid rgba(99,102,241,0.3);color:#3730a3;
+                background:rgba(var(--accent-rgb),0.1);border:1px solid rgba(var(--accent-rgb),0.3);color:#3730a3;
                 {% endif %}">
                 <span style="font-size:24px;line-height:1;">
                     {% if selected_ai_error_report.verdict == 'external_issue' %}🟢

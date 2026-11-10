@@ -43,7 +43,7 @@
 >
 
         <div class="card-accent"
-             style="background:linear-gradient(90deg,{{ assignment.subject.color|default:'#6366f1' }},#8b5cf6)">
+             style="background:linear-gradient(90deg,{{ assignment.subject.color|default:'#146c78' }},var(--accent))">
         </div>
 
         <div class="card-body">
@@ -170,7 +170,7 @@
                 </a>
                 {% if not user.is_authenticated or not user.teacher_profile %}
                     {% if assignment.is_archived or assignment.status == 'archived' %}
-                    <span class="badge" style="background: rgba(245, 158, 11, 0.15); color:var(--color-warning); border: 1px solid rgba(245, 158, 11, 0.3); font-size: 12px; font-weight: 700; padding: 5px 10px; border-radius: var(--radius-sm);" title="Прийом робіт закрито (архів)">
+                    <span class="badge" style="background: rgba(var(--warn-rgb), 0.15); color:var(--color-warning); border: 1px solid rgba(var(--warn-rgb), 0.3); font-size: 12px; font-weight: 700; padding: 5px 10px; border-radius: var(--radius-sm);" title="Прийом робіт закрито (архів)">
                         🔒 Прийом закрито
                     </span>
                     {% elif assignment.no_submission_required %}

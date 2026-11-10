@@ -62,7 +62,7 @@
                     <div style="font-size:24px;font-weight:800;color:var(--color-success);">{{ graded_count }}</div>
                     <div class="text-muted text-sm" style="font-weight:600;">✅ Оцінено</div>
                 </div>
-                <div class="sidebar-card" style="padding:14px;text-align:center;border-top:3px solid #6366f1;">
+                <div class="sidebar-card" style="padding:14px;text-align:center;border-top:3px solid var(--accent);">
                     <div style="font-size:24px;font-weight:800;color:var(--color-primary);">{{ avg_score|default:"—" }}</div>
                     <div class="text-muted text-sm" style="font-weight:600;">Середній бал</div>
                 </div>
@@ -170,22 +170,22 @@
                                 </a>
                                 {% if submission.is_resubmission or submission.resubmission_attempt > 1 %}
                                     {% if submission.is_latest_attempt %}
-                                    <span class="badge" style="background:var(--color-success-light);color:var(--color-success);border:1px solid #6ee7b7;font-size:11px;font-weight:800;padding:2px 6px;">
+                                    <span class="badge" style="background:var(--color-success-light);color:var(--color-success);border:1px solid var(--ok);font-size:11px;font-weight:800;padding:2px 6px;">
                                         🔄 Спроба #{{ submission.resubmission_attempt }} (Робота над помилками)
                                     </span>
                                     {% else %}
-                                    <span class="badge" style="background:var(--color-warning-light);color:var(--color-warning);border:1px solid #fde68a;font-size:10.5px;font-weight:700;">
+                                    <span class="badge" style="background:var(--color-warning-light);color:var(--color-warning);border:1px solid color-mix(in srgb, var(--warn) 40%, transparent);font-size:10.5px;font-weight:700;">
                                         📦 Попередня спроба #{{ submission.resubmission_attempt }}
                                     </span>
                                     {% endif %}
                                 {% endif %}
                                 {% if submission.ai_authorship_state == 'suspected' %}
-                                    <span class="badge" style="background:{% if submission.is_ai_allowed %}#ecfdf5;color:var(--color-success);border:1px solid #a7f3d0;{% else %}#fef2f2;color:var(--color-danger);border:1px solid #fecaca;{% endif %}font-size:10.5px;font-weight:700;padding:2px 6px;" title="{% if submission.is_ai_allowed %}Є ознаки ШІ (дозволено вчителем). Це не доказ авторства.{% else %}Є ознаки ШІ (самостійна робота). Це не доказ авторства.{% endif %} {{ submission.ai_generated_details }}">
+                                    <span class="badge" style="background:{% if submission.is_ai_allowed %}var(--tint-success);color:var(--color-success);border:1px solid color-mix(in srgb, var(--ok) 40%, transparent);{% else %}var(--tint-danger);color:var(--color-danger);border:1px solid color-mix(in srgb, var(--danger) 40%, transparent);{% endif %}font-size:10.5px;font-weight:700;padding:2px 6px;" title="{% if submission.is_ai_allowed %}Є ознаки ШІ (дозволено вчителем). Це не доказ авторства.{% else %}Є ознаки ШІ (самостійна робота). Це не доказ авторства.{% endif %} {{ submission.ai_generated_details }}">
                                         🤖 Є ознаки ШІ ({{ submission.get_ai_generated_confidence_display|default:submission.ai_generated_confidence }})
                                     </span>
                                 {% endif %}
                                 {% if submission.is_collective_work %}
-                                    <span class="badge" style="background:var(--color-primary-light);color:var(--color-primary);border:1px solid #c7d2fe;font-size:10.5px;font-weight:700;padding:2px 6px;" title="Колективна робота. Учасники: {{ submission.get_group_members_display|join:', ' }}">
+                                    <span class="badge" style="background:var(--color-primary-light);color:var(--color-primary);border:1px solid color-mix(in srgb, var(--accent) 35%, transparent);font-size:10.5px;font-weight:700;padding:2px 6px;" title="Колективна робота. Учасники: {{ submission.get_group_members_display|join:', ' }}">
                                         👥 Колективна робота
                                     </span>
                                 {% endif %}
@@ -268,7 +268,7 @@
 
                         <!-- Історія спроб учня (Робота над помилками) -->
                         {% if submission.is_resubmission or submission.previous_submission %}
-                        <div class="submission-history-box" style="margin-bottom:12px;background:rgba(16,185,129,0.05);border:1px solid rgba(16,185,129,0.25);border-radius:var(--radius-sm);padding:10px 12px;font-size:12px;">
+                        <div class="submission-history-box" style="margin-bottom:12px;background:rgba(var(--ok-rgb),0.05);border:1px solid rgba(var(--ok-rgb),0.25);border-radius:var(--radius-sm);padding:10px 12px;font-size:12px;">
                             <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;" onclick="var el=document.getElementById('history-{{ submission.id }}'); el.style.display=(el.style.display==='none'?'block':'none');">
                                 <strong style="color:var(--color-success);display:flex;align-items:center;gap:6px;">
                                     <span>📜</span>
@@ -276,7 +276,7 @@
                                 </strong>
                                 <span style="font-size:11px;color:var(--color-primary);font-weight:700;">Показати історію ▼</span>
                             </div>
-                            <div id="history-{{ submission.id }}" style="display:none;margin-top:8px;border-top:1px dashed rgba(16,185,129,0.25);padding-top:8px;">
+                            <div id="history-{{ submission.id }}" style="display:none;margin-top:8px;border-top:1px dashed rgba(var(--ok-rgb),0.25);padding-top:8px;">
                                 {% for prev in submission.get_previous_attempts %}
                                 <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid rgba(0,0,0,0.04);gap:8px;flex-wrap:wrap;">
                                     <div>
@@ -305,7 +305,7 @@
                         {% if submission.comments.all %}
                         <div class="submission-comments" style="margin-top:8px;">
                             {% for comment in submission.comments.all %}
-                            <div class="submission-comment-item" style="background:rgba(99,102,241,0.06);border-left:3px solid var(--color-primary);padding:8px 12px;border-radius:0 var(--radius-sm) var(--radius-sm) 0;margin-bottom:6px;font-size:12px;">
+                            <div class="submission-comment-item" style="background:rgba(var(--accent-rgb),0.06);border-left:3px solid var(--color-primary);padding:8px 12px;border-radius:0 var(--radius-sm) var(--radius-sm) 0;margin-bottom:6px;font-size:12px;">
                                 <div style="display:flex;justify-content:space-between;align-items:center;">
                                     <div style="font-weight:700;color:var(--color-text-primary);">
                                         👨‍🏫 {{ comment.author.get_full_name|default:comment.author.username }}
@@ -354,7 +354,7 @@
                             <div style="display:flex;align-items:center;gap:8px;">
                                 <span style="font-size:12px;color:var(--color-text-muted);font-weight:600;">Оцінка:</span>
                                 {% if submission.grade == 'Доопрацювати' %}
-                                <span class="grade-badge" id="grade-display-{{ submission.id }}" style="background:var(--color-warning-light);color:var(--color-warning);border:1px solid #fcd34d;font-size:12px;padding:3px 8px;font-weight:700;">
+                                <span class="grade-badge" id="grade-display-{{ submission.id }}" style="background:var(--color-warning-light);color:var(--color-warning);border:1px solid color-mix(in srgb, var(--warn) 40%, transparent);font-size:12px;padding:3px 8px;font-weight:700;">
                                     🔄 Доопрацювати
                                 </span>
                                 {% else %}
@@ -488,7 +488,7 @@ function saveGrade(subId) {
             setTimeout(() => { statusEl.textContent = ''; }, 2500);
         } else {
             statusEl.textContent = '❌ Помилка';
-            statusEl.style.color = 'var(--color-error)';
+            statusEl.style.color = 'var(--danger)';
         }
     })
     .catch(() => {
@@ -516,7 +516,7 @@ function addComment(subId) {
             const c = data.comment;
             const commentsBlock = document.querySelector('#submission-' + subId + ' .submission-comments');
             const newComment = `
-                <div class="submission-comment-item" style="background:rgba(99,102,241,0.06);border-left:3px solid var(--color-primary);padding:8px 12px;border-radius:0 var(--radius-sm) var(--radius-sm) 0;margin-bottom:6px;font-size:12px;">
+                <div class="submission-comment-item" style="background:rgba(var(--accent-rgb),0.06);border-left:3px solid var(--color-primary);padding:8px 12px;border-radius:0 var(--radius-sm) var(--radius-sm) 0;margin-bottom:6px;font-size:12px;">
                     <div style="display:flex;justify-content:space-between;align-items:center;">
                         <strong style="color:var(--color-primary);">${c.author}</strong>
                         <span style="color:var(--color-text-muted);font-size:11px;">${c.created_at}</span>

@@ -40,7 +40,7 @@
                     </div>
 
                     {% if form.non_field_errors %}
-                    <div class="alert alert-error" style="margin-bottom:16px;padding:12px;border-radius:var(--radius-sm);background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);color:var(--color-danger);">
+                    <div class="alert alert-error" style="margin-bottom:16px;padding:12px;border-radius:var(--radius-sm);background:rgba(var(--danger-rgb),0.1);border:1px solid rgba(var(--danger-rgb),0.3);color:var(--color-danger);">
                         {{ form.non_field_errors.0 }}
                     </div>
                     {% endif %}

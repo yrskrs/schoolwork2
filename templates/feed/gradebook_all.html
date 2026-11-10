@@ -85,14 +85,14 @@
                             <td style="text-align:center;">
                                 <div style="display:flex;align-items:center;justify-content:center;gap:6px;">
                                     {% if sub.grade == 'Доопрацювати' or sub.grade == 'д' or sub.grade == 'Д' or sub.grade == 'доопрацювання' %}
-                                    <span class="grade-badge" style="font-size:13px;padding:3px 8px;background:var(--color-warning-light);color:var(--color-warning);border:1px solid #fcd34d;font-weight:800;cursor:help;" title="🔄 Роботу повернуто на доопрацювання">
+                                    <span class="grade-badge" style="font-size:13px;padding:3px 8px;background:var(--color-warning-light);color:var(--color-warning);border:1px solid color-mix(in srgb, var(--warn) 40%, transparent);font-weight:800;cursor:help;" title="🔄 Роботу повернуто на доопрацювання">
                                         Д
                                     </span>
                                     {% else %}
                                     <span class="grade-badge" style="font-size:14px;padding:3px 10px;">{{ sub.grade }}</span>
                                     {% endif %}
                                     {% if sub.has_gr_results %}
-                                    <span class="badge" style="font-size:11px;background:rgba(99,102,241,0.12);color:var(--color-primary);font-weight:700;" title="Оцінено за ГР: {% for gr in sub.get_ai_gr_results_list %}{{ gr.code }}: {{ gr.grade }} б.{% if not forloop.last %}, {% endif %}{% endfor %}">
+                                    <span class="badge" style="font-size:11px;background:rgba(var(--accent-rgb),0.12);color:var(--color-primary);font-weight:700;" title="Оцінено за ГР: {% for gr in sub.get_ai_gr_results_list %}{{ gr.code }}: {{ gr.grade }} б.{% if not forloop.last %}, {% endif %}{% endfor %}">
                                         📊 ГР
                                     </span>
                                     {% endif %}

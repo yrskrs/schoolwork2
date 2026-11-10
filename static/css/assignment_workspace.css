@@ -1,8 +1,10 @@
 /* Only the assignment reading/submission areas; the shared navbar is unchanged. */
 body .page-wrapper.assignment-workspace,
 body .page-wrapper.submission-workspace { --workspace-gap: 24px; }
+/* Сітка — як на решті сторінок: 1fr + --layout-sidebar-width (240px).
+   Раніше тут було 2.15fr/1fr, через що права колонка ставала 373px. */
 body .page-wrapper.assignment-workspace .assignment-detail-layout,
-body .page-wrapper.submission-workspace .submission-page-layout { grid-template-columns: minmax(0, 2.15fr) minmax(290px, 1fr); gap: var(--workspace-gap); }
+body .page-wrapper.submission-workspace .submission-page-layout { grid-template-columns: minmax(0, 1fr) var(--layout-sidebar-width); gap: var(--layout-gap); }
 body .assignment-workspace .assignment-detail-overview,
 body .submission-workspace .submission-context { padding: 8px 0 0 !important; border: 0; margin-bottom: 26px; }
 body .assignment-workspace .assignment-detail-tags { justify-content: flex-start; gap: 8px; }
@@ -11,11 +13,11 @@ body .submission-workspace .submission-context h1 { font-size: clamp(19px, 1.8vw
 body .assignment-workspace .assignment-detail-overview-meta,
 body .submission-workspace .submission-context-meta { font-size: 15px; line-height: 1.6; }
 body .assignment-workspace .assignment-detail-sidebar { display: flex; gap: 18px; }
-body .assignment-workspace .assignment-detail-instructions { border: 1px solid var(--color-border); border-radius: 14px; }
+body .assignment-workspace .assignment-detail-instructions { border: 1px solid var(--color-border); border-radius: var(--radius-lg); }
 body .assignment-workspace .assignment-description-header { border-bottom: 0; padding: 22px 24px 0 !important; }
 body .assignment-workspace .assignment-full-description { padding: 16px 24px 22px !important; font-size: 17px !important; line-height: 1.75 !important; }
 body .assignment-workspace .assignment-detail-material-hint { font-weight: 500; background: transparent; padding: 10px 24px; }
-body .assignment-workspace .assignment-detail-materials { padding: 24px; border-radius: 14px; }
+body .assignment-workspace .assignment-detail-materials { padding: 24px; border-radius: var(--radius-lg); }
 body .assignment-workspace .assignment-detail-materials h3 { font-size: 15px; margin: 18px 0 10px; }
 body .assignment-workspace .assignment-detail-files { margin-bottom: 0 !important; }
 body .assignment-workspace .assignment-detail-file-header { padding: 14px !important; gap: 12px !important; }
@@ -24,14 +26,14 @@ body .assignment-workspace .assignment-detail-file-identity > div { min-width: 0
 body .assignment-workspace .assignment-file-type { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 48px; min-height: 52px; border-radius: 10px; background: var(--color-primary-light); color: var(--color-primary-text); font-size: 11px; font-weight: 800; overflow-wrap: anywhere; }
 body .assignment-workspace .assignment-detail-file-actions { gap: 8px; }
 body .assignment-workspace .assignment-detail-file-actions .btn { min-height: 44px; padding: 10px 14px; }
-body .assignment-workspace .assignment-detail-completion { padding: 24px !important; border: 2px solid var(--color-success); border-radius: 14px; }
+body .assignment-workspace .assignment-detail-completion { padding: 20px !important; border: 1px solid var(--color-border); border-top: 3px solid var(--color-success); border-radius: var(--radius-lg); }
 body .assignment-workspace .assignment-detail-completion h2 { margin-bottom: 14px; }
-body .assignment-workspace .assignment-detail-completion ol { padding-left: 22px; font-size: 15px; line-height: 1.6; }
-body .assignment-workspace .assignment-detail-completion .btn { display: flex; width: 100%; min-height: 52px; justify-content: center; font-size: 18px; font-weight: 750; }
-body .assignment-workspace .assignment-detail-help-card { padding: 16px !important; border: 1px solid var(--color-border); border-radius: 14px; }
+body .assignment-workspace .assignment-detail-completion ol { padding-left: 20px; font-size: 14px; line-height: 1.55; }
+body .assignment-workspace .assignment-detail-completion .btn { display: flex; width: 100%; min-height: 46px; justify-content: center; font-size: 16px; font-weight: 750; }
+body .assignment-workspace .assignment-detail-help-card { padding: 16px !important; border: 1px solid var(--color-border); border-radius: var(--radius-lg); }
 body .assignment-workspace .assignment-detail-help-actions { margin: 0; flex-direction: column; }
 body .assignment-workspace .assignment-detail-help-actions .btn { flex: none; width: 100%; min-height: 46px; padding: 12px 14px; font-size: 15px; }
-body .assignment-workspace .assignment-detail-info { border-radius: 14px; }
+body .assignment-workspace .assignment-detail-info { border-radius: var(--radius-lg); }
 body .assignment-workspace .assignment-detail-info > summary,
 body .assignment-workspace .assignment-detail-guide > summary { padding: 16px; font-weight: 700; font-size: 15px; cursor: pointer; color: var(--color-text-primary); overflow-wrap: anywhere; }
 body .assignment-workspace .assignment-detail-guide { margin-top: 12px; border-top: 1px solid var(--color-border); }
@@ -45,7 +47,7 @@ body .submission-workspace .submission-back-link:hover { text-decoration: underl
 body .submission-workspace .submission-context { margin-bottom: 24px; }
 body .submission-workspace .submission-kicker { color: var(--color-primary-text); font-weight: 750; font-size: 13px; letter-spacing: .04em; }
 body .submission-workspace .submission-form-main { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
-body .submission-workspace .submission-form-card { padding: 24px !important; gap: 16px; border-radius: 14px; }
+body .submission-workspace .submission-form-card { padding: 24px !important; gap: 16px; border-radius: var(--radius-lg); }
 body .submission-workspace .school-submission-step { margin: 0; padding: 0; border: 0; font-size: 21px; }
 body .submission-workspace .school-step-number { width: 32px; height: 32px; font-size: 17px; }
 body .submission-workspace .school-form-help { font-size: 15px; line-height: 1.65; }
@@ -62,7 +64,7 @@ body .submission-workspace .submission-file-picker { min-height: 44px; padding: 
 body .submission-workspace .submission-optional-fields { background: var(--color-surface); }
 body .submission-workspace .submission-optional-fields > summary { padding: 14px; font-size: 15px; line-height: 1.5; }
 body .submission-workspace .submission-sidebar { display: flex; flex-direction: column; gap: 18px; }
-body .submission-workspace .submission-send-bar { position: static; margin: 0; padding: 22px !important; border: 2px solid var(--color-success); border-radius: 14px; box-shadow: none; gap: 16px; }
+body .submission-workspace .submission-send-bar { position: static; margin: 0; padding: 22px !important; border: 2px solid var(--color-success); border-radius: var(--radius-lg); box-shadow: none; gap: 16px; }
 body .submission-workspace .submission-send-bar h2 { font-size: 20px; margin: 0; color: var(--color-text-primary); }
 body .submission-workspace #submission-send-button { min-height: 52px; padding: 12px; font-size: 16px; line-height: 1.5; justify-content: center; text-align: center; }
 body .submission-workspace .submission-readiness { display: flex; flex-direction: column; gap: 12px; margin: 0; }
@@ -71,7 +73,7 @@ body .submission-workspace .submission-readiness dt { flex: 0 1 auto; }
 body .submission-workspace .submission-readiness dd { margin: 0; text-align: right; min-width: 0; max-width: 62%; overflow-wrap: anywhere; font-size: 13px; font-weight: 700; color: var(--color-warning); }
 body .submission-workspace .submission-readiness dd[data-ready="true"],
 body .submission-workspace .submission-readiness [data-submission-class][data-ready="true"] { color: var(--color-success); }
-body .submission-workspace .submission-tools-card { padding: 16px; border-radius: 14px; }
+body .submission-workspace .submission-tools-card { padding: 16px; border-radius: var(--radius-lg); }
 body .submission-workspace .submission-side-actions .btn { font-size: 15px; min-height: 46px; padding: 12px; justify-content: flex-start; text-align: left; }
 body .submission-workspace #btn-add-coauthor { display: flex; align-items: center; gap: 12px; border: 2px solid var(--color-primary); background: var(--color-primary-light); color: var(--color-primary-text); min-height: 68px; font-weight: 750; }
 body .submission-workspace #btn-add-coauthor[hidden] { display: none; }

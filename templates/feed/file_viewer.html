@@ -157,7 +157,7 @@
 
 .btn-ai-prominent {
     width: 100%;
-    background: linear-gradient(135deg, #4f46e5 0%, #6366f1 50%, #3b82f6 100%);
+    background: var(--ai-fill);
     color: #ffffff !important;
     border: none;
     border-radius: var(--radius-md);
@@ -170,17 +170,17 @@
     justify-content: center;
     gap: 8px;
     cursor: pointer;
-    box-shadow: 0 4px 14px rgba(79, 70, 229, 0.35);
+    box-shadow: 0 4px 14px rgba(var(--accent-rgb), 0.35);
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .btn-ai-prominent:hover {
-    background: linear-gradient(135deg, #4338ca 0%, #4f46e5 50%, #2563eb 100%);
-    box-shadow: 0 6px 20px rgba(79, 70, 229, 0.5);
+    background: color-mix(in srgb, var(--ai-fill) 85%, #000);
+    box-shadow: 0 6px 20px rgba(var(--accent-rgb), 0.5);
     transform: translateY(-1.5px);
 }
 .btn-ai-prominent:active {
     transform: translateY(0);
-    box-shadow: 0 2px 8px rgba(79, 70, 229, 0.3);
+    box-shadow: 0 2px 8px rgba(var(--accent-rgb), 0.3);
 }
 .btn-ai-prominent:disabled {
     opacity: 0.7;
@@ -232,10 +232,10 @@
     box-shadow: 0 3px 8px rgba(0,0,0,0.08);
 }
 .fv-file-tab-item.active {
-    background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%);
-    color: #ffffff !important;
-    border-color: #818cf8;
-    box-shadow: 0 4px 14px rgba(79, 70, 229, 0.35);
+    background: var(--fill-accent);
+    color: var(--on-fill) !important;
+    border-color: var(--accent);
+    box-shadow: 0 4px 14px rgba(var(--accent-rgb), 0.35);
 }
 
 .img-gallery-thumb {
@@ -249,11 +249,11 @@
 }
 .img-gallery-thumb:hover {
     transform: scale(1.08);
-    border-color: #818cf8;
+    border-color: var(--accent);
 }
 .img-gallery-thumb.active {
-    border-color: #6366f1;
-    box-shadow: 0 0 0 3px rgba(99,102,241,0.5);
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(var(--accent-rgb),0.5);
     transform: scale(1.05);
 }
 </style>
@@ -433,7 +433,7 @@
                                 <button type="button" class="btn btn-secondary btn-sm" onclick="resetActiveImageTransform()" title="Скинути масштаб і поворот (100%)" style="font-size:12px;padding:4px 9px;background:rgba(255,255,255,0.1);color:#fff;border-color:rgba(255,255,255,0.2);">
                                     1:1
                                 </button>
-                                <button type="button" class="btn btn-secondary btn-sm" onclick="rotateActiveImage()" title="Повернути на 90° за годинниковою стрілкою (Клавіша R)" style="font-size:12px;padding:4px 10px;background:rgba(99,102,241,0.25);color:#a5b4fc;border-color:rgba(99,102,241,0.4);font-weight:700;">
+                                <button type="button" class="btn btn-secondary btn-sm" onclick="rotateActiveImage()" title="Повернути на 90° за годинниковою стрілкою (Клавіша R)" style="font-size:12px;padding:4px 10px;background:rgba(var(--accent-rgb),0.25);color:#a5b4fc;border-color:rgba(var(--accent-rgb),0.4);font-weight:700;">
                                     🔄 Повернути 90°
                                 </button>
                             </div>
@@ -756,7 +756,7 @@ function showFormula(cell) {
         const formula = cell.getAttribute('data-formula');
         formulaInput.value = formula || cell.innerText;
         document.querySelectorAll('.excel-table td').forEach(td => td.style.outline = '');
-        cell.style.outline = '2px solid var(--color-primary, #6366f1)';
+        cell.style.outline = '2px solid var(--accent)';
     }
 }
 
@@ -1190,15 +1190,15 @@ function runSingleAICheck(subId) {
             var gradeVal = data.suggested_grade || 'Оцінено';
             var gradeBadge = '';
             if (gradeVal === 'Доопрацювати') {
-                gradeBadge = '<span class="badge" style="font-size:12px;font-weight:700;background:var(--color-warning-light);color:var(--color-warning);border:1px solid #fcd34d;">🔄 Доопрацювати</span>';
+                gradeBadge = '<span class="badge" style="font-size:12px;font-weight:700;background:var(--color-warning-light);color:var(--color-warning);border:1px solid color-mix(in srgb, var(--warn) 40%, transparent);">🔄 Доопрацювати</span>';
             } else {
-                gradeBadge = '<span class="badge" style="font-size:13px;font-weight:800;background:rgba(16,185,129,0.15);color:var(--color-success);">🤖 ' + gradeVal + (data.level ? ' (' + data.level + ')' : '') + '</span>';
+                gradeBadge = '<span class="badge" style="font-size:13px;font-weight:800;background:rgba(var(--ok-rgb),0.15);color:var(--color-success);">🤖 ' + gradeVal + (data.level ? ' (' + data.level + ')' : '') + '</span>';
             }
 
             var formatWarningBanner = '';
             if (data.format_warning || (data.feedback && data.feedback.indexOf('Зауваження до формату файлу') !== -1)) {
                 var warnMsg = data.format_warning || 'Файл здано без належного розширення або не у тому форматі (оцінку знижено).';
-                formatWarningBanner = '<div style="background:var(--color-warning-light);border:1px solid #fde68a;border-radius:6px;padding:8px 10px;margin-bottom:8px;font-size:12px;color:var(--color-warning);display:flex;align-items:flex-start;gap:6px;">' +
+                formatWarningBanner = '<div style="background:var(--color-warning-light);border:1px solid color-mix(in srgb, var(--warn) 40%, transparent);border-radius:6px;padding:8px 10px;margin-bottom:8px;font-size:12px;color:var(--color-warning);display:flex;align-items:flex-start;gap:6px;">' +
                     '<span style="font-size:14px;">⚠️</span>' +
                     '<div><strong style="color:var(--color-warning);">Невідповідний формат файлу:</strong><div style="margin-top:2px;font-size:11.5px;color:var(--color-warning);">' + warnMsg + '</div></div>' +
                 '</div>';
@@ -1218,7 +1218,7 @@ function runSingleAICheck(subId) {
                     var gScore = gr.grade ? gr.grade + ' б.' : 'Не перевірено';
                     var gLvl = gr.level ? ' (' + gr.level + ')' : '';
                     var gComment = gr.comment ? '<div style="font-size:11px;color:var(--color-text-secondary);margin-top:3px;line-height:1.35;">' + gr.comment + '</div>' : '';
-                    grHtml += '<div style="background:var(--color-bg-secondary);border:1px solid rgba(99,102,241,0.2);border-radius:6px;padding:6px 10px;font-size:11.5px;">' +
+                    grHtml += '<div style="background:var(--color-bg-secondary);border:1px solid rgba(var(--accent-rgb),0.2);border-radius:6px;padding:6px 10px;font-size:11.5px;">' +
                         '<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">' +
                             '<strong style="color:var(--color-primary);font-size:12px;">' + (gr.code || 'ГР') + ': ' + (gr.name || '') + '</strong>' +
                             '<span class="badge" style="background:var(--color-primary-light);color:var(--color-primary-text);font-weight:800;font-size:11px;white-space:nowrap;">' + gScore + gLvl + '</span>' +
@@ -1233,8 +1233,8 @@ function runSingleAICheck(subId) {
                 var confMap = {'high': 'Висока ймовірність', 'medium': 'Середня ймовірність', 'low': 'Низька ймовірність', 'none': 'Не виявлено'};
                 var confText = confMap[data.ai_generated_confidence] || data.ai_generated_confidence || 'Ознаки ШІ';
                 var isAllowed = {% if submission.is_ai_allowed %}true{% else %}false{% endif %};
-                var bgStyle = isAllowed ? 'rgba(16,185,129,0.08)' : 'rgba(239,68,68,0.08)';
-                var borderStyle = isAllowed ? '#10b981' : '#ef4444';
+                var bgStyle = isAllowed ? 'rgba(var(--ok-rgb),0.08)' : 'rgba(var(--danger-rgb),0.08)';
+                var borderStyle = isAllowed ? 'var(--ok)' : 'var(--danger)';
                 var titleColor = isAllowed ? 'var(--color-success)' : 'var(--color-danger)';
                 var pctText = '';
                 var noteText = isAllowed ? '💡 Дозволено вчителем для цього завдання.' : '⚠️ ШІ не дозволено вчителем. Ознаки походження потребують уточнення; вони не означають автоматичного зниження змістового бала.';
@@ -1270,7 +1270,7 @@ function runSingleAICheck(subId) {
             '<button type="button" class="btn btn-secondary btn-sm" onclick="takeViewerAIToDraft()" style="width:100%;margin-bottom:8px">Взяти оцінку й відгук у чернетку</button>' +
             '<button type="button" class="btn btn-primary btn-sm" onclick="applyAIEvaluation(' + subId + ')" style="width:100%;font-size:12px;font-weight:700;padding:6px;">✓ Прийняти оцінку та відгук ШІ</button>';
         } else {
-            box.innerHTML = '<div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);border-radius:var(--radius-sm);padding:8px 10px;font-size:12px;color:var(--color-danger);">' +
+            box.innerHTML = '<div style="background:rgba(var(--danger-rgb),0.08);border:1px solid rgba(var(--danger-rgb),0.25);border-radius:var(--radius-sm);padding:8px 10px;font-size:12px;color:var(--color-danger);">' +
                 '<strong>⚠️ ' + (data.status === 'unsupported' ? 'Формат не підтримується' : 'Помилка ШІ') + ':</strong> ' + (data.error || 'Не вдалося перевірити') +
             '</div>';
         }
@@ -1282,7 +1282,7 @@ function runSingleAICheck(subId) {
             btn.innerHTML = '<span style="font-size:16px;">⚡</span> <span>Перевірити роботу ШІ</span>';
         }
         if (box) {
-            box.innerHTML = '<div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);border-radius:var(--radius-sm);padding:8px 10px;font-size:12px;color:var(--color-danger);">' +
+            box.innerHTML = '<div style="background:rgba(var(--danger-rgb),0.08);border:1px solid rgba(var(--danger-rgb),0.25);border-radius:var(--radius-sm);padding:8px 10px;font-size:12px;color:var(--color-danger);">' +
                 '<strong>⚠️ Помилка:</strong> ' + escapeHtmlForViewer(err.message) +
             '</div>';
         }
@@ -1469,7 +1469,7 @@ document.addEventListener('DOMContentLoaded', function() {
         var html = '';
         grList.forEach(function(gr) {
             var badgeColor = 'var(--color-text-primary)';
-            var badgeBg = (gr.grade == 'Доопрацювати') ? 'var(--color-warning-light)' : 'rgba(16,185,129,0.12)';
+            var badgeBg = (gr.grade == 'Доопрацювати') ? 'var(--color-warning-light)' : 'rgba(var(--ok-rgb),0.12)';
             html += '<div style="padding:7px 10px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:6px;">' +
                 '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">' +
                 '<span style="font-size:11.5px;font-weight:800;color:var(--color-primary);">' + escapeHtmlForViewer(gr.code || '') + '</span>' +
@@ -1503,8 +1503,8 @@ function acceptStudentAIGrade(subId) {
         if (data.ok) {
             var block = document.getElementById('student-ai-draft-block');
             if (block) {
-                block.style.background = 'rgba(16,185,129,0.07)';
-                block.style.borderColor = '#10b981';
+                block.style.background = 'rgba(var(--ok-rgb),0.07)';
+                block.style.borderColor = 'var(--ok)';
                 var titleEl = block.querySelector('[data-student-title]') || block.querySelector('span:last-child');
                 block.innerHTML = '<div style="font-weight:800;font-size:13px;color:var(--color-success);text-align:center;padding:8px 0;">✅ Оцінку прийнято та записано в журнал!</div>';
             }

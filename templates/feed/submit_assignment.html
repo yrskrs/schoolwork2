@@ -105,7 +105,7 @@
 #submit-form .form-input:focus,
 #submit-form .form-select:focus {
     border-color: var(--color-primary) !important;
-    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.18) !important;
+    box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.18) !important;
     background: var(--color-surface) !important;
     outline: none !important;
 }
@@ -125,7 +125,7 @@
 [data-theme="dark"] #submit-form .form-input:focus,
 [data-theme="dark"] #submit-form .form-select:focus {
     border-color: var(--color-primary) !important;
-    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.25) !important;
+    box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.25) !important;
 }
 
 /* Поле коментаря: авторозширення при введенні + ручний resize за бажанням + завжди доступна прокрутка */
@@ -151,7 +151,7 @@
 
 #submit-form textarea.form-input:focus {
     border-color: var(--color-primary) !important;
-    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.18) !important;
+    box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.18) !important;
     background: var(--color-surface) !important;
     outline: none !important;
 }
@@ -168,7 +168,7 @@
 
 [data-theme="dark"] #submit-form textarea.form-input:focus {
     border-color: var(--color-primary) !important;
-    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.25) !important;
+    box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.25) !important;
 }
 
 #submit-form .file-drop-zone {
@@ -181,7 +181,7 @@
 #submit-form .file-drop-zone:hover,
 #submit-form .file-drop-zone.dragover {
     border-color: var(--color-primary) !important;
-    background: rgba(99, 102, 241, 0.05) !important;
+    background: rgba(var(--accent-rgb), 0.05) !important;
 }
 </style>
 {% endblock %}
@@ -271,7 +271,7 @@ function updateFilesUI() {
     }
     if (dropZone) {
         dropZone.style.borderColor = 'var(--color-success)';
-        dropZone.style.background = 'rgba(16, 185, 129, 0.06)';
+        dropZone.style.background = 'rgba(var(--ok-rgb), 0.06)';
     }
 }
 
@@ -407,12 +407,12 @@ if (dropZone) {
     dropZone.addEventListener('dragover', function(e) {
         e.preventDefault();
         dropZone.style.borderColor = 'var(--color-primary)';
-        dropZone.style.background = 'rgba(99, 102, 241, 0.08)';
+        dropZone.style.background = 'rgba(var(--accent-rgb), 0.08)';
     });
 
     dropZone.addEventListener('dragleave', function() {
         dropZone.style.borderColor = fileStore.files.length > 0 ? 'var(--color-success)' : 'var(--color-border)';
-        dropZone.style.background = fileStore.files.length > 0 ? 'rgba(16, 185, 129, 0.06)' : 'var(--color-bg-secondary)';
+        dropZone.style.background = fileStore.files.length > 0 ? 'rgba(var(--ok-rgb), 0.06)' : 'var(--color-bg-secondary)';
     });
 
     dropZone.addEventListener('drop', function(e) {
@@ -1346,8 +1346,8 @@ if (submitForm) {
             hasError = true;
             if (!firstInvalid) firstInvalid = rosterSelect && rosterSelect.offsetParent !== null ? rosterSelect : nameInput;
             if (nameInput) {
-                nameInput.style.borderColor = '#ef4444';
-                nameInput.style.boxShadow = '0 0 0 3px rgba(239, 68, 68, 0.2)';
+                nameInput.style.borderColor = 'var(--danger)';
+                nameInput.style.boxShadow = '0 0 0 3px rgba(var(--danger-rgb), 0.2)';
             }
             if (nameErrorDiv) {
                 nameErrorDiv.style.display = 'flex';
@@ -1359,8 +1359,8 @@ if (submitForm) {
             hasError = true;
             if (!firstInvalid) firstInvalid = classSelect;
             if (classSelect) {
-                classSelect.style.borderColor = '#ef4444';
-                classSelect.style.boxShadow = '0 0 0 3px rgba(239, 68, 68, 0.2)';
+                classSelect.style.borderColor = 'var(--danger)';
+                classSelect.style.boxShadow = '0 0 0 3px rgba(var(--danger-rgb), 0.2)';
             }
             if (classErrorDiv) {
                 classErrorDiv.style.display = 'flex';

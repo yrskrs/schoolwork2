@@ -32,7 +32,8 @@
             <!-- ── Форма фільтрації та налаштування звіту ──────────────────────── -->
             <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:18px 20px;margin-bottom:20px;box-shadow:0 2px 10px rgba(0,0,0,0.03);">
                 
-                <form method="GET" id="report-filter-form">
+                <details class="filter-panel" open data-mobile-collapsed="true"><summary>Фільтри, період і експорт</summary>
+                    <form method="GET" id="report-filter-form">
                     
                     <div style="font-weight:800;font-size:14px;color:var(--color-text-primary);margin-bottom:12px;display:flex;align-items:center;gap:6px;">
                         <span>🔍</span> <span>Параметри вибірки оцінок:</span>
@@ -143,7 +144,7 @@
                             <summary style="font-size:13px;font-weight:750;color:var(--color-primary);user-select:none;margin-bottom:10px;">
                                 ⚙️ Додаткові реквізити для заміни уроків (ПІБ основного вчителя, примітка для журналу)
                             </summary>
-                            <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(min(100%,240px), 1fr));gap:12px;margin-top:10px;background:rgba(99,102,241,0.03);border:1px solid rgba(99,102,241,0.2);border-radius:var(--radius-md);padding:12px;">
+                            <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(min(100%,240px), 1fr));gap:12px;margin-top:10px;background:rgba(var(--accent-rgb),0.03);border:1px solid rgba(var(--accent-rgb),0.2);border-radius:var(--radius-md);padding:12px;">
                                 <div>
                                     <label for="target_teacher" style="display:block;font-size:12px;font-weight:700;color:var(--color-text-secondary);margin-bottom:4px;">
                                         👩‍🏫 Основний вчитель (кого ви замінювали):
@@ -193,6 +194,7 @@
                     </div>
 
                 </form>
+                </details>
 
             </div>
 
@@ -218,7 +220,7 @@
                 </div>
                 <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:12px;text-align:center;">
                     <div style="font-size:11.5px;color:var(--color-text-muted);font-weight:700;margin-bottom:2px;">Достатній (7-9)</div>
-                    <div style="font-size:1.4rem;font-weight:900;color:#3b82f6;">{{ stats.good_cnt }}</div>
+                    <div style="font-size:1.4rem;font-weight:900;color:var(--info);">{{ stats.good_cnt }}</div>
                 </div>
                 <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:12px;text-align:center;">
                     <div style="font-size:11.5px;color:var(--color-text-muted);font-weight:700;margin-bottom:2px;">Середній (4-6)</div>
@@ -262,7 +264,7 @@
                             <tr style="border-bottom:1px solid var(--color-border);transition:background 0.15s;" onmouseover="this.style.background='var(--color-bg-secondary)'" onmouseout="this.style.background='transparent'" id="row-sub-{{ sub.id }}">
                                 <!-- Checkbox -->
                                 <td style="padding:10px 12px;text-align:center;">
-                                    <input type="checkbox" class="sub-checkbox" value="{{ sub.id }}" checked onchange="updateSelectedCount()" style="width:16px;height:16px;cursor:pointer;">
+                                    <label class="sub-check-wrap"><input type="checkbox" class="sub-checkbox" value="{{ sub.id }}" checked onchange="updateSelectedCount()"></label>
                                 </td>
                                 <!-- № -->
                                 <td style="padding:10px 8px;text-align:center;color:var(--color-text-muted);font-weight:700;">
@@ -283,7 +285,7 @@
                                 </td>
                                 <!-- Клас -->
                                 <td style="padding:10px 10px;text-align:center;">
-                                    <span class="badge" style="background:rgba(99,102,241,0.1);color:var(--color-primary);border:1px solid rgba(99,102,241,0.25);font-weight:800;padding:2px 8px;border-radius:var(--radius-sm);font-size:12px;">
+                                    <span class="badge" style="background:rgba(var(--accent-rgb),0.1);color:var(--color-primary);border:1px solid rgba(var(--accent-rgb),0.25);font-weight:800;padding:2px 8px;border-radius:var(--radius-sm);font-size:12px;">
                                         {{ sub.class_group.name|default:"—" }}
                                     </span>
                                     {% if filters.class_id != 'all' and sub.class_group_id and sub.class_group_id|stringformat:"s" != filters.class_id %}
@@ -322,7 +324,7 @@
                                 <!-- Оцінка -->
                                 <td style="padding:10px 12px;text-align:center;">
                                     {% if sub.grade %}
-                                    <span style="display:inline-block;padding:3px 10px;border-radius:var(--radius-sm);background:rgba(16,185,129,0.12);color:var(--color-success);border:1.5px solid rgba(16,185,129,0.3);font-size:14px;font-weight:850;">
+                                    <span style="display:inline-block;padding:3px 10px;border-radius:var(--radius-sm);background:rgba(var(--ok-rgb),0.12);color:var(--color-success);border:1.5px solid rgba(var(--ok-rgb),0.3);font-size:14px;font-weight:850;">
                                         {{ sub.grade }}
                                     </span>
                                     {% else %}
@@ -333,11 +335,11 @@
                                 <td style="padding:10px 12px;font-size:11.5px;">
                                     {% if sub.ai_authorship_state == 'suspected' %}
                                         {% if sub.assignment and sub.assignment.allow_ai_usage %}
-                                        <span class="badge" style="background:rgba(16,185,129,0.1);color:var(--color-success);border:1px solid rgba(16,185,129,0.25);font-weight:700;padding:2px 6px;">
+                                        <span class="badge" style="background:rgba(var(--ok-rgb),0.1);color:var(--color-success);border:1px solid rgba(var(--ok-rgb),0.25);font-weight:700;padding:2px 6px;">
                                             🤖 ШІ (дозв.)
                                         </span>
                                         {% else %}
-                                        <span class="badge" style="background:rgba(239,68,68,0.1);color:var(--color-danger);border:1px solid rgba(239,68,68,0.25);font-weight:700;padding:2px 6px;">
+                                        <span class="badge" style="background:rgba(var(--danger-rgb),0.1);color:var(--color-danger);border:1px solid rgba(var(--danger-rgb),0.25);font-weight:700;padding:2px 6px;">
                                             🤖 Виявлено ШІ!
                                         </span>
                                         {% endif %}

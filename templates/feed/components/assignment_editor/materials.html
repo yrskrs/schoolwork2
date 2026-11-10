@@ -92,7 +92,7 @@
                 <span class="text-muted text-sm">({{ file.get_size_display }})</span>
             </div>
             <div style="display:flex;align-items:center;gap:12px;flex-shrink:0;">
-                <label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;font-size:11.5px;font-weight:700;color:var(--color-primary);background:rgba(99,102,241,0.08);padding:3px 8px;border-radius:4px;border:1px solid rgba(99,102,241,0.25);" title="Позначити цей файл як основну умову завдання для ШІ">
+                <label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;font-size:11.5px;font-weight:700;color:var(--color-primary);background:rgba(var(--accent-rgb),0.08);padding:3px 8px;border-radius:4px;border:1px solid rgba(var(--accent-rgb),0.25);" title="Позначити цей файл як основну умову завдання для ШІ">
                     <input type="radio" name="ai_task_file" value="existing:{{ file.id }}" {% if file.is_task_source_for_ai %}checked{% endif %} class="ai-task-radio" onchange="setAiTaskFileSelection(this.value)">
                     <span>🎯 Умова для ШІ</span>
                 </label>

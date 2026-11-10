@@ -44,12 +44,12 @@ body[data-theme="dark"] {
   --kind-class-border: rgba(56, 189, 248, 0.45);
 
   --kind-student-accent: #fbbf24;
-  --kind-student-bg: rgba(245, 158, 11, 0.22);
+  --kind-student-bg: rgba(var(--warn-rgb), 0.22);
   --kind-student-text: #fde68a;
-  --kind-student-border: rgba(251, 191, 36, 0.45);
+  --kind-student-border: rgba(var(--warn-rgb), 0.45);
 
   --kind-assignment-accent: #34d399;
-  --kind-assignment-bg: rgba(16, 185, 129, 0.22);
+  --kind-assignment-bg: rgba(var(--ok-rgb), 0.22);
   --kind-assignment-text: #a7f3d0;
   --kind-assignment-border: rgba(52, 211, 153, 0.45);
 }
@@ -267,8 +267,8 @@ details[open] > .access-card-summary .access-collapse-icon { transform: rotate(1
 .access-state.is-active { color: #047857; background: #d1fae5; }
 .access-state.is-revoked { color: #b91c1c; background: #fee2e2; }
 .access-state.is-expired { color: #64748b; background: #f1f5f9; }
-[data-theme="dark"] .access-state.is-active { color: #34d399; background: rgba(16, 185, 129, 0.2); }
-[data-theme="dark"] .access-state.is-revoked { color: #f87171; background: rgba(239, 68, 68, 0.2); }
+[data-theme="dark"] .access-state.is-active { color: #34d399; background: rgba(var(--ok-rgb), 0.2); }
+[data-theme="dark"] .access-state.is-revoked { color: #f87171; background: rgba(var(--danger-rgb), 0.2); }
 [data-theme="dark"] .access-state.is-expired { color: #94a3b8; background: rgba(148, 163, 184, 0.16); }
 
 /* Копіювання та QR в картках */

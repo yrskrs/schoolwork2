@@ -11,6 +11,23 @@
     gap: 14px;
     margin-bottom: 20px;
 }
+/* На телефоні три великі картки з'їдали пів екрана — робимо один рядок. */
+@media (max-width: 960px) {
+    .students-stats-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+        margin-bottom: 12px;
+    }
+    .stat-box {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 4px;
+        padding: 10px 12px;
+    }
+    .stat-icon { display: none; }
+    .stat-value { font-size: 1.15rem; }
+    .stat-label { font-size: 11px; line-height: 1.3; }
+}
 .stat-box {
     background: var(--color-surface);
     border: 1px solid var(--color-border);
@@ -30,7 +47,7 @@
     width: 44px;
     height: 44px;
     border-radius: var(--radius-md);
-    background: rgba(99,102,241,0.12);
+    background: rgba(var(--accent-rgb),0.12);
     color: var(--color-primary);
     display: flex;
     align-items: center;
@@ -83,7 +100,7 @@
     background: var(--color-primary);
     color: #fff;
     border-color: var(--color-primary);
-    box-shadow: 0 2px 8px rgba(99,102,241,0.35);
+    box-shadow: 0 2px 8px rgba(var(--accent-rgb),0.35);
 }
 .class-tab-badge {
     background: rgba(0,0,0,0.12);
@@ -134,13 +151,13 @@ body .page-wrapper {
     font-size: 13.5px;
 }
 .student-table tr:hover td {
-    background: rgba(99,102,241,0.035);
+    background: rgba(var(--accent-rgb),0.035);
 }
 .student-row-avatar {
     width: 32px;
     height: 32px;
     border-radius: 50%;
-    background: linear-gradient(135deg, var(--color-primary), #8b5cf6);
+    background: var(--fill-accent);
     color: #fff;
     font-weight: 700;
     font-size: 12.5px;
@@ -151,9 +168,9 @@ body .page-wrapper {
     flex-shrink: 0;
 }
 .class-badge-pill {
-    background: rgba(99,102,241,0.12);
+    background: rgba(var(--accent-rgb),0.12);
     color: var(--color-primary);
-    border: 1px solid rgba(99,102,241,0.25);
+    border: 1px solid rgba(var(--accent-rgb),0.25);
     padding: 3px 9px;
     border-radius: 14px;
     font-size: 12px;
@@ -254,7 +271,7 @@ body .page-wrapper {
     background: var(--action-primary-bg);
     color: #fff;
     border-color: var(--action-primary-bg);
-    box-shadow: 0 2px 6px rgba(79, 70, 229, 0.3);
+    box-shadow: 0 2px 6px rgba(var(--accent-rgb), 0.3);
 }
 .page-btn-nav {
     padding: 0 12px;
@@ -406,20 +423,20 @@ body .page-wrapper {
 
             <!-- ── Перемикач вкладок розділу ───────────────────────────────────── -->
             <div style="display:flex;gap:10px;margin-bottom:20px;border-bottom:1px solid var(--color-border);padding-bottom:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;">
-                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                <div class="students-tabs" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
                     <a href="{% url 'teacher_students' %}?tab=students{% if selected_class %}&class_group={{ selected_class.id }}{% endif %}" class="btn {% if current_tab == 'students' %}btn-primary{% else %}btn-secondary{% endif %}" style="font-weight:700;display:inline-flex;align-items:center;gap:6px;border-radius:var(--radius-md);">
                         👥 Список учнів та класів
                     </a>
                     <a href="{% url 'teacher_students' %}?tab=lessons{% if selected_class %}&class_group={{ selected_class.id }}{% endif %}" class="btn {% if current_tab == 'lessons' %}btn-primary{% else %}btn-secondary{% endif %}" style="font-weight:700;display:inline-flex;align-items:center;gap:6px;border-radius:var(--radius-md);">
                         📚 Проведені теми уроків
                         {% if total_conducted_lessons_count %}
-                        <span style="background:rgba(255,255,255,0.25);padding:1px 8px;border-radius:12px;font-size:11px;">{{ total_conducted_lessons_count }}</span>
+                        <span style="background:rgba(255,255,255,0.25);padding:1px 8px;border-radius:12px;font-size:12px;">{{ total_conducted_lessons_count }}</span>
                         {% endif %}
                     </a>
                     <a href="{% url 'teacher_students' %}?tab=schedule" class="btn {% if current_tab == 'schedule' %}btn-primary{% else %}btn-secondary{% endif %}" style="font-weight:700;display:inline-flex;align-items:center;gap:6px;border-radius:var(--radius-md);">
                         📅 Мій тижневий розклад уроків
                         {% if total_scheduled_lessons %}
-                        <span style="background:rgba(255,255,255,0.25);padding:1px 8px;border-radius:12px;font-size:11px;">{{ total_scheduled_lessons }}</span>
+                        <span style="background:rgba(255,255,255,0.25);padding:1px 8px;border-radius:12px;font-size:12px;">{{ total_scheduled_lessons }}</span>
                         {% endif %}
                     </a>
                 </div>
@@ -453,6 +470,7 @@ body .page-wrapper {
 
             <!-- ── Панель фільтрації та пошуку ─────────────────────────────────── -->
             <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:18px 20px;margin-bottom:20px;box-shadow:0 2px 10px rgba(0,0,0,0.03);">
+                <details class="filter-panel" open data-mobile-collapsed="true"><summary>Клас і пошук</summary>
                 
                 <!-- Таби вибору класу -->
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
@@ -461,7 +479,7 @@ body .page-wrapper {
                     </div>
                     {% if selected_class %}
                     <div style="display:flex;gap:8px;">
-                        <a href="{% url 'gradebook' %}?class_group={{ selected_class.id }}" class="btn btn-secondary btn-sm" style="font-size:12px;">
+                        <a href="{% url 'gradebook' %}?class_group={{ selected_class.id }}" class="btn btn-secondary btn-sm" style="font-size:12.5px;">
                             📊 Відкрити журнал класу {{ selected_class.name }}
                         </a>
                     </div>
@@ -506,6 +524,7 @@ body .page-wrapper {
                     </a>
                     {% endif %}
                 </form>
+                </details>
             </div>
 
             <!-- ── Таблиця учнів ──────────────────────────────────────────────── -->
@@ -519,14 +538,14 @@ body .page-wrapper {
                             Усі зареєстровані учні школи ({{ page_obj.paginator.count }})
                         {% endif %}
                     </div>
-                    <div style="font-size:12px;color:var(--color-text-muted);">
+                    <div style="font-size:12.5px;color:var(--color-text-muted);">
                         Показано {{ page_obj.start_index|default:0 }}–{{ page_obj.end_index|default:0 }} з {{ page_obj.paginator.count }}
                     </div>
                 </div>
 
                 {% if page_obj %}
                 <div class="table-responsive">
-                    <table class="student-table" style="width:100%;">
+                    <table class="student-table" data-record-compact="true" style="width:100%;">
                         <thead>
                             <tr>
                                 <th style="width:46px;text-align:center;">№</th>
@@ -540,7 +559,7 @@ body .page-wrapper {
                         <tbody>
                             {% for student in page_obj %}
                             <tr id="student-row-{{ student.id }}">
-                                <td style="text-align:center;color:var(--color-text-muted);font-weight:700;font-size:12px;">
+                                <td data-record="secondary wide" style="text-align:center;color:var(--color-text-muted);font-weight:700;font-size:12.5px;">
                                     {{ forloop.counter0|add:page_obj.start_index }}
                                 </td>
                                 <td>
@@ -555,36 +574,36 @@ body .page-wrapper {
                                                title="Переглянути історію робіт учня">
                                                 <span class="student-display-name">{{ student.last_name }} {{ student.first_name }}</span>
                                             </a>
-                                            <div style="font-size:11px;color:var(--color-text-muted);white-space:nowrap;margin-top:2px;">
+                                            <div style="font-size:12px;color:var(--color-text-muted);white-space:nowrap;margin-top:2px;">
                                                 Додано: {{ student.created_at|date:"d.m.Y" }}
                                             </div>
                                         </div>
                                     </div>
                                 </td>
-                                <td style="text-align:center;white-space:nowrap;">
+                                <td data-record="secondary wide" style="text-align:center;white-space:nowrap;">
                                     <span class="class-badge-pill student-class-label">
                                         🏫 {{ student.class_group.name }}
                                     </span>
                                 </td>
                                 <td style="text-align:center;white-space:nowrap;">
                                     {% if student.subs_count > 0 %}
-                                    <a {% if student.profile_url %}href="{{ student.profile_url }}"{% endif %} class="badge-tag" style="background:rgba(16,185,129,0.12);color:var(--color-success);border:1px solid rgba(16,185,129,0.3);text-decoration:none;padding:3px 9px;border-radius:12px;font-size:12px;font-weight:700;display:inline-block;" title="Здано: {{ student.subs_count }}, з них оцінено: {{ student.graded_count }}">
+                                    <a {% if student.profile_url %}href="{{ student.profile_url }}"{% endif %} class="badge-tag" style="background:rgba(var(--ok-rgb),0.12);color:var(--color-success);border:1px solid rgba(var(--ok-rgb),0.3);text-decoration:none;padding:3px 9px;border-radius:12px;font-size:12.5px;font-weight:700;display:inline-block;" title="Здано: {{ student.subs_count }}, з них оцінено: {{ student.graded_count }}">
                                         📥 {{ student.subs_count }} робіт ({{ student.graded_count }} оцінено)
                                     </a>
                                     {% else %}
-                                    <span style="font-size:12px;color:var(--color-text-muted);">— немає робіт —</span>
+                                    <span style="font-size:12.5px;color:var(--color-text-muted);">— немає робіт —</span>
                                     {% endif %}
                                 </td>
-                                <td>
+                                <td data-record="secondary wide">
                                     {% if student.notes %}
                                     <span style="font-size:12.5px;color:var(--color-text-secondary);max-width:240px;display:inline-block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="{{ student.notes }}">
                                         📝 {{ student.notes }}
                                     </span>
                                     {% else %}
-                                    <span style="font-size:12px;color:var(--color-text-muted);">—</span>
+                                    <span style="font-size:12.5px;color:var(--color-text-muted);">—</span>
                                     {% endif %}
                                 </td>
-                                <td style="text-align:right;white-space:nowrap;width:235px;min-width:220px;">
+                                <td data-record="wide" style="text-align:right;white-space:nowrap;width:235px;min-width:220px;">
                                     <div class="student-actions-group">
                                         <button type="button"
                                                 class="btn btn-secondary btn-sm student-edit-btn"
@@ -595,13 +614,15 @@ body .page-wrapper {
                                         <button type="button"
                                                 class="btn btn-secondary btn-sm student-icon-btn"
                                                 onclick="openMergeStudentsModal({{ student.id }})"
-                                                title="Об'єднати цей дублікат із основним профілем">
+                                                title="Об'єднати цей дублікат із основним профілем"
+                                                aria-label="Об'єднати дублікат із основним профілем">
                                             🔀
                                         </button>
                                         {% if student.profile_url %}
                                         <a href="{{ student.profile_url }}"
                                            class="btn btn-secondary btn-sm student-icon-btn"
-                                           title="Історія робіт учня">
+                                           title="Історія робіт учня"
+                                           aria-label="Історія робіт учня">
                                             📋
                                         </a>
                                         {% endif %}
@@ -609,8 +630,9 @@ body .page-wrapper {
                                             {% csrf_token %}
                                             <button type="submit"
                                                     class="btn btn-sm student-icon-btn"
-                                                    style="background:rgba(239,68,68,0.1);color:var(--color-danger);border:1px solid rgba(239,68,68,0.25);"
-                                                    title="Видалити зі списку">
+                                                    style="background:rgba(var(--danger-rgb),0.1);color:var(--color-danger);border:1px solid rgba(var(--danger-rgb),0.25);"
+                                                    title="Видалити зі списку"
+                                                    aria-label="Видалити учня зі списку">
                                                 🗑️
                                             </button>
                                         </form>
@@ -701,7 +723,7 @@ body .page-wrapper {
                     </div>
                     {% if selected_class %}
                     <div style="display:flex;gap:8px;">
-                        <a href="{% url 'gradebook' %}?class_group={{ selected_class.id }}" class="btn btn-secondary btn-sm" style="font-size:12px;">
+                        <a href="{% url 'gradebook' %}?class_group={{ selected_class.id }}" class="btn btn-secondary btn-sm" style="font-size:12.5px;">
                             📊 Журнал класу {{ selected_class.name }}
                         </a>
                     </div>
@@ -796,7 +818,7 @@ body .page-wrapper {
                             <tr>
                                 <td style="white-space:nowrap;">
                                     <div style="font-weight:700;color:var(--color-text-primary);font-size:13px;line-height:1.2;">{{ item.date_str }}</div>
-                                    <div style="font-size:11.5px;color:var(--color-primary);font-weight:600;margin-top:2px;">
+                                    <div style="font-size:12px;color:var(--color-primary);font-weight:600;margin-top:2px;">
                                         {{ item.day_name }}{% if item.time_str %} · {{ item.time_str }}{% endif %}
                                     </div>
                                 </td>
@@ -806,7 +828,7 @@ body .page-wrapper {
                                         <a href="{% url 'teacher_students' %}?tab=lessons&class_group={{ c.id }}" class="class-badge-pill" style="text-decoration:none;margin:1px;">{{ c.name }}</a>
                                         {% endfor %}
                                     {% else %}
-                                        <span style="font-size:11.5px;color:var(--color-text-muted);font-weight:600;">{{ item.classes_str }}</span>
+                                        <span style="font-size:12px;color:var(--color-text-muted);font-weight:600;">{{ item.classes_str }}</span>
                                     {% endif %}
                                 </td>
                                 <td>
@@ -821,31 +843,31 @@ body .page-wrapper {
                                 </td>
                                 <td style="text-align:center;white-space:nowrap;">
                                     {% if item.is_archived %}
-                                    <span class="status-badge status-archived" style="font-size:11px;padding:3px 8px;">📦 Архів</span>
+                                    <span class="status-badge status-archived" style="font-size:12px;padding:3px 8px;">📦 Архів</span>
                                     {% else %}
-                                    <span class="status-badge status-published" style="font-size:11px;padding:3px 8px;">✅ Опубліковано</span>
+                                    <span class="status-badge status-published" style="font-size:12px;padding:3px 8px;">✅ Опубліковано</span>
                                     {% endif %}
                                 </td>
                                 <td style="text-align:center;white-space:nowrap;">
-                                    <a href="{% url 'assignment_submissions' item.id %}" class="btn btn-secondary btn-xs" style="font-weight:700;text-decoration:none;padding:3px 8px;border-radius:12px;display:inline-flex;align-items:center;gap:3px;font-size:12px;" title="Переглянути здані роботи учнів">
+                                    <a href="{% url 'assignment_submissions' item.id %}" class="btn btn-secondary btn-xs" style="font-weight:700;text-decoration:none;padding:3px 8px;border-radius:12px;display:inline-flex;align-items:center;gap:3px;font-size:12.5px;" title="Переглянути здані роботи учнів">
                                         📥 {{ item.submissions_count }}
                                     </a>
                                 </td>
                                 <td style="text-align:right;white-space:nowrap;">
                                     <div style="display:inline-flex;gap:4px;align-items:center;">
-                                        <a href="{% url 'assignment_detail' item.id %}" class="btn btn-secondary btn-xs" title="Переглянути урок" style="padding:4px 7px;font-size:12px;">👁️</a>
-                                        <a href="{% url 'assignment_edit' item.id %}" class="btn btn-secondary btn-xs" title="Редагувати урок" style="padding:4px 7px;font-size:12px;">✏️</a>
+                                        <a href="{% url 'assignment_detail' item.id %}" class="btn btn-secondary btn-xs" title="Переглянути урок" style="padding:4px 7px;font-size:12.5px;">👁️</a>
+                                        <a href="{% url 'assignment_edit' item.id %}" class="btn btn-secondary btn-xs" title="Редагувати урок" style="padding:4px 7px;font-size:12.5px;">✏️</a>
                                         {% if item.is_archived %}
                                         <form method="post" action="{% url 'assignment_unarchive' item.id %}" style="display:inline;" onsubmit="return confirm('Розархівувати цей урок?');">
                                             {% csrf_token %}
                                             <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                                            <button type="submit" class="btn btn-secondary btn-xs" title="Розархівувати" style="padding:4px 7px;font-size:12px;">🔄</button>
+                                            <button type="submit" class="btn btn-secondary btn-xs" title="Розархівувати" style="padding:4px 7px;font-size:12.5px;">🔄</button>
                                         </form>
                                         {% else %}
                                         <form method="post" action="{% url 'assignment_archive' item.id %}" style="display:inline;" onsubmit="return confirm('Перемістити цей урок в архів?');">
                                             {% csrf_token %}
                                             <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                                            <button type="submit" class="btn btn-secondary btn-xs" title="В архів" style="padding:4px 7px;font-size:12px;">📦</button>
+                                            <button type="submit" class="btn btn-secondary btn-xs" title="В архів" style="padding:4px 7px;font-size:12.5px;">📦</button>
                                         </form>
                                         {% endif %}
                                     </div>
@@ -914,11 +936,11 @@ body .page-wrapper {
                 <!-- 1. Інформаційний банер проведених уроків та швидких переглядів -->
                 <div style="background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:14px 18px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px;margin-bottom:20px;">
                     <div style="display:flex;align-items:center;gap:14px;">
-                        <div style="width:44px;height:44px;border-radius:12px;background:rgba(99,102,241,0.12);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;">
+                        <div style="width:44px;height:44px;border-radius:12px;background:rgba(var(--accent-rgb),0.12);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;">
                             🎓
                         </div>
                         <div>
-                            <div style="font-size:11.5px;color:var(--color-text-muted);font-weight:700;text-transform:uppercase;letter-spacing:0.04em;">
+                            <div style="font-size:12px;color:var(--color-text-muted);font-weight:700;text-transform:uppercase;letter-spacing:0.04em;">
                                 Облік навчальних годин
                             </div>
                             <div style="display:flex;align-items:center;gap:10px;margin-top:2px;">
@@ -928,7 +950,7 @@ body .page-wrapper {
                                 <span style="font-size:13.5px;font-weight:700;color:var(--color-text-primary);">
                                     проведених уроків
                                 </span>
-                                <span class="badge" style="font-size:11px;padding:2px 8px;border-radius:10px;background:{% if teacher_conducted_lessons.is_manual %}rgba(245,158,11,0.15);color:var(--color-warning);border:1px solid rgba(245,158,11,0.3);{% else %}rgba(16,185,129,0.15);color:var(--color-success);border:1px solid rgba(16,185,129,0.3);{% endif %};">
+                                <span class="badge" style="font-size:12px;padding:2px 8px;border-radius:10px;background:{% if teacher_conducted_lessons.is_manual %}rgba(var(--warn-rgb),0.15);color:var(--color-warning);border:1px solid rgba(var(--warn-rgb),0.3);{% else %}rgba(var(--ok-rgb),0.15);color:var(--color-success);border:1px solid rgba(var(--ok-rgb),0.3);{% endif %};">
                                     {% if teacher_conducted_lessons.is_manual %}✏️ Встановлено вручну{% else %}🤖 Розраховано системою (з 1 вересня){% endif %}
                                 </span>
                             </div>
@@ -945,7 +967,7 @@ body .page-wrapper {
                             <h2 style="font-size:1.35rem;font-weight:800;margin:0;color:var(--color-text-primary);">
                                 📅 Мій розклад уроків по класах
                             </h2>
-                            <span class="badge" style="background:rgba(99,102,241,0.12);color:var(--color-primary);font-weight:700;font-size:12px;padding:4px 10px;border-radius:20px;">
+                            <span class="badge" style="background:rgba(var(--accent-rgb),0.12);color:var(--color-primary);font-weight:700;font-size:12.5px;padding:4px 10px;border-radius:20px;">
                                 Уроків у тижні: <span id="active-lessons-counter">{{ total_scheduled_lessons }}</span>
                             </span>
                         </div>
@@ -965,14 +987,14 @@ body .page-wrapper {
                             </button>
                         </div>
 
-                        <button type="submit" form="schedule-form" id="save-schedule-top-btn" class="btn btn-primary btn-sm" style="font-weight:700;display:none;box-shadow:0 4px 12px rgba(99,102,241,0.35);">
+                        <button type="submit" form="schedule-form" id="save-schedule-top-btn" class="btn btn-primary btn-sm" style="font-weight:700;display:none;box-shadow:0 4px 12px rgba(var(--accent-rgb),0.35);">
                             💾 Зберегти зміни
                         </button>
                     </div>
                 </div>
 
                 {% if not bell_slots %}
-                <div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);border-radius:var(--radius-md);padding:24px;text-align:center;">
+                <div style="background:rgba(var(--danger-rgb),0.08);border:1px solid rgba(var(--danger-rgb),0.25);border-radius:var(--radius-md);padding:24px;text-align:center;">
                     <div style="font-size:36px;margin-bottom:8px;">🔔</div>
                     <h4 style="margin:0 0 6px;color:var(--color-danger);font-weight:700;">Розклад дзвінків ще не налаштовано</h4>
                     <p style="font-size:13px;color:var(--color-text-muted);margin:0 0 16px;">
@@ -988,9 +1010,9 @@ body .page-wrapper {
                 <!-- 3.1. РЕЖИМ ПЕРЕГЛЯДУ (VIEW MODE) — ЧИСТИЙ І ЗРУЧНИЙ ВИГЛЯД   -->
                 <!-- ═════════════════════════════════════════════════════════════ -->
                 <!-- 🌟 Інформаційна плашка: сьогоднішній день та поточний урок 🌟 -->
-                <div class="schedule-live-indicator-card" style="background:var(--color-bg-secondary);border:1px solid var(--color-border);border-left:5px solid {% if live_lesson_status.status_type == 'in_lesson' %}#10b981{% elif live_lesson_status.status_type == 'in_break' %}#f59e0b{% elif live_lesson_status.status_type == 'before_school' %}#3b82f6{% else %}var(--color-primary){% endif %};border-radius:var(--radius-md);padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;box-shadow:0 1px 4px rgba(0,0,0,0.03);">
+                <div class="schedule-live-indicator-card" style="background:var(--color-bg-secondary);border:1px solid var(--color-border);border-left:5px solid {% if live_lesson_status.status_type == 'in_lesson' %}var(--ok){% elif live_lesson_status.status_type == 'in_break' %}var(--warn){% elif live_lesson_status.status_type == 'before_school' %}var(--info){% else %}var(--color-primary){% endif %};border-radius:var(--radius-md);padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;box-shadow:0 1px 4px rgba(0,0,0,0.03);">
                     <div style="display:flex;align-items:center;gap:14px;min-width:0;flex:1 1 auto;">
-                        <div style="width:42px;height:42px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;background:{% if live_lesson_status.status_type == 'in_lesson' %}rgba(16,185,129,0.15){% elif live_lesson_status.status_type == 'in_break' %}rgba(245,158,11,0.15){% elif live_lesson_status.status_type == 'before_school' %}rgba(59,130,246,0.15){% else %}rgba(99,102,241,0.12){% endif %};">
+                        <div style="width:42px;height:42px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;background:{% if live_lesson_status.status_type == 'in_lesson' %}rgba(var(--ok-rgb),0.15){% elif live_lesson_status.status_type == 'in_break' %}rgba(var(--warn-rgb),0.15){% elif live_lesson_status.status_type == 'before_school' %}rgba(var(--info-rgb),0.15){% else %}rgba(var(--accent-rgb),0.12){% endif %};">
                             {% if live_lesson_status.status_type == 'in_lesson' %}🔔
                             {% elif live_lesson_status.status_type == 'in_break' %}☕
                             {% elif live_lesson_status.status_type == 'before_school' %}🌅
@@ -999,18 +1021,18 @@ body .page-wrapper {
                         </div>
                         <div style="min-width:0;">
                             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-                                <span style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:0.04em;color:var(--color-text-muted);">
+                                <span style="font-size:12.5px;font-weight:800;text-transform:uppercase;letter-spacing:0.04em;color:var(--color-text-muted);">
                                     Сьогодні: <strong style="color:var(--color-text-primary);">{{ today_weekday_name }}</strong>, {{ today_date_str }}
                                 </span>
-                                <span style="font-size:12px;color:var(--color-text-muted);">•</span>
-                                <span style="font-size:12px;font-weight:700;color:var(--color-text-secondary);display:inline-flex;align-items:center;gap:4px;">
+                                <span style="font-size:12.5px;color:var(--color-text-muted);">•</span>
+                                <span style="font-size:12.5px;font-weight:700;color:var(--color-text-secondary);display:inline-flex;align-items:center;gap:4px;">
                                     🕒 Поточний час: <span id="schedule-live-clock" style="font-family:monospace;font-weight:800;color:var(--color-primary);font-size:13px;">{{ today_time_str }}</span>
                                 </span>
                                 {% if live_lesson_status.badge_text %}
-                                <span class="badge" style="font-size:11px;font-weight:800;padding:2px 8px;border-radius:10px;
-                                    {% if live_lesson_status.status_type == 'in_lesson' %}background:rgba(16,185,129,0.15);color:var(--color-success);border:1px solid rgba(16,185,129,0.3);
-                                    {% elif live_lesson_status.status_type == 'in_break' %}background:rgba(245,158,11,0.15);color:var(--color-warning);border:1px solid rgba(245,158,11,0.3);
-                                    {% elif live_lesson_status.status_type == 'before_school' %}background:rgba(59,130,246,0.15);color:var(--color-info);border:1px solid rgba(59,130,246,0.3);
+                                <span class="badge" style="font-size:12px;font-weight:800;padding:2px 8px;border-radius:10px;
+                                    {% if live_lesson_status.status_type == 'in_lesson' %}background:rgba(var(--ok-rgb),0.15);color:var(--color-success);border:1px solid rgba(var(--ok-rgb),0.3);
+                                    {% elif live_lesson_status.status_type == 'in_break' %}background:rgba(var(--warn-rgb),0.15);color:var(--color-warning);border:1px solid rgba(var(--warn-rgb),0.3);
+                                    {% elif live_lesson_status.status_type == 'before_school' %}background:rgba(var(--info-rgb),0.15);color:var(--color-info);border:1px solid rgba(var(--info-rgb),0.3);
                                     {% else %}background:var(--color-surface);color:var(--color-text-secondary);border:1px solid var(--color-border);{% endif %}">
                                     {{ live_lesson_status.badge_text }}
                                 </span>
@@ -1029,7 +1051,7 @@ body .page-wrapper {
                         </div>
                     </div>
                     <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
-                        <span style="font-size:11.5px;color:var(--color-text-muted);background:var(--color-surface);padding:5px 10px;border-radius:6px;border:1px solid var(--color-border);display:inline-flex;align-items:center;gap:6px;">
+                        <span style="font-size:12px;color:var(--color-text-muted);background:var(--color-surface);padding:5px 10px;border-radius:6px;border:1px solid var(--color-border);display:inline-flex;align-items:center;gap:6px;">
                             <span>💡</span>
                             <span>Колонка «{{ today_weekday_name }}» та поточний урок підсвічені в таблиці</span>
                         </span>
@@ -1045,11 +1067,11 @@ body .page-wrapper {
                                     № Уроку / Час
                                 </th>
                                 {% for day_num, day_name in days_of_week %}
-                                <th style="text-align:center;background:{% if day_num == today_weekday %}rgba(99,102,241,0.12){% else %}var(--color-bg-secondary){% endif %};border-bottom:{% if day_num == today_weekday %}3px solid var(--color-primary){% else %}1px solid var(--color-border){% endif %};">
+                                <th style="text-align:center;background:{% if day_num == today_weekday %}rgba(var(--accent-rgb),0.12){% else %}var(--color-bg-secondary){% endif %};border-bottom:{% if day_num == today_weekday %}3px solid var(--color-primary){% else %}1px solid var(--color-border){% endif %};">
                                     <div style="display:flex;align-items:center;justify-content:center;gap:6px;">
                                         <span>{{ day_name }}</span>
                                         {% if day_num == today_weekday %}
-                                        <span class="badge" style="background:var(--color-primary);color:#fff;font-size:10px;padding:2px 6px;border-radius:4px;font-weight:800;letter-spacing:0.02em;">СЬОГОДНІ</span>
+                                        <span class="badge" style="background:var(--color-primary);color:#fff;font-size:11.5px;padding:2px 6px;border-radius:4px;font-weight:800;letter-spacing:0.02em;">СЬОГОДНІ</span>
                                         {% endif %}
                                     </div>
                                 </th>
@@ -1059,55 +1081,55 @@ body .page-wrapper {
                         <tbody>
                             {% for row in schedule_rows %}
                             <tr>
-                                <td style="text-align:center;vertical-align:middle;background:{% if row.is_current_slot and today_weekday <= 6 %}rgba(16,185,129,0.08){% else %}var(--color-bg-secondary){% endif %};border-right:1px solid var(--color-border);border-left:{% if row.is_current_slot and today_weekday <= 6 %}3px solid #10b981{% else %}none{% endif %};padding:12px 8px;">
+                                <td style="text-align:center;vertical-align:middle;background:{% if row.is_current_slot and today_weekday <= 6 %}rgba(var(--ok-rgb),0.08){% else %}var(--color-bg-secondary){% endif %};border-right:1px solid var(--color-border);border-left:{% if row.is_current_slot and today_weekday <= 6 %}3px solid var(--ok){% else %}none{% endif %};padding:12px 8px;">
                                     {% if row.is_current_slot and today_weekday <= 6 %}
-                                    <span class="badge" style="background:#10b981;color:#fff;font-size:10px;font-weight:800;padding:2px 6px;border-radius:4px;margin-bottom:4px;display:inline-block;">
+                                    <span class="badge" style="background:var(--fill-success);color:#fff;font-size:11.5px;font-weight:800;padding:2px 6px;border-radius:4px;margin-bottom:4px;display:inline-block;">
                                         🟢 ЗАРАЗ
                                     </span>
                                     {% endif %}
                                     <div style="font-weight:900;font-size:14px;color:var(--color-text-primary);">
                                         {{ row.slot.lesson_number }}-й урок
                                     </div>
-                                    <div style="font-size:12px;color:var(--color-text-muted);margin-top:2px;font-weight:600;">
+                                    <div style="font-size:12.5px;color:var(--color-text-muted);margin-top:2px;font-weight:600;">
                                         {{ row.slot.start_time|time:"H:i" }} – {{ row.slot.end_time|time:"H:i" }}
                                     </div>
-                                    <div style="font-size:11px;color:var(--color-primary);font-weight:700;margin-top:2px;">
+                                    <div style="font-size:12px;color:var(--color-primary);font-weight:700;margin-top:2px;">
                                         {{ row.slot.duration_minutes }} хв
                                     </div>
                                 </td>
 
                                 {% for day in row.days %}
-                                <td style="vertical-align:middle;padding:10px 8px;border-right:1px solid var(--color-border);text-align:center;background:{% if day.is_current_lesson %}rgba(16,185,129,0.09){% elif day.is_today %}rgba(99,102,241,0.04){% elif day.entry %}rgba(99,102,241,0.02){% else %}transparent{% endif %};{% if day.is_today %}border-left:1px dashed rgba(99,102,241,0.22);border-right:1px dashed rgba(99,102,241,0.22);{% endif %}">
+                                <td style="vertical-align:middle;padding:10px 8px;border-right:1px solid var(--color-border);text-align:center;background:{% if day.is_current_lesson %}rgba(var(--ok-rgb),0.09){% elif day.is_today %}rgba(var(--accent-rgb),0.04){% elif day.entry %}rgba(var(--accent-rgb),0.02){% else %}transparent{% endif %};{% if day.is_today %}border-left:1px dashed rgba(var(--accent-rgb),0.22);border-right:1px dashed rgba(var(--accent-rgb),0.22);{% endif %}">
                                     {% if day.entry %}
-                                    <div style="background:var(--color-surface);border:{% if day.is_current_lesson %}2px solid #10b981{% else %}1px solid rgba(99,102,241,0.22){% endif %};border-left:4px solid {% if day.is_current_lesson %}#10b981{% else %}{{ day.entry.subject.color|default:'var(--color-primary)' }}{% endif %};border-radius:6px;padding:8px 10px;text-align:left;box-shadow:{% if day.is_current_lesson %}0 0 14px rgba(16,185,129,0.35){% else %}0 1px 4px rgba(0,0,0,0.04){% endif %};position:relative;">
+                                    <div style="background:var(--color-surface);border:{% if day.is_current_lesson %}2px solid var(--ok){% else %}1px solid rgba(var(--accent-rgb),0.22){% endif %};border-left:4px solid {% if day.is_current_lesson %}var(--ok){% else %}{{ day.entry.subject.color|default:'var(--color-primary)' }}{% endif %};border-radius:6px;padding:8px 10px;text-align:left;box-shadow:{% if day.is_current_lesson %}0 0 14px rgba(var(--ok-rgb),0.35){% else %}0 1px 4px rgba(0,0,0,0.04){% endif %};position:relative;">
                                         {% if day.is_current_lesson %}
                                         <div style="display:flex;align-items:center;gap:4px;margin-bottom:6px;">
-                                            <span class="badge" style="background:#10b981;color:#fff;font-size:10px;font-weight:800;padding:2px 7px;border-radius:4px;letter-spacing:0.02em;">
+                                            <span class="badge" style="background:var(--fill-success);color:#fff;font-size:11.5px;font-weight:800;padding:2px 7px;border-radius:4px;letter-spacing:0.02em;">
                                                 🟢 ТРИВАЄ ЗАРАЗ
                                             </span>
                                         </div>
                                         {% endif %}
                                         <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
-                                            <span class="class-tag" style="font-size:12px;font-weight:800;padding:2px 8px;">
+                                            <span class="class-tag" style="font-size:12.5px;font-weight:800;padding:2px 8px;">
                                                 {{ day.entry.class_group.name }}
                                             </span>
-                                            <span style="font-size:10.5px;color:var(--color-text-muted);font-weight:600;">
+                                            <span style="font-size:11.5px;color:var(--color-text-muted);font-weight:600;">
                                                 {{ row.slot.start_time|time:"H:i" }}
                                             </span>
                                         </div>
                                         {% if day.entry.subject %}
-                                        <div style="font-size:12px;color:var(--color-primary-text);font-weight:700;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                                        <div style="font-size:12.5px;color:var(--color-primary-text);font-weight:700;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
                                             {{ day.entry.subject.icon }} {{ day.entry.subject.name }}
                                         </div>
                                         {% endif %}
                                     </div>
                                     {% else %}
                                         {% if day.is_current_lesson %}
-                                        <div style="background:rgba(245,158,11,0.1);border:1px dashed #f59e0b;border-radius:6px;padding:6px 8px;font-size:11px;color:var(--color-warning);font-weight:700;">
+                                        <div style="background:rgba(var(--warn-rgb),0.1);border:1px dashed var(--warn);border-radius:6px;padding:6px 8px;font-size:12px;color:var(--color-warning);font-weight:700;">
                                             ☕ Зараз вікно (вільний час)
                                         </div>
                                         {% else %}
-                                        <div style="color:var(--color-text-muted);font-size:12px;opacity:0.35;">
+                                        <div style="color:var(--color-text-muted);font-size:12.5px;opacity:0.35;">
                                             —
                                         </div>
                                         {% endif %}
@@ -1136,11 +1158,11 @@ body .page-wrapper {
                                             № Уроку / Час
                                         </th>
                                         {% for day_num, day_name in days_of_week %}
-                                        <th style="text-align:center;background:{% if day_num == today_weekday %}rgba(99,102,241,0.12){% else %}var(--color-bg-secondary){% endif %};border-bottom:{% if day_num == today_weekday %}3px solid var(--color-primary){% else %}1px solid var(--color-border){% endif %};">
+                                        <th style="text-align:center;background:{% if day_num == today_weekday %}rgba(var(--accent-rgb),0.12){% else %}var(--color-bg-secondary){% endif %};border-bottom:{% if day_num == today_weekday %}3px solid var(--color-primary){% else %}1px solid var(--color-border){% endif %};">
                                             <div style="display:flex;align-items:center;justify-content:center;gap:6px;">
                                                 <span>{{ day_name }}</span>
                                                 {% if day_num == today_weekday %}
-                                                <span class="badge" style="background:var(--color-primary);color:#fff;font-size:10px;padding:2px 6px;border-radius:4px;font-weight:800;letter-spacing:0.02em;">СЬОГОДНІ</span>
+                                                <span class="badge" style="background:var(--color-primary);color:#fff;font-size:11.5px;padding:2px 6px;border-radius:4px;font-weight:800;letter-spacing:0.02em;">СЬОГОДНІ</span>
                                                 {% endif %}
                                             </div>
                                         </th>
@@ -1150,29 +1172,29 @@ body .page-wrapper {
                                 <tbody>
                                     {% for row in schedule_rows %}
                                     <tr>
-                                        <td style="text-align:center;vertical-align:middle;background:{% if row.is_current_slot and today_weekday <= 6 %}rgba(16,185,129,0.08){% else %}var(--color-bg-secondary){% endif %};border-right:1px solid var(--color-border);border-left:{% if row.is_current_slot and today_weekday <= 6 %}3px solid #10b981{% else %}none{% endif %};padding:10px 8px;">
+                                        <td style="text-align:center;vertical-align:middle;background:{% if row.is_current_slot and today_weekday <= 6 %}rgba(var(--ok-rgb),0.08){% else %}var(--color-bg-secondary){% endif %};border-right:1px solid var(--color-border);border-left:{% if row.is_current_slot and today_weekday <= 6 %}3px solid var(--ok){% else %}none{% endif %};padding:10px 8px;">
                                             {% if row.is_current_slot and today_weekday <= 6 %}
-                                            <span class="badge" style="background:#10b981;color:#fff;font-size:10px;font-weight:800;padding:2px 6px;border-radius:4px;margin-bottom:4px;display:inline-block;">
+                                            <span class="badge" style="background:var(--fill-success);color:#fff;font-size:11.5px;font-weight:800;padding:2px 6px;border-radius:4px;margin-bottom:4px;display:inline-block;">
                                                 🟢 ЗАРАЗ
                                             </span>
                                             {% endif %}
                                             <div style="font-weight:800;font-size:13.5px;color:var(--color-text-primary);">
                                                 {{ row.slot.lesson_number }}-й урок
                                             </div>
-                                            <div style="font-size:12px;color:var(--color-text-muted);margin-top:2px;">
+                                            <div style="font-size:12.5px;color:var(--color-text-muted);margin-top:2px;">
                                                 {{ row.slot.start_time|time:"H:i" }} – {{ row.slot.end_time|time:"H:i" }}
                                             </div>
-                                            <div style="font-size:11px;color:var(--color-primary);font-weight:600;margin-top:1px;">
+                                            <div style="font-size:12px;color:var(--color-primary);font-weight:600;margin-top:1px;">
                                                 {{ row.slot.duration_minutes }} хв
                                             </div>
                                         </td>
 
                                         {% for day in row.days %}
-                                        <td class="schedule-cell-td" style="vertical-align:top;padding:8px;border-right:1px solid var(--color-border);background:{% if day.is_current_lesson %}rgba(16,185,129,0.09){% elif day.is_today %}rgba(99,102,241,0.04){% elif day.class_id %}rgba(99,102,241,0.06){% else %}transparent{% endif %};{% if day.is_today %}border-left:1px dashed rgba(99,102,241,0.22);border-right:1px dashed rgba(99,102,241,0.22);{% endif %}">
-                                            <div class="schedule-cell-box" style="position:relative;border-radius:6px;padding:4px;border:{% if day.is_current_lesson %}2px solid #10b981{% elif day.class_id %}1px solid var(--color-primary){% else %}1px solid transparent{% endif %};transition:all 0.15s ease;">
+                                        <td class="schedule-cell-td" style="vertical-align:top;padding:8px;border-right:1px solid var(--color-border);background:{% if day.is_current_lesson %}rgba(var(--ok-rgb),0.09){% elif day.is_today %}rgba(var(--accent-rgb),0.04){% elif day.class_id %}rgba(var(--accent-rgb),0.06){% else %}transparent{% endif %};{% if day.is_today %}border-left:1px dashed rgba(var(--accent-rgb),0.22);border-right:1px dashed rgba(var(--accent-rgb),0.22);{% endif %}">
+                                            <div class="schedule-cell-box" style="position:relative;border-radius:6px;padding:4px;border:{% if day.is_current_lesson %}2px solid var(--ok){% elif day.class_id %}1px solid var(--color-primary){% else %}1px solid transparent{% endif %};transition:all 0.15s ease;">
                                                 {% if day.is_current_lesson %}
                                                 <div style="margin-bottom:4px;">
-                                                    <span class="badge" style="background:#10b981;color:#fff;font-size:9.5px;font-weight:800;padding:2px 6px;border-radius:4px;">
+                                                    <span class="badge" style="background:var(--fill-success);color:#fff;font-size:11px;font-weight:800;padding:2px 6px;border-radius:4px;">
                                                         🟢 Зараз триває цей слот
                                                     </span>
                                                 </div>
@@ -1201,7 +1223,7 @@ body .page-wrapper {
                                                     <select 
                                                         name="cell_{{ day.day_num }}_{{ row.slot.id }}_subject" 
                                                         class="form-select"
-                                                        style="width:100%;padding:3px 6px;font-size:11px;border-radius:4px;border:1px solid var(--color-border);background:var(--color-surface);color:var(--color-text-secondary);"
+                                                        style="width:100%;padding:3px 6px;font-size:12px;border-radius:4px;border:1px solid var(--color-border);background:var(--color-surface);color:var(--color-text-secondary);"
                                                     >
                                                         <option value="">(За замовчуванням)</option>
                                                         {% for s in teacher_subjects %}
@@ -1335,7 +1357,7 @@ body .page-wrapper {
                         <option value="{{ cg.id }}">{{ cg.name }}</option>
                         {% endfor %}
                     </select>
-                    <div style="font-size:11px;color:var(--color-text-muted);margin-top:3px;">
+                    <div style="font-size:12px;color:var(--color-text-muted);margin-top:3px;">
                         Якщо учень обрав неправильний клас при здачі, змініть його тут — роботи автоматично перенесуться в журнал обраного класу.
                     </div>
                 </div>
@@ -1345,7 +1367,7 @@ body .page-wrapper {
                     <textarea id="edit_modal_notes" name="notes" class="form-input" rows="2" placeholder="Особисті примітки вчителя..."></textarea>
                 </div>
 
-                <div style="margin-bottom:18px;background:rgba(99,102,241,0.06);padding:12px 14px;border-radius:var(--radius-md);border:1px solid rgba(99,102,241,0.2);">
+                <div style="margin-bottom:18px;background:rgba(var(--accent-rgb),0.06);padding:12px 14px;border-radius:var(--radius-md);border:1px solid rgba(var(--accent-rgb),0.2);">
                     <label style="display:flex;align-items:flex-start;gap:8px;font-size:12.5px;cursor:pointer;font-weight:600;color:var(--color-text-primary);">
                         <input type="checkbox" name="sync_submissions" value="true" checked style="margin-top:2px;">
                         <span>🔄 <strong>Синхронізувати всі здані роботи учня</strong>: оновити ім'я, прізвище та перенести всі попередні оцінки і здачі в обраний клас.</span>
@@ -1397,7 +1419,7 @@ body .page-wrapper {
                     </select>
                 </div>
 
-                <div style="margin-bottom:16px;background:rgba(245,158,11,0.08);padding:10px 12px;border-radius:var(--radius-md);border:1px solid rgba(245,158,11,0.3);font-size:12px;color:var(--color-warning);">
+                <div style="margin-bottom:16px;background:rgba(var(--warn-rgb),0.08);padding:10px 12px;border-radius:var(--radius-md);border:1px solid rgba(var(--warn-rgb),0.3);font-size:12.5px;color:var(--color-warning);">
                     ⚠️ Усі здані роботи та оцінки першого профілю перейдуть до другого. Відновити видалений дублікат окремо буде неможливо.
                 </div>
 
@@ -1453,7 +1475,7 @@ body .page-wrapper {
                         Оберіть файл зі списком (.csv, .txt, .tsv):
                     </label>
                     <input type="file" name="file" id="id_import_file" class="form-file-input" accept=".csv,.txt,.tsv">
-                    <div style="font-size:11px;color:var(--color-text-muted);margin-top:4px;">
+                    <div style="font-size:12px;color:var(--color-text-muted);margin-top:4px;">
                         Підтримуються файли CSV з роздільниками (кома, крапка з комою, табуляція) у кодуванні UTF-8 або Windows-1251.
                     </div>
                 </div>
@@ -1482,7 +1504,7 @@ body .page-wrapper {
                 </div>
 
                 <!-- Зразок форматів -->
-                <div style="font-size:12px;color:var(--color-text-muted);background:rgba(0,0,0,0.02);border:1px dashed var(--color-border);padding:10px 14px;border-radius:var(--radius-md);margin-bottom:18px;">
+                <div style="font-size:12.5px;color:var(--color-text-muted);background:rgba(0,0,0,0.02);border:1px dashed var(--color-border);padding:10px 14px;border-radius:var(--radius-md);margin-bottom:18px;">
                     <strong>💡 Підтримувані формати рядків:</strong><br>
                     • <code>Іваненко Тарас, 9-А</code><br>
                     • <code>Іваненко, Тарас, 9-А</code><br>
@@ -1575,7 +1597,7 @@ function onScheduleCellChange(selectEl) {
     var td = selectEl.closest('.schedule-cell-td');
     var box = selectEl.closest('.schedule-cell-box');
     if (selectEl.value) {
-        if (td) td.style.background = 'rgba(99, 102, 241, 0.08)';
+        if (td) td.style.background = 'rgba(var(--accent-rgb), 0.08)';
         if (box) box.style.borderColor = 'var(--color-primary)';
     } else {
         if (td) td.style.background = 'transparent';

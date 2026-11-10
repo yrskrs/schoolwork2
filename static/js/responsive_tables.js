@@ -33,16 +33,41 @@
                     if (observer) observer.observe(region);
                 }
                 const labels = Array.from(table.tHead.rows[0].cells).flatMap(cell => Array(cell.colSpan).fill((cell.title || cell.textContent).replace(/\s+/g, ' ').trim()));
+                const compact = table.dataset.recordCompact === 'true';
+                if (compact) table.classList.add('record-compact');
                 Array.from(table.tBodies).forEach(body => Array.from(body.rows).forEach(row => {
                     let index = 0;
                     Array.from(row.cells).forEach(cell => {
+                        if (cell.classList.contains('record-toggle-cell')) return;
                         cell.dataset.columnLabel = cell.colSpan > 1 ? '' : labels[index] || '';
                         cell.classList.toggle('platform-full-row', cell.colSpan > 1 || (index === 0 && table.classList.contains('journal-table')));
                         index += cell.colSpan;
                     });
+                    if (compact) addRecordToggle(row);
                 }));
                 update(region);
             });
+        }
+        // Secondary columns stay behind a "Деталі" toggle on narrow screens.
+        function addRecordToggle(row) {
+            if (row.querySelector('.record-toggle-cell')) return;
+            if (!row.querySelector('td[data-record~="secondary"]')) return;
+            const cell = document.createElement('td');
+            cell.className = 'record-toggle-cell platform-full-row';
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'record-toggle';
+            button.setAttribute('aria-expanded', 'false');
+            button.innerHTML = 'Деталі <span aria-hidden="true">▾</span>';
+            button.addEventListener('click', () => {
+                const open = row.classList.toggle('is-record-expanded');
+                button.setAttribute('aria-expanded', String(open));
+                button.innerHTML = open
+                    ? 'Згорнути <span aria-hidden="true">▴</span>'
+                    : 'Деталі <span aria-hidden="true">▾</span>';
+            });
+            cell.appendChild(button);
+            row.appendChild(cell);
         }
         enhance(page.querySelectorAll('table'));
         const dirtyTables = new Set();

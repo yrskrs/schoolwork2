@@ -106,7 +106,7 @@
                 {% for sub in page_obj %}
                 <article class="student-sub-card" style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:20px 24px;box-shadow:0 2px 12px rgba(0,0,0,0.04);">
 
-                    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:12px;">
+                    <div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:10px;">
                         <div style="flex:1 1 auto;min-width:0;">
                             <!-- Клас та учень -->
                             <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap;">
@@ -118,17 +118,17 @@
                                     👤 {{ sub.last_name }} {{ sub.first_name }}
                                 </span>
                                 {% if sub.resubmission_attempt > 1 %}
-                                <span class="badge" style="background:rgba(99,102,241,0.12);color:var(--color-primary);border:1px solid rgba(99,102,241,0.3);font-size:11px;font-weight:800;padding:2px 7px;border-radius:12px;" title="Повторна спроба здачі (актуальна версія)">
+                                <span class="badge" style="background:rgba(var(--accent-rgb),0.12);color:var(--color-primary);border:1px solid rgba(var(--accent-rgb),0.3);font-size:11px;font-weight:800;padding:2px 7px;border-radius:12px;" title="Повторна спроба здачі (актуальна версія)">
                                     🔄 Спроба #{{ sub.resubmission_attempt }} (Актуальна)
                                 </span>
                                 {% endif %}
                                 {% if sub.ai_authorship_state == 'suspected' %}
                                     {% if sub.is_ai_allowed %}
-                                    <span class="badge" style="background:var(--color-success-light);color:var(--color-success);border:1px solid #a7f3d0;font-size:11px;font-weight:700;padding:2px 7px;border-radius:12px;" title="У роботі зафіксовано використання ШІ (дозволено вчителем)">
+                                    <span class="badge" style="background:var(--color-success-light);color:var(--color-success);border:1px solid color-mix(in srgb, var(--ok) 40%, transparent);font-size:11px;font-weight:700;padding:2px 7px;border-radius:12px;" title="У роботі зафіксовано використання ШІ (дозволено вчителем)">
                                         🤖 ШІ (дозволено)
                                     </span>
                                     {% else %}
-                                    <span class="badge" style="background:var(--color-danger-light);color:var(--color-danger);border:1px solid #fecaca;font-size:11px;font-weight:700;padding:2px 7px;border-radius:12px;" title="Є ознаки використання ШІ (самостійна робота)">
+                                    <span class="badge" style="background:var(--color-danger-light);color:var(--color-danger);border:1px solid color-mix(in srgb, var(--danger) 40%, transparent);font-size:11px;font-weight:700;padding:2px 7px;border-radius:12px;" title="Є ознаки використання ШІ (самостійна робота)">
                                         🤖 Виявлено ШІ (самостійна робота)
                                     </span>
                                     {% endif %}
@@ -136,6 +136,26 @@
                                 <span style="font-size:12px;color:var(--color-text-muted);">
                                     · 📅 {{ sub.submitted_at|date:"d.m.Y H:i" }}
                                 </span>
+<!-- Статус перевірки: закріплено справа блоку без перенесення під текст -->
+                        <span class="sub-status">
+                            {% if sub.grade == 'Доопрацювати' or sub.grade == 'доопрацювання' or sub.grade == 'д' or sub.grade == 'Д' %}
+                            <span class="badge" style="font-size:12px;padding:6px 14px;font-weight:800;background:var(--color-warning-light);color:var(--color-warning);border:1px solid color-mix(in srgb, var(--warn) 40%, transparent);border-radius:20px;display:inline-flex;align-items:center;gap:4px;white-space:nowrap;" title="Роботу повернуто на доопрацювання">
+                                🔄 Доопрацювати
+                            </span>
+                            {% elif sub.grade %}
+                            <span class="badge badge-success" style="font-size:12px;padding:6px 14px;font-weight:800;background:rgba(var(--ok-rgb),0.15);color:var(--color-success);border:1px solid rgba(var(--ok-rgb),0.3);border-radius:20px;display:inline-flex;align-items:center;gap:4px;white-space:nowrap;">
+                                ✅ Перевірено
+                            </span>
+                            {% elif not sub.is_latest_attempt %}
+                            <span style="background:rgba(148,163,184,0.15);color:var(--color-text-secondary);border:1px solid rgba(148,163,184,0.3);border-radius:20px;padding:6px 14px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:4px;white-space:nowrap;" title="Замінено пізнішою спробою, не потребує оцінки">
+                                📦 Замінено новою версією
+                            </span>
+                            {% else %}
+                            <span style="background:rgba(234,179,8,0.15);color:var(--color-warning);border:1px solid rgba(234,179,8,0.3);border-radius:20px;padding:6px 14px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:4px;white-space:nowrap;">
+                                ⏳ Очікує перевірки
+                            </span>
+                            {% endif %}
+                        </span>
                             </div>
 
                             <!-- Назва завдання -->
@@ -163,45 +183,26 @@
                             {% endif %}
                         </div>
 
-                        <!-- Статус перевірки: закріплено справа блоку без перенесення під текст -->
-                        <div style="flex-shrink:0;text-align:right;white-space:nowrap;margin-left:auto;">
-                            {% if sub.grade == 'Доопрацювати' or sub.grade == 'доопрацювання' or sub.grade == 'д' or sub.grade == 'Д' %}
-                            <span class="badge" style="font-size:12px;padding:6px 14px;font-weight:800;background:var(--color-warning-light);color:var(--color-warning);border:1px solid #fcd34d;border-radius:20px;display:inline-flex;align-items:center;gap:4px;white-space:nowrap;" title="Роботу повернуто на доопрацювання">
-                                🔄 Доопрацювати
-                            </span>
-                            {% elif sub.grade %}
-                            <span class="badge badge-success" style="font-size:12px;padding:6px 14px;font-weight:800;background:rgba(16,185,129,0.15);color:var(--color-success);border:1px solid rgba(16,185,129,0.3);border-radius:20px;display:inline-flex;align-items:center;gap:4px;white-space:nowrap;">
-                                ✅ Перевірено
-                            </span>
-                            {% elif not sub.is_latest_attempt %}
-                            <span style="background:rgba(148,163,184,0.15);color:var(--color-text-secondary);border:1px solid rgba(148,163,184,0.3);border-radius:20px;padding:6px 14px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:4px;white-space:nowrap;" title="Замінено пізнішою спробою, не потребує оцінки">
-                                📦 Замінено новою версією
-                            </span>
-                            {% else %}
-                            <span style="background:rgba(234,179,8,0.15);color:var(--color-warning);border:1px solid rgba(234,179,8,0.3);border-radius:20px;padding:6px 14px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:4px;white-space:nowrap;">
-                                ⏳ Очікує перевірки
-                            </span>
-                            {% endif %}
-                        </div>
+                        
                     </div>
 
                     <!-- Інформація про прикріплені файли роботи учня -->
                     {% if sub.files.all %}
-                    <div style="padding:12px 16px;background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:var(--radius-md);margin-bottom:12px;display:flex;flex-direction:column;gap:8px;">
-                        <div style="font-size:11.5px;font-weight:700;color:var(--color-text-muted);display:flex;justify-content:space-between;">
-                            <span>📎 Прикріплені файли ({{ sub.files.all|length }}):</span>
-                            <span>{{ sub.get_total_files_size_display }}</span>
-                        </div>
-                        <div style="display:flex;flex-direction:column;gap:6px;">
+                    <details class="sub-files" open data-mobile-collapsed="true">
+                        <summary>
+                            <span>📎 Прикріплені файли ({{ sub.files.all|length }})</span>
+                            <span class="sub-files-size">{{ sub.get_total_files_size_display }}</span>
+                        </summary>
+                        <div class="sub-files-body">
                             {% for sf in sub.files.all %}
-                            <div style="display:flex;align-items:center;gap:8px;font-size:13px;">
-                                <span style="font-size:16px;">{{ sf.get_file_icon }}</span>
-                                <span style="font-weight:700;color:var(--color-text-primary);word-break:break-all;">{{ sf.original_name|default:sf.file.name|slice:"-45:" }}</span>
-                                <span style="font-size:11px;color:var(--color-text-muted);">({{ sf.get_size_display }})</span>
+                            <div class="sub-file-row">
+                                <span>{{ sf.get_file_icon }}</span>
+                                <span class="sub-file-name">{{ sf.original_name|default:sf.file.name|slice:"-45:" }}</span>
+                                <span class="sub-file-size">{{ sf.get_size_display }}</span>
                             </div>
                             {% endfor %}
                         </div>
-                    </div>
+                    </details>
                     {% elif sub.file %}
                     <div style="padding:12px 16px;background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:var(--radius-md);margin-bottom:12px;display:flex;align-items:center;gap:12px;">
                         <span style="font-size:22px;">{{ sub.get_file_icon }}</span>
@@ -230,10 +231,10 @@
 
                     <!-- Інформація про використання ШІ для учня (загальна інформація без деталей) -->
                     {% if sub.ai_authorship_state == 'suspected' %}
-                    <div style="padding:10px 14px;background:{% if sub.is_ai_allowed %}rgba(16,185,129,0.08){% else %}rgba(239,68,68,0.08){% endif %};border:1px solid {% if sub.is_ai_allowed %}#10b981{% else %}#ef4444{% endif %};border-radius:var(--radius-md);margin-bottom:12px;font-size:12.5px;display:flex;align-items:flex-start;gap:8px;">
+                    <div style="padding:10px 14px;background:{% if sub.is_ai_allowed %}rgba(var(--ok-rgb),0.08){% else %}rgba(var(--danger-rgb),0.08){% endif %};border:1px solid {% if sub.is_ai_allowed %}var(--ok){% else %}var(--danger){% endif %};border-radius:var(--radius-md);margin-bottom:12px;font-size:12.5px;display:flex;align-items:flex-start;gap:8px;">
                         <span style="font-size:18px;line-height:1;flex-shrink:0;">🤖</span>
                         <div>
-                            <div style="font-weight:800;color:{% if sub.is_ai_allowed %}#065f46{% else %}var(--color-danger){% endif %};">
+                            <div style="font-weight:800;color:{% if sub.is_ai_allowed %}var(--ok){% else %}var(--color-danger){% endif %};">
                                 {% if sub.is_ai_allowed %}
                                 Є ознаки використання ШІ — дозволено вчителем
                                 {% else %}
@@ -252,7 +253,7 @@
                     {% endif %}
 
                     {% if sub.comment_student %}
-                    <div style="font-size:13px;color:var(--color-text-secondary);margin-bottom:12px;padding-left:4px;">
+                    <div class="sub-comment" style="font-size:13px;color:var(--color-text-secondary);margin-bottom:12px;padding-left:4px;">
                         💬 <strong>Ваш коментар при здачі:</strong> <em>«{{ sub.comment_student }}»</em>
                     </div>
                     {% endif %}
@@ -266,7 +267,7 @@
 
                         <div style="display:flex;flex-direction:column;gap:8px;">
                             {% for comment in sub.comments.all %}
-                            <div style="padding:10px 14px;background:rgba(99,102,241,0.06);border-left:3px solid var(--color-primary);border-radius:var(--radius-sm);font-size:13px;">
+                            <div style="padding:10px 14px;background:rgba(var(--accent-rgb),0.06);border-left:3px solid var(--color-primary);border-radius:var(--radius-sm);font-size:13px;">
                                 <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
                                     <strong style="color:var(--color-primary);">{{ comment.get_author_name }}</strong>
                                     <span style="font-size:11px;color:var(--color-text-muted);">{{ comment.created_at|date:"d.m.Y H:i" }}</span>
@@ -300,7 +301,7 @@
                                         </div>
                                         <div>
                                             {% if prev.grade == 'Доопрацювати' or prev.grade == 'доопрацювання' or prev.grade == 'д' or prev.grade == 'Д' %}
-                                            <span class="badge" style="font-size:10.5px;padding:2px 8px;background:var(--color-warning-light);color:var(--color-warning);border:1px solid #fcd34d;border-radius:10px;font-weight:700;">
+                                            <span class="badge" style="font-size:10.5px;padding:2px 8px;background:var(--color-warning-light);color:var(--color-warning);border:1px solid color-mix(in srgb, var(--warn) 40%, transparent);border-radius:10px;font-weight:700;">
                                                 🔄 Доопрацювати
                                             </span>
                                             {% elif prev.grade %}

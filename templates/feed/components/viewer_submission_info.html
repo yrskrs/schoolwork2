@@ -11,7 +11,7 @@
                         </div>
                         <div style="flex-shrink:0;">
                             {% if submission.grade == 'Доопрацювати' or submission.grade == 'доопрацювання' or submission.grade == 'д' or submission.grade == 'Д' %}
-                            <span class="badge" style="font-size:11px;padding:3px 8px;font-weight:800;background:var(--color-warning-light);color:var(--color-warning);border:1px solid #fcd34d;">
+                            <span class="badge" style="font-size:11px;padding:3px 8px;font-weight:800;background:var(--color-warning-light);color:var(--color-warning);border:1px solid color-mix(in srgb, var(--warn) 40%, transparent);">
                                 🔄 Доопрацювати
                             </span>
                             {% elif submission.grade %}
@@ -53,12 +53,12 @@
 
                         <!-- Колективна (групова) робота -->
                         {% if submission.is_collective_work %}
-                        <div style="background:rgba(99,102,241,0.08);border:1.5px solid rgba(99,102,241,0.3);border-radius:var(--radius-sm);padding:8px 10px;margin-top:4px;">
+                        <div style="background:rgba(var(--accent-rgb),0.08);border:1.5px solid rgba(var(--accent-rgb),0.3);border-radius:var(--radius-sm);padding:8px 10px;margin-top:4px;">
                             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
                                 <span style="font-weight:800;color:var(--color-primary);display:inline-flex;align-items:center;gap:4px;font-size:12px;">
                                     <span>👥</span> <span>Колективна робота</span>
                                 </span>
-                                <span class="badge" style="background:rgba(99,102,241,0.15);color:var(--color-primary);font-size:10px;font-weight:800;padding:1px 5px;">
+                                <span class="badge" style="background:rgba(var(--accent-rgb),0.15);color:var(--color-primary);font-size:10px;font-weight:800;padding:1px 5px;">
                                     Група
                                 </span>
                             </div>
@@ -81,7 +81,7 @@
                         {% if submission.is_resubmission or submission.resubmission_attempt > 1 %}
                         <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:2px;">
                             <span style="color:var(--color-text-muted);">🔄 Спроба:</span>
-                            <span class="badge" style="background:var(--color-success-light);color:var(--color-success);border:1px solid #a7f3d0;font-size:11px;font-weight:800;padding:2px 7px;">
+                            <span class="badge" style="background:var(--color-success-light);color:var(--color-success);border:1px solid color-mix(in srgb, var(--ok) 40%, transparent);font-size:11px;font-weight:800;padding:2px 7px;">
                                 Спроба #{{ submission.resubmission_attempt }} (Робота над помилками)
                             </span>
                         </div>
@@ -91,7 +91,7 @@
                         <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:2px;">
                             <span style="color:var(--color-text-muted);">🤖 Використання ШІ:</span>
                             {% if submission.assignment.allow_ai_usage %}
-                            <span class="badge" style="background:var(--color-success-light);color:var(--color-success);border:1px solid #a7f3d0;font-size:10.5px;font-weight:700;">
+                            <span class="badge" style="background:var(--color-success-light);color:var(--color-success);border:1px solid color-mix(in srgb, var(--ok) 40%, transparent);font-size:10.5px;font-weight:700;">
                                 💡 Дозволено вчителем
                             </span>
                             {% else %}
@@ -103,7 +103,7 @@
 
                         <!-- Ознаки використання ШІ у роботі (якщо виявлено) -->
                         {% if submission.ai_authorship_state == 'suspected' %}
-                        <div style="background:{% if submission.is_ai_allowed %}rgba(16,185,129,0.08){% else %}rgba(239,68,68,0.08){% endif %};border:1.5px solid {% if submission.is_ai_allowed %}#10b981{% else %}#ef4444{% endif %};border-radius:var(--radius-sm);padding:8px 10px;font-size:11.5px;margin-top:6px;">
+                        <div style="background:{% if submission.is_ai_allowed %}rgba(var(--ok-rgb),0.08){% else %}rgba(var(--danger-rgb),0.08){% endif %};border:1.5px solid {% if submission.is_ai_allowed %}var(--ok){% else %}var(--danger){% endif %};border-radius:var(--radius-sm);padding:8px 10px;font-size:11.5px;margin-top:6px;">
                             <div style="font-weight:800;color:{% if submission.is_ai_allowed %}var(--color-success){% else %}var(--color-danger){% endif %};display:flex;align-items:center;gap:6px;margin-bottom:3px;">
                                 <span>🤖</span>
                                 <span>Є ознаки використання ШІ ({{ submission.get_ai_generated_confidence_display|default:submission.ai_generated_confidence }})</span>
@@ -124,7 +124,7 @@
 
                     <!-- Попередження, якщо вчитель відкрив застарілу версію роботи, а учень здав новішу -->
                     {% if not submission.is_latest_attempt %}
-                    <div style="background:var(--color-warning-light);border:1.5px solid #fde68a;border-radius:var(--radius-sm);padding:8px 10px;font-size:11.5px;color:var(--color-warning);">
+                    <div style="background:var(--color-warning-light);border:1.5px solid color-mix(in srgb, var(--warn) 40%, transparent);border-radius:var(--radius-sm);padding:8px 10px;font-size:11.5px;color:var(--color-warning);">
                         <strong style="display:block;margin-bottom:2px;color:var(--color-warning);">⚠️ Це попередня версія роботи (Спроба #{{ submission.resubmission_attempt }})!</strong>
                         <div>Учень здав оновлену роботу (роботу над помилками). Цю спробу оцінювати не потрібно.</div>
                         {% if submission.subsequent_submissions.all %}
@@ -141,7 +141,7 @@
 
                     <!-- Блок інформації про попередню спробу -->
                     {% if submission.previous_submission %}
-                    <div style="background:var(--color-surface);border:1px solid rgba(16,185,129,0.35);border-radius:var(--radius-sm);padding:8px 10px;font-size:11.5px;">
+                    <div style="background:var(--color-surface);border:1px solid rgba(var(--ok-rgb),0.35);border-radius:var(--radius-sm);padding:8px 10px;font-size:11.5px;">
                         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
                             <strong style="color:var(--color-success);display:flex;align-items:center;gap:4px;">
                                 <span>📜</span> <span>Попередня спроба #{{ submission.previous_submission.resubmission_attempt|default:"1" }}</span>

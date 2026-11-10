@@ -6,18 +6,18 @@
             
             <!-- Ліва кольорова смужка статусу -->
             <div style="position: absolute; left: 0; top: 0; bottom: 0; width: 4px; 
-                {% if live_lesson_status.status_type == 'in_lesson' %}background: #10b981;
-                {% elif live_lesson_status.status_type == 'in_break' %}background: #f59e0b;
-                {% elif live_lesson_status.status_type == 'before_school' %}background: #3b82f6;
+                {% if live_lesson_status.status_type == 'in_lesson' %}background: var(--fill-success);
+                {% elif live_lesson_status.status_type == 'in_break' %}background: var(--fill-warning);
+                {% elif live_lesson_status.status_type == 'before_school' %}background: var(--fill-info);
                 {% else %}background: var(--color-primary);{% endif %}">
             </div>
 
             <div class="live-lesson-status-content" style="display: flex; align-items: center; gap: 12px; padding-left: 4px; min-width: 0; flex: 1 1 auto;">
                 <!-- Іконка статусу -->
                 <div class="status-icon-bubble" style="width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0;
-                    {% if live_lesson_status.status_type == 'in_lesson' %}background: rgba(16, 185, 129, 0.15); color:var(--color-success);
-                    {% elif live_lesson_status.status_type == 'in_break' %}background: rgba(245, 158, 11, 0.15); color:var(--color-warning);
-                    {% elif live_lesson_status.status_type == 'before_school' %}background: rgba(59, 130, 246, 0.15); color:var(--color-info);
+                    {% if live_lesson_status.status_type == 'in_lesson' %}background: rgba(var(--ok-rgb), 0.15); color:var(--color-success);
+                    {% elif live_lesson_status.status_type == 'in_break' %}background: rgba(var(--warn-rgb), 0.15); color:var(--color-warning);
+                    {% elif live_lesson_status.status_type == 'before_school' %}background: rgba(var(--info-rgb), 0.15); color:var(--color-info);
                     {% else %}background: var(--color-bg-secondary); color: var(--color-text-secondary);{% endif %}">
                     {% if live_lesson_status.status_type == 'in_lesson' %}🔔
                     {% elif live_lesson_status.status_type == 'in_break' %}☕
@@ -28,9 +28,9 @@
                 <div style="min-width: 0; flex: 1 1 auto;">
                     <div class="live-lesson-heading" style="display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; overflow: hidden;">
                         <span class="badge" style="font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 10px; flex-shrink: 0; white-space: nowrap;
-                            {% if live_lesson_status.status_type == 'in_lesson' %}background: rgba(16, 185, 129, 0.15); color:var(--color-success); border: 1px solid rgba(16, 185, 129, 0.3);
-                            {% elif live_lesson_status.status_type == 'in_break' %}background: rgba(245, 158, 11, 0.15); color:var(--color-warning); border: 1px solid rgba(245, 158, 11, 0.3);
-                            {% elif live_lesson_status.status_type == 'before_school' %}background: rgba(59, 130, 246, 0.15); color:var(--color-info); border: 1px solid rgba(59, 130, 246, 0.3);
+                            {% if live_lesson_status.status_type == 'in_lesson' %}background: rgba(var(--ok-rgb), 0.15); color:var(--color-success); border: 1px solid rgba(var(--ok-rgb), 0.3);
+                            {% elif live_lesson_status.status_type == 'in_break' %}background: rgba(var(--warn-rgb), 0.15); color:var(--color-warning); border: 1px solid rgba(var(--warn-rgb), 0.3);
+                            {% elif live_lesson_status.status_type == 'before_school' %}background: rgba(var(--info-rgb), 0.15); color:var(--color-info); border: 1px solid rgba(var(--info-rgb), 0.3);
                             {% else %}background: var(--color-bg-secondary); color: var(--color-text-secondary); border: 1px solid var(--color-border);{% endif %}">
                             {{ live_lesson_status.badge_text }}
                         </span>
@@ -47,7 +47,7 @@
 
                     {% if live_lesson_status.status_type == 'in_lesson' or live_lesson_status.status_type == 'in_break' %}
                     <div style="margin-top: 4px; width: 100%; max-width: 220px; height: 4px; background: rgba(0,0,0,0.08); border-radius: 2px; overflow: hidden; position: relative;">
-                        <div id="live-lesson-progress-fill" class="live-lesson-progress-fill" style="height: 100%; width: {{ live_lesson_status.progress_percent|default:0 }}%; background: {% if live_lesson_status.status_type == 'in_break' %}linear-gradient(90deg, #f59e0b, #fbbf24, #d97706){% else %}linear-gradient(90deg, #10b981, #34d399, #059669){% endif %}; border-radius: 2px; transition: width 0.4s ease;"></div>
+                        <div id="live-lesson-progress-fill" class="live-lesson-progress-fill" style="height: 100%; width: {{ live_lesson_status.progress_percent|default:0 }}%; background: {% if live_lesson_status.status_type == 'in_break' %}linear-gradient(90deg, var(--warn), var(--warn), var(--warn)){% else %}linear-gradient(90deg, var(--ok), var(--ok), var(--ok)){% endif %}; border-radius: 2px; transition: width 0.4s ease;"></div>
                     </div>
                     {% endif %}
                 </div>

@@ -12,7 +12,7 @@
 
         <!-- Вітальна плашка-банер -->
         <div style="text-align: center; margin-bottom: 24px;">
-            <div style="display: inline-flex; align-items: center; justify-content: center; width: 64px; height: 64px; border-radius: 20px; background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%); box-shadow: 0 10px 25px -5px rgba(99, 102, 241, 0.4); font-size: 32px; margin-bottom: 16px; animation: floatIcon 3s ease-in-out infinite;">
+            <div style="display: inline-flex; align-items: center; justify-content: center; width: 64px; height: 64px; border-radius: 20px; background: var(--fill-accent); box-shadow: 0 10px 25px -5px rgba(var(--accent-rgb), 0.4); font-size: 32px; margin-bottom: 16px; animation: floatIcon 3s ease-in-out infinite;">
                 🚀
             </div>
             <h1 style="font-size: 1.75rem; font-weight: 800; margin: 0 0 8px; color: var(--color-text-primary); letter-spacing: -0.02em;">
@@ -26,7 +26,7 @@
         <!-- Картка форми налаштування -->
         <div class="card" style="background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 18px; padding: 32px; box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.15); backdrop-filter: blur(10px);">
             
-            <div style="display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-radius: 12px; background: rgba(99, 102, 241, 0.08); border: 1px solid rgba(99, 102, 241, 0.2); margin-bottom: 24px;">
+            <div style="display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-radius: 12px; background: rgba(var(--accent-rgb), 0.08); border: 1px solid rgba(var(--accent-rgb), 0.2); margin-bottom: 24px;">
                 <span style="font-size: 20px;">🛡️</span>
                 <p style="margin: 0; font-size: 13px; line-height: 1.4; color: var(--color-text-secondary);">
                     У системі ще немає зареєстрованих адміністраторів. Створіть <strong>головний обліковий запис</strong> для керування платформою.
@@ -37,7 +37,7 @@
                 {% csrf_token %}
 
                 {% if form.non_field_errors %}
-                <div class="alert alert-error" style="margin-bottom: 20px; padding: 12px 16px; border-radius: 10px; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); color:var(--color-danger); font-size: 13px;">
+                <div class="alert alert-error" style="margin-bottom: 20px; padding: 12px 16px; border-radius: 10px; background: rgba(var(--danger-rgb), 0.1); border: 1px solid rgba(var(--danger-rgb), 0.3); color:var(--color-danger); font-size: 13px;">
                     {{ form.non_field_errors.0 }}
                 </div>
                 {% endif %}
@@ -108,7 +108,7 @@
                 <!-- Чекбокс типових даних -->
                 <div style="background: var(--color-bg-secondary, rgba(0,0,0,0.03)); border: 1px solid var(--color-border); border-radius: 12px; padding: 14px 16px; margin-bottom: 24px;">
                     <label style="display: flex; align-items: flex-start; gap: 12px; cursor: pointer; user-select: none;">
-                        <input type="checkbox" name="seed_default_data" id="id_seed_default_data" checked style="margin-top: 3px; width: 18px; height: 18px; accent-color: var(--color-primary, #6366f1); cursor: pointer;">
+                        <input type="checkbox" name="seed_default_data" id="id_seed_default_data" checked style="margin-top: 3px; width: 18px; height: 18px; accent-color: var(--accent); cursor: pointer;">
                         <div>
                             <span style="font-size: 13.5px; font-weight: 650; color: var(--color-text-primary); display: block; margin-bottom: 2px;">
                                 📦 Ініціалізувати базу стандартними предметами та класами НУШ
@@ -121,7 +121,7 @@
                 </div>
 
                 <!-- Кнопка сабміту -->
-                <button type="submit" class="btn btn-primary btn-block" style="padding: 13px 20px; font-size: 15.5px; font-weight: 700; border-radius: 12px; display: flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35); transition: all 0.2s ease;">
+                <button type="submit" class="btn btn-primary btn-block" style="padding: 13px 20px; font-size: 15.5px; font-weight: 700; border-radius: 12px; display: flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 4px 14px rgba(var(--accent-rgb), 0.35); transition: all 0.2s ease;">
                     <span>Створити адміністратора та увійти</span>
                     <span style="font-size: 18px;">➜</span>
                 </button>

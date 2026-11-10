@@ -16,7 +16,7 @@
 
       <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px;">
         <a href="{% url 'ai_settings' %}" class="btn btn-secondary btn-sm">← Налаштування ШІ</a>
-        <span class="badge" style="align-self:center;background:rgba(99,102,241,.12);color:var(--color-primary);padding:4px 10px;border-radius:10px;font-weight:700;">Оновлено 09.11.2026</span>
+        <span class="badge" style="align-self:center;background:rgba(var(--accent-rgb),.12);color:var(--color-primary);padding:4px 10px;border-radius:10px;font-weight:700;">Оновлено 09.11.2026</span>
       </div>
 
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;margin-bottom:18px;">
@@ -89,8 +89,8 @@
               <td style="padding:4px 0;font-weight:700;">{{ item.id }}</td>
               <td style="padding:4px 0;">{{ item.title }}</td>
               <td style="padding:4px 0;">
-                {% if item.status == 'done' %}<span style="color:#047857;font-weight:700;">✅ виконано</span>
-                {% elif item.status == 'next' %}<span style="color:#b45309;font-weight:700;">⏳ наступне</span>
+                {% if item.status == 'done' %}<span style="color:var(--ok);font-weight:700;">✅ виконано</span>
+                {% elif item.status == 'next' %}<span style="color:var(--warn);font-weight:700;">⏳ наступне</span>
                 {% else %}<span style="color:var(--color-text-secondary);">заплановано</span>{% endif %}
               </td>
             </tr>

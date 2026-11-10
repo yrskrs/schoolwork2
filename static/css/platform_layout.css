@@ -1,20 +1,5 @@
 /* Shared geometry and theme tokens for the complete platform. */
-:root {
-    --layout-page-width: 1200px;
-    --layout-sidebar-width: 280px;
-    --layout-gap: 20px;
-    --layout-page-gutter: 16px;
-    --action-primary-bg: #4f46e5;
-    --action-primary-hover: #4338ca;
-    --action-success-bg: #047857;
-    --action-success-hover: #065f46;
-    --action-danger-bg: #b91c1c;
-    --action-warning-bg: #92400e;
-    --action-text: #ffffff;
-    --color-info: #1d4ed8;
-    --color-success: #065f46;
-}
-[data-theme="dark"] { --color-info: #60a5fa; --color-success: #34d399; }
+/* Геометрія й палітра — у static/css/theme.css. */
 body .page-wrapper { width: 100%; max-width: var(--layout-page-width) !important; padding: 16px var(--layout-page-gutter) 24px !important; }
 .navbar-inner { max-width: var(--layout-page-width); }
 .page-wrapper .feed-layout { grid-template-columns: minmax(0, 1fr) var(--layout-sidebar-width); gap: var(--layout-gap); }
