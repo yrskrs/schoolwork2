@@ -1,4 +1,5 @@
 """Report filter contracts across shared lessons, rosters, roles and exports."""
+import os
 from datetime import datetime, timedelta, timezone as dt_timezone
 from itertools import product
 from unittest.mock import patch
@@ -216,3 +217,71 @@ class ReportFilterTests(TestCase):
         self.client.logout()
         self.assertEqual(self.client.get('/teacher/reports/').status_code, 302)
         self.assertEqual(self.client.get('/teacher/reports/pdf/').status_code, 302)
+
+    def test_teacher_reports_pagination_and_per_page_controls(self):
+        # Create additional synthetic submissions to exceed 25 items
+        for i in range(30):
+            Submission.objects.create(
+                assignment=self.shared, teacher=self.teacher, class_group=self.a,
+                first_name=f'Учень{i}', last_name=f'Тестовий{i}',
+                grade=f'{min(12, max(1, i % 12 + 1))}',
+                graded_by=self.user,
+                graded_at=datetime(2026, 10, 14, 10, tzinfo=dt_timezone.utc),
+                submitted_at=datetime(2026, 10, 14, 9, tzinfo=dt_timezone.utc),
+                is_latest_attempt=True
+            )
+
+        # Default per_page should be 25
+        resp = self.client.get('/teacher/reports/', {'class_id': 'all', 'pupil_scope': 'all', 'graded_only': '0'})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.context['per_page'], '25')
+        self.assertEqual(len(resp.context['submissions']), 25)
+        self.assertTrue(resp.context['page_obj'].has_next())
+        self.assertGreater(resp.context['stats']['total_count'], 25)
+
+        # Page 2
+        resp_p2 = self.client.get('/teacher/reports/', {'class_id': 'all', 'pupil_scope': 'all', 'graded_only': '0', 'page': 2})
+        self.assertEqual(resp_p2.status_code, 200)
+        self.assertEqual(resp_p2.context['page_obj'].number, 2)
+        self.assertEqual(resp_p2.context['page_obj'].start_index(), 26)
+
+        # Custom per_page = 10
+        resp_10 = self.client.get('/teacher/reports/', {'class_id': 'all', 'pupil_scope': 'all', 'graded_only': '0', 'per_page': '10'})
+        self.assertEqual(resp_10.status_code, 200)
+        self.assertEqual(len(resp_10.context['submissions']), 10)
+        self.assertEqual(resp_10.context['per_page'], '10')
+
+        # per_page = all
+        resp_all = self.client.get('/teacher/reports/', {'class_id': 'all', 'pupil_scope': 'all', 'graded_only': '0', 'per_page': 'all'})
+        self.assertEqual(resp_all.status_code, 200)
+        self.assertEqual(len(resp_all.context['submissions']), resp_all.context['stats']['total_count'])
+        self.assertFalse(resp_all.context['page_obj'].has_other_pages())
+
+    def test_log_archive_viewer_pagination(self):
+        import csv
+        from django.conf import settings
+
+        archive_dir = os.path.join(settings.MEDIA_ROOT, 'logs_archives')
+        os.makedirs(archive_dir, exist_ok=True)
+        test_file = 'test_paginated_log_archive.csv'
+        filepath = os.path.join(archive_dir, test_file)
+        try:
+            with open(filepath, 'w', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                writer.writerow(['ID', 'Action', 'Timestamp'])
+                for i in range(120):
+                    writer.writerow([i, f'Action {i}', '2026-11-10 12:00:00'])
+
+            resp = self.client.get(f'/teacher/activity/archives/{test_file}/view/')
+            self.assertEqual(resp.status_code, 200)
+            self.assertEqual(resp.context['total_rows'], 120)
+            self.assertEqual(len(resp.context['rows']), 50)
+            self.assertTrue(resp.context['page_obj'].has_next())
+
+            resp_p2 = self.client.get(f'/teacher/activity/archives/{test_file}/view/?page=2')
+            self.assertEqual(resp_p2.status_code, 200)
+            self.assertEqual(resp_p2.context['page_obj'].number, 2)
+            self.assertEqual(len(resp_p2.context['rows']), 50)
+        finally:
+            if os.path.exists(filepath):
+                os.remove(filepath)

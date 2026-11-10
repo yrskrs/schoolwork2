@@ -3,6 +3,55 @@
 
 {% block title %}Звіти оцінювання та журнал заміни | Шкільні Завдання{% endblock %}
 
+{% block extra_head %}
+<style>
+.pagination-wrap {
+    padding: 14px 20px;
+    border-top: 1px solid var(--color-border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    background: var(--color-surface);
+}
+.pagination-pages {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+.page-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 32px;
+    height: 32px;
+    padding: 0 9px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border);
+    background: var(--color-bg-secondary);
+    color: var(--color-text-primary);
+    font-size: 12.5px;
+    font-weight: 700;
+    text-decoration: none;
+    transition: all 0.15s ease;
+}
+.page-btn:hover {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+}
+.page-btn.active {
+    background: var(--action-primary-bg);
+    color: #fff;
+    border-color: var(--action-primary-bg);
+    box-shadow: 0 2px 6px rgba(var(--accent-rgb), 0.3);
+}
+.page-btn-nav {
+    padding: 0 12px;
+}
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="page-wrapper">
 
@@ -34,6 +83,7 @@
                 
                 <details class="filter-panel" open data-mobile-collapsed="true"><summary>Фільтри, період і експорт</summary>
                     <form method="GET" id="report-filter-form">
+                    <input type="hidden" name="per_page" id="report-per-page-hidden" value="{{ per_page }}">
                     
                     <div style="font-weight:800;font-size:14px;color:var(--color-text-primary);margin-bottom:12px;display:flex;align-items:center;gap:6px;">
                         <span>🔍</span> <span>Параметри вибірки оцінок:</span>
@@ -235,11 +285,11 @@
                     <div style="display:flex;align-items:center;gap:10px;">
                         <input type="checkbox" id="select-all-checkbox" checked onchange="toggleSelectAll(this)" style="width:17px;height:17px;cursor:pointer;">
                         <label for="select-all-checkbox" style="font-weight:800;font-size:13.5px;color:var(--color-text-primary);cursor:pointer;">
-                            Обрати всі (<span id="selected-count-label">{{ submissions|length }}</span> із {{ submissions|length }})
+                            Обрати всі на сторінці (<span id="selected-count-label">{{ submissions|length }}</span> із {{ submissions|length }})
                         </label>
                     </div>
                     <div style="font-size:12px;color:var(--color-text-secondary);">
-                        💡 <em>Позначте прапорцями лише тих учнів, чиї оцінки потрібно експортувати у PDF</em>
+                        💡 <em>Експорт у PDF за замовчуванням формується для <strong>всіх</strong> знайдених робіт ({{ stats.total_count }} шт.) за вказаними фільтрами.</em>
                     </div>
                 </div>
 
@@ -268,7 +318,7 @@
                                 </td>
                                 <!-- № -->
                                 <td style="padding:10px 8px;text-align:center;color:var(--color-text-muted);font-weight:700;">
-                                    {{ forloop.counter }}
+                                    {{ forloop.counter0|add:page_obj.start_index }}
                                 </td>
                                 <!-- Дата -->
                                 <td style="padding:10px 12px;white-space:nowrap;">
@@ -377,6 +427,51 @@
                     </table>
                 </div>
 
+                <!-- ── Пагінація та вибір кількості на сторінці ────────────────────── -->
+                <div class="pagination-wrap">
+                    <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+                        <div style="font-size:12.5px;color:var(--color-text-muted);">
+                            {% if stats.total_count > 0 %}
+                            Показано <strong>{{ page_obj.start_index }}–{{ page_obj.end_index }}</strong> із <strong>{{ stats.total_count }}</strong> робіт
+                            {% if page_obj.paginator.num_pages > 1 %}(сторінка <strong>{{ page_obj.number }}</strong> з <strong>{{ page_obj.paginator.num_pages }}</strong>){% endif %}
+                            {% else %}
+                            Роботи відсутні
+                            {% endif %}
+                        </div>
+                        <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--color-text-secondary);">
+                            <label for="report-per-page-select">Показувати по:</label>
+                            <select id="report-per-page-select" class="form-input" style="padding:3px 8px;font-size:12px;height:28px;" onchange="changePerPage(this.value)">
+                                <option value="25" {% if per_page == '25' %}selected{% endif %}>25</option>
+                                <option value="50" {% if per_page == '50' %}selected{% endif %}>50</option>
+                                <option value="100" {% if per_page == '100' %}selected{% endif %}>100</option>
+                                <option value="all" {% if per_page == 'all' %}selected{% endif %}>Всі ({{ stats.total_count }})</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    {% if page_obj.has_other_pages %}
+                    <div class="pagination-pages">
+                        {% if page_obj.has_previous %}
+                        <a href="?{% if filter_querystring %}{{ filter_querystring }}&{% endif %}page={{ page_obj.previous_page_number }}" class="page-btn page-btn-nav" title="Попередня сторінка">← Попередня</a>
+                        {% endif %}
+
+                        {% for p in page_obj.paginator.page_range %}
+                            {% if p == page_obj.number %}
+                            <span class="page-btn active">{{ p }}</span>
+                            {% elif p == 1 or p == page_obj.paginator.num_pages or p >= page_obj.number|add:"-2" and p <= page_obj.number|add:"2" %}
+                            <a href="?{% if filter_querystring %}{{ filter_querystring }}&{% endif %}page={{ p }}" class="page-btn">{{ p }}</a>
+                            {% elif p == page_obj.number|add:"-3" or p == page_obj.number|add:"3" %}
+                            <span class="page-btn" style="border:none;background:transparent;cursor:default;">…</span>
+                            {% endif %}
+                        {% endfor %}
+
+                        {% if page_obj.has_next %}
+                        <a href="?{% if filter_querystring %}{{ filter_querystring }}&{% endif %}page={{ page_obj.next_page_number }}" class="page-btn page-btn-nav" title="Наступна сторінка">Наступна →</a>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                </div>
+
             </div>
 
         </div>
@@ -448,12 +543,20 @@ function setDatePreset(preset) {
     }
 }
 
+// ── Керування кількістю рядків на сторінці ──────────────────────────────────
+function changePerPage(val) {
+    const url = new URL(window.location.href);
+    url.searchParams.set('per_page', val);
+    url.searchParams.set('page', '1');
+    window.location.href = url.toString();
+}
+
 // ── Завантаження PDF ─────────────────────────────────────────────────────────
 function downloadReportPdf(mode) {
     const form = document.getElementById('report-filter-form');
     const params = new URLSearchParams(new FormData(form));
 
-    // Перевіряємо вибрані чекбокси
+    // Перевіряємо вибрані чекбокси на поточній сторінці
     const checkboxes = document.querySelectorAll('.sub-checkbox');
     const allChecked = Array.from(checkboxes).every(cb => cb.checked);
 
@@ -464,7 +567,13 @@ function downloadReportPdf(mode) {
             return;
         }
         params.set('selected_ids', selectedIds.join(','));
+    } else {
+        params.delete('selected_ids');
     }
+
+    // Для генерації повного PDF прибираємо параметри сторінкової розбивки веб-інтерфейсу
+    params.delete('page');
+    params.delete('per_page');
 
     params.set('mode', mode);
     const url = "{% url 'teacher_reports_pdf' %}?" + params.toString();

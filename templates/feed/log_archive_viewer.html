@@ -58,6 +58,23 @@
                         {% endfor %}
                     </tbody>
                 </table>
+
+                {% if page_obj and page_obj.has_other_pages %}
+                <div style="padding:14px 20px;border-top:1px solid var(--color-border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;background:var(--color-surface);">
+                    <div style="font-size:12.5px;color:var(--color-text-muted);">
+                        Показано <strong>{{ page_obj.start_index }}–{{ page_obj.end_index }}</strong> із <strong>{{ total_rows }}</strong> рядків (сторінка {{ page_obj.number }} з {{ page_obj.paginator.num_pages }})
+                    </div>
+                    <div style="display:flex;align-items:center;gap:6px;">
+                        {% if page_obj.has_previous %}
+                        <a href="?page={{ page_obj.previous_page_number }}" class="btn btn-secondary btn-sm">← Попередня</a>
+                        {% endif %}
+                        <span style="font-size:12.5px;font-weight:700;padding:4px 8px;">{{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
+                        {% if page_obj.has_next %}
+                        <a href="?page={{ page_obj.next_page_number }}" class="btn btn-secondary btn-sm">Наступна →</a>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
             </div>
 
         </div>

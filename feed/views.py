@@ -6727,12 +6727,14 @@ def teacher_reports(request):
 
     submissions = get_report_submissions(request.user, filters)
 
-    # Підрахунок статистики
+    # Підрахунок статистики за всіма знайденими записами
+    all_grades = list(submissions.values_list('grade', flat=True))
+    total_count = len(all_grades)
     grades_nums = []
-    for s in submissions:
-        if s.grade:
+    for g in all_grades:
+        if g:
             try:
-                val = float(s.grade.replace(',', '.').strip())
+                val = float(str(g).replace(',', '.').strip())
                 grades_nums.append(val)
             except ValueError:
                 pass
@@ -6743,6 +6745,29 @@ def teacher_reports(request):
     avg_cnt = sum(1 for g in grades_nums if 4 <= g < 7)
     low_cnt = sum(1 for g in grades_nums if g < 4)
 
+    # Серверна пагінація списку робіт (за замовчуванням 25 на сторінку)
+    per_page_raw = request.GET.get('per_page', '25')
+    if per_page_raw == 'all':
+        page_size = max(total_count, 1)
+        per_page = 'all'
+    else:
+        try:
+            page_size = int(per_page_raw)
+            if page_size not in (10, 25, 50, 100):
+                page_size = 25
+            per_page = str(page_size)
+        except (ValueError, TypeError):
+            page_size = 25
+            per_page = '25'
+
+    paginator = Paginator(submissions, page_size)
+    page_number = request.GET.get('page', 1)
+    page_obj = paginator.get_page(page_number)
+
+    filter_params = request.GET.copy()
+    filter_params.pop('page', None)
+    filter_querystring = filter_params.urlencode()
+
     other_teachers = Teacher.objects.all()
     if teacher:
         other_teachers = other_teachers.exclude(id=teacher.id)
@@ -6752,15 +6777,18 @@ def teacher_reports(request):
 
     context = {
         'teacher': teacher,
-        'submissions': submissions,
+        'page_obj': page_obj,
+        'submissions': page_obj.object_list,
         'classes': classes,
         'assignments': assignments,
         'other_teachers': other_teachers,
         'school': school,
         'filters': filters,
+        'per_page': per_page,
+        'filter_querystring': filter_querystring,
         'selected_assignment_unavailable': assignment_id != 'all' and not any(str(a.pk) == assignment_id for a in assignments),
         'stats': {
-            'total_count': len(submissions),
+            'total_count': total_count,
             'grades_count': len(grades_nums),
             'avg_grade': avg_grade,
             'high_cnt': high_cnt,
@@ -7016,10 +7044,15 @@ def view_log_archive(request, filename):
     headers = rows[0] if rows else []
     data_rows = rows[1:] if len(rows) > 1 else []
 
+    paginator = Paginator(data_rows, 50)
+    page_number = request.GET.get('page', 1)
+    page_obj = paginator.get_page(page_number)
+
     return render(request, 'feed/log_archive_viewer.html', {
         'filename': safe_filename,
         'headers': headers,
-        'rows': data_rows,
+        'page_obj': page_obj,
+        'rows': page_obj.object_list,
         'total_rows': len(data_rows),
     })
 
