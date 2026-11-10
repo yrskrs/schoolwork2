@@ -1,8 +1,8 @@
-<div class="form-card mb-4" id="cloud-storage-settings-card">
-    <div class="form-card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+<details class="form-card mb-4 settings-disclosure" id="cloud-storage-settings-card" data-mobile-collapsed="true">
+    <summary class="form-card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;cursor:pointer;">
         <h2 class="form-card-title">☁️ Хмарні диски та сховища</h2>
         <span class="text-muted text-xs">Підключіть хмарні диски для легкого прикріплення матеріалів до завдань</span>
-    </div>
+    </summary>
     <div class="form-card-body">
         <p class="text-muted text-sm mb-4">
             Після підключення Nextcloud або Google Drive при створенні та редагуванні завдань з'явиться кнопка
@@ -258,7 +258,7 @@
 
         </div>
     </div>
-</div>
+</details>
 
 
 {% load static %}<script src="{% static 'js/cloud_storage_settings.js' %}?v=20261019-r1" defer></script>

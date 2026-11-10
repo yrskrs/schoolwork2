@@ -33,19 +33,23 @@ class AISettingsNavigationTests(TestCase):
             self.assertEqual(params['stats_days'], [days])
 
     def test_each_link_opens_only_its_panel_without_javascript(self):
+        # Panels are rendered on the server: only the requested one exists in
+        # the HTML, and every tab links to its own URL.
         sections = ['connection', 'criteria', 'models', 'statistics', 'errors']
         for section in sections:
             with self.subTest(section=section):
                 _, page = self.page({'tab': 'ai', 'ai_section': section, 'stats_days': '14'})
                 root = page.xpath('//*[@data-ai-settings]')[0]
                 panels = root.xpath('./section[@data-ai-panel]')
-                self.assertEqual(len(panels), 5)
-                self.assertEqual([p.get('data-ai-panel') for p in panels if 'hidden' not in p.attrib], [section])
+                self.assertEqual([p.get('data-ai-panel') for p in panels], [section])
                 tabs = root.xpath('.//*[@data-ai-tab]')
                 self.assertEqual([t.get('data-ai-tab') for t in tabs if t.get('aria-selected') == 'true'], [section])
                 for tab in tabs:
-                    self.assertEqual(parse_qs(urlsplit(tab.get('href')).query)['stats_days'], ['14'])
-                    self.assertEqual(len(root.xpath('./section[@id=$panel]', panel=tab.get('aria-controls'))), 1)
+                    query = parse_qs(urlsplit(tab.get('href')).query)
+                    self.assertEqual(query['stats_days'], ['14'])
+                    self.assertEqual(query['ai_section'], [tab.get('data-ai-tab')])
+                    if tab.get('data-ai-tab') == section:
+                        self.assertEqual(len(root.xpath('./section[@id=$panel]', panel=tab.get('aria-controls'))), 1)
 
     def test_default_and_unknown_section_open_connection(self):
         for query in ({'tab': 'ai'}, {'tab': 'ai', 'ai_section': 'unknown'}):

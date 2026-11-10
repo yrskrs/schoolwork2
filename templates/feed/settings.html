@@ -39,6 +39,7 @@
             <!-- ═══════════════════════════════════════════════════════════════════ -->
             <!-- 1. ВКЛАДКА: ПРОФІЛЬ ВЧИТЕЛЯ                                         -->
             <!-- ═══════════════════════════════════════════════════════════════════ -->
+            {% if active_tab == 'profile' %}
             <div id="tab-section-profile" class="settings-tab-pane" style="{% if active_tab != 'profile' %}display:none;{% endif %}">
 
                 <!-- 1.1. Основні дані та фото аватара -->
@@ -70,7 +71,7 @@
                             <form method="POST" style="display:inline-block;margin-top:10px">
                                 {% csrf_token %}
                                 <input type="hidden" name="action" value="remove_avatar">
-                                <button type="submit" class="btn btn-secondary btn-sm" style="color:var(--color-danger);border-color:rgba(239,68,68,0.3);font-size:12px" data-confirm="Прибрати фото аватара та повернути кольорові ініціали?">
+                                <button type="submit" class="btn btn-secondary btn-sm" style="color:var(--color-danger);border-color:rgba(var(--danger-rgb),0.3);font-size:12px" data-confirm="Прибрати фото аватара та повернути кольорові ініціали?">
                                     🗑️ Прибрати фото аватара
                                 </button>
                             </form>
@@ -222,7 +223,7 @@
                         <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px">
                             {% for cgroup in teacher_classes %}
                             <div style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:var(--radius-full);background:var(--color-bg-secondary);border:1px solid var(--color-border);font-size:13px">
-                                <span class="class-badge">{{ cgroup.grade }}{{ cgroup.letter }}</span>
+                                
                                 <span style="font-weight:700">{{ cgroup.name }}</span>
                                 <form method="POST" style="display:inline;margin:0">
                                     {% csrf_token %}
@@ -283,11 +284,13 @@
                 </div>
 
             </div>
+            {% endif %}
 
 
             <!-- ═══════════════════════════════════════════════════════════════════ -->
             <!-- 2. ВКЛАДКА: СЕРЕДОВИЩЕ ТА ЗАКЛАД                                    -->
             <!-- ═══════════════════════════════════════════════════════════════════ -->
+            {% if active_tab == 'environment' %}
             <div id="tab-section-environment" class="settings-tab-pane" style="{% if active_tab != 'environment' %}display:none;{% endif %}">
 
                 <!-- Підкатегорії Середовища -->
@@ -457,9 +460,9 @@
                                 </thead>
                                 <tbody>
                                     {% for slot in bell_schedules %}
-                                    <tr style="border-bottom:1px solid var(--color-border);transition:background 0.15s;" onmouseover="this.style.background='rgba(99,102,241,0.03)'" onmouseout="this.style.background='transparent'">
+                                    <tr style="border-bottom:1px solid var(--color-border);transition:background 0.15s;" onmouseover="this.style.background='rgba(var(--accent-rgb),0.03)'" onmouseout="this.style.background='transparent'">
                                         <td style="padding:12px;font-weight:800;">
-                                            <span style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;background:rgba(99,102,241,0.12);color:var(--color-primary);border-radius:6px;font-weight:800;">
+                                            <span style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;background:rgba(var(--accent-rgb),0.12);color:var(--color-primary);border-radius:6px;font-weight:800;">
                                                 {{ slot.lesson_number }}
                                             </span>
                                         </td>
@@ -474,7 +477,7 @@
                                         </td>
                                         <td style="padding:12px;">
                                             {% if slot.get_break_after is not None %}
-                                            <span style="display:inline-flex;align-items:center;gap:6px;padding:3px 10px;background:rgba(16,185,129,0.12);color:var(--color-success);border-radius:12px;font-weight:700;font-size:12px;border:1px solid rgba(16,185,129,0.25);">
+                                            <span style="display:inline-flex;align-items:center;gap:6px;padding:3px 10px;background:rgba(var(--ok-rgb),0.12);color:var(--color-success);border-radius:12px;font-weight:700;font-size:12px;border:1px solid rgba(var(--ok-rgb),0.25);">
                                                 ☕ {{ slot.get_break_after }} хв перерви
                                             </span>
                                             {% else %}
@@ -516,7 +519,7 @@
 
                 <!-- 2.2. Адміністрування вчителів та доступів (Для Супер-Адміністратора) -->
                 {% if user.is_superuser %}
-                <div class="form-card mb-4" style="border-color:{% if is_superadmin_mode %}#f59e0b{% else %}var(--color-border){% endif %};">
+                <div class="form-card mb-4" style="border-color:{% if is_superadmin_mode %}var(--warn){% else %}var(--color-border){% endif %};">
                     <div class="form-card-header">
                         <h2 class="form-card-title">Керування вчителями закладу</h2>
                     </div>
@@ -632,15 +635,18 @@
                 </div> <!-- env-panel-school -->
 
             </div>
+            {% endif %}
 
 
             <!-- ═══════════════════════════════════════════════════════════════════ -->
             <!-- 3. ВКЛАДКА: НАЛАШТУВАННЯ ШІ (GEMINI AI & ПРІОРИТЕТИ МОДЕЛЕЙ)        -->
             <!-- ═══════════════════════════════════════════════════════════════════ -->
+            {% if active_tab == 'ai' %}
             <div id="tab-section-ai" class="settings-tab-pane" data-ai-settings data-ai-section="{{ ai_section }}" style="{% if active_tab != 'ai' %}display:none;{% endif %}">
 
                 {% include 'feed/components/ai_settings_tabs.html' %}
 
+                {% if ai_section == 'connection' %}
                 <section id="ai-panel-connection" class="ai-settings-panel" data-ai-panel="connection" role="tabpanel" aria-labelledby="ai-tab-connection" tabindex="0" {% if ai_section != 'connection' %}hidden{% endif %}>
                 <!-- 3.1. Параметри підключення API та глобальне ввімкнення -->
                 <div class="form-card mb-4">
@@ -657,7 +663,7 @@
                     <div class="form-card-body">
                         <!-- Інформаційне повідомлення про останнє перемикання (якщо відбувалося) -->
                         {% if ai_settings.last_failover_at %}
-                        <div style="background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);border-radius:var(--radius-md);padding:10px 14px;margin-bottom:18px;display:flex;align-items:center;gap:10px;font-size:13px;color:var(--color-warning);">
+                        <div style="background:rgba(var(--warn-rgb),0.1);border:1px solid rgba(var(--warn-rgb),0.3);border-radius:var(--radius-md);padding:10px 14px;margin-bottom:18px;display:flex;align-items:center;gap:10px;font-size:13px;color:var(--color-warning);">
                             <span style="font-size:18px;">⚡</span>
                             <div style="flex:1;">
                                 <strong>Останнє автоматичне перемикання:</strong> {{ ai_settings.last_failover_at|date:"d.m.Y H:i" }}
@@ -719,7 +725,7 @@
                                         <label for="ai_detector_tolerance_percent" class="form-label" style="font-weight:700;margin:0;display:flex;align-items:center;gap:6px;">
                                             <span>🛡️</span>
                                             <span>Ознаки ШІ та самостійність (поріг допустимості):</span>
-                                            <span class="badge" style="background:#6366f1;color:#fff;font-size:12px;font-weight:800;padding:2px 8px;border-radius:10px;">
+                                            <span class="badge badge-accent">
                                                 <span id="ai-tol-val">{{ ai_settings.ai_detector_tolerance_percent|default:25 }}</span>%
                                             </span>
                                         </label>
@@ -776,6 +782,8 @@
                 </div>
                 </section>
 
+                {% endif %}
+                {% if ai_section == 'criteria' %}
                 <section id="ai-panel-criteria" class="ai-settings-panel" data-ai-panel="criteria" role="tabpanel" aria-labelledby="ai-tab-criteria" tabindex="0" {% if ai_section != 'criteria' %}hidden{% endif %}>
                 <!-- 3.2. Шаблони критеріїв оцінювання та документи МОН (Word / PDF / TXT) -->
                 <div class="form-card mb-4" style="border-color:var(--color-primary);">
@@ -806,7 +814,7 @@
                         <!-- Список наявних шаблонів -->
                         <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:20px;">
                             {% for p in criteria_presets %}
-                            <div style="border:1px solid {% if p.is_default %}#10b981{% else %}var(--color-border){% endif %};border-radius:var(--radius-md);background:var(--color-surface);padding:14px 16px;box-shadow:0 1px 4px rgba(0,0,0,0.03);">
+                            <div style="border:1px solid {% if p.is_default %}var(--ok){% else %}var(--color-border){% endif %};border-radius:var(--radius-md);background:var(--color-surface);padding:14px 16px;box-shadow:0 1px 4px rgba(0,0,0,0.03);">
                                 <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;">
                                     <div style="flex:1;min-width:240px;">
                                         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
@@ -815,9 +823,9 @@
                                              <span class="badge" style="background:var(--action-success-bg);color:#fff;font-weight:800;font-size:11px;">⭐ Активний за замовчуванням</span>
                                             {% endif %}
                                             {% if p.evaluation_type == 'nus_gr' %}
-                                            <span class="badge" style="background:rgba(99,102,241,0.15);color:var(--color-primary);font-weight:800;font-size:11px;">🌟 Групи результатів (ГР)</span>
+                                            <span class="badge" style="background:rgba(var(--accent-rgb),0.15);color:var(--color-primary);font-weight:800;font-size:11px;">🌟 Групи результатів (ГР)</span>
                                             {% elif p.evaluation_type == 'traditional' %}
-                                            <span class="badge" style="background:rgba(245,158,11,0.15);color:var(--color-warning);font-weight:800;font-size:11px;">📊 Традиційна 1-12</span>
+                                            <span class="badge" style="background:rgba(var(--warn-rgb),0.15);color:var(--color-warning);font-weight:800;font-size:11px;">📊 Традиційна 1-12</span>
                                             {% endif %}
                                             {% if p.is_system %}
                                             <span class="badge" style="background:var(--color-bg-secondary);color:var(--color-text-muted);font-size:10px;font-weight:700;">Базовий системний</span>
@@ -835,7 +843,7 @@
                                         {% if gr_list %}
                                         <div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px;">
                                             {% for gr in gr_list %}
-                                            <span class="badge" style="background:var(--color-bg-secondary);border:1px solid rgba(99,102,241,0.25);color:var(--color-text-primary);font-size:11px;font-weight:600;padding:3px 8px;" title="{{ gr.name }}">
+                                            <span class="badge" style="background:var(--color-bg-secondary);border:1px solid rgba(var(--accent-rgb),0.25);color:var(--color-text-primary);font-size:11px;font-weight:600;padding:3px 8px;" title="{{ gr.name }}">
                                                 <strong style="color:var(--color-primary);">{{ gr.code }}:</strong> {{ gr.name|truncatechars:38 }}
                                             </span>
                                             {% endfor %}
@@ -845,7 +853,7 @@
 
                                         <!-- Прикріплений документ МОН -->
                                         {% if p.document_file or p.extracted_criteria_text %}
-                                        <div style="margin-top:8px;display:inline-flex;align-items:center;gap:6px;background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.3);border-radius:var(--radius-sm);padding:4px 10px;font-size:12px;">
+                                        <div style="margin-top:8px;display:inline-flex;align-items:center;gap:6px;background:rgba(var(--info-rgb),0.08);border:1px solid rgba(var(--info-rgb),0.3);border-radius:var(--radius-sm);padding:4px 10px;font-size:12px;">
                                             <span>📄 Документ МОН / Інструкція ГР:</span>
                                             {% if p.document_file %}
                                             <a href="{{ p.document_file.url }}" download class="text-primary font-bold" style="text-decoration:none;" title="Завантажити оригінал файлу">
@@ -947,7 +955,7 @@
                                 </div>
 
                                 <!-- Конфігурація груп результатів (ГР) -->
-                                <div class="form-group" id="new_gr_box" style="background:var(--color-surface);border:1px solid rgba(99,102,241,0.3);padding:14px;border-radius:var(--radius-md);">
+                                <div class="form-group" id="new_gr_box" style="background:var(--color-surface);border:1px solid rgba(var(--accent-rgb),0.3);padding:14px;border-radius:var(--radius-md);">
                                     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px;">
                                         <label class="form-label" style="font-weight:800;color:var(--color-primary);margin:0;display:flex;align-items:center;gap:6px;">
                                             <span>📊</span> <span>Групи результатів (ГР) для оцінювання:</span>
@@ -1012,6 +1020,8 @@
                 </div>
                 </section>
 
+                {% endif %}
+                {% if ai_section == 'models' %}
                 <section id="ai-panel-models" class="ai-settings-panel" data-ai-panel="models" role="tabpanel" aria-labelledby="ai-tab-models" tabindex="0" {% if ai_section != 'models' %}hidden{% endif %}>
                 <!-- 3.3. Черга пріоритетів моделей та автоматичний Fallback -->
                 <div class="form-card mb-4">
@@ -1041,7 +1051,7 @@
                                 </thead>
                                 <tbody>
                                     {% for ms in model_stats %}
-                                    <tr {% if ms.is_active %}style="background:rgba(99,102,241,0.07);font-weight:600;"{% endif %}>
+                                    <tr {% if ms.is_active %}style="background:rgba(var(--accent-rgb),0.07);font-weight:600;"{% endif %}>
                                         <!-- Пріоритетний бейдж -->
                                         <td style="text-align:center;">
                                             <span class="badge" style="background:var(--color-bg-secondary);color:var(--color-text-primary);font-weight:700;">#{{ ms.priority }}</span>
@@ -1054,10 +1064,10 @@
                                             <span style="font-size:10px;color:var(--color-primary);font-weight:800;margin-left:4px;">(Поточна)</span>
                                             {% endif %}
                                             {% if ms.context_limit_flagged %}
-                                            <span class="badge" style="background:rgba(239, 68, 68, 0.15);color:#dc2626;border:1px solid rgba(239, 68, 68, 0.3);font-size:10px;padding:2px 6px;border-radius:4px;margin-left:4px;" title="{{ ms.context_limit_error }}">⚠️ Зафіксовано ліміт контексту</span>
+                                            <span class="badge" style="background:rgba(var(--danger-rgb), 0.15);color:var(--danger);border:1px solid rgba(var(--danger-rgb), 0.3);font-size:10px;padding:2px 6px;border-radius:4px;margin-left:4px;" title="{{ ms.context_limit_error }}">⚠️ Зафіксовано ліміт контексту</span>
                                             {% endif %}
                                             {% if ms.is_in_cooldown %}
-                                            <span class="badge" style="background:rgba(245, 158, 11, 0.15);color:#d97706;border:1px solid rgba(245, 158, 11, 0.3);font-size:10px;padding:2px 6px;border-radius:4px;margin-left:4px;" title="{{ ms.cooldown_reason|default:'Модель тимчасово перевантажена' }}">⏳ Пауза ({{ ms.cooldown_remaining }}с)</span>
+                                            <span class="badge" style="background:rgba(var(--warn-rgb), 0.15);color:var(--warn);border:1px solid rgba(var(--warn-rgb), 0.3);font-size:10px;padding:2px 6px;border-radius:4px;margin-left:4px;" title="{{ ms.cooldown_reason|default:'Модель тимчасово перевантажена' }}">⏳ Пауза ({{ ms.cooldown_remaining }}с)</span>
                                             {% endif %}
                                         </td>
 
@@ -1156,18 +1166,26 @@
                 </div>
                 </section>
 
+                {% endif %}
+                {% if ai_section == 'statistics' %}
                 <section id="ai-panel-statistics" class="ai-settings-panel" data-ai-panel="statistics" role="tabpanel" aria-labelledby="ai-tab-statistics" tabindex="0" {% if ai_section != 'statistics' %}hidden{% endif %}>
                 {% include 'feed/components/ai_usage_statistics.html' %}
                 </section>
 
+                {% endif %}
+                {% if ai_section == 'errors' %}
                 <section id="ai-panel-errors" class="ai-settings-panel" data-ai-panel="errors" role="tabpanel" aria-labelledby="ai-tab-errors" tabindex="0" {% if ai_section != 'errors' %}hidden{% endif %}>
                 {% include 'feed/components/ai_error_analysis.html' %}
                 </section>
 
+                {% endif %}
             </div>
+            {% endif %}
 
             <!-- 4. ВКЛАДКА: API ТА ЛОКАЛЬНИЙ ЖУРНАЛ ОЦІНОК -->
+            {% if active_tab == 'api' %}
             {% include 'feed/components/settings_api_tab.html' %}
+            {% endif %}
 
         </div>
     </div>
@@ -1210,7 +1228,7 @@
             </div>
 
             <!-- Конфігурація груп результатів (ГР) -->
-            <div class="form-group" id="edit_gr_box" style="background:var(--color-bg-secondary);border:1px solid rgba(99,102,241,0.3);padding:14px;border-radius:var(--radius-md);">
+            <div class="form-group" id="edit_gr_box" style="background:var(--color-bg-secondary);border:1px solid rgba(var(--accent-rgb),0.3);padding:14px;border-radius:var(--radius-md);">
                 <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px;">
                     <label class="form-label" style="font-weight:800;color:var(--color-primary);margin:0;display:flex;align-items:center;gap:6px;">
                         <span>📊</span> <span>Групи результатів (ГР) для оцінювання:</span>
@@ -1546,61 +1564,20 @@ function switchEnvSubtab(sectionName, btnEl) {
     return false;
 }
 
-// Перемикання вкладок
+// Перемикання вкладок: вкладки тепер рендеряться на сервері, тому це навігація,
+// а не показ прихованих блоків. HTML сторінки зменшився втричі.
 function switchSettingsTab(tabName, linkEl, updateHistory, subSection) {
     if (tabName === 'notifications') {
         tabName = 'environment';
         subSection = 'notifications';
     }
-
-    // Оновлюємо кнопки вкладок
-    var tabs = document.querySelectorAll('#settings-main-tabs .tab-btn');
-    tabs.forEach(function(t) { t.classList.remove('active'); });
-    if (linkEl && linkEl.classList.contains('tab-btn')) {
-        linkEl.classList.add('active');
-    } else {
-        var matchingTab = document.querySelector('#settings-main-tabs a[href*="tab=' + tabName + '"]');
-        if (matchingTab) matchingTab.classList.add('active');
-    }
-
-    // Оновлюємо посилання у сайдбарі налаштувань
-    var sidebarItems = document.querySelectorAll('#settings-sidebar-links .sidebar-tab-item');
-    sidebarItems.forEach(function(item) { item.classList.remove('active'); });
-    if (tabName === 'environment' && subSection === 'notifications') {
-        var matchingSidebarNotif = document.querySelector('#settings-sidebar-links a[href*="section=notifications"]');
-        if (matchingSidebarNotif && matchingSidebarNotif.parentElement) {
-            matchingSidebarNotif.parentElement.classList.add('active');
-        }
-    } else {
-        var matchingSidebar = document.querySelector('#settings-sidebar-links a[href*="tab=' + tabName + '"]');
-        if (matchingSidebar && matchingSidebar.parentElement) {
-            matchingSidebar.parentElement.classList.add('active');
-        }
-    }
-
-    // Оновлюємо відображення блоків
-    var panes = document.querySelectorAll('.settings-tab-pane');
-    panes.forEach(function(p) { p.style.display = 'none'; });
-
-    var target = document.getElementById('tab-section-' + tabName);
-    if (target) target.style.display = 'block';
-
+    var url = '{% url "teacher_settings" %}?tab=' + encodeURIComponent(tabName);
     if (tabName === 'environment' && subSection) {
-        switchEnvSubtab(subSection);
+        url += '&section=' + encodeURIComponent(subSection);
+    } else if (tabName === 'ai' && window.SchoolNetAISettings) {
+        url += '&ai_section=' + encodeURIComponent(SchoolNetAISettings.getActive());
     }
-
-    // Оновлюємо URL без перезавантаження
-    if (history.pushState && updateHistory !== false) {
-        var newUrl = new URL(window.location.href);
-        newUrl.searchParams.set('tab', tabName);
-        if (tabName === 'environment' && subSection) {
-            newUrl.searchParams.set('section', subSection);
-        } else if (tabName === 'ai' && window.SchoolNetAISettings) {
-            newUrl.searchParams.set('ai_section', SchoolNetAISettings.getActive());
-        }
-        newUrl.hash = '';
-        history.pushState(null, '', newUrl);
-    }
+    window.location.assign(url);
     return false;
 }
 
@@ -1608,12 +1585,6 @@ function switchSettingsTabFromSidebar(tabName, linkEl, subSection) {
     return switchSettingsTab(tabName, null, true, subSection);
 }
 
-document.addEventListener('DOMContentLoaded', function() {
-    var params = new URLSearchParams(window.location.search);
-    if (params.get('section') === 'notifications' || params.get('tab') === 'notifications' || window.location.hash === '#submission-notification-settings') {
-        switchSettingsTab('environment', null, false, 'notifications');
-    }
-});
 
 function selectModelToInput(modelName, target, provider) {
     var connection = document.getElementById('new_model_connection');

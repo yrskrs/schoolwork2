@@ -12,6 +12,16 @@
         function select(section, options) {
             options = options || {};
             if (!sections.includes(section)) section = 'connection';
+            // Panels are rendered on the server: if this section is not in the
+            // document, navigate instead of hiding everything.
+            if (!panels.some(panel => panel.dataset.aiPanel === section)) {
+                const url = new URL(window.location.href);
+                url.searchParams.set('tab', 'ai');
+                url.searchParams.set('ai_section', section);
+                url.hash = '';
+                window.location.assign(url.toString());
+                return;
+            }
             active = section;
             root.dataset.aiSection = section;
             tabs.forEach(tab => {
