@@ -102,3 +102,7 @@ private-backups/
 # Private environment snapshots (never commit)
 .env.bak-*
 .env.before-*
+
+# Local UI-audit tooling (Playwright venv, uv cache)
+.audit-venv/
+.uv-cache/
