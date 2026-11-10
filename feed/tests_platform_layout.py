@@ -118,8 +118,10 @@ class PlatformNavigationTests(TestCase):
             with self.subTest(url=url):
                 page = self.page(self.client.get(url))
                 styles = page.xpath('//head/link[@rel="stylesheet"]/@href')
+                # ui.css is the final normalisation layer after school_ui.css.
                 self.assertEqual([urlparse(style).path for style in styles[-2:]],
-                                 ['/static/css/platform_layout.css', '/static/css/school_ui.css'])
+                                 ['/static/css/school_ui.css', '/static/css/ui.css'])
+                self.assertEqual(urlparse(styles[0]).path, '/static/css/theme.css')
                 switch = page.get_element_by_id('simplified-site-toggle')
                 self.assertEqual(switch.get('role'), 'switch')
                 self.assertTrue(switch.xpath('ancestor::nav[@aria-label="Головна навігація"]'))
@@ -232,7 +234,7 @@ class PlatformNavigationTests(TestCase):
             links = page.get_element_by_id(element).xpath(selector)
             self.assertEqual({parse_qs(urlparse(link).query)['tab'][0] for link in links if urlparse(link).query},
                              {'profile', 'environment', 'ai', 'api'})
-            self.assertEqual(len(links), 8 if element == 'settings-sidebar-links' else 5)
+            self.assertEqual(len(links), 8 if element == 'settings-sidebar-links' else 6)
             self.assertEqual(links.count(reverse('cloud_backups')),1)
             if element == 'settings-sidebar-links':
                 self.assertEqual(links.count(reverse('system_updates')), 1)

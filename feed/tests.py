@@ -965,10 +965,14 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
         self.assertEqual(resp_env.status_code, 200)
         self.assertContains(resp_env, 'Параметри закладу освіти')
 
-        # Вкладка ШІ
+        # Вкладка ШІ: панелі рендеряться на сервері, тому модельний розділ
+        # відкривається через ai_section, а не ховається на клієнті.
         resp_ai = self.client.get(reverse('teacher_settings') + '?tab=ai')
         self.assertEqual(resp_ai.status_code, 200)
-        self.assertContains(resp_ai, 'Пріоритети моделей та автоматичний перехід')
+        self.assertContains(resp_ai, 'Налаштування модуля ШІ')
+        resp_ai_models = self.client.get(reverse('teacher_settings') + '?tab=ai&ai_section=models')
+        self.assertEqual(resp_ai_models.status_code, 200)
+        self.assertContains(resp_ai_models, 'Пріоритети моделей та автоматичний перехід')
 
     def test_ai_model_priorities_management_and_deletion(self):
         """Тест додавання моделей з пріоритетами, зміни пріоритетів та видалення моделі."""
