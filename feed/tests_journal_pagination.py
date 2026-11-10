@@ -138,7 +138,7 @@ class JournalPaginationTests(TestCase):
         self.sub.ai_generated_details = 'Виявлено конкретну ознаку у файлі.'
         self.sub.save()
         response = Client().get(reverse('submission_detail', args=[self.sub.pk]))
-        self.assertContains(response, 'У роботі виявлено ознаки використання штучного інтелекту')
+        self.assertContains(response, 'Є ознаки використання ШІ')
 
     def test_review_keeps_navigation_and_persistent_grading_controls(self):
         response = self.client.get(reverse('view_file', args=[self.sub.pk]))

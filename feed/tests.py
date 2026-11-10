@@ -3795,7 +3795,7 @@ class AssignmentFileAIAndCoauthorTests(TestCase):
         # Перевірка відображення на submission_detail
         detail_resp = self.client.get(reverse('submission_detail', args=[sub.id]))
         self.assertEqual(detail_resp.status_code, 200)
-        self.assertContains(detail_resp, 'У роботі виявлено ознаки використання штучного інтелекту')
+        self.assertContains(detail_resp, 'Є ознаки використання ШІ')
         self.assertNotContains(detail_resp, '87%')  # Відсоток ШІ приховано для учня
         self.assertNotContains(detail_resp, 'Google Gemini')  # Згадування конкретно Google Gemini прибрано
         self.assertNotContains(detail_resp, 'Оцінки за групами результатів')  # Оцінки за ГР приховано
