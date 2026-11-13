@@ -8577,6 +8577,7 @@ def refine_assignment_description_with_gemini(teacher_notes, assignment_title=''
         "",
         "5. ФОРМАТУВАННЯ:",
         "   - Зрозуміла, доброзичлива українська мова, охайний Markdown.",
+        "   - НЕ використовуй HTML-теги (<div>, <img>, <iframe>, <script> тощо) — лише чистий Markdown.",
         "   - Надай ТІЛЬКИ готовий текст завдання без мета-вступів («Ось ваш опис:») та кінцевих приміток чи побажань успіху."
     ]
 
@@ -8635,8 +8636,12 @@ def refine_assignment_description_with_gemini(teacher_notes, assignment_title=''
                         except Exception:
                             pass
 
-                    md = MarkdownIt('commonmark', {'breaks': True, 'html': True})
-                    rendered_html = md.render(result_text)
+                    # Відповідь моделі — недовірений вміст: не рендеримо сирий HTML
+                    # (html=False) і додатково санітизуємо результат перед віддачею
+                    # у браузер, де він вставляється через innerHTML.
+                    from .utils import sanitize_html
+                    md = MarkdownIt('commonmark', {'breaks': True, 'html': False})
+                    rendered_html = sanitize_html(md.render(result_text))
 
                     model_display = f"{c_model} ({c_provider.title()})" if c_provider != 'gemini' else c_model
                     return {

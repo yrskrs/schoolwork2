@@ -498,3 +498,26 @@ class SystemAILogicAndFailoverTests(TestCase):
         uncapped = run({'is_choice_based': True})
         self.assertEqual(uncapped[0], '10')
         self.assertEqual(uncapped[7], [])
+
+    @patch('feed.gemini_service.call_ai_api')
+    def test_refine_assignment_description_sanitizes_untrusted_html(self, mock_call):
+        """Сирий HTML з відповіді моделі не має ставати виконуваною розміткою у прев'ю."""
+        settings = get_ai_settings()
+        settings.is_enabled = True
+        settings.api_key = 'AIzaValidKey'
+        settings.save()
+
+        payload = ('Опис завдання.\n\n<img src=x onerror="alert(1)">\n\n'
+                   '<iframe src="https://evil.example"></iframe>\n\n'
+                   '<script>alert(2)</script>\n\n**Жирний** текст')
+        mock_call.return_value = (200, payload, None, {})
+
+        resp = self.client.post(
+            reverse('teacher_refine_assignment_description'),
+            {'teacher_notes': 'Опис завдання'}
+        )
+        self.assertEqual(resp.status_code, 200)
+        html = resp.json()['html']
+        for tag in ('<img', '<iframe', '<script'):
+            self.assertNotIn(tag, html.lower())
+        self.assertIn('<strong>Жирний</strong>', html)
