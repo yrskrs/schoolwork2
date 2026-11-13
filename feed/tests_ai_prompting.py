@@ -159,6 +159,22 @@ class GeneratedFactsValidationTests(SimpleTestCase):
             'Оцінка 5,5 балів', '', 'Оцінка 5.5 бала')
         self.assertEqual(warnings, [])
 
+    def test_missing_deadline_date_produces_warning(self):
+        warnings = _validate_generated_facts(
+            'Дедлайн 20.11. Здати файл .xlsx', '',
+            'Завдання 1 — 8 балів. Здати .xlsx')
+        self.assertEqual(warnings, ['Не збережено дату: 20.11'])
+
+    def test_deadline_in_ukrainian_month_is_accepted(self):
+        warnings = _validate_generated_facts(
+            'Дедлайн 20.11.2026', '', 'Здати до 20 листопада 2026 року')
+        self.assertEqual(warnings, [])
+
+    def test_decimal_score_is_not_treated_as_date(self):
+        warnings = _validate_generated_facts(
+            'Оцінка 5.5 балів', '', 'Оцінка 5,5 балів')
+        self.assertEqual(warnings, [])
+
 
 # ════════════════════════════════════════════════════════════════════════════
 # Спільна база для endpoint-тестів 4.9.6
