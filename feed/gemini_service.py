@@ -8636,7 +8636,8 @@ def refine_assignment_description_with_gemini(teacher_notes, assignment_title=''
                 max_output_tokens=3500,
                 timeout=35,
                 json_mode=False,
-                thinking_budget=thinking_budget_val
+                thinking_budget=thinking_budget_val,
+                action='description_refinement'
             )
 
             if status_code == 200 and raw_text:
@@ -8681,10 +8682,13 @@ def refine_assignment_description_with_gemini(teacher_notes, assignment_title=''
         except Exception as e:
             attempted_errors.append(f"{c_provider}/{c_model}: {str(e)}")
 
-    detail = f" ({'; '.join(attempted_errors)})" if attempted_errors else ""
+    if attempted_errors:
+        # Деталі провайдерів/помилок пишемо в лог, а не у відповідь вчителю.
+        logger.warning('refine_assignment_description: усі спроби ШІ невдалі: %s',
+                       '; '.join(attempted_errors))
     return {
         'status': 'error',
-        'message': f"Не вдалося сформулювати опис завдання через тимчасову недоступність моделі ШІ{detail}. Спробуйте ще раз або перевірте налаштування ШІ."
+        'message': 'Не вдалося сформулювати опис завдання через тимчасову недоступність моделі ШІ. Спробуйте ще раз або перевірте налаштування ШІ.'
     }
 
 

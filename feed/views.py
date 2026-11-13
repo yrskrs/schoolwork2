@@ -8640,6 +8640,41 @@ def teacher_generate_assignment_criteria(request):
         }, status=400)
 
 
+_AI_DESC_FIELD_LIMITS = {
+    'teacher_notes': 8000,
+    'current_description': 8000,
+    'assignment_title': 300,
+    'subject_name': 120,
+    'class_group_name': 120,
+}
+
+
+def _clean_ai_description_field(body, key):
+    """Валідує текстове поле AJAX-запиту ШІ-помічника. Повертає (значення, помилка)."""
+    value = body.get(key, '')
+    if value is None:
+        return '', None
+    if not isinstance(value, str):
+        return None, 'Некоректні дані запиту: текстові поля мають бути рядками.'
+    value = value.strip()
+    limit = _AI_DESC_FIELD_LIMITS.get(key, 8000)
+    if len(value) > limit:
+        return None, f'Текст задовгий: максимум {limit} символів на поле.'
+    return value, None
+
+
+def _ai_refine_rate_limited(teacher):
+    """Обмежує випадковий спам дорогих запитів ШІ: 20 запитів на хвилину на вчителя."""
+    from django.core.cache import cache
+    try:
+        key = f'schoolnet:ai-desc-refine:{teacher.pk}'
+        if cache.add(key, 1, 60):
+            return False
+        return cache.incr(key) > 20
+    except Exception:
+        return False
+
+
 @teacher_required
 @require_POST
 def teacher_refine_assignment_description(request):
@@ -8651,28 +8686,47 @@ def teacher_refine_assignment_description(request):
 
     if request.content_type == 'application/json':
         try:
-            body = json.loads(request.body)
+            body = json.loads(request.body or b'{}')
         except Exception:
-            body = {}
-        teacher_notes = body.get('teacher_notes', '').strip()
-        assignment_title = body.get('assignment_title', '').strip()
-        current_description = body.get('current_description', '').strip()
-        subject_name = body.get('subject_name', '').strip()
-        class_group_name = body.get('class_group_name', '').strip()
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Некоректний формат JSON-запиту.'
+            }, status=400)
+        if not isinstance(body, dict):
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Некоректний формат JSON-запиту.'
+            }, status=400)
         has_materials = body.get('has_materials') in (True, 'true', 'True', '1', 1)
     else:
-        teacher_notes = request.POST.get('teacher_notes', '').strip()
-        assignment_title = request.POST.get('assignment_title', '').strip()
-        current_description = request.POST.get('current_description', '').strip()
-        subject_name = request.POST.get('subject_name', '').strip()
-        class_group_name = request.POST.get('class_group_name', '').strip()
-        has_materials = request.POST.get('has_materials') in ('1', 'true', 'True', 'on')
+        body = request.POST
+        has_materials = body.get('has_materials') in ('1', 'true', 'True', 'on')
+
+    values = {}
+    for field in _AI_DESC_FIELD_LIMITS:
+        value, error = _clean_ai_description_field(body, field)
+        if error:
+            return JsonResponse({'status': 'error', 'message': error}, status=400)
+        values[field] = value
+
+    teacher_notes = values['teacher_notes']
+    assignment_title = values['assignment_title']
+    current_description = values['current_description']
+    subject_name = values['subject_name']
+    class_group_name = values['class_group_name']
 
     if not teacher_notes and not current_description and not assignment_title:
         return JsonResponse({
             'status': 'error',
             'message': 'Будь ласка, вкажіть тему, чернетку або опис завдання.'
         }, status=400)
+
+    teacher = get_teacher_or_none(request)
+    if teacher and _ai_refine_rate_limited(teacher):
+        return JsonResponse({
+            'status': 'error',
+            'message': 'Забагато запитів до ШІ. Зачекайте хвилину й спробуйте ще раз.'
+        }, status=429)
 
     res = refine_assignment_description_with_gemini(
         teacher_notes=teacher_notes,
