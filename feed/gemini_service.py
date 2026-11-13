@@ -35,6 +35,7 @@ from .ai_privacy import private_assessment
 from .ai_transport import guarded_http, configured_call, retry_after
 from .ai_metrics import timed
 from . import ai_prompting
+from .ai_diff import build_line_diff
 
 logger = logging.getLogger(__name__)
 
@@ -8395,6 +8396,11 @@ def generate_criteria_with_gemini(teacher_notes, assignment_title='', assignment
     class_group_name = (class_group_name or '').strip()
     custom_criteria = strip_html_tags(custom_criteria or '').strip()
     evaluation_type = (evaluation_type or '').strip()
+    criteria_warnings = []
+    if evaluation_type and evaluation_type not in {'nus_gr', 'nus', 'traditional', 'custom'}:
+        criteria_warnings.append(
+            'Невідомий тип оцінювання; використано типову 12-бальну шкалу НУШ.')
+        evaluation_type = ''
     is_traditional = evaluation_type == 'traditional'
     is_custom = evaluation_type == 'custom' or bool(custom_criteria)
 
@@ -8526,10 +8532,13 @@ def generate_criteria_with_gemini(teacher_notes, assignment_title='', assignment
                             pass
 
                     model_display = f"{c_model} ({c_provider.title()})" if c_provider != 'gemini' else c_model
+                    log_generation_event(
+                        teacher, 'criteria_generation', ai_prompting.PROMPT_VERSION, model_display)
                     return {
                         'status': 'success',
                         'criteria': result_text,
                         'model_used': model_display,
+                        'warnings': criteria_warnings,
                         'prompt_version': ai_prompting.PROMPT_VERSION,
                     }
 
@@ -8718,7 +8727,7 @@ def _find_choice_block_end(lines, start):
     return index
 
 
-def _clean_hallucinated_choice_block(result_text, teacher_notes, current_description):
+def _clean_hallucinated_choice_block(result_text, teacher_notes, current_description, return_meta=False):
     """Видаляє ЛИШЕ галюцинований блок вибору, якщо вчитель прямо вимагає обов'язкові завдання.
 
     Правила безпеки:
@@ -8726,14 +8735,19 @@ def _clean_hallucinated_choice_block(result_text, teacher_notes, current_descrip
     - видаляється лише блок із заголовком «Увага ... вибір» з упевнено визначеним кінцем;
     - якщо межу блоку не визначено або очищення дає порожній текст — повертається оригінал;
     - видалення логуються без тексту вчителя/моделі.
+
+    return_meta=True повертає (текст, чи_було_видалення) для статистики.
     """
+    def result(text, removed=False):
+        return (text, removed) if return_meta else text
+
     if not (result_text or '').strip():
-        return result_text
+        return result(result_text, False)
     notes_intent = _detect_choice_intent(teacher_notes)
     description_intent = _detect_choice_intent(current_description)
     intent = notes_intent if notes_intent != 'unknown' else description_intent
     if intent != 'mandatory':
-        return result_text
+        return result(result_text, False)
 
     lines = result_text.splitlines()
     filtered = []
@@ -8746,7 +8760,7 @@ def _clean_hallucinated_choice_block(result_text, teacher_notes, current_descrip
                 logger.warning(
                     'ai_description_cleanup: не вдалося визначити межу блоку вибору; текст не змінено'
                 )
-                return result_text
+                return result(result_text, False)
             removed_lines += end - index
             index = end
             continue
@@ -8764,10 +8778,10 @@ def _clean_hallucinated_choice_block(result_text, teacher_notes, current_descrip
     cleaned = re.sub(r'\n{3,}', '\n\n', '\n'.join(final_lines)).strip()
     if not cleaned:
         logger.warning('ai_description_cleanup: очищення дало порожній текст; повернуто оригінал')
-        return result_text
+        return result(result_text, False)
     if removed_lines:
         logger.info('ai_description_cleanup: видалено рядків блоку вибору=%s', removed_lines)
-    return cleaned
+    return result(cleaned, bool(removed_lines))
 
 
 _DESC_REFINE_MAX_TOKENS = 3500
@@ -8783,6 +8797,19 @@ _FACT_EXT_RE = re.compile(
     re.IGNORECASE,
 )
 _FACT_NUMBER_RE = re.compile(r'\d+(?:[.,]\d+)?')
+_FACT_URL_RE = re.compile(r'https?://[^\s<>"»]+', re.IGNORECASE)
+_FACT_TASK_NUM_RE = re.compile(
+    r'\b(?:завдан\w*|вправ\w*|пункт\w*)\s*(?:№\s*)?(\d{1,2})\b',
+    re.IGNORECASE,
+)
+_INJECTION_PATTERNS = (
+    re.compile(r'\bігноруй(?:те)?\s+(?:попередні|всі|усі)\b', re.IGNORECASE),
+    re.compile(r'\bignore\s+(?:all\s+)?previous\b', re.IGNORECASE),
+    re.compile(r'\bти\s+тепер\s+', re.IGNORECASE),
+    re.compile(r'\byou\s+are\s+now\b', re.IGNORECASE),
+    re.compile(r'\bsystem\s*prompt\b', re.IGNORECASE),
+    re.compile(r'<\|(?:im_start|im_end|system|assistant)\|>', re.IGNORECASE),
+)
 _FACT_DATE_RE = re.compile(r'(?<![\d.])(\d{1,2})[./](\d{1,2})(?:[./](\d{2,4}))?(?!\d)')
 _FACT_DATE_KEYWORDS = ('дедлайн', 'термін', 'до ', 'дата', 'здачі', 'числа')
 _MONTHS_GENITIVE = (
@@ -8813,6 +8840,32 @@ def _extract_teacher_facts(*texts):
     return scores, extensions
 
 
+def _extract_teacher_links(*texts):
+    links = set()
+    for text in texts:
+        for match in _FACT_URL_RE.finditer(str(text or '')):
+            link = match.group(0).rstrip('.,;:!?)]}')
+            if link:
+                links.add(link)
+    return links
+
+
+def _extract_teacher_task_numbers(*texts):
+    numbers = set()
+    for text in texts:
+        for match in _FACT_TASK_NUM_RE.finditer(str(text or '')):
+            number = int(match.group(1))
+            if 1 <= number <= 99:
+                numbers.add(number)
+    return numbers
+
+
+def detect_prompt_injection(text):
+    """Повертає True, якщо в службовому тексті є типові команди для моделі."""
+    value = str(text or '')
+    return any(pattern.search(value) for pattern in _INJECTION_PATTERNS)
+
+
 def _extract_teacher_dates(source):
     """Витягує явні дати дедлайну/здачі, не плутаючи їх із десятковими балами."""
     dates = set()
@@ -8839,6 +8892,29 @@ def _date_present_in_result(day, month, result_lower):
     return f'{day} {month_name}' in result_lower or f'{day:02d} {month_name}' in result_lower
 
 
+def log_generation_event(teacher, action, prompt_version, model_used, guardrail_removed=False, fact_warnings_count=0):
+    """Записує факт успішної генерації для статистики якості ШІ."""
+    if teacher is None:
+        return
+    try:
+        from datetime import timedelta
+        from django.utils import timezone
+        from .models import AIGenerationEvent
+        AIGenerationEvent.objects.create(
+            teacher=teacher,
+            action=str(action or '')[:64],
+            prompt_version=str(prompt_version or '')[:64],
+            model_used=str(model_used or '')[:100],
+            guardrail_removed=bool(guardrail_removed),
+            fact_warnings_count=int(fact_warnings_count or 0),
+        )
+        # Ретенція журналу подій: не тримаємо сирі записи нескінченно.
+        AIGenerationEvent.objects.filter(
+            created_at__lt=timezone.now() - timedelta(days=90)).delete()
+    except Exception:
+        logger.debug('log_generation_event: не вдалося записати подію', exc_info=True)
+
+
 def _validate_generated_facts(teacher_notes, current_description, result_text):
     """Повертає попередження, якщо модель загубила бали або формат із вказівок.
 
@@ -8863,6 +8939,13 @@ def _validate_generated_facts(teacher_notes, current_description, result_text):
     for day, month in sorted(_extract_teacher_dates(source)):
         if not _date_present_in_result(day, month, result_lower):
             warnings.append(f'Не збережено дату: {day:02d}.{month:02d}')
+    for link in sorted(_extract_teacher_links(source)):
+        normalized_link = link.rstrip('/').lower()
+        if normalized_link not in result_lower.replace(' ', ''):
+            warnings.append(f'Не збережено посилання: {link[:80]}')
+    for number in sorted(_extract_teacher_task_numbers(source)):
+        if not re.search(rf'(?<!\d){number}(?!\d)', result):
+            warnings.append(f'Не збережено номер завдання: {number}')
     return warnings[:5]
 
 
@@ -8907,6 +8990,10 @@ def refine_assignment_description_with_gemini(teacher_notes, assignment_title=''
         teacher_notes=teacher_notes,
         current_description=current_description,
     )
+    input_warnings = []
+    if detect_prompt_injection(teacher_notes) or detect_prompt_injection(current_description):
+        input_warnings.append(
+            'У вказівках є текст, схожий на інструкції для ШІ; його оброблено як дані, а не як команди.')
 
     materials_attached = bool(has_materials)
     no_submission = bool(no_submission_required)
@@ -9052,8 +9139,8 @@ def refine_assignment_description_with_gemini(teacher_notes, assignment_title=''
                         result_text = "\n".join(lines).strip()
 
                     if result_text:
-                        cleaned_text = _clean_hallucinated_choice_block(
-                            result_text, teacher_notes, current_description)
+                        cleaned_text, guardrail_removed = _clean_hallucinated_choice_block(
+                            result_text, teacher_notes, current_description, return_meta=True)
                         if not cleaned_text.strip():
                             attempted_errors.append(
                                 f"{c_provider}/{c_model}: порожній опис після очищення")
@@ -9074,13 +9161,21 @@ def refine_assignment_description_with_gemini(teacher_notes, assignment_title=''
                         rendered_html = sanitize_html(md.render(cleaned_text))
 
                         model_display = f"{c_model} ({c_provider.title()})" if c_provider != 'gemini' else c_model
+                        fact_warnings = _validate_generated_facts(
+                            teacher_notes, current_description, cleaned_text)
+                        diff = build_line_diff(current_description, cleaned_text)
+                        log_generation_event(
+                            teacher, 'description_refinement', ai_prompting.PROMPT_VERSION,
+                            model_display, guardrail_removed, len(fact_warnings))
                         return {
                             'status': 'success',
                             'markdown': cleaned_text,
                             'html': rendered_html,
                             'model_used': model_display,
-                            'fact_warnings': _validate_generated_facts(
-                                teacher_notes, current_description, cleaned_text),
+                            'fact_warnings': fact_warnings,
+                            'input_warnings': input_warnings,
+                            'guardrail_removed': guardrail_removed,
+                            'diff': diff,
                             'prompt_version': ai_prompting.PROMPT_VERSION,
                         }
 

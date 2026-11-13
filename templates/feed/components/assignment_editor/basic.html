@@ -84,11 +84,20 @@
                 <ul id="ai-desc-fact-list" style="margin:0;padding-left:20px;font-size:12.5px;line-height:1.5;color:var(--color-text-primary, #1e293b);"></ul>
             </div>
 
-            <!-- Показ змін: простий line-diff між поточним текстом і згенерованим Markdown -->
+            <!-- Попередження щодо вхідного тексту (input_warnings: текст, схожий на інструкції для ШІ) -->
+            <div id="ai-desc-input-warning" style="display:none;margin-bottom:12px;padding:10px 13px;background:var(--color-info-light, #e0f2fe);border:1px solid color-mix(in srgb, var(--info, #0284c7) 45%, transparent);border-radius:6px;">
+                <div style="font-weight:700;font-size:12.5px;color:var(--color-info, #0369a1);margin-bottom:6px;">⚠️ Підозрілі інструкції у вашому тексті</div>
+                <ul id="ai-desc-input-list" style="margin:0;padding-left:20px;font-size:12.5px;line-height:1.5;color:var(--color-text-primary, #1e293b);"></ul>
+            </div>
+
+            <!-- Показ змін: серверний diff (ops + segments) або клієнтський fallback -->
             <details id="ai-desc-diff-details" style="display:none;margin-bottom:12px;">
                 <summary style="cursor:pointer;font-size:12.5px;font-weight:600;color:var(--color-text-secondary, #334155);">Показати зміни</summary>
                 <pre id="ai-desc-diff" style="margin:8px 0 0;padding:10px 12px;background:var(--color-bg-secondary, #f8fafc);border:1px solid var(--color-border);border-radius:6px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,'Liberation Mono',monospace;font-size:11.5px;line-height:1.5;color:var(--color-text-primary, #1e293b);max-height:240px;overflow:auto;white-space:pre-wrap;word-break:break-word;"></pre>
             </details>
+
+            <!-- Службова позначка: чи збережено версію в історію / чи видалено зайвий блок -->
+            <div id="ai-desc-save-note" style="display:none;margin-bottom:12px;font-size:11.5px;line-height:1.5;color:var(--color-text-muted, #64748b);"></div>
 
             <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;">
                 <button type="button" id="btn-append-desc" class="btn btn-sm btn-secondary" style="display:none;align-items:center;gap:6px;font-size:12.5px;font-weight:600;padding:6px 14px;border-radius:6px;cursor:pointer;">
@@ -101,6 +110,19 @@
                 </button>
             </div>
         </div>
+
+        <!-- Історія генерацій опису: останні 10 збережених версій (GET description-history) -->
+        <details id="ai-desc-history-details" style="margin-top:14px;border:1px solid var(--color-border);border-radius:8px;background:var(--surface);">
+            <summary style="cursor:pointer;font-weight:600;font-size:12.5px;color:var(--color-text-secondary, #334155);padding:10px 12px;">🕘 Історія генерацій опису</summary>
+            <div style="padding:0 12px 12px;">
+                <button type="button" id="btn-load-desc-history" class="btn btn-sm btn-secondary" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:5px 12px;border-radius:6px;cursor:pointer;">
+                    <span>🔄</span>
+                    <span>Завантажити історію</span>
+                </button>
+                <p id="ai-desc-history-status" style="margin:8px 0 0;font-size:11.5px;color:var(--color-text-muted, #64748b);">Показано останні 10 збережених версій для цього завдання.</p>
+                <ul id="ai-desc-history-list" style="list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:8px;"></ul>
+            </div>
+        </details>
     </div>
     <style>
         @keyframes descSpin { to { transform: rotate(360deg); } }

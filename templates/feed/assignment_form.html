@@ -740,6 +740,31 @@ function toggleEditorSourceMode() {
     var btnAppend = document.getElementById('btn-append-criteria');
     var targetTextarea = document.getElementById('id_custom_criteria');
     var modelBadge = document.getElementById('ai-criteria-model-badge');
+    var criteriaWarningBox = document.getElementById('ai-criteria-warning-box');
+    var criteriaWarningList = document.getElementById('ai-criteria-warning-list');
+
+    function hideCriteriaWarnings() {
+        if (criteriaWarningBox) criteriaWarningBox.style.display = 'none';
+        if (criteriaWarningList) criteriaWarningList.replaceChildren();
+    }
+
+    function renderCriteriaWarnings(warnings) {
+        if (!criteriaWarningBox || !criteriaWarningList) return;
+        criteriaWarningList.replaceChildren();
+        if (!Array.isArray(warnings) || warnings.length === 0) {
+            criteriaWarningBox.style.display = 'none';
+            return;
+        }
+        warnings.forEach(function(warning) {
+            if (warning === null || warning === undefined) return;
+            var text = String(warning).trim();
+            if (!text) return;
+            var li = document.createElement('li');
+            li.textContent = text;
+            criteriaWarningList.appendChild(li);
+        });
+        criteriaWarningBox.style.display = criteriaWarningList.children.length ? 'block' : 'none';
+    }
 
     if (!btnToggle || !panel) return;
 
@@ -834,6 +859,7 @@ function toggleEditorSourceMode() {
 
             if (errorBox) errorBox.style.display = 'none';
             if (resultBox) resultBox.style.display = 'none';
+            hideCriteriaWarnings();
 
             btnRun.disabled = true;
             if (spinner) spinner.style.display = 'inline-block';
@@ -873,6 +899,7 @@ function toggleEditorSourceMode() {
                 if (btnText) btnText.textContent = 'Згенерувати критерії (12 балів)';
 
                 if (!res.ok || res.data.status !== 'success') {
+                    hideCriteriaWarnings();
                     if (errorBox) {
                         errorBox.textContent = res.data.message || 'Помилка під час звернення до ШІ. Перевірте налаштування Gemini.';
                         errorBox.style.display = 'block';
@@ -882,6 +909,8 @@ function toggleEditorSourceMode() {
                     if (modelBadge && res.data.model_used) {
                         modelBadge.textContent = 'Модель: ' + res.data.model_used;
                     }
+                    // Попередження сервера (наприклад, невідомий тип оцінювання).
+                    renderCriteriaWarnings(res.data.warnings);
                     if (resultBox) {
                         resultBox.style.display = 'block';
                         resultBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -893,6 +922,7 @@ function toggleEditorSourceMode() {
                 if (spinner) spinner.style.display = 'none';
                 if (btnIcon) btnIcon.style.display = 'inline';
                 if (btnText) btnText.textContent = 'Згенерувати критерії (12 балів)';
+                hideCriteriaWarnings();
                 if (errorBox) {
                     errorBox.textContent = 'Мережева помилка при зверненні до сервера: ' + err.message;
                     errorBox.style.display = 'block';
@@ -957,22 +987,40 @@ function toggleEditorSourceMode() {
         var btnAppendDesc = document.getElementById('btn-append-desc');
         var factWarningDesc = document.getElementById('ai-desc-fact-warning');
         var factListDesc = document.getElementById('ai-desc-fact-list');
+        var inputWarningDesc = document.getElementById('ai-desc-input-warning');
+        var inputListDesc = document.getElementById('ai-desc-input-list');
         var diffDetailsDesc = document.getElementById('ai-desc-diff-details');
         var diffPreDesc = document.getElementById('ai-desc-diff');
+        var saveNoteDesc = document.getElementById('ai-desc-save-note');
+        var historyDetailsDesc = document.getElementById('ai-desc-history-details');
+        var historyListDesc = document.getElementById('ai-desc-history-list');
+        var historyStatusDesc = document.getElementById('ai-desc-history-status');
+        var btnLoadHistoryDesc = document.getElementById('btn-load-desc-history');
 
         var richEditor = document.getElementById('rich-editor');
         var descTextarea = document.getElementById('{{ form.description.id_for_label }}') || document.querySelector('textarea[name="description"]');
 
+        // ID завдання для історії генерацій (порожньо на сторінці створення).
+        var assignmentId = '{{ assignment.id|default:"" }}';
+
         var lastGeneratedHtml = '';
         var lastGeneratedMarkdown = '';
         var lastSourceText = '';
+        var historyLoadedOnce = false;
+        var historyLoading = false;
 
         // ── Допоміжні функції: факти-попередження та простий line-diff ──
         function hideFactAndDiff() {
             if (factWarningDesc) factWarningDesc.style.display = 'none';
             if (factListDesc) factListDesc.replaceChildren();
+            if (inputWarningDesc) inputWarningDesc.style.display = 'none';
+            if (inputListDesc) inputListDesc.replaceChildren();
             if (diffDetailsDesc) diffDetailsDesc.style.display = 'none';
             if (diffPreDesc) diffPreDesc.replaceChildren();
+            if (saveNoteDesc) {
+                saveNoteDesc.style.display = 'none';
+                saveNoteDesc.replaceChildren();
+            }
         }
 
         function renderFactWarnings(warnings) {
@@ -991,6 +1039,44 @@ function toggleEditorSourceMode() {
                 factListDesc.appendChild(li);
             });
             factWarningDesc.style.display = factListDesc.children.length ? 'block' : 'none';
+        }
+
+        function renderInputWarnings(warnings) {
+            if (!inputListDesc || !inputWarningDesc) return;
+            inputListDesc.replaceChildren();
+            if (!Array.isArray(warnings) || warnings.length === 0) {
+                inputWarningDesc.style.display = 'none';
+                return;
+            }
+            warnings.forEach(function(warning) {
+                if (warning === null || warning === undefined) return;
+                var text = String(warning).trim();
+                if (!text) return;
+                var li = document.createElement('li');
+                li.textContent = text;
+                inputListDesc.appendChild(li);
+            });
+            inputWarningDesc.style.display = inputListDesc.children.length ? 'block' : 'none';
+        }
+
+        // Службові позначки з відповіді: revision_saved / guardrail_removed.
+        function renderSaveNote(data) {
+            if (!saveNoteDesc) return;
+            saveNoteDesc.replaceChildren();
+            var lines = [];
+            if (data && data.guardrail_removed) {
+                lines.push('ℹ️ З відповіді видалено зайвий блок вибору варіантів, якого не було у ваших вказівках.');
+            }
+            if (data && data.revision_saved) {
+                lines.push('✅ Версію збережено в історії генерацій.');
+            }
+            lines.forEach(function(text, index) {
+                var line = document.createElement('div');
+                if (index) line.style.marginTop = '2px';
+                line.textContent = text;
+                saveNoteDesc.appendChild(line);
+            });
+            saveNoteDesc.style.display = lines.length ? 'block' : 'none';
         }
 
         // Обмежений LCS для рядків: повертає масив {type: '+','-',' ', text}.
@@ -1081,6 +1167,180 @@ function toggleEditorSourceMode() {
             diffDetailsDesc.style.display = 'block';
         }
 
+        // Серверний diff: ops [{type, text, segments:[{text, changed}]|null}] + truncated.
+        // Рендер лише через DOM/textContent; changed-сегменти підсвічуються окремим span.
+        function renderServerDiff(serverDiff) {
+            if (!diffPreDesc || !diffDetailsDesc) return false;
+            var ops = serverDiff && Array.isArray(serverDiff.ops) ? serverDiff.ops : null;
+            if (!ops || !ops.length) return false;
+            diffPreDesc.replaceChildren();
+            ops.forEach(function(op) {
+                if (!op) return;
+                var type = String(op.type || ' ').charAt(0);
+                if (type !== '+' && type !== '-' && type !== ' ') type = ' ';
+                var row = document.createElement('div');
+                row.style.cssText = 'display:block;white-space:pre-wrap;word-break:break-word;padding:0 4px;border-radius:3px;';
+                if (type === '+') {
+                    row.style.background = 'rgba(22, 163, 74, 0.16)';
+                    row.style.color = 'var(--ok, #15803d)';
+                } else if (type === '-') {
+                    row.style.background = 'rgba(220, 38, 38, 0.14)';
+                    row.style.color = 'var(--danger, #b91c1c)';
+                } else {
+                    row.style.color = 'var(--color-text-muted, #64748b)';
+                }
+                row.appendChild(document.createTextNode(type + ' '));
+                if (Array.isArray(op.segments) && op.segments.length) {
+                    op.segments.forEach(function(segment) {
+                        if (!segment) return;
+                        var segmentText = segment.text === null || segment.text === undefined ? '' : String(segment.text);
+                        if (!segmentText) return;
+                        if (segment.changed) {
+                            var mark = document.createElement('span');
+                            mark.style.background = type === '+' ? 'rgba(22, 163, 74, 0.35)' : 'rgba(220, 38, 38, 0.3)';
+                            mark.style.borderRadius = '2px';
+                            mark.textContent = segmentText;
+                            row.appendChild(mark);
+                        } else {
+                            row.appendChild(document.createTextNode(segmentText));
+                        }
+                    });
+                } else {
+                    row.appendChild(document.createTextNode(op.text === null || op.text === undefined ? '' : String(op.text)));
+                }
+                diffPreDesc.appendChild(row);
+            });
+            if (serverDiff.truncated) {
+                var truncatedNote = document.createElement('div');
+                truncatedNote.style.cssText = 'display:block;margin-top:6px;font-style:italic;color:var(--color-text-muted, #64748b);';
+                truncatedNote.textContent = '… diff обрізано: показано перші рядки тексту';
+                diffPreDesc.appendChild(truncatedNote);
+            }
+            diffDetailsDesc.style.display = 'block';
+            return true;
+        }
+
+        // ── Історія генерацій опису ──
+        function setHistoryStatus(text) {
+            if (!historyStatusDesc) return;
+            historyStatusDesc.textContent = text || '';
+            historyStatusDesc.style.display = text ? 'block' : 'none';
+        }
+
+        // Українське відмінювання слова «версія» для рядка статусу.
+        function pluralVersions(count) {
+            var abs = Math.abs(count) % 100;
+            var last = abs % 10;
+            if (abs > 10 && abs < 20) return 'версій';
+            if (last === 1) return 'версія';
+            if (last >= 2 && last <= 4) return 'версії';
+            return 'версій';
+        }
+
+        function restoreRevision(rev) {
+            if (!rev || typeof rev.html !== 'string' || !rev.html) return;
+            if (!window.confirm('Відновити цю версію опису? Поточний текст у редакторі буде замінено.')) return;
+            lastGeneratedHtml = rev.html;
+            lastGeneratedMarkdown = typeof rev.markdown === 'string' ? rev.markdown : '';
+            if (richEditor) richEditor.innerHTML = rev.html;
+            if (descTextarea) descTextarea.value = rev.html;
+            var restoreTarget = richEditor || descTextarea;
+            if (restoreTarget) {
+                restoreTarget.style.transition = 'box-shadow 0.3s ease, border-color 0.3s ease';
+                restoreTarget.style.borderColor = 'var(--ok)';
+                restoreTarget.style.boxShadow = '0 0 0 4px rgba(22, 163, 74, 0.25)';
+                restoreTarget.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                setTimeout(function() {
+                    restoreTarget.style.borderColor = '';
+                    restoreTarget.style.boxShadow = '';
+                }, 2200);
+            }
+            if (panelDesc) panelDesc.style.display = 'none';
+        }
+
+        function renderHistoryList(revisions) {
+            if (!historyListDesc) return;
+            historyListDesc.replaceChildren();
+            if (!Array.isArray(revisions) || revisions.length === 0) {
+                setHistoryStatus('Ще немає збережених версій опису для цього завдання.');
+                return;
+            }
+            setHistoryStatus('Останні ' + revisions.length + ' ' + pluralVersions(revisions.length) + ' (найновіші зверху).');
+            revisions.slice(0, 10).forEach(function(rev) {
+                if (!rev) return;
+                var item = document.createElement('li');
+                item.style.cssText = 'display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;padding:9px 11px;border:1px solid var(--color-border);border-radius:6px;background:var(--color-bg-secondary, #f8fafc);';
+
+                var info = document.createElement('div');
+                info.style.cssText = 'min-width:0;flex:1 1 220px;';
+                var meta = document.createElement('div');
+                meta.style.cssText = 'font-size:12.5px;font-weight:700;color:var(--color-text-primary, #1e293b);';
+                meta.textContent = (rev.created_at || '—') + (rev.model_used ? ' · ' + String(rev.model_used) : '');
+                info.appendChild(meta);
+
+                var details = [];
+                if (rev.prompt_version) details.push('prompt: ' + String(rev.prompt_version));
+                if (rev.guardrail_removed) details.push('ℹ️ видалено зайвий блок вибору');
+                var factWarnings = Array.isArray(rev.fact_warnings) ? rev.fact_warnings : [];
+                if (factWarnings.length) {
+                    details.push('⚠️ попереджень про факти: ' + factWarnings.length);
+                }
+                if (details.length) {
+                    var detailsLine = document.createElement('div');
+                    detailsLine.style.cssText = 'font-size:11.5px;color:var(--color-text-muted, #64748b);margin-top:2px;';
+                    detailsLine.textContent = details.join(' · ');
+                    if (factWarnings.length) {
+                        detailsLine.title = factWarnings.map(function(warning) {
+                            return String(warning);
+                        }).join('\n');
+                    }
+                    info.appendChild(detailsLine);
+                }
+                item.appendChild(info);
+
+                var restoreBtn = document.createElement('button');
+                restoreBtn.type = 'button';
+                restoreBtn.className = 'btn btn-sm btn-secondary';
+                restoreBtn.style.cssText = 'display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:600;padding:4px 11px;border-radius:6px;cursor:pointer;flex-shrink:0;';
+                restoreBtn.textContent = '↩️ Відновити';
+                restoreBtn.title = 'Вставити цю версію опису в редактор';
+                restoreBtn.addEventListener('click', function() { restoreRevision(rev); });
+                item.appendChild(restoreBtn);
+
+                historyListDesc.appendChild(item);
+            });
+        }
+
+        function loadDescriptionHistory() {
+            if (!historyListDesc || historyLoading) return;
+            historyLoading = true;
+            setHistoryStatus('Завантаження історії…');
+            fetch("{% url 'teacher_description_history' %}?assignment_id=" + encodeURIComponent(assignmentId), {
+                method: 'GET',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(function(resp) {
+                return resp.json().then(function(data) {
+                    return { ok: resp.ok, data: data };
+                });
+            })
+            .then(function(res) {
+                historyLoading = false;
+                if (!res.ok || !res.data || res.data.status !== 'success') {
+                    setHistoryStatus((res.data && res.data.message) || 'Не вдалося завантажити історію генерацій.');
+                    return;
+                }
+                historyLoadedOnce = true;
+                renderHistoryList(res.data.revisions);
+            })
+            .catch(function(err) {
+                historyLoading = false;
+                setHistoryStatus('Мережева помилка при завантаженні історії: ' + err.message);
+            });
+        }
+
         if (!btnToggleDesc || !panelDesc) return;
 
         btnToggleDesc.addEventListener('click', function() {
@@ -1095,6 +1355,20 @@ function toggleEditorSourceMode() {
         if (btnCloseDesc) {
             btnCloseDesc.addEventListener('click', function() {
                 panelDesc.style.display = 'none';
+            });
+        }
+
+        // Історія генерацій: автозавантаження при першому відкритті + кнопка оновлення.
+        if (historyDetailsDesc) {
+            historyDetailsDesc.addEventListener('toggle', function() {
+                if (historyDetailsDesc.open && !historyLoadedOnce) {
+                    loadDescriptionHistory();
+                }
+            });
+        }
+        if (btnLoadHistoryDesc) {
+            btnLoadHistoryDesc.addEventListener('click', function() {
+                loadDescriptionHistory();
             });
         }
 
@@ -1216,7 +1490,8 @@ function toggleEditorSourceMode() {
                         subject_name: subjectName,
                         class_group_name: classGroupName,
                         has_materials: hasMaterials,
-                        no_submission_required: noSubmission
+                        no_submission_required: noSubmission,
+                        assignment_id: assignmentId
                     })
                 })
                 .then(function(resp) {
@@ -1249,14 +1524,25 @@ function toggleEditorSourceMode() {
                         }
                         // Попередження про можливо втрачені факти (порожній масив — ховаємо блок).
                         renderFactWarnings(res.data.fact_warnings);
-                        // Простий line-diff: поточний текст редактора → згенерований Markdown.
-                        renderLineDiff(lastSourceText, lastGeneratedMarkdown);
+                        // Попередження щодо вхідного тексту (схожий на інструкції для ШІ).
+                        renderInputWarnings(res.data.input_warnings);
+                        // Службові позначки: збереження в історію / видалений зайвий блок.
+                        renderSaveNote(res.data);
+                        // Серверний diff (ops + intra-line segments); fallback — клієнтський LCS.
+                        var serverDiffRendered = renderServerDiff(res.data.diff);
+                        if (!serverDiffRendered) {
+                            renderLineDiff(lastSourceText, lastGeneratedMarkdown);
+                        }
                         if (btnAppendDesc) {
                             btnAppendDesc.style.display = lastGeneratedHtml ? 'inline-flex' : 'none';
                         }
                         if (resultBoxDesc) {
                             resultBoxDesc.style.display = 'block';
                             resultBoxDesc.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                        }
+                        // Якщо історія вже відкрита — оновлюємо її, щоб нова версія з'явилась.
+                        if (historyDetailsDesc && historyDetailsDesc.open) {
+                            loadDescriptionHistory();
                         }
                     }
                 })

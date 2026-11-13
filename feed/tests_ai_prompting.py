@@ -118,6 +118,8 @@ class GeneratedFactsValidationTests(SimpleTestCase):
             'Не збережено бали: 8',
             'Не збережено бали: 12',
             'Не збережено формат файлу: .xlsx',
+            'Не збережено номер завдання: 1',
+            'Не збережено номер завдання: 2',
         ])
 
     def test_preserved_facts_produce_no_warnings(self):
@@ -371,7 +373,7 @@ class GenerationThrottleTests(TestCase):
         row = AIGenerationThrottle.objects.create(
             teacher=self.teacher, action='criteria_generation')
         AIGenerationThrottle.objects.filter(pk=row.pk).update(
-            created_at=timezone.now() - timedelta(minutes=5))
+            created_at=timezone.now() - timedelta(days=8))
         self.assertFalse(_ai_generation_rate_limited(
             self.teacher, action='criteria_generation'))
         self.assertFalse(

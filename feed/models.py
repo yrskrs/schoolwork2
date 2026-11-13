@@ -4059,6 +4059,76 @@ class AIGenerationThrottle(models.Model):
         return f"{self.teacher_id}:{self.action} @ {self.created_at:%d.%m %H:%M:%S}"
 
 
+class AIGenerationRateWindow(models.Model):
+    """Атомарний лічильник вікна для спільного rate-limit генерацій ШІ."""
+    teacher = models.ForeignKey(
+        'Teacher', on_delete=models.CASCADE,
+        related_name='ai_generation_rate_windows', verbose_name='Вчитель')
+    action = models.CharField('Дія', max_length=64, db_index=True)
+    window_start = models.DateTimeField('Початок хвилини', db_index=True)
+    count = models.PositiveIntegerField('Кількість у вікні', default=0)
+
+    class Meta:
+        verbose_name = 'Вікно rate-limit генерацій'
+        verbose_name_plural = 'Вікна rate-limit генерацій'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['teacher', 'action', 'window_start'],
+                name='ai_rate_window_unique'),
+        ]
+        indexes = [
+            models.Index(fields=['window_start'], name='ai_rate_window_time_idx'),
+        ]
+
+
+class AIGenerationEvent(models.Model):
+    """Факт успішної генерації ШІ для статистики якості й спостережуваності."""
+    teacher = models.ForeignKey(
+        'Teacher', on_delete=models.CASCADE,
+        related_name='ai_generation_events', verbose_name='Вчитель')
+    action = models.CharField('Дія', max_length=64, default='description_refinement', db_index=True)
+    prompt_version = models.CharField('Версія промпту', max_length=64, blank=True, default='')
+    model_used = models.CharField('Модель', max_length=100, blank=True, default='')
+    guardrail_removed = models.BooleanField('Спрацював guardrail', default=False)
+    fact_warnings_count = models.PositiveIntegerField('Кількість факт-попереджень', default=0)
+    created_at = models.DateTimeField('Час генерації', auto_now_add=True, db_index=True)
+
+    class Meta:
+        verbose_name = 'Подія генерації ШІ'
+        verbose_name_plural = 'Події генерації ШІ'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['teacher', 'created_at'], name='ai_gen_event_teacher_time_idx'),
+        ]
+
+
+class AIDescriptionRevision(models.Model):
+    """Збережена історія генерацій опису завдання (source → result + diff)."""
+    teacher = models.ForeignKey(
+        'Teacher', on_delete=models.CASCADE,
+        related_name='ai_description_revisions', verbose_name='Вчитель')
+    assignment = models.ForeignKey(
+        'Assignment', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='ai_description_revisions', verbose_name='Завдання')
+    source_text = models.TextField('Текст до генерації', blank=True, default='')
+    result_markdown = models.TextField('Згенерований Markdown', blank=True, default='')
+    result_html = models.TextField('Згенерований HTML', blank=True, default='')
+    prompt_version = models.CharField('Версія промпту', max_length=64, blank=True, default='')
+    model_used = models.CharField('Модель', max_length=100, blank=True, default='')
+    diff = models.JSONField('Diff', default=dict, blank=True)
+    fact_warnings = models.JSONField('Факт-попередження', default=list, blank=True)
+    guardrail_removed = models.BooleanField('Спрацював guardrail', default=False)
+    created_at = models.DateTimeField('Створено', auto_now_add=True, db_index=True)
+
+    class Meta:
+        verbose_name = 'Історія генерації опису'
+        verbose_name_plural = 'Історії генерацій описів'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['teacher', 'assignment', 'created_at'], name='ai_desc_rev_teacher_time_idx'),
+        ]
+
+
 class AIErrorReport(models.Model):
     """
     Згенерований звіт аналізу помилок ШІ для передачі ШІ-розробнику або діагностики.

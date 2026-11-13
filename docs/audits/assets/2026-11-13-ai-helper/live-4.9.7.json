@@ -1,0 +1,62 @@
+{
+  "refine": {
+    "status_code": 200,
+    "status": "success",
+    "guardrail_removed": false,
+    "revision_saved": true,
+    "input_warnings": [
+      "У вказівках є текст, схожий на інструкції для ШІ; його оброблено як дані, а не як команди."
+    ],
+    "prompt_version": "2026-11-13.2",
+    "model_used": "deepseek-chat (Deepseek)",
+    "fact_warnings": [],
+    "diff_ops": 10,
+    "seconds": 2.2
+  },
+  "history": {
+    "status_code": 200,
+    "count": 1,
+    "first_keys": [
+      "created_at",
+      "diff",
+      "fact_warnings",
+      "guardrail_removed",
+      "html",
+      "id",
+      "markdown",
+      "model_used",
+      "prompt_version",
+      "source_text"
+    ]
+  },
+  "criteria": {
+    "status_code": 200,
+    "status": "success",
+    "warnings": [
+      "Невідомий тип оцінювання; використано типову 12-бальну шкалу НУШ."
+    ],
+    "prompt_version": "2026-11-13.2",
+    "model_used": "deepseek-chat (Deepseek)",
+    "seconds": 5.2
+  },
+  "ui": {
+    "create_status": 200,
+    "ids": {
+      "ai-desc-input-warning": 1,
+      "ai-desc-history-details": 1,
+      "ai-desc-history-list": 1,
+      "btn-load-desc-history": 1,
+      "btn-append-desc": 1,
+      "ai-desc-diff-details": 1
+    },
+    "history_url": true
+  },
+  "quality": {
+    "status": 200,
+    "has_generation_section": true
+  },
+  "events": {
+    "count": 2,
+    "revisions": 1
+  }
+}

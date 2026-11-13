@@ -8405,11 +8405,25 @@ def ai_quality_view(request):
     """Teacher-facing summary: current AI policy, calibration and known limitations."""
     from collections import Counter
     from django.conf import settings as django_settings
-    from .models import AIJob, AISettings, School
+    from datetime import timedelta
+    from django.db.models import Sum
+    from django.utils import timezone
+    from .models import AIJob, AIGenerationEvent, AISettings, School
     from .ai_jobs import pinned_model_for_assessment
 
     teacher = request.user.teacher_profile
     school = School.objects.first()
+    since = timezone.now() - timedelta(days=30)
+    generation_events = AIGenerationEvent.objects.filter(teacher=teacher, created_at__gte=since)
+    generation_stats = {
+        'total': generation_events.count(),
+        'description': generation_events.filter(action='description_refinement').count(),
+        'criteria': generation_events.filter(action='criteria_generation').count(),
+        'guardrail_removed': generation_events.filter(guardrail_removed=True).count(),
+        'with_fact_warnings': generation_events.filter(fact_warnings_count__gt=0).count(),
+        'fact_warnings_total': generation_events.aggregate(total=Sum('fact_warnings_count'))['total'] or 0,
+        'last_at': generation_events.order_by('-created_at').values_list('created_at', flat=True).first(),
+    }
     recent = list(AIJob.objects.filter(kind__in=('teacher_check', 'batch_check'))
                   .order_by('-created_at')[:50])
     model_counter = Counter((job.result or {}).get('model_used') or '—' for job in recent)
@@ -8446,7 +8460,7 @@ def ai_quality_view(request):
     }
     return render(request, 'feed/ai_quality.html', {
         'teacher': teacher, 'school': school, 'live': live, 'calibration': calibration,
-        'backlog': backlog, 'policy': policy,
+        'backlog': backlog, 'policy': policy, 'generation_stats': generation_stats,
     })
 
 
@@ -8626,8 +8640,6 @@ def teacher_generate_assignment_criteria(request):
     class_group_name = values['class_group_name']
     custom_criteria = values['custom_criteria']
     evaluation_type = values['evaluation_type']
-    if evaluation_type and evaluation_type not in {'nus_gr', 'nus', 'traditional', 'custom'}:
-        evaluation_type = ''
 
     if not teacher_notes and not assignment_description and not assignment_title:
         return JsonResponse({
@@ -8658,6 +8670,7 @@ def teacher_generate_assignment_criteria(request):
             'status': 'success',
             'criteria': res.get('criteria', ''),
             'model_used': res.get('model_used', ''),
+            'warnings': res.get('warnings', []),
             'prompt_version': res.get('prompt_version', ''),
         })
     if res.get('status') == 'success':
@@ -8693,7 +8706,7 @@ _AI_CRITERIA_FIELD_LIMITS = (
     ('assignment_description', 8000, 'Опис завдання'),
     ('subject_name', 120, 'Предмет'),
     ('class_group_name', 120, 'Клас'),
-    ('custom_criteria', 8000, 'Критерії вчителя'),
+    ('custom_criteria', 20000, 'Критерії вчителя'),
     ('evaluation_type', 30, 'Тип оцінювання'),
 )
 
@@ -8732,34 +8745,43 @@ def _as_bool(value):
 def _ai_generation_rate_limited(teacher, action='description_refinement', limit=20, window_seconds=60):
     """Спільний для всіх воркерів rate-limit генерацій ШІ на основі БД.
 
-    LocMemCache множив ліміт на кількість процесів і обнулявся після рестарту.
-    Записи в БД бачать усі воркери; старі рядки прибираються під час перевірки.
+    Використовує атомарний лічильник хвилинного вікна (AIGenerationRateWindow),
+    а не блокування рядка вчителя: різні дії/вікна не конкурують між собою.
+    Кожен дозволений запит додатково фіксується в AIGenerationThrottle як архів.
     """
     from datetime import timedelta
-    from django.db import transaction
+    from django.db import IntegrityError, transaction
+    from django.db.models import F
     from django.utils import timezone
-    from .models import AIGenerationThrottle, Teacher
+    from .models import AIGenerationRateWindow, AIGenerationThrottle
 
     now = timezone.now()
-    cutoff = now - timedelta(seconds=window_seconds)
+    window_start = now.replace(second=0, microsecond=0)
     try:
-        with transaction.atomic():
-            # Серіалізуємо перевірку per-teacher, щоб паралельні запити не проскочили ліміт.
-            Teacher.objects.select_for_update().get(pk=teacher.pk)
-            AIGenerationThrottle.objects.filter(
-                teacher=teacher, action=action, created_at__lt=cutoff).delete()
-            # Глобальне прибирання старих записів (дешеве, раз на запит).
-            AIGenerationThrottle.objects.filter(
-                created_at__lt=now - timedelta(days=1)).delete()
-            current = AIGenerationThrottle.objects.filter(
-                teacher=teacher, action=action, created_at__gte=cutoff).count()
-            if current >= limit:
-                return True
-            AIGenerationThrottle.objects.create(teacher=teacher, action=action)
-            return False
+        for _attempt in range(3):
+            try:
+                with transaction.atomic():
+                    window, _created = AIGenerationRateWindow.objects.get_or_create(
+                        teacher=teacher, action=action, window_start=window_start,
+                        defaults={'count': 0})
+                    window = AIGenerationRateWindow.objects.select_for_update().get(pk=window.pk)
+                    if window.count >= limit:
+                        return True
+                    AIGenerationRateWindow.objects.filter(pk=window.pk).update(count=F('count') + 1)
+                    AIGenerationThrottle.objects.create(teacher=teacher, action=action)
+                    # Ретенція: старі вікна й архівні події не тримаємо нескінченно.
+                    AIGenerationRateWindow.objects.filter(
+                        window_start__lt=now - timedelta(days=1)).delete()
+                    AIGenerationThrottle.objects.filter(
+                        created_at__lt=now - timedelta(days=7)).delete()
+                    return False
+            except IntegrityError:
+                # Паралельний воркер щойно створив вікно — повторюємо транзакцію.
+                continue
     except Exception:
         # Fail-open: збій журналу не повинен блокувати вчителя.
         return False
+    return False
 
 
 def _ai_refine_rate_limited(teacher):
@@ -8791,10 +8813,15 @@ def teacher_refine_assignment_description(request):
             }, status=400)
         has_materials = _as_bool(body.get('has_materials'))
         no_submission_required = _as_bool(body.get('no_submission_required'))
+        assignment_id_raw = body.get('assignment_id', '')
     else:
         body = request.POST
         has_materials = _as_bool(body.get('has_materials'))
         no_submission_required = _as_bool(body.get('no_submission_required'))
+        assignment_id_raw = body.get('assignment_id', '')
+    assignment_id = None
+    if str(assignment_id_raw).strip().isdigit():
+        assignment_id = int(str(assignment_id_raw).strip())
 
     values = {}
     for field in _AI_DESC_FIELD_LIMITS:
@@ -8834,13 +8861,38 @@ def teacher_refine_assignment_description(request):
     )
 
     if res.get('status') == 'success' and (res.get('markdown') or '').strip():
+        assignment = None
+        if teacher and assignment_id:
+            from .models import Assignment
+            assignment = Assignment.objects.filter(pk=assignment_id, teacher=teacher).first()
+        if teacher:
+            try:
+                from .models import AIDescriptionRevision
+                AIDescriptionRevision.objects.create(
+                    teacher=teacher,
+                    assignment=assignment,
+                    source_text=current_description,
+                    result_markdown=res.get('markdown', ''),
+                    result_html=res.get('html', ''),
+                    prompt_version=res.get('prompt_version', ''),
+                    model_used=res.get('model_used', ''),
+                    diff=res.get('diff') or {},
+                    fact_warnings=res.get('fact_warnings', []),
+                    guardrail_removed=bool(res.get('guardrail_removed')),
+                )
+            except Exception:
+                logger.warning('teacher_refine_assignment_description: не вдалося зберегти історію', exc_info=True)
         return JsonResponse({
             'status': 'success',
             'html': res.get('html', ''),
             'markdown': res.get('markdown', ''),
             'model_used': res.get('model_used', ''),
             'fact_warnings': res.get('fact_warnings', []),
+            'input_warnings': res.get('input_warnings', []),
+            'guardrail_removed': bool(res.get('guardrail_removed')),
+            'diff': res.get('diff') or {},
             'prompt_version': res.get('prompt_version', ''),
+            'revision_saved': bool(teacher),
         })
     if res.get('status') == 'success':
         return JsonResponse({
@@ -8852,6 +8904,37 @@ def teacher_refine_assignment_description(request):
         'message': res.get('message', 'Не вдалося сформулювати опис завдання.')
     }, status=400)
 
+
+
+@teacher_required
+def teacher_description_history(request):
+    """Останні збережені генерації опису для поточного вчителя."""
+    from .models import AIDescriptionRevision
+    teacher = get_teacher_or_none(request)
+    if not teacher:
+        return JsonResponse({'status': 'error', 'message': 'Немає доступу'}, status=403)
+    assignment_id_raw = request.GET.get('assignment_id', '')
+    qs = AIDescriptionRevision.objects.filter(teacher=teacher)
+    if str(assignment_id_raw).strip().isdigit():
+        qs = qs.filter(assignment_id=int(str(assignment_id_raw).strip()))
+    else:
+        qs = qs.filter(assignment__isnull=True)
+    revisions = qs.order_by('-created_at')[:10]
+    return JsonResponse({'status': 'success', 'revisions': [
+        {
+            'id': item.pk,
+            'created_at': item.created_at.strftime('%d.%m.%Y %H:%M'),
+            'model_used': item.model_used,
+            'prompt_version': item.prompt_version,
+            'fact_warnings': item.fact_warnings or [],
+            'guardrail_removed': item.guardrail_removed,
+            'markdown': item.result_markdown,
+            'html': item.result_html,
+            'source_text': item.source_text,
+            'diff': item.diff or {},
+        }
+        for item in revisions
+    ]})
 
 
 def api_classes_list(request):

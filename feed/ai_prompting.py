@@ -39,7 +39,11 @@ def teacher_data_block(tag, text):
     «закрити» блок і вставити інструкції поза ним. Це не загальний
     anti-prompt-injection механізм, а базова гігієна для службового тексту.
     """
-    value = str(text or "").strip()
+    value = str(text or "").replace("\r\n", "\n").replace("\r", "\n").strip()
+    # Керуючі/невидимі символи можуть візуально ховати інструкції від людини.
+    value = re.sub(
+        r"[\x00-\x08\x0b\x0c\x0e-\x1f\u200b-\u200f\u202a-\u202e\u2060\ufeff]",
+        "", value)
     value = _TAG_SAFE_RE.sub("", value)
     return f"<{tag}>\n{value}\n</{tag}>"
 

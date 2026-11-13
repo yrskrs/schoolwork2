@@ -157,6 +157,7 @@ urlpatterns = [
     path('api/ai/process-item/<int:submission_id>/', views.api_ai_process_item, name='api_ai_process_item'),
     path('teacher/assignment/generate-criteria/', views.teacher_generate_assignment_criteria, name='teacher_generate_assignment_criteria'),
     path('teacher/assignment/refine-description/', views.teacher_refine_assignment_description, name='teacher_refine_assignment_description'),
+    path('teacher/assignment/description-history/', views.teacher_description_history, name='teacher_description_history'),
 
     # ── Самоперевірка учня (ШІ) ──────────────────────────────────────────────────────
     path('submission/<int:submission_id>/student-ai-check/', views.student_ai_self_check, name='student_ai_self_check'),

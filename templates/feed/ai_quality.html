@@ -68,6 +68,22 @@
         </section>
 
         <section class="form-card" style="padding:16px 18px;">
+          <h2 style="margin:0 0 10px;font-size:17px;">Генерація описів і критеріїв · 30 днів</h2>
+          <table style="width:100%;border-collapse:collapse;font-size:13.5px;">
+            <tr><td style="color:var(--color-text-secondary);padding:3px 0;">Усього генерацій</td><td>{{ generation_stats.total }}</td></tr>
+            <tr><td style="color:var(--color-text-secondary);padding:3px 0;">Опис завдання</td><td>{{ generation_stats.description }}</td></tr>
+            <tr><td style="color:var(--color-text-secondary);padding:3px 0;">Критерії</td><td>{{ generation_stats.criteria }}</td></tr>
+            <tr><td style="color:var(--color-text-secondary);padding:3px 0;">Guardrail виправляв вибір</td><td>{{ generation_stats.guardrail_removed }}</td></tr>
+            <tr><td style="color:var(--color-text-secondary);padding:3px 0;">З факт-попередженнями</td><td>{{ generation_stats.with_fact_warnings }} · усього попереджень: {{ generation_stats.fact_warnings_total }}</td></tr>
+          </table>
+          {% if generation_stats.last_at %}
+          <p style="font-size:12px;color:var(--color-text-secondary);margin:8px 0 0;">
+            Остання генерація: {{ generation_stats.last_at|date:"d.m.Y H:i" }}
+          </p>
+          {% endif %}
+        </section>
+
+        <section class="form-card" style="padding:16px 18px;">
           <h2 style="margin:0 0 10px;font-size:17px;">Що вже виправлено</h2>
           <ul style="margin:0;padding-left:18px;font-size:13.5px;line-height:1.5;">
             <li>Бінарники не декодуються як текст; довідка не губиться.</li>
