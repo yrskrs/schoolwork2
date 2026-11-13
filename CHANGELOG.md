@@ -6,7 +6,7 @@
 - `templates/feed/access_required.html` («Потрібне посилання від учителя») отримав підключення `theme.css` — раніше там був лише `access_links.css`, тому кольори й тіні не узгоджувалися з темою сайту.
 - Cache-busting: `theme.css` і `access_links.css` на сторінках `access_enter` і `access_required`, а також `access_links.css` у консолі посилань підключено з `?v=20261113d` (замість старого `20261107c`), щоб браузери й тунель не показували закешований CSS.
 - Browser-тест `scripts/test_access_links_ui.py` тепер перевіряє центрування: відхилення центру картки ≤ 1px, `text-align: center` і `display: flex` у body (Chrome через CDP), а також збережену поведінку кнопки «Відкрити сайт». Додано Django-тест `feed/test_access_links.py`, який перевіряє класи сторінки, cache-busting `?v=20261113d` і наявність правил центрування в `access_links.css`.
-- Тести: додано перевірку геометрії сторінки доступу; `feed.test_access_links` — 46 тестів OK; Chrome/CDP browser-перевірка центрування — OK. [Звіт про центрування сторінки доступу](docs/audits/ACCESS_LANDING_CENTERING_4_9_8_2026-11-13.md).
+- Тести: додано перевірку геометрії сторінки доступу; `feed.test_access_links` — 46 тестів OK; Chrome/CDP browser-перевірка центрування — OK. Сервер 4.9.8 розгорнуто, публічний `/access/<token>/` віддає новий CSS і центровану картку (headless Chrome). [Звіт про центрування сторінки доступу](docs/audits/ACCESS_LANDING_CENTERING_4_9_8_2026-11-13.md).
 
 ## 4.9.7 — 2026-11-13 — Залишкові виправлення помічника опису: серверний diff, історія, безпека вхідного тексту й спостережуваність
 

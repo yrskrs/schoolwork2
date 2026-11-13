@@ -31,7 +31,7 @@
 - **Browser-тест:** `scripts/test_access_links_ui.py` (Chrome через CDP) перевіряє центрування картки за обчисленими стилями й геометрією, а не лише наявність елементів. Результат: **OK** — Chrome/CDP, центрування підтверджено обчисленими стилями (`centerOffset ≤ 1`, `text-align: center`, `display: flex`); скріншот [access-enter-fixed.png](assets/2026-11-13-ai-helper/access-enter-fixed.png).
 - **Django-тест:** `feed/test_access_links.py::test_access_landing_page_has_centered_layout_styles` перевіряє класи сторінки, `access_links.css?v=20261113d` і наявність правил центрування у CSS (`body.access-landing`, `display: flex`, `justify-content: center`, `.access-landing-card`, `text-align: center`, `.access-open`). Результат: **OK** — Chrome/CDP, центрування підтверджено обчисленими стилями (`centerOffset ≤ 1`, `text-align: center`, `display: flex`); скріншот [access-enter-fixed.png](assets/2026-11-13-ai-helper/access-enter-fixed.png).
 - **Скріншот та обчислені стилі:** візуальний скріншот сторінки `/access/<token>/` (1440×1100) підтверджує, що картка по центру екрана, а текст і кнопка вирівняні по центру: [access-enter-fixed.png](assets/2026-11-13-ai-helper/access-enter-fixed.png). Повні значення `getBoundingClientRect()`/`getComputedStyle()` — після прогону browser-тесту.
-- **CSS через тунель:** перевірка, що сторінка через HTTPS-тунель віддає оновлений `access_links.css` (cache-busting `?v=20261113d`) — буде уточнено після розгортання на сервері.
+- **CSS через тунель:** перевірка, що сторінка через HTTPS-тунель віддає оновлений `access_links.css` (cache-busting `?v=20261113d`) — **підтверджено**: live-сторінка посилається на `access_links.css?v=20261113d`, тунель віддає CSS 25 257 байт із правилами `body.access-landing`; headless Chrome-скріншот live-URL показує картку по центру екрана — [access-enter-live-fixed.png](assets/2026-11-13-ai-helper/access-enter-live-fixed.png).
 - **Узгодженість метаданих:** `VERSION`, `Dockerfile` (`ARG APP_VERSION`), `compose.yaml` (теги образів `app`/`ai_worker` і build arg; runner лишається 4.5.7), `README.md`, `feed/changelog.py` (`SITE_VERSION`, `SITE_VERSION_SHORT`, перший запис `CHANGELOG_DATA`) і `RELEASES.json` вказують на 4.9.8; `is_latest` рівно один; `python -m py_compile feed/changelog.py` — OK; історія 4.9.7 у журналі та CHANGELOG збережена.
 
 ## Залишкові обмеження
@@ -40,4 +40,10 @@
 - Автоматизована перевірка геометрії виконується лише в Chrome через CDP; Safari/WebKit і мобільні браузери окремим прогоном не покриті (як і в попередніх релізах).
 - Cache-busting ручний (`?v=20261113d`): під час наступних змін CSS версію треба оновлювати вручну, централізованого хешування статики не запроваджено.
 - Виправлення стосується саме публічних сторінок доступу; інші standalone-шаблони (наприклад, сторінки помилок) не змінювалися.
-- Перевірка через тунель залежить від його кешування та доступності Funnel; у межах цієї задачі повний прогін тунелем не виконувався — числа/скріншоти будуть уточнені після прогону.
+- Перевірка через тунель залежить від його кешування та доступності Funnel; у межах цієї задачі тунельний прогін виконано після розгортання 4.9.8 на сервері; залежність від кешу браузера/проксі знято cache-busting-параметром.
+
+## Розгортання на сервері
+
+- Сервер `192.168.1.13` (Tailscale `localwork`), застосунок `http://192.168.1.13:8080`, публічний Funnel — `https://localwork.tail9ec47d.ts.net`.
+- Оновлення виконано через `scripts/update.sh`: fast-forward до `eb82b947` (4.9.8), перевірена резервна копія, зібрано `schoolwork2-candidate:4.9.8-248fa7be1a3e`, `schoolnet_app`/`schoolnet_ai_worker` healthy, `manage.py check` — OK.
+- Публічний `/access/<token>/` після оновлення віддає новий CSS; headless Chrome показує центровану картку (див. скріншот вище).
