@@ -4032,6 +4032,33 @@ class AIRequestLog(models.Model):
         return f"{self.model_name} [{self.status_code}] - {self.total_tokens} токенів ({self.created_at.strftime('%d.%m %H:%M:%S')})"
 
 
+class AIGenerationThrottle(models.Model):
+    """Серверний журнал спроб генерації ШІ для спільного rate-limit між воркерами.
+
+    На відміну від LocMemCache, записи в БД бачать усі процеси gunicorn і після
+    рестарту ліміт не обнуляється. Старі записи прибираються під час перевірки.
+    """
+    teacher = models.ForeignKey(
+        'Teacher',
+        on_delete=models.CASCADE,
+        related_name='ai_generation_throttle',
+        verbose_name='Вчитель',
+    )
+    action = models.CharField('Дія', max_length=64, default='description_refinement', db_index=True)
+    created_at = models.DateTimeField('Час спроби', auto_now_add=True, db_index=True)
+
+    class Meta:
+        verbose_name = 'Спроба генерації ШІ'
+        verbose_name_plural = 'Спроби генерації ШІ (rate-limit)'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['teacher', 'action', 'created_at'], name='ai_throttle_teacher_time_idx'),
+        ]
+
+    def __str__(self):
+        return f"{self.teacher_id}:{self.action} @ {self.created_at:%d.%m %H:%M:%S}"
+
+
 class AIErrorReport(models.Model):
     """
     Згенерований звіт аналізу помилок ШІ для передачі ШІ-розробнику або діагностики.

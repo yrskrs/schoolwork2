@@ -34,6 +34,7 @@ from .document_parsers import parse_drawingml_chart_xml, format_python_pptx_char
 from .ai_privacy import private_assessment
 from .ai_transport import guarded_http, configured_call, retry_after
 from .ai_metrics import timed
+from . import ai_prompting
 
 logger = logging.getLogger(__name__)
 
@@ -8366,10 +8367,11 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
     return {'status': 'failed', 'error': all_err_msg}
 
 
-def generate_criteria_with_gemini(teacher_notes, assignment_title='', assignment_description='', subject_name='', class_group_name='', custom_model=None):
+def generate_criteria_with_gemini(teacher_notes, assignment_title='', assignment_description='', subject_name='', class_group_name='', custom_model=None, evaluation_type=None, custom_criteria='', teacher=None):
     """
-    Генерує структуровані індивідуальні критерії оцінювання за 12-бальною шкалою НУШ
-    на основі побажань вчителя, описаних звичайною мовою, та контексту завдання.
+    Генерує структуровані індивідуальні критерії оцінювання на основі побажань
+    вчителя. За замовчуванням — 12-бальна шкала НУШ; для traditional/custom
+    враховує обрану систему оцінювання й наявні критерії, не нав'язуючи рівні НУШ.
     Підтримує будь-якого налаштованого ШІ-провайдера та резервний API при збоях.
     """
     settings = get_ai_settings()
@@ -8386,57 +8388,92 @@ def generate_criteria_with_gemini(teacher_notes, assignment_title='', assignment
         if not act_key and act_provider != 'custom':
             return {'status': 'error', 'message': ('Додайте підключення та хоча б одну ввімкнену модель у Налаштуваннях ШІ.' if settings.unified_model_queue else f'API-ключ для {act_provider.title()} не налаштовано в системі.')}
 
-    teacher_notes = (teacher_notes or '').strip()
+    teacher_notes = strip_html_tags(teacher_notes or '').strip()
     assignment_title = (assignment_title or '').strip()
-    assignment_description = (assignment_description or '').strip()
+    assignment_description = strip_html_tags(assignment_description or '').strip()
     subject_name = (subject_name or '').strip()
     class_group_name = (class_group_name or '').strip()
+    custom_criteria = strip_html_tags(custom_criteria or '').strip()
+    evaluation_type = (evaluation_type or '').strip()
+    is_traditional = evaluation_type == 'traditional'
+    is_custom = evaluation_type == 'custom' or bool(custom_criteria)
 
     if not teacher_notes and not assignment_description and not assignment_title:
         return {'status': 'error', 'message': 'Будь ласка, опишіть вимоги до завдання або вкажіть тему чи опис.'}
 
-    # Формуємо контекст завдання
-    context_lines = []
-    if subject_name:
-        context_lines.append(f"Предмет: {subject_name}")
-    if class_group_name:
-        context_lines.append(f"Клас: {class_group_name}")
-    if assignment_title:
-        context_lines.append(f"Назва/тема завдання: {assignment_title}")
+    context_lines = ai_prompting.build_shared_context(
+        subject_name=subject_name,
+        class_group_name=class_group_name,
+        assignment_title=assignment_title,
+    )
     if assignment_description:
-        context_lines.append(f"Текстовий опис/умова завдання від вчителя:\n«{assignment_description}»")
+        context_lines.append(
+            "Текстовий опис/умова завдання від вчителя:\n"
+            + ai_prompting.teacher_data_block('assignment_description', assignment_description)
+        )
 
     prompt_parts = [
-        "Ти — досвідчений методист української школи та експерт з оцінювання результатів навчання за стандартами Нової української школи (НУШ) та 12-бальної шкали оцінювання.",
+        ai_prompting.prompt_version_line(),
+        ("Ти — досвідчений методист української школи та експерт з оцінювання результатів навчання; "
+         "вчитель обрав традиційну або власну систему оцінювання, тому не нав'язуй чотири рівні НУШ без потреби."
+         if is_traditional else
+         "Ти — досвідчений методист української школи та експерт з оцінювання результатів навчання за стандартами Нової української школи (НУШ) та 12-бальної шкали оцінювання."),
         "Вчитель створює завдання та описує своїми словами (звичайною розмовною мовою), що саме вимагається від учнів, на що звернути особливу увагу або які його вимоги до оцінювання.",
         "",
         "КОНТЕКСТ ЗАВДАННЯ:",
         "\n".join(context_lines) if context_lines else "(Тема завдання уточнюється)",
         "",
-        "ПОБАЖАННЯ ТА ВИМОГИ ВЧИТЕЛЯ (ОПИС СВОЇМИ СЛОВАМИ):",
-        f"«{teacher_notes}»" if teacher_notes else "(Вчитель просить скласти критерії на основі зазначеної теми та опису завдання)",
+        ai_prompting.data_boundary_rule(),
         "",
+        "ПОБАЖАННЯ ТА ВИМОГИ ВЧИТЕЛЯ (ОПИС СВОЇМИ СЛОВАМИ):",
+        ai_prompting.teacher_data_block('teacher_notes', teacher_notes) if teacher_notes else "(Вчитель просить скласти критерії на основі зазначеної теми та опису завдання)",
+        "",
+    ]
+    if custom_criteria:
+        prompt_parts += [
+            "УЧИТЕЛЬ УЖЕ МАЄ КРИТЕРІЇ (збережи їхню логіку та шкалу; уточни/структуруй, не замінюй без потреби):",
+            ai_prompting.teacher_data_block('custom_criteria', custom_criteria),
+            "",
+        ]
+    prompt_parts += [
         "ТВОЄ ЗАВДАННЯ:",
-        "1. Перетвори опис та побажання вчителя у чіткі, зрозумілі, педагогічно вивірені індивідуальні критерії оцінювання за 12-БАЛЬНОЮ ШКАЛОЮ (1–12 балів).",
-        "2. Структуруй критерії так, щоб вони були зрозумілими як для учнів (які ознайомляться з ними перед виконанням роботи), так і для ШІ та вчителя при оцінюванні.",
-        "3. Формат виводу повинен бути лаконічним і структурованим (наприклад, розподіл балів за компонентами завдання до 12 балів, або за 4 рівнями: Початковий 1–3 б., Середній 4–6 б., Достатній 7–9 б., Високий 10–12 б.).",
-        "4. Обов'язково чітко зазнач, що саме необхідно для отримання найвищого балу (10–12 балів), за що оцінка знижується, та які ключові акценти (власні думки, охайність, обґрунтованість тощо).",
+    ]
+    if is_traditional or is_custom:
+        prompt_parts += [
+            "1. Перетвори опис та побажання вчителя у чіткі, зрозумілі, педагогічно вивірені критерії оцінювання за шкалою, яку задав учитель або пресет.",
+            "2. Не нав'язуй чотири рівні НУШ, якщо їх немає у вказівках. Якщо шкала не вказана — використай 1–12 балів без обов'язкових рівнів НУШ.",
+            "3. Якщо вчитель уже надав критерії, збережи їхні ваги та формулювання; додай структуру й уточнення, але не замінюй логіку оцінювання.",
+        ]
+    else:
+        prompt_parts += [
+            "1. Перетвори опис та побажання вчителя у чіткі, зрозумілі, педагогічно вивірені індивідуальні критерії оцінювання за 12-БАЛЬНОЮ ШКАЛОЮ (1–12 балів).",
+            "2. Структуруй критерії так, щоб вони були зрозумілими як для учнів (які ознайомляться з ними перед виконанням роботи), так і для ШІ та вчителя при оцінюванні.",
+            "3. Формат виводу повинен бути лаконічним і структурованим (наприклад, розподіл балів за компонентами завдання до 12 балів, або за 4 рівнями: Початковий 1–3 б., Середній 4–6 б., Достатній 7–9 б., Високий 10–12 б.).",
+            "4. Обов'язково чітко зазнач, що саме необхідно для отримання найвищого балу (10–12 балів), за що оцінка знижується, та які ключові акценти (власні думки, охайність, обґрунтованість тощо).",
+        ]
+    prompt_parts += [
         "5. Формулюй українською мовою, діловим, доброзичливим та доступним для школярів тоном.",
+        *ai_prompting.language_rules(),
+        *ai_prompting.anti_hallucination_rules(),
         "6. Оформлюй відповідь у Markdown: короткі заголовки, списки та за потреби таблиця з колонками рівня, балів і вимог. Не використовуй HTML та не загортай усю відповідь у блок коду.",
-        "7. ВАЖЛИВО: Надай ТІЛЬКИ готовий текст критеріїв оцінювання, без жодних мета-вступів (на зразок «Ось критерії:», «Звісно...») та без кінцевих побажань."
+        "7. ВАЖЛИВО: Надай ТІЛЬКИ готовий текст критеріїв оцінювання, без жодних мета-вступів (на зразок «Ось критерії:», «Звісно...») та без кінцевих побажань.",
     ]
 
     full_prompt = "\n".join(prompt_parts)
 
+    raw_temperature = getattr(settings, 'temperature', None)
     try:
-        temp_val = float(getattr(settings, 'temperature', 0.3) or 0.3)
-        temperature = max(0.0, min(1.0, temp_val))
-    except (ValueError, TypeError):
-        temperature = 0.3
+        temperature = 0.2 if raw_temperature is None else float(raw_temperature)
+    except (TypeError, ValueError):
+        temperature = 0.2
+    temperature = max(0.0, min(1.0, temperature))
+    thinking_enabled = bool(getattr(settings, 'default_thinking_mode', False))
 
     attempts_configs = settings.get_request_configs(custom_model=custom_model)
 
     attempted_errors = []
+    last_provider = last_model = ''
+    last_status = None
 
     for cfg_idx, cfg in enumerate(attempts_configs):
         c_provider = cfg['provider']
@@ -8444,13 +8481,16 @@ def generate_criteria_with_gemini(teacher_notes, assignment_title='', assignment
         c_model = cfg['model']
         c_url = cfg['custom_url']
         c_is_backup = cfg['is_backup']
+        c_connection_id = cfg.get('connection_id') or None
         is_failover = (cfg_idx > 0) or (c_is_backup != is_backup_active)
 
         try:
-            thinking_budget_val = 0 if ('flash' in c_model.lower() and c_provider == 'gemini') else None
+            thinking_budget_val = None
+            if 'flash' in c_model.lower() and c_provider == 'gemini' and not thinking_enabled:
+                thinking_budget_val = 0
             status_code, raw_text, err_msg, raw_data = call_ai_api(
                 prompt_text=full_prompt,
-                system_prompt="",
+                system_prompt="",  # оцінювальний system_prompt тут не застосовується: це генерація критеріїв
                 inline_media=None,
                 provider=c_provider,
                 api_key=c_key,
@@ -8460,8 +8500,11 @@ def generate_criteria_with_gemini(teacher_notes, assignment_title='', assignment
                 max_output_tokens=3500,
                 timeout=35,
                 json_mode=False,
-                thinking_budget=thinking_budget_val
+                thinking_budget=thinking_budget_val,
+                action='criteria_generation',
+                connection_id=c_connection_id,
             )
+            last_provider, last_model, last_status = c_provider, c_model, status_code
 
             if status_code == 200 and raw_text:
                 result_text = raw_text.strip()
@@ -8486,7 +8529,8 @@ def generate_criteria_with_gemini(teacher_notes, assignment_title='', assignment
                     return {
                         'status': 'success',
                         'criteria': result_text,
-                        'model_used': model_display
+                        'model_used': model_display,
+                        'prompt_version': ai_prompting.PROMPT_VERSION,
                     }
 
             if status_code == 429:
@@ -8501,9 +8545,20 @@ def generate_criteria_with_gemini(teacher_notes, assignment_title='', assignment
         # Деталі провайдерів — тільки в лог, без витоку вчителю/учню.
         logger.warning('generate_criteria_with_gemini: усі спроби ШІ невдалі: %s',
                        '; '.join(attempted_errors))
+        log_ai_error(
+            teacher=teacher,
+            action='criteria_generation',
+            provider=last_provider,
+            model_name=last_model,
+            status_code=last_status,
+            error_type='all_attempts_failed',
+            error_message='; '.join(attempted_errors),
+            failover_triggered=len(attempted_errors) > 1,
+        )
     return {
         'status': 'error',
-        'message': 'Не вдалося згенерувати критерії через тимчасову недоступність моделі ШІ. Спробуйте ще раз або перевірте налаштування ШІ.'
+        'message': 'Не вдалося згенерувати критерії через тимчасову недоступність моделі ШІ. Спробуйте ще раз або перевірте налаштування ШІ.',
+        'prompt_version': ai_prompting.PROMPT_VERSION,
     }
 
 
@@ -8719,7 +8774,99 @@ _DESC_REFINE_MAX_TOKENS = 3500
 _DESC_REFINE_RETRY_MAX_TOKENS = 7000
 
 
-def refine_assignment_description_with_gemini(teacher_notes, assignment_title='', current_description='', subject_name='', class_group_name='', custom_model=None, has_materials=False, no_submission_required=False):
+_FACT_SCORE_RE = re.compile(
+    r'(?<![\d.,])(\d{1,2}(?:[.,]\d{1,2})?)\s*(?:бал(?:ів|и|а|ами|ах)?|б\.|очк(?:ів|и|а)?)',
+    re.IGNORECASE,
+)
+_FACT_EXT_RE = re.compile(
+    r'\.(xlsx|docx|pptx|pdf|py|zip|csv|png|jpe?g|txt|md|html|ods|odt)\b',
+    re.IGNORECASE,
+)
+_FACT_NUMBER_RE = re.compile(r'\d+(?:[.,]\d+)?')
+_FACT_DATE_RE = re.compile(r'(?<![\d.])(\d{1,2})[./](\d{1,2})(?:[./](\d{2,4}))?(?!\d)')
+_FACT_DATE_KEYWORDS = ('дедлайн', 'термін', 'до ', 'дата', 'здачі', 'числа')
+_MONTHS_GENITIVE = (
+    'січня', 'лютого', 'березня', 'квітня', 'травня', 'червня',
+    'липня', 'серпня', 'вересня', 'жовтня', 'листопада', 'грудня',
+)
+
+
+def _normalize_fact_number(value):
+    text = str(value or '').replace(',', '.').strip()
+    if '.' in text:
+        text = text.rstrip('0').rstrip('.')
+    return text
+
+
+def _extract_teacher_facts(*texts):
+    """Витягує з умов учителя бали та формати файлів, які не можна губити."""
+    scores = set()
+    extensions = set()
+    for text in texts:
+        source = str(text or '')
+        for match in _FACT_SCORE_RE.finditer(source):
+            value = _normalize_fact_number(match.group(1))
+            if value:
+                scores.add(value)
+        for match in _FACT_EXT_RE.finditer(source):
+            extensions.add(match.group(1).lower())
+    return scores, extensions
+
+
+def _extract_teacher_dates(source):
+    """Витягує явні дати дедлайну/здачі, не плутаючи їх із десятковими балами."""
+    dates = set()
+    text = str(source or '')
+    for match in _FACT_DATE_RE.finditer(text):
+        prefix = text[max(0, match.start() - 40):match.start()].lower()
+        if not any(keyword in prefix for keyword in _FACT_DATE_KEYWORDS):
+            continue
+        day, month = int(match.group(1)), int(match.group(2))
+        if 1 <= day <= 31 and 1 <= month <= 12:
+            dates.add((day, month))
+    return dates
+
+
+def _date_present_in_result(day, month, result_lower):
+    variants = {
+        f'{day:02d}.{month:02d}', f'{day}.{month}',
+        f'{day:02d}/{month:02d}', f'{day}/{month}',
+        f'{day:02d}-{month:02d}', f'{day}-{month}',
+    }
+    if any(variant in result_lower for variant in variants):
+        return True
+    month_name = _MONTHS_GENITIVE[month - 1]
+    return f'{day} {month_name}' in result_lower or f'{day:02d} {month_name}' in result_lower
+
+
+def _validate_generated_facts(teacher_notes, current_description, result_text):
+    """Повертає попередження, якщо модель загубила бали або формат із вказівок.
+
+    Це не блокує заміну опису: вчитель бачить попередження й сам вирішує.
+    Перевіряються лише однозначні факти (бали та розширення файлів), щоб
+    уникнути хибних спрацювань на перефразуванні дат/формулювань.
+    """
+    source = (teacher_notes or '').strip() or (current_description or '').strip()
+    result = str(result_text or '')
+    if not source or not result:
+        return []
+    scores, extensions = _extract_teacher_facts(source)
+    result_numbers = {_normalize_fact_number(value) for value in _FACT_NUMBER_RE.findall(result)}
+    result_lower = result.lower()
+    warnings = []
+    for score in sorted(scores, key=lambda value: float(value)):
+        if _normalize_fact_number(score) not in result_numbers:
+            warnings.append(f'Не збережено бали: {score}')
+    for extension in sorted(extensions):
+        if f'.{extension}' not in result_lower:
+            warnings.append(f'Не збережено формат файлу: .{extension}')
+    for day, month in sorted(_extract_teacher_dates(source)):
+        if not _date_present_in_result(day, month, result_lower):
+            warnings.append(f'Не збережено дату: {day:02d}.{month:02d}')
+    return warnings[:5]
+
+
+def refine_assignment_description_with_gemini(teacher_notes, assignment_title='', current_description='', subject_name='', class_group_name='', custom_model=None, has_materials=False, no_submission_required=False, teacher=None):
     """
     Формулює чіткий, доброзичливий для учнів та однозначний для алгоритмів ШІ опис завдання
     на основі чернетки чи побажань вчителя.
@@ -8753,19 +8900,13 @@ def refine_assignment_description_with_gemini(teacher_notes, assignment_title=''
     if not teacher_notes and not current_description and not assignment_title:
         return {'status': 'error', 'message': 'Будь ласка, вкажіть тему, чернетку або опис завдання.'}
 
-    context_lines = []
-    if subject_name:
-        context_lines.append(f"Предмет: {subject_name}")
-    if class_group_name:
-        context_lines.append(f"Клас: {class_group_name}")
-    if assignment_title:
-        context_lines.append(f"Назва/тема завдання: {assignment_title}")
-    if teacher_notes:
-        context_lines.append(f"НОВІ ВКАЗІВКИ / ПОБАЖАННЯ ВЧИТЕЛЯ (найвищий пріоритет; збережи все, що не суперечить):\n«{teacher_notes}»")
-    if current_description and current_description != teacher_notes:
-        context_lines.append(f"ПОПЕРЕДНІЙ ТЕКСТ У РЕДАКТОРІ (перероби згідно з новими вказівками; несуперечливі умови збережи):\n«{current_description}»")
-    elif not teacher_notes and current_description:
-        context_lines.append(f"ЧЕРНЕТКА / ВКАЗІВКИ ВЧИТЕЛЯ:\n«{current_description}»")
+    context_lines = ai_prompting.build_context_lines(
+        subject_name=subject_name,
+        class_group_name=class_group_name,
+        assignment_title=assignment_title,
+        teacher_notes=teacher_notes,
+        current_description=current_description,
+    )
 
     materials_attached = bool(has_materials)
     no_submission = bool(no_submission_required)
@@ -8774,15 +8915,17 @@ def refine_assignment_description_with_gemini(teacher_notes, assignment_title=''
         choice_intent = _detect_choice_intent(current_description)
 
     prompt_parts = [
+        ai_prompting.prompt_version_line(),
         "Ти — досвідчений шкільний методист та фахівець з інтелектуальних систем оцінювання знань школярів.",
         "Твоє завдання — перетворити чернетку чи вказівки вчителя на чітку, зрозумілу й лаконічну інструкцію для учнів, яку також однозначно інтерпретуватиме автоматичне ШІ-оцінювання платформи.",
         "",
         "МОВА ВІДПОВІДІ:",
-        "- Відповідай ВИКЛЮЧНО українською мовою. Українська — єдина мова відповіді, навіть якщо завдання стосується іноземної мови.",
-        "- Іншомовні приклади, цитати, назви чи команди з контексту зберігай без перекладу, але всі пояснення й інструкції формулюй українською.",
+        *ai_prompting.language_rules(),
         "",
         "КОНТЕКСТ ЗАВДАННЯ:",
         "\n".join(context_lines) if context_lines else "(Тема завдання уточнюється)",
+        "",
+        ai_prompting.data_boundary_rule(),
         "",
         "ГОЛОВНІ ПРИНЦИПИ (КРИТИЧНО ВАЖЛИВО):",
         "1. ПРІОРИТЕТ ВКАЗІВОК УЧИТЕЛЯ:",
@@ -8792,7 +8935,7 @@ def refine_assignment_description_with_gemini(teacher_notes, assignment_title=''
         "",
         "2. ЗМІСТ ТА ОРГАНІЗАЦІЯ:",
         "- Формулюй організаційні вказівки: що відкрити, що виконати, як підготувати й де продемонструвати результат.",
-        "- Не вигадуй фактів, матеріалів, назв файлів, номерів сторінок, балів, дедлайнів чи форматів, яких немає в контексті.",
+        *ai_prompting.anti_hallucination_rules(),
         "- Збережи всі суттєві вимоги вчителя, навіть якщо вони сформульовані коротко.",
     ]
     if materials_attached:
@@ -8861,6 +9004,8 @@ def refine_assignment_description_with_gemini(teacher_notes, assignment_title=''
 
     attempts_configs = settings.get_request_configs(custom_model=custom_model)
     attempted_errors = []
+    last_provider = last_model = ''
+    last_status = None
 
     for cfg_idx, cfg in enumerate(attempts_configs):
         c_provider = cfg['provider']
@@ -8894,6 +9039,7 @@ def refine_assignment_description_with_gemini(teacher_notes, assignment_title=''
                     action='description_refinement',
                     connection_id=c_connection_id,
                 )
+                last_provider, last_model, last_status = c_provider, c_model, status_code
 
                 if status_code == 200 and raw_text:
                     result_text = raw_text.strip()
@@ -8933,6 +9079,9 @@ def refine_assignment_description_with_gemini(teacher_notes, assignment_title=''
                             'markdown': cleaned_text,
                             'html': rendered_html,
                             'model_used': model_display,
+                            'fact_warnings': _validate_generated_facts(
+                                teacher_notes, current_description, cleaned_text),
+                            'prompt_version': ai_prompting.PROMPT_VERSION,
                         }
 
                 if err_msg and 'MAX_TOKENS' in str(err_msg) and token_budget < _DESC_REFINE_RETRY_MAX_TOKENS:
@@ -8953,9 +9102,20 @@ def refine_assignment_description_with_gemini(teacher_notes, assignment_title=''
         # Деталі провайдерів/помилок пишемо в лог, а не у відповідь вчителю.
         logger.warning('refine_assignment_description: усі спроби ШІ невдалі: %s',
                        '; '.join(attempted_errors))
+        log_ai_error(
+            teacher=teacher,
+            action='description_refinement',
+            provider=last_provider,
+            model_name=last_model,
+            status_code=last_status,
+            error_type='all_attempts_failed',
+            error_message='; '.join(attempted_errors),
+            failover_triggered=len(attempted_errors) > 1,
+        )
     return {
         'status': 'error',
-        'message': 'Не вдалося сформулювати опис завдання через тимчасову недоступність моделі ШІ. Спробуйте ще раз або перевірте налаштування ШІ.'
+        'message': 'Не вдалося сформулювати опис завдання через тимчасову недоступність моделі ШІ. Спробуйте ще раз або перевірте налаштування ШІ.',
+        'prompt_version': ai_prompting.PROMPT_VERSION,
     }
 
 
@@ -9059,6 +9219,9 @@ def generate_age_appropriate_student_guide(
     tasks_list: list[dict] = None,
     is_single_task: bool = False,
     task_interpretation: dict = None,
+    no_submission_required: bool = False,
+    has_links: bool = False,
+    has_youtube: bool = False,
     **kwargs
 ) -> str:
     """
@@ -9251,6 +9414,9 @@ def generate_age_appropriate_student_guide(
             s3 = f"• Крок 3 (Верифікація): Перевір якість отриманого результату та відсутність неточностей."
             s4 = f"• Крок 4 (Фіксація та здача): Сформуй підсумковий документ чи файл і надішли на перевірку."
 
+    if no_submission_required:
+        s4 = "• Крок 4 (Підсумок): Підготуйся продемонструвати результат на уроці."
+
     # 4. Блок «Що має бути в результаті»
     res_items = []
     res_items.append(f"Готовий результат: {deliverable.get('description', title_clean)}")
@@ -9285,7 +9451,10 @@ def generate_age_appropriate_student_guide(
     if 'question_answer' in comp_types and not any('запитан' in str(ci).lower() or 'відповід' in str(ci).lower() for ci in check_items):
         check_items.append("Надано відповіді на всі контрольні запитання")
 
-    check_items.append("Файл збережено під зрозумілою назвою та успішно прикріплено")
+    if no_submission_required:
+        check_items.append("Результат готовий до демонстрації на уроці")
+    else:
+        check_items.append("Файл збережено під зрозумілою назвою та успішно прикріплено")
 
     # Збирання структури
     lines = [
@@ -9293,6 +9462,12 @@ def generate_age_appropriate_student_guide(
         "",
         "Коротко: що потрібно зробити",
         short_summary,
+    ]
+    if has_youtube:
+        lines.append("Спочатку переглянь відео, надане вчителем.")
+    if has_links:
+        lines.append("Скористайся посиланнями/матеріалами, наданими вчителем.")
+    lines += [
         "",
         "Покроковий план виконання:",
         s1,
@@ -9360,7 +9535,10 @@ def analyze_assignment_task_understanding(assignment, force_refresh=False, sourc
                         assignment_title=assignment_title,
                         assignment_desc=assignment_desc,
                         tasks_list=cached_data.get('tasks', []),
-                        is_single_task=(cached_data.get('tasks_total_count') == 1)
+                        is_single_task=(cached_data.get('tasks_total_count') == 1),
+                        no_submission_required=bool(getattr(assignment, 'no_submission_required', False)),
+                        has_links=bool(getattr(assignment, 'link_url', '') or assignment.additional_links.exists()),
+                        has_youtube=bool(getattr(assignment, 'youtube_url', '') or assignment.youtube_links.exists()),
                     )
                 return {
                     'status': 'success',
@@ -9389,10 +9567,15 @@ def analyze_assignment_task_understanding(assignment, force_refresh=False, sourc
     assigned_tasks_list = scope.get('assigned_tasks', [])
 
     prompt_lines = [
+        ai_prompting.prompt_version_line(),
+        *ai_prompting.language_rules(),
+        "",
         f"ПРЕДМЕТ: {subject_name}",
         f"КЛАС: {classes_str} (орієнтовний вік учнів: {age_str}, {grade_str})",
         f"ТЕМА ЗАВДАННЯ: {assignment_title}",
-        f"\nОПИС / ВКАЗІВКИ ВЧИТЕЛЯ:\n{assignment_desc}"
+        "ОПИС / ВКАЗІВКИ ВЧИТЕЛЯ:",
+        ai_prompting.teacher_data_block('assignment_description', assignment_desc),
+        ai_prompting.data_boundary_rule(),
     ]
     teacher_ai_instructions = getattr(assignment, 'teacher_ai_instructions', '') if assignment else ''
     if teacher_ai_instructions and teacher_ai_instructions.strip():
@@ -9594,7 +9777,10 @@ def analyze_assignment_task_understanding(assignment, force_refresh=False, sourc
                     assignment_desc=assignment_desc,
                     tasks_list=result_data.get('tasks', []),
                     is_single_task=is_single_task,
-                    task_interpretation=scope.get('task_interpretation')
+                    task_interpretation=scope.get('task_interpretation'),
+                    no_submission_required=bool(getattr(assignment, 'no_submission_required', False)),
+                    has_links=bool(getattr(assignment, 'link_url', '') or assignment.additional_links.exists()),
+                    has_youtube=bool(getattr(assignment, 'youtube_url', '') or assignment.youtube_links.exists()),
                 )
             else:
                 result_data['student_explanation'] = current_expl
@@ -9700,7 +9886,10 @@ def analyze_assignment_task_understanding(assignment, force_refresh=False, sourc
             assignment_desc=assignment_desc,
             tasks_list=tasks_list,
             is_single_task=is_single_task,
-            task_interpretation=task_interpretation
+            task_interpretation=task_interpretation,
+            no_submission_required=bool(getattr(assignment, 'no_submission_required', False)),
+            has_links=bool(getattr(assignment, 'link_url', '') or assignment.additional_links.exists()),
+            has_youtube=bool(getattr(assignment, 'youtube_url', '') or assignment.youtube_links.exists()),
         )
 
         if not questions_expected:

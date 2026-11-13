@@ -8624,6 +8624,10 @@ def teacher_generate_assignment_criteria(request):
     assignment_description = values['assignment_description']
     subject_name = values['subject_name']
     class_group_name = values['class_group_name']
+    custom_criteria = values['custom_criteria']
+    evaluation_type = values['evaluation_type']
+    if evaluation_type and evaluation_type not in {'nus_gr', 'nus', 'traditional', 'custom'}:
+        evaluation_type = ''
 
     if not teacher_notes and not assignment_description and not assignment_title:
         return JsonResponse({
@@ -8632,7 +8636,7 @@ def teacher_generate_assignment_criteria(request):
         }, status=400)
 
     teacher = get_teacher_or_none(request)
-    if teacher and _ai_refine_rate_limited(teacher):
+    if teacher and _ai_generation_rate_limited(teacher, action='criteria_generation'):
         return JsonResponse({
             'status': 'error',
             'message': 'Забагато запитів до ШІ. Зачекайте хвилину й спробуйте ще раз.'
@@ -8643,14 +8647,18 @@ def teacher_generate_assignment_criteria(request):
         assignment_title=assignment_title,
         assignment_description=assignment_description,
         subject_name=subject_name,
-        class_group_name=class_group_name
+        class_group_name=class_group_name,
+        evaluation_type=evaluation_type,
+        custom_criteria=custom_criteria,
+        teacher=teacher,
     )
 
     if res.get('status') == 'success' and (res.get('criteria') or '').strip():
         return JsonResponse({
             'status': 'success',
             'criteria': res.get('criteria', ''),
-            'model_used': res.get('model_used', '')
+            'model_used': res.get('model_used', ''),
+            'prompt_version': res.get('prompt_version', ''),
         })
     if res.get('status') == 'success':
         return JsonResponse({
@@ -8685,6 +8693,8 @@ _AI_CRITERIA_FIELD_LIMITS = (
     ('assignment_description', 8000, 'Опис завдання'),
     ('subject_name', 120, 'Предмет'),
     ('class_group_name', 120, 'Клас'),
+    ('custom_criteria', 8000, 'Критерії вчителя'),
+    ('evaluation_type', 30, 'Тип оцінювання'),
 )
 
 
@@ -8719,16 +8729,42 @@ def _as_bool(value):
     return False
 
 
-def _ai_refine_rate_limited(teacher):
-    """Обмежує випадковий спам дорогих запитів ШІ: 20 запитів на хвилину на вчителя."""
-    from django.core.cache import cache
+def _ai_generation_rate_limited(teacher, action='description_refinement', limit=20, window_seconds=60):
+    """Спільний для всіх воркерів rate-limit генерацій ШІ на основі БД.
+
+    LocMemCache множив ліміт на кількість процесів і обнулявся після рестарту.
+    Записи в БД бачать усі воркери; старі рядки прибираються під час перевірки.
+    """
+    from datetime import timedelta
+    from django.db import transaction
+    from django.utils import timezone
+    from .models import AIGenerationThrottle, Teacher
+
+    now = timezone.now()
+    cutoff = now - timedelta(seconds=window_seconds)
     try:
-        key = f'schoolnet:ai-desc-refine:{teacher.pk}'
-        if cache.add(key, 1, 60):
+        with transaction.atomic():
+            # Серіалізуємо перевірку per-teacher, щоб паралельні запити не проскочили ліміт.
+            Teacher.objects.select_for_update().get(pk=teacher.pk)
+            AIGenerationThrottle.objects.filter(
+                teacher=teacher, action=action, created_at__lt=cutoff).delete()
+            # Глобальне прибирання старих записів (дешеве, раз на запит).
+            AIGenerationThrottle.objects.filter(
+                created_at__lt=now - timedelta(days=1)).delete()
+            current = AIGenerationThrottle.objects.filter(
+                teacher=teacher, action=action, created_at__gte=cutoff).count()
+            if current >= limit:
+                return True
+            AIGenerationThrottle.objects.create(teacher=teacher, action=action)
             return False
-        return cache.incr(key) > 20
     except Exception:
+        # Fail-open: збій журналу не повинен блокувати вчителя.
         return False
+
+
+def _ai_refine_rate_limited(teacher):
+    """Сумісна обгортка для помічника опису (20 запитів/хв)."""
+    return _ai_generation_rate_limited(teacher, action='description_refinement')
 
 
 @teacher_required
@@ -8794,6 +8830,7 @@ def teacher_refine_assignment_description(request):
         class_group_name=class_group_name,
         has_materials=has_materials,
         no_submission_required=no_submission_required,
+        teacher=teacher,
     )
 
     if res.get('status') == 'success' and (res.get('markdown') or '').strip():
@@ -8801,7 +8838,9 @@ def teacher_refine_assignment_description(request):
             'status': 'success',
             'html': res.get('html', ''),
             'markdown': res.get('markdown', ''),
-            'model_used': res.get('model_used', '')
+            'model_used': res.get('model_used', ''),
+            'fact_warnings': res.get('fact_warnings', []),
+            'prompt_version': res.get('prompt_version', ''),
         })
     if res.get('status') == 'success':
         return JsonResponse({
