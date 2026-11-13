@@ -126,3 +126,51 @@ class AssignmentDescriptionRefineEndpointTests(TestCase):
         response = self.post_json({'teacher_notes': 'Опис'})
         self.assertEqual(response.status_code, 429)
         self.assertIn('Забагато запитів', response.json()['message'])
+
+    @patch('feed.gemini_service.call_ai_api')
+    def test_strips_hallucinated_choice_block_when_teacher_requests_both(self, mock_call):
+        raw_output = (
+            "📌 **Вказівки до роботи:**\n"
+            "1. Відкрийте файл.\n"
+            "2. Виконайте обидва завдання.\n\n"
+            "⚠️ **Увага (вибір завдання та оцінювання):**\n"
+            "• Оберіть та виконайте одне завдання на вибір відповідно до бажаної оцінки:\n"
+            "- Завдання 1 (максимум 8 балів)\n"
+            "- Завдання 2 (максимум 12 балів)\n"
+            "(Виконувати обидва завдання не потрібно — оцінюється лише одне обране)\n\n"
+            "📁 **Вимоги до здачі:**\n"
+            "• Здайте файл."
+        )
+        mock_call.return_value = (200, raw_output, None, {})
+        response = self.post_json({
+            'teacher_notes': 'виконати обидва завдання та здати',
+            'current_description': 'Виконання Завдання 1 - 8 балів'
+        })
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertNotIn('Увага (вибір', data['markdown'])
+        self.assertNotIn('не потрібно', data['markdown'])
+        self.assertIn('Виконайте обидва завдання', data['markdown'])
+        self.assertIn('Вимоги до здачі', data['markdown'])
+
+    @patch('feed.gemini_service.call_ai_api')
+    def test_preserves_choice_block_when_teacher_requests_choice(self, mock_call):
+        raw_output = (
+            "📌 **Вказівки до роботи:**\n"
+            "1. Відкрийте файл.\n"
+            "2. Оберіть одне завдання.\n\n"
+            "⚠️ **Увага (вибір завдання та оцінювання):**\n"
+            "• Оберіть та виконайте одне завдання на вибір відповідно до бажаної оцінки:\n"
+            "- Завдання 1 (максимум 8 балів)\n"
+            "- Завдання 2 (максимум 12 балів)\n\n"
+            "📁 **Вимоги до здачі:**\n"
+            "• Здайте файл."
+        )
+        mock_call.return_value = (200, raw_output, None, {})
+        response = self.post_json({
+            'teacher_notes': 'на вибір: завдання 1 на 8 балів або завдання 2 на 12 балів',
+        })
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn('Увага (вибір', data['markdown'])
+        self.assertIn('Завдання 1 (максимум 8 балів)', data['markdown'])
