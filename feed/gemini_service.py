@@ -5981,6 +5981,34 @@ def build_question_answer_mapping(task_questions: list[str], student_text: str, 
     return "\n".join(lines), omitted, answered_count, total_qs
 
 
+def assignment_is_choice_based(assignment) -> bool:
+    """
+    Чи завдання передбачає вибір одного із кількох завдань.
+
+    Кешований аналіз ШІ («Як ШІ розуміє завдання») може керувати стелею оцінки,
+    тому довіряємо йому лише коли він:
+      - свіжий (збігається fingerprint опису/матеріалів/політик завдання);
+      - згенерований саме ШІ (analysis_mode == 'ai'), а не локальним фолбеком;
+      - явно містить булеве is_choice_based = True (рядок "false" не спрацює).
+    Будь-яка помилка чи застарілий кеш дають безпечне False: тоді працює
+    звичайне визначення вибору за текстом інструкції.
+    """
+    if assignment is None or not getattr(assignment, 'ai_task_understanding', None):
+        return False
+    try:
+        from .ai_context import assignment_fingerprint
+        payload = json.loads(assignment.ai_task_understanding)
+        if not isinstance(payload, dict):
+            return False
+        if payload.get('analysis_mode') != 'ai':
+            return False
+        if payload.get('is_choice_based') is not True:
+            return False
+        return payload.get('_source_fingerprint') == assignment_fingerprint(assignment)
+    except Exception:
+        return False
+
+
 def apply_multi_task_evaluation_guardrail(
     result_json: dict,
     task_questions: list[str],
@@ -6036,9 +6064,9 @@ def apply_multi_task_evaluation_guardrail(
         'обрати одне', 'обрати одне із', 'обрати одне з', 'обрати яке', 'вибрати одне',
         'вибрати одне із', 'вибрати одне з', 'вибрати яке', 'виконати одне', 'на яку оцінку бажає'
     ])
-    if not is_choice and scope:
-        if scope.get('is_choice_based') or (scope.get('final_task_understanding') or {}).get('is_choice_based'):
-            is_choice = True
+    if not is_choice and scope and scope.get('is_choice_based'):
+        # Сюди потрапляє лише свіжий і явний прапорець з assignment_is_choice_based().
+        is_choice = True
     if is_choice:
         summary, weaknesses, feedback_comment = sanitize_unassigned_task_mentions(
             summary, weaknesses, feedback_comment, is_single_task=True
@@ -6629,13 +6657,8 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
         primary_task_content=primary_task_content if 'primary_task_content' in locals() else None,
         teacher_files_content=(primary_task_content if 'primary_task_content' in locals() else []) + teacher_files_content,
     )
-    if assignment and getattr(assignment, 'ai_task_understanding', None):
-        try:
-            tu_obj = json.loads(assignment.ai_task_understanding)
-            if isinstance(tu_obj, dict) and tu_obj.get('is_choice_based'):
-                scope['is_choice_based'] = True
-        except Exception:
-            pass
+    if assignment_is_choice_based(assignment):
+        scope['is_choice_based'] = True
     teacher_specific_task_nums = scope.get('teacher_specific_task_nums') or []
     task_questions = scope.get('task_questions') or []
     combined_task_for_qs = scope.get('clean_instruction_text') or assignment_desc or ""

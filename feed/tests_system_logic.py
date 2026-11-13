@@ -411,3 +411,61 @@ class SystemAILogicAndFailoverTests(TestCase):
         range_desc = 'Виконати практичні завдання 1-3 зі сторінки підручника'
         range_nums = parse_teacher_specific_task_numbers(range_desc)
         self.assertEqual(range_nums, [1, 2, 3])
+
+    def test_cached_choice_flag_is_trusted_only_when_fresh_and_explicit(self):
+        """Кешований is_choice_based не має керувати стелею оцінки, якщо він застарілий або неоднозначний."""
+        from feed.ai_context import assignment_fingerprint
+        from feed.gemini_service import assignment_is_choice_based
+
+        fresh = assignment_fingerprint(self.assignment)
+        cases = [
+            ({'analysis_mode': 'ai', '_source_fingerprint': fresh, 'is_choice_based': True}, True),
+            ({'analysis_mode': 'ai', '_source_fingerprint': fresh, 'is_choice_based': 'false'}, False),
+            ({'analysis_mode': 'ai', '_source_fingerprint': fresh, 'is_choice_based': 'true'}, False),
+            ({'analysis_mode': 'ai', '_source_fingerprint': fresh, 'is_choice_based': False}, False),
+            ({'analysis_mode': 'local', '_source_fingerprint': fresh, 'is_choice_based': True}, False),
+            ({'analysis_mode': 'ai', '_source_fingerprint': 'stale', 'is_choice_based': True}, False),
+            ({'analysis_mode': 'ai', '_source_fingerprint': fresh}, False),
+        ]
+        for payload, expected in cases:
+            with self.subTest(payload=payload):
+                self.assignment.ai_task_understanding = json.dumps(payload)
+                self.assignment.save(update_fields=['ai_task_understanding'])
+                self.assertEqual(assignment_is_choice_based(self.assignment), expected)
+
+        # Після редагування опису старий (свіжий на момент генерації) кеш ігнорується.
+        self.assignment.ai_task_understanding = json.dumps(
+            {'analysis_mode': 'ai', '_source_fingerprint': fresh, 'is_choice_based': True})
+        self.assignment.description = 'Новий опис без вибору завдань'
+        self.assignment.save(update_fields=['ai_task_understanding', 'description'])
+        self.assertFalse(assignment_is_choice_based(self.assignment))
+
+        # Пошкоджений JSON не валить оцінювання.
+        self.assignment.ai_task_understanding = '{broken'
+        self.assignment.save(update_fields=['ai_task_understanding'])
+        self.assertFalse(assignment_is_choice_based(self.assignment))
+
+    def test_multi_task_ceiling_is_skipped_only_when_scope_marks_explicit_choice(self):
+        """Прапорець вибору з scope знімає стелю часткового виконання; без нього стеля діє."""
+        from feed.gemini_service import apply_multi_task_evaluation_guardrail
+        instructions = (
+            'Практична робота. Завдання 1. Знайдіть відомості. Завдання 2. Знайдіть пояснення. '
+            'Завдання 3. Перекладіть англійською. Виконати всі 3 завдання.'
+        )
+        result_json = {'tasks_evaluated': [{'task_num': 1, 'status': 'completed'}], 'tasks_completed_count': 1}
+
+        def run(scope):
+            return apply_multi_task_evaluation_guardrail(
+                result_json=result_json, task_questions=[], teacher_instructions_text=instructions,
+                student_raw_text='text', suggested_grade='10', level='Високий',
+                clean_gr_results=[], numeric_gr_grades=[10], avg_gr_grade=10, is_traditional=False,
+                summary='Учень виконав завдання 1', strengths=['Добре'], weaknesses=[],
+                feedback_comment='Виконано 1 із 3', scope=scope)
+
+        capped = run(None)
+        self.assertEqual(capped[0], '5')
+        self.assertTrue(capped[7])
+
+        uncapped = run({'is_choice_based': True})
+        self.assertEqual(uncapped[0], '10')
+        self.assertEqual(uncapped[7], [])
