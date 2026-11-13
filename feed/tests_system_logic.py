@@ -521,3 +521,30 @@ class SystemAILogicAndFailoverTests(TestCase):
         for tag in ('<img', '<iframe', '<script'):
             self.assertNotIn(tag, html.lower())
         self.assertIn('<strong>Жирний</strong>', html)
+
+    @patch('feed.gemini_service.call_ai_api')
+    def test_refine_prompt_respects_materials_and_does_not_hardcode_scores(self, mock_call):
+        """Промпт не згадує файли, яких немає, не хардкодить бали і не змішує вибір із різною вагою."""
+        settings = get_ai_settings()
+        settings.is_enabled = True
+        settings.api_key = 'AIzaValidKey'
+        settings.save()
+        mock_call.return_value = (200, '**Опис**', None, {})
+        url = reverse('teacher_refine_assignment_description')
+
+        self.client.post(url, {'teacher_notes': 'Зробити таблицю в Excel'})
+        prompt_without = mock_call.call_args.kwargs['prompt_text']
+        self.assertIn('НЕ прикріплено файлів', prompt_without)
+        self.assertNotIn('Відкрийте прикріплені', prompt_without)
+        self.assertNotIn('максимум 8 балів', prompt_without)
+        self.assertNotIn('максимум 12 балів', prompt_without)
+        self.assertIn('максимум N балів', prompt_without)
+
+        mock_call.reset_mock()
+        self.client.post(url, {'teacher_notes': 'Зробити таблицю в Excel', 'has_materials': 'true'})
+        prompt_with = mock_call.call_args.kwargs['prompt_text']
+        self.assertIn('прикріплені матеріали', prompt_with)
+        self.assertIn('НЕ переказуй', prompt_with)
+        self.assertNotIn('НЕ прикріплено файлів', prompt_with)
+        # Різні бали без вибору не повинні перетворюватись на «одне завдання на вибір».
+        self.assertIn('вибору немає', prompt_with)

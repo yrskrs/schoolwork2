@@ -8659,12 +8659,14 @@ def teacher_refine_assignment_description(request):
         current_description = body.get('current_description', '').strip()
         subject_name = body.get('subject_name', '').strip()
         class_group_name = body.get('class_group_name', '').strip()
+        has_materials = body.get('has_materials') in (True, 'true', 'True', '1', 1)
     else:
         teacher_notes = request.POST.get('teacher_notes', '').strip()
         assignment_title = request.POST.get('assignment_title', '').strip()
         current_description = request.POST.get('current_description', '').strip()
         subject_name = request.POST.get('subject_name', '').strip()
         class_group_name = request.POST.get('class_group_name', '').strip()
+        has_materials = request.POST.get('has_materials') in ('1', 'true', 'True', 'on')
 
     if not teacher_notes and not current_description and not assignment_title:
         return JsonResponse({
@@ -8677,7 +8679,8 @@ def teacher_refine_assignment_description(request):
         assignment_title=assignment_title,
         current_description=current_description,
         subject_name=subject_name,
-        class_group_name=class_group_name
+        class_group_name=class_group_name,
+        has_materials=has_materials
     )
 
     if res.get('status') == 'success':

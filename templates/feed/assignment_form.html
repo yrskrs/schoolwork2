@@ -984,7 +984,19 @@ function toggleEditorSourceMode() {
                 var title = titleInput ? titleInput.value.trim() : '';
 
                 var subjectSelect = document.getElementById('id_subject') || document.querySelector('select[name="subject"]');
-                var subjectName = subjectSelect && subjectSelect.selectedIndex >= 0 ? subjectSelect.options[subjectSelect.selectedIndex].text : '';
+                var subjectName = subjectSelect && subjectSelect.value ? subjectSelect.options[subjectSelect.selectedIndex].text : '';
+
+                // Чи має завдання прикріплені матеріали: наявні файли або вже вибрані для завантаження.
+                var hasMaterials = false;
+                var materialsForm = descTextarea ? descTextarea.closest('form') : null;
+                if (materialsForm) {
+                    var existingMaterialCount = materialsForm.querySelectorAll('.existing-file-item').length;
+                    var queuedMaterialCount = 0;
+                    materialsForm.querySelectorAll('input[type="file"]').forEach(function(fileInput) {
+                        if (fileInput.files && fileInput.files.length) queuedMaterialCount += fileInput.files.length;
+                    });
+                    hasMaterials = existingMaterialCount > 0 || queuedMaterialCount > 0;
+                }
 
                 if (!notes && !currentDesc && !title) {
                     if (errorBoxDesc) {
@@ -1018,7 +1030,8 @@ function toggleEditorSourceMode() {
                         teacher_notes: notes,
                         assignment_title: title,
                         current_description: currentDesc,
-                        subject_name: subjectName
+                        subject_name: subjectName,
+                        has_materials: hasMaterials
                     })
                 })
                 .then(function(resp) {
