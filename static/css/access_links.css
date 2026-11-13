@@ -352,3 +352,105 @@ details[open] > .access-card-summary .access-collapse-icon { transform: rotate(1
 @media(prefers-reduced-motion:reduce) { .access-view-pane { animation:none!important; transition:none!important; transform:none!important; } }
 
 .access-grid > *, .access-list-section, .access-view-pane { min-width: 0; max-width: 100%; }
+
+/* ─── Публічна сторінка «Відкрити сайт» за посиланням ───────────────────────
+   Окремий мінімальний екран без меню й saйдбара: картка по центру екрана,
+   текст і кнопка — по центру картки. Класи використовують access_enter.html
+   і access_required.html. */
+body.access-landing {
+  margin: 0;
+  min-height: 100vh;
+  min-height: 100svh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 24px;
+  background: var(--bg-app, #f3f6f7);
+  color: var(--ink, #192e3b);
+  font-family: var(--font-body, "Segoe UI", Roboto, Arial, sans-serif);
+  line-height: 1.55;
+}
+
+.access-landing-card {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 560px;
+  padding: 40px 36px;
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--border, #d5dfe4);
+  border-radius: var(--radius-xl, 16px);
+  box-shadow: var(--shadow-lg, 0 12px 32px rgba(24, 53, 70, 0.12));
+  text-align: center;
+}
+
+.access-landing-card .access-eyebrow {
+  display: inline-block;
+  margin-bottom: 14px;
+  padding: 5px 12px;
+  border-radius: var(--radius-full, 9999px);
+  background: var(--tint-accent, #e2f2f2);
+  color: var(--accent, #146c78);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.access-landing-card h1 {
+  margin: 0 0 12px;
+  font-size: clamp(1.6rem, 4vw, 2.1rem);
+  line-height: 1.2;
+  color: var(--ink, #192e3b);
+  overflow-wrap: anywhere;
+}
+
+.access-landing-card p {
+  margin: 0 auto 24px;
+  max-width: 46ch;
+  color: var(--ink-secondary, #465e6c);
+  font-size: 0.98rem;
+}
+
+.access-landing-card form {
+  margin: 0;
+}
+
+.access-landing-card a {
+  color: var(--accent, #146c78);
+  font-weight: 700;
+}
+
+.access-open {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 11px 24px;
+  border: 0;
+  border-radius: var(--radius-md, 8px);
+  background: var(--fill-accent, #146c78);
+  color: var(--on-fill, #ffffff);
+  font: inherit;
+  font-size: 0.98rem;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm, 0 1px 2px rgba(24, 53, 70, 0.06));
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.access-open:hover {
+  background: var(--fill-accent-hover, #105762);
+  transform: translateY(-1px);
+}
+
+.access-open:focus-visible {
+  outline: 3px solid var(--focus, rgba(20, 108, 120, 0.38));
+  outline-offset: 2px;
+}
+
+@media (max-width: 640px) {
+  body.access-landing { padding: 16px; }
+  .access-landing-card { padding: 28px 22px; }
+}

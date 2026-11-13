@@ -82,6 +82,21 @@ class PublicAccessTests(TestCase):
         self.assertEqual(self.get('/').status_code, 403)
         self.assertEqual(self.client.get('/', **LAN).status_code, 200)
 
+    def test_access_landing_page_has_centered_layout_styles(self):
+        """Публічна сторінка входу має картку по центру екрана, а не голий текст."""
+        link = self.link()
+        response = self.client.get(reverse('access_enter', args=[link.token]), **PUBLIC)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'class="access-landing"')
+        self.assertContains(response, 'access_links.css?v=20261113d')
+        from django.contrib.staticfiles import finders
+        css_path = finders.find('css/access_links.css')
+        self.assertTrue(css_path, 'access_links.css не знайдено у staticfiles')
+        css = Path(css_path).read_text(encoding='utf-8')
+        for rule in ('body.access-landing', 'display: flex', 'justify-content: center',
+                     '.access-landing-card', 'text-align: center', '.access-open'):
+            self.assertIn(rule, css, f'Немає правила центрування: {rule}')
+
     def test_confirmation_does_not_count_previews_or_head_requests(self):
         link = self.link()
         for method in ('get', 'head'):

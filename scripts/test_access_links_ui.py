@@ -159,6 +159,11 @@ def main():
             personal = AccessLink.objects.get(kind='student')
             navigate(public + '/', "document.body?.innerText.includes('Потрібне посилання')")
             navigate(public + reverse('access_enter', args=[personal.token]), "!!document.querySelector('.access-open')")
+            landing_geometry = cdp.evaluate("""(()=>{const card=document.querySelector('.access-landing-card');const r=card.getBoundingClientRect();const cs=getComputedStyle(card);return {centerOffset:Math.abs((r.left+r.right)/2-window.innerWidth/2),textAlign:cs.textAlign,display:getComputedStyle(document.body).display};})()""")
+            assert landing_geometry['centerOffset'] <= 1, f"access card is not horizontally centered: {landing_geometry}"
+            assert landing_geometry['textAlign'] == 'center', f"access card text is not centered: {landing_geometry}"
+            assert landing_geometry['display'] == 'flex', f"access landing body is not flex-centered: {landing_geometry}"
+            screenshot('access-enter.png')
             assert personal.visits == 0
             cdp.evaluate("document.querySelector('.access-open').click()")
             cdp.until("location.pathname==='/' && document.body?.innerText.includes('Навчальне завдання')")
