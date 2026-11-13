@@ -412,6 +412,35 @@ class SystemAILogicAndFailoverTests(TestCase):
         range_nums = parse_teacher_specific_task_numbers(range_desc)
         self.assertEqual(range_nums, [1, 2, 3])
 
+    def test_parse_teacher_specific_task_numbers_score_edge_cases(self):
+        """Бали після дефіса, коротка форма «б», десяткові бали та діапазони перед ключовим словом."""
+        from feed.gemini_service import parse_teacher_specific_task_numbers
+        cases = [
+            ('Завдання 1 - 8 балів', [1]),
+            ('Завдання 1 - максимум 8 балів', [1]),
+            ('завдання 1 – 8 б.', [1]),
+            ('завдання 1 - 8 б', [1]),
+            ('Завдання 1 - 8,5 балів', [1]),
+            ('Завдання 2 (максимум 12 балів)', [2]),
+            ('завдання 1 - 8 балів і завдання 2 - 12 балів', [1, 2]),
+            ('Завдання 1 - 8 балів, 2 - 12 балів', [1, 2]),
+            ('Завдання 1 - 8 балів та 2 - 12 балів', [1, 2]),
+            ('Завдання 1 - 8 балів; 2 - 12 балів', [1, 2]),
+            ('завдання 1-3', [1, 2, 3]),
+            ('завдання 1-3 бали', [1]),
+            ('завдання 1-2, 4', [1, 2, 4]),
+            ('1-3 завдання', [1, 2, 3]),
+            ('виконати всі 3 завдання', []),
+            ('Завдання 4 бали', []),
+            ('завдання на 8 балів', []),
+            ('виконати завдання 1 та 2', [1, 2]),
+            ('завдання 1, 2, 3', [1, 2, 3]),
+            ('п. 1-2', [1, 2]),
+        ]
+        for text, expected in cases:
+            with self.subTest(text=text):
+                self.assertEqual(parse_teacher_specific_task_numbers(text), expected)
+
     def test_cached_choice_flag_is_trusted_only_when_fresh_and_explicit(self):
         """Кешований is_choice_based не має керувати стелею оцінки, якщо він застарілий або неоднозначний."""
         from feed.ai_context import assignment_fingerprint

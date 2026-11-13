@@ -3360,10 +3360,11 @@ def parse_teacher_specific_task_numbers(description: str) -> list[int]:
     found_nums: set[int] = set()
 
     # «завдання 4 бали» means four points, not task number four. Do not let
-    # score/percentage/time units become an assigned task number.
+    # score/percentage/time units become an assigned task number. Also covers
+    # decimal scores («8,5 балів») and the short form «8 б» without a dot.
     NUMBER_UNIT_PAT = re.compile(
-        r'\s*(?:бал(?:ів|и|а|ами|ах)?|очк(?:ів|и|а)?|%|відсотк\w*|хв(?:илин\w*)?|'
-        r'год(?:ин\w*)?|стор(?:ін\w*|\.)?|клас(?:у|ів)?|грн|грив\w*|б\.)', re.IGNORECASE)
+        r'\s*(?:[.,]\d+)?\s*(?:бал(?:ів|и|а|ами|ах)?|очк(?:ів|и|а)?|%|відсотк\w*|хв(?:илин\w*)?|'
+        r'год(?:ин\w*)?|стор(?:ін\w*|\.)?|клас(?:у|ів)?|грн|грив\w*|б(?![а-яіїєґa-z])\.?)', re.IGNORECASE)
 
     # Спершу обробляємо діапазони «завдання 1-3», «вправа 2-4», «№ 1-2»
     range_pat = re.compile(
@@ -3381,6 +3382,18 @@ def parse_teacher_specific_task_numbers(description: str) -> list[int]:
             for n in range(start, end + 1):
                 found_nums.add(n)
 
+    # Діапазон перед ключовим словом: «1-3 завдання», «2–4 вправи».
+    leading_range_pat = re.compile(
+        r'(?<![\w\d])(\d+)\s*[-–—]\s*(\d+)\s+(?:практичн[а-яіїє]*\s+|лабораторн[а-яіїє]*\s+)?'
+        r'(?:завдан[а-яіїє]*|вправ[а-яіїє]*|пункт[а-яіїє]*)\b',
+        re.IGNORECASE
+    )
+    for m in leading_range_pat.finditer(text):
+        start, end = int(m.group(1)), int(m.group(2))
+        if start < end <= start + 15:
+            for n in range(start, end + 1):
+                found_nums.add(n)
+
     # Ключові слова-якорі: завдання, вправа, номер, пункт, № (у всіх відмінках та скороченнях)
     KEYWORD_PAT = re.compile(
         r'(?:\b(?:практичн[а-яіїє]*|лабораторн[а-яіїє]*)\s+)?(?:\b(?:завдан[а-яіїє]*|вправ[а-яіїє]*|пункт[а-яіїє]*|номер[а-яіїє]*)\b|(?:завд|впр|ном)\b\.?|\bп\.\s*|№)',
@@ -3388,9 +3401,13 @@ def parse_teacher_specific_task_numbers(description: str) -> list[int]:
     )
 
     # Роздільники між числами після ключового слова
-    # Дозволяємо: пробіли, коми, «та», «і», «й», «та й», «і», «and», «№»
-    SEP_PAT = re.compile(r'(?:\s*(?:,|та|і|й|and)\s*|\s+)(?:№\s*)?', re.IGNORECASE)
+    # Дозволяємо: пробіли, коми, крапки з комою, «та», «і», «й», «та й», «і», «and», «№»
+    SEP_PAT = re.compile(r'(?:\s*(?:,|;|та|і|й|and)\s*|\s+)(?:№\s*)?', re.IGNORECASE)
     NUM_PAT = re.compile(r'\d+')
+
+    # Пара «N - M» після номера завдання: «1 - 8 балів» — це номер 1 і 8 балів,
+    # а не діапазон завдань 1..8.
+    SCORE_PAIR_PAT = re.compile(r'\s*[-–—]\s*(\d+)(?:[.,]\d+)?')
 
     # Потім шукаємо всі входження ключового слова та числа після нього
     for kw_match in KEYWORD_PAT.finditer(text):
@@ -3407,9 +3424,36 @@ def parse_teacher_specific_task_numbers(description: str) -> list[int]:
             if not num_m:
                 break
             n = int(num_m.group(0))
-            if not NUMBER_UNIT_PAT.match(text, num_m.end()):
-                if 1 <= n <= 50:
+
+            unit_m = NUMBER_UNIT_PAT.match(text, num_m.end())
+            if unit_m:
+                # «4 бали» — це оцінка/одиниця, а не номер завдання.
+                pos = unit_m.end()
+                continue
+
+            pair_m = SCORE_PAIR_PAT.match(text, num_m.end())
+            if pair_m:
+                second_unit_m = NUMBER_UNIT_PAT.match(text, pair_m.end())
+                if second_unit_m:
+                    # «Завдання 1 - 8 балів»: перше число — номер завдання,
+                    # друге — бали. Продовжуємо скан, щоб підхопити наступні
+                    # пари «2 - 12 балів» навіть без повторного ключового слова.
+                    if 1 <= n <= 50:
+                        found_nums.add(n)
+                    pos = second_unit_m.end()
+                    continue
+                # «Завдання 1-3» без одиниць — справжній діапазон номерів завдань.
+                start, end = n, int(pair_m.group(1))
+                if start < end <= start + 15:
+                    for k in range(start, end + 1):
+                        found_nums.add(k)
+                elif 1 <= n <= 50:
                     found_nums.add(n)
+                pos = pair_m.end()
+                continue
+
+            if 1 <= n <= 50:
+                found_nums.add(n)
             pos = num_m.end()
 
     # Якщо вчитель вжив конструкцію «всі N завдань» — це ЗАГАЛЬНА кількість, не конкретні номери
