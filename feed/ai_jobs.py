@@ -312,6 +312,39 @@ def enqueue_understanding_job(assignment, user=None, force_refresh=False, eager=
     return job
 
 
+# P2 defense-in-depth: the student self-check status endpoint is reachable
+# without a teacher session, so the response is built from an explicit
+# whitelist of student-facing fields. Teacher-only material (audit facts,
+# criteria breakdown, provenance details, payload metadata, raw JSON) must never
+# be copied over, even if a future job.result happens to contain it.
+_STUDENT_CHECK_PUBLIC_FIELDS = frozenset({
+    'ok', 'status', 'error', 'events', 'job_id', 'retry_at', 'status_url',
+    'grade', 'level', 'grade_group', 'suggested_grade',
+    'summary', 'feedback', 'clean_feedback', 'feedback_comment',
+    'sections', 'praise', 'grade_reason', 'recommendation', 'improvement',
+    'revision_advice', 'strengths', 'weaknesses',
+    'unclear_task', 'format_warning', 'is_traditional', 'gr_results', 'gr_avg',
+    'allow_ai_usage', 'duplicate_info',
+    # Student-facing authorship state (the banner on submit_success uses these
+    # fields). Teacher-only provenance details/percent stay hidden.
+    'ai_authorship_state', 'ai_generated_detected', 'ai_generated_details',
+    'ai_generated_confidence', 'ai_generated_percent',
+})
+
+
+def _student_check_public_result(result):
+    """Whitelist the student self-check API response (teacher fields stripped)."""
+    if not isinstance(result, dict):
+        return {}
+    public = {key: value for key, value in result.items()
+              if key in _STUDENT_CHECK_PUBLIC_FIELDS}
+    if result.get('assessment_blocked'):
+        # A blocked assessment has no numeric grade to show the student.
+        for field in ('suggested_grade', 'grade', 'level'):
+            public.pop(field, None)
+    return public
+
+
 def job_response(job, is_teacher=False, request=None):
     if job.status in ('succeeded', 'failed', 'cancelled'):
         result = dict(job.result)
@@ -325,11 +358,9 @@ def job_response(job, is_teacher=False, request=None):
                     result[field] = compact_student_feedback(text=result[field])
             result.update(summary=public_parts['summary'], strengths=public_parts['strengths'],
                           weaknesses=public_parts['weaknesses'], revision_advice=public_parts['weaknesses'])
-            result.pop('grade_explanation', None)
-            result.pop('raw_json', None)
-            result.pop('criteria_results', None)
-            result.pop('payload_manifest', None)
-            result.pop('server_adjustments', None)
+            # Whitelist is stricter than pop(): a new teacher-only key added to
+            # job.result later cannot leak through this endpoint by default.
+            result = _student_check_public_result(result)
         if request is not None and 'duplicate_info' in result:
             from .access_control import scope_duplicate_info
             result['duplicate_info'] = scope_duplicate_info(request, result['duplicate_info'])
@@ -540,6 +571,11 @@ def _execute_job(job_id):
                 _finish_job(job_id, {'status': 'failed', 'error': 'Немає доступу до роботи'}, 403)
                 return
             teacher = getattr(job.requested_by, 'teacher_profile', None)
+            # P1-5: a fresh teacher/batch run must not keep the previous run's
+            # deterministic audit while the new response is pending or failed.
+            if submission.ai_technical_evidence:
+                submission.ai_technical_evidence = {}
+                submission.save(update_fields=['ai_technical_evidence'])
             result = evaluate_submission_with_gemini(submission, teacher=teacher,
                                                       source_overrides=source_overrides, **call_parameters())
             if result.get('status') == 'deferred':

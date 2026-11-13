@@ -127,8 +127,10 @@ class AIDetectionFormatsTests(TestCase):
         self.assertEqual(signals[0]['basis'], 'metadata')
         self.assertIn('trainedAlgorithmicMedia', signals[0]['observation'])
 
-    def test_normalize_authorship_preserves_presentation_ai_result(self):
-        # Even if status is 'none' or 'unknown', high ai_percent and slide evidence must be preserved!
+    def test_normalize_authorship_presentation_model_claim_is_uncalibrated(self):
+        # P1-9: raw model boolean/percent + слабке slide_content-спостереження без
+        # підтвердженого medium-сигналу не є доказом. Результат моделі
+        # зберігається у звіті як некалібрована оцінка, але detected=False.
         gemini_result = {
             'ai_generated_detected': True,
             'ai_generated_percent': 85,
@@ -147,10 +149,14 @@ class AIDetectionFormatsTests(TestCase):
             }
         }
         res = normalize_authorship(gemini_result, False)
-        self.assertTrue(res['ai_generated_detected'], "Detection must NOT be wiped when evidence exists")
+        self.assertFalse(res['ai_generated_detected'])
         self.assertEqual(res['ai_generated_percent'], 85)
-        self.assertEqual(res['ai_generated_confidence'], 'low')
-        self.assertIn('Слайд 2', res['ai_generated_details'])
+        self.assertEqual(res['ai_authorship_state'], 'insufficient')
+        self.assertEqual(res['ai_generated_confidence'], 'none')
+        self.assertIn('Некалібрована оцінка моделі', res['ai_generated_details'])
+        report = res['ai_provenance_report']
+        self.assertTrue(report['evidence_gate']['model_claim_ignored_as_uncalibrated'])
+        self.assertEqual(report['model_estimate']['percent'], 85)
 
     def test_batch_queue_api_includes_ai_detection_fields(self):
         from feed.views import api_ai_get_batch_queue

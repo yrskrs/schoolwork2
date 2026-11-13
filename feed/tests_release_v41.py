@@ -33,10 +33,18 @@ class ProvenanceTests(TestCase):
         self.assertEqual(below['ai_generated_percent'], 10)
         self.assertEqual(below['ai_authorship_state'], 'insufficient')
 
+        # P1-9 evidence-gate: самé лише число моделі — некалібрована оцінка,
+        # а не доказ. Воно зберігається в звіті, але не дає detected/suspected.
         above = normalize_authorship({'ai_generated_percent': 80}, False, tolerance_percent=25)
-        self.assertTrue(above['ai_generated_detected'])
+        self.assertFalse(above['ai_generated_detected'])
         self.assertEqual(above['ai_generated_percent'], 80)
-        self.assertEqual(above['ai_generated_confidence'], 'low')
+        self.assertEqual(above['ai_authorship_state'], 'insufficient')
+        self.assertEqual(above['ai_generated_confidence'], 'none')
+        self.assertIn('Некалібрована оцінка моделі', above['ai_generated_details'])
+        report = above['ai_provenance_report']
+        self.assertFalse(report['evidence_gate']['verified_medium_signal'])
+        self.assertTrue(report['evidence_gate']['model_claim_ignored_as_uncalibrated'])
+        self.assertEqual(report['model_estimate']['percent'], 80)
 
         negative = normalize_authorship({'ai_generated_detected': False, 'ai_generated_details': 'Ознак ШІ не знайдено.'}, False)
         self.assertFalse(negative['ai_generated_detected'])

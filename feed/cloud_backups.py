@@ -51,6 +51,32 @@ def schema():
         'auth.user': [f.name for f in [*User._meta.local_fields, *User._meta.local_many_to_many]]}
 
 
+def schema_compatibility(stored, current):
+    """Compare a backup schema snapshot with the running model schema.
+
+    Returns ``(compatible, ignored_fields, reason)``. New model fields (added
+    after the backup was taken) are ignored with a warning and are filled by
+    the current model defaults on restore. Removed or renamed fields make the
+    backup unrestorable: silently dropping stored data is never acceptable.
+    """
+    if not isinstance(stored, dict) or not isinstance(current, dict):
+        return False, [], 'У копії відсутній опис схеми БД.'
+    ignored = []
+    for label, stored_fields in stored.items():
+        if label not in current:
+            return False, ignored, f'Модель {label} більше не існує у цій версії.'
+        stored_names = [str(name) for name in (stored_fields or [])]
+        current_names = [str(name) for name in (current.get(label) or [])]
+        missing = [name for name in stored_names if name not in current_names]
+        if missing:
+            return False, ignored, (f'Поля {label}: {", ".join(missing[:6])} більше не існують '
+                                    f'у цій версії.')
+        for name in current_names:
+            if name not in stored_names:
+                ignored.append(f'{label}.{name}')
+    return True, ignored, ''
+
+
 class Adapter:
     app = 'schoolwork'
 
@@ -209,8 +235,19 @@ class Adapter:
     def load(self, owner, config, directory):
         owner = self.resolve(owner)
         index = json.loads((directory/'index.json').read_text())
-        if index.get('app') != self.app or index.get('scope') != config['scope'] or index.get('schema') != schema():
+        if index.get('app') != self.app or index.get('scope') != config['scope']:
             raise ValueError('Копія несумісна з цією схемою SchoolWork. Установіть сумісну версію сайту')
+        compatible, ignored_fields, schema_reason = schema_compatibility(
+            index.get('schema'), schema())
+        if not compatible:
+            raise ValueError('Копія несумісна з цією схемою SchoolWork. '
+                             + (schema_reason or 'Установіть сумісну версію сайту'))
+        schema_warnings = []
+        if ignored_fields:
+            schema_warnings.append(
+                'Копію створено старішою версією; нові поля відсутні у копії та '
+                'заповнюються типовими значеннями: ' + ', '.join(ignored_fields[:20]))
+        index['schema_warnings'] = schema_warnings
         rows = read_records(directory/'db',recursive=True)
         if len(rows) != index['records']:
             raise ValueError('Неповний склад БД')
@@ -278,7 +315,10 @@ class Adapter:
 
     def validate(self, owner, config, directory):
         index, objects, pairs = self.load(owner, config, directory)
-        return {'records': len(objects), 'files': len(pairs), 'options':index['options']}
+        result = {'records': len(objects), 'files': len(pairs), 'options':index['options']}
+        if index.get('schema_warnings'):
+            result['warnings'] = list(index['schema_warnings'])
+        return result
 
     def restore(self, owner, config, directory):
         self.authorize(owner, config['scope'])
@@ -345,7 +385,10 @@ class Adapter:
                     cursor.execute('INSERT INTO cloud_restore_receipts(receipt) VALUES(%s)', [receipt])
                 # The outer transaction commits just after leaving this guard;
                 # deferred constraints have already been checked explicitly.
-        return {'records':len(objects), 'files':len(pairs)}
+        result = {'records':len(objects), 'files':len(pairs)}
+        if index.get('schema_warnings'):
+            result['warnings'] = list(index['schema_warnings'])
+        return result
 
     def notify(self, owner, title, body):
         # State keeps a durable copy even if full restore changes account IDs.

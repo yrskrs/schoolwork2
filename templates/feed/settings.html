@@ -767,6 +767,12 @@
                                 </div>
                                 <textarea name="system_prompt" id="system_prompt" rows="8" class="form-input"
                                           style="font-family:monospace;font-size:12px;line-height:1.4;resize:vertical;">{{ ai_settings.system_prompt }}</textarea>
+                                <div id="system-prompt-warning" style="display:{% if ai_settings.system_prompt|length > 4000 %}block{% else %}none{% endif %};margin-top:8px;padding:10px 12px;border-radius:var(--radius-sm);background:rgba(var(--warn-rgb),.12);border:1px solid rgba(var(--warn-rgb),.35);font-size:12.5px;line-height:1.45;color:var(--color-text-primary);">
+                                    ⚠️ Системний промт довший за <strong>4000 символів</strong>. Для сумісності з безкоштовними/компактними моделями (наприклад, <code>openrouter/free</code>) сервер передає лише перші 4000 символів під час перевірки в компактному режимі. Довший текст не гарантує застосування повністю.
+                                </div>
+                                <p class="form-hint" style="margin-top:6px;font-size:12px;color:var(--color-text-muted);line-height:1.5;">
+                                    Цей системний промт <strong>замінює предметний промпт обраного шаблону критеріїв</strong> і застосовується до <strong>всіх</strong> оцінювань ШІ. Рекомендована довжина — до 4000 символів; лічильник: <span id="system-prompt-counter" style="font-weight:700;">{{ ai_settings.system_prompt|length }}</span> символів.
+                                </p>
                             </div>
 
                                 </div>
@@ -1631,6 +1637,24 @@ function resetDefaultPrompt() {
         }
     }
 }
+
+// Системний промт: лічильник і попередження про ліміт компактного режиму (P2).
+function updateSystemPromptCounter() {
+    var promptEl = document.getElementById('system_prompt');
+    var counterEl = document.getElementById('system-prompt-counter');
+    var warningEl = document.getElementById('system-prompt-warning');
+    if (!promptEl) return;
+    var length = promptEl.value.length;
+    if (counterEl) counterEl.textContent = length;
+    if (warningEl) warningEl.style.display = length > 4000 ? 'block' : 'none';
+}
+document.addEventListener('DOMContentLoaded', function() {
+    var promptEl = document.getElementById('system_prompt');
+    if (promptEl) {
+        promptEl.addEventListener('input', updateSystemPromptCounter);
+        updateSystemPromptCounter();
+    }
+});
 
 // Прев'ю аватара
 document.addEventListener('DOMContentLoaded', function() {

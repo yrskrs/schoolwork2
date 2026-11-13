@@ -88,6 +88,9 @@ class StudentFeedbackBoundaryTests(TestCase):
     def test_apply_ai_grade_saves_short_public_comment_and_preserves_teacher_result(self):
         self.sub.ai_suggested_grade='8'
         self.sub.ai_feedback='📌 **Висновок:**\nЗміст зрозумілий.\n🎯 **Чому така оцінка:**\n8 балів.\n🛠️ **Як покращити роботу:**\nДодай джерела.'
+        # P0-4: публічний коментар будується лише зі student_ai_feedback;
+        # teacher-only ai_feedback (з оцінками) не є джерелом fallback.
+        self.sub.student_ai_feedback='📌 **Висновок:**\nЗміст зрозумілий.\n🛠️ **Як покращити роботу:**\nДодай джерела.'
         self.sub.save()
         self.client.force_login(self.user)
         response=self.client.post(reverse('ai_apply_suggested_grade',args=[self.sub.pk]))

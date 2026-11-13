@@ -223,7 +223,14 @@ def api_journal_export_grades(request: HttpRequest) -> JsonResponse:
                 'due_date': sub.assignment.due_date.isoformat() if (sub.assignment and sub.assignment.due_date) else None,
             },
             'grade': sub.grade or '',
+            # AI mark is a suggestion, never the official journal grade: v1
+            # consumers must see it explicitly flagged and unconfirmed unless a
+            # teacher has already applied it to the official `grade` field.
             'ai_suggested_grade': sub.ai_suggested_grade or '',
+            'is_ai_suggestion': bool((sub.ai_suggested_grade or '').strip()),
+            'ai_suggestion_confirmed_by_teacher': bool(
+                (sub.ai_suggested_grade or '').strip() and (sub.grade or '').strip()
+                and str(sub.grade).strip() == str(sub.ai_suggested_grade).strip()),
             'teacher_comment': sub.teacher_comment or '',
             'submitted_at': sub.submitted_at.isoformat() if sub.submitted_at else None,
             'graded_at': sub.graded_at.isoformat() if sub.graded_at else None,

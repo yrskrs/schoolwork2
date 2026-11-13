@@ -527,7 +527,13 @@ def generate_teacher_report_pdf(buffer, report_meta, submissions, mode='grades_o
             if sub.assignment and getattr(sub.assignment, 'allow_ai_usage', False):
                 notes_parts.append("ШІ (дозв.)")
             else:
-                notes_parts.append("ШІ виявлено!")
+                notes_parts.append("Є ознаки ШІ (перевірити)")
+        elif getattr(sub, 'ai_provenance_report', None):
+            # A model-only estimate is not evidence; keep it as a review note,
+            # never as a detected-AI claim.
+            estimate = (sub.ai_provenance_report or {}).get('model_estimate') or {}
+            if estimate.get('percent') is not None or estimate.get('detected_claim'):
+                notes_parts.append("оцінка моделі (некалібрована)")
         if sub.teacher_comment:
             # Короткий відгук
             comment_short = (sub.teacher_comment[:40] + '...') if len(sub.teacher_comment) > 40 else sub.teacher_comment
@@ -648,9 +654,21 @@ def generate_teacher_report_pdf(buffer, report_meta, submissions, mode='grades_o
                 sub_elements.append(Spacer(1, 2))
                 sub_elements.append(Paragraph(
                     f"<b>Перевірка ШІ:</b> Виявлено ознаки штучного інтелекту ({ai_perm}). "
+                    f"Це ознаки, а не доведений факт; потребує перевірки вчителя. "
                     f"Впевненість: {sub.ai_generated_confidence or '—'}",
                     style_cell
                 ))
+            else:
+                estimate = (getattr(sub, 'ai_provenance_report', None) or {}).get('model_estimate') or {}
+                if estimate.get('percent') is not None or estimate.get('detected_claim'):
+                    percent = estimate.get('percent')
+                    percent_note = f" ~{percent}%" if percent is not None else ''
+                    sub_elements.append(Spacer(1, 2))
+                    sub_elements.append(Paragraph(
+                        f"<b>Перевірка ШІ:</b> лише некалібрована оцінка моделі{percent_note}; "
+                        f"це припущення, а не доказ. Потрібна перевірка вчителя.",
+                        style_cell
+                    ))
 
             # Відгук викладача
             if sub.teacher_comment:

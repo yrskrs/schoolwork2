@@ -97,7 +97,7 @@ def payload_manifest(prompt, system, media, provider='', model=''):
     encoded = ''.join(str(item.get('data') or '') for item in items if isinstance(item, dict))
     return {
         'builder': 'assessment-v5',
-        'rules_version': '2026-11-09.1',
+        'rules_version': '2026-11-14.1',
         'provider': provider,
         'model': model,
         'prompt_chars': len(prompt or ''),

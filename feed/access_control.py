@@ -136,10 +136,64 @@ def bind_submission_form(request, form):
     return form
 
 
-def scope_duplicate_info(request, info):
-    """Keep the warning without exposing another pupil through duplicate metadata."""
-    link = link_for(request) if request is not None else None
-    if link and link.kind != 'site' and info and info.get('type') == 'student_duplicate':
-        return {'is_duplicate': bool(info.get('is_duplicate')), 'is_duplicate_student': True,
-                'type': 'student_duplicate', 'warning_message': 'Виявлено збіг із раніше зданою роботою. Перевірте свою відповідь або зверніться до вчителя.'}
-    return info
+def _duplicate_warning(info):
+    kind = (info or {}).get('type') or ''
+    if kind == 'teacher_duplicate':
+        return ('⚠️ Увага: ваша робота повністю збігається з матеріалами вчителя до цього '
+                'завдання. Перевірте, чи ви не здали вихідний файл завдання замість розв\'язку.')
+    if kind == 'student_duplicate':
+        return ('⚠️ Виявлено збіг із раніше зданою роботою. Це підозра, а не доведений факт: '
+                'перевірте свою відповідь або зверніться до вчителя.')
+    if kind == 'ignored_collaboration':
+        return '👥 Спільна/колективна робота: збіг із роботою співавтора. Плагіат виключено.'
+    if kind == 'ignored_plagiarism':
+        return 'ℹ️ Збіг із раніше зданою роботою проігноровано вчителем.'
+    return ''
+
+
+def _public_duplicate_info(info):
+    """Duplicate facts without another pupil's name, class, time or submission id."""
+    info = info if isinstance(info, dict) else {}
+    public_matches = []
+    for match in info.get('matches') or []:
+        if not isinstance(match, dict):
+            continue
+        role = match.get('role') or ('teacher' if 'teacher' in str(match.get('type')) else 'student')
+        public_matches.append({
+            'type': str(match.get('type') or ''),
+            'role': role,
+            'reason': str(match.get('reason') or ''),
+            'file': str(match.get('file') or ''),
+            'other': ('матеріали вчителя' if role != 'student' else 'інший учень'),
+        })
+    return {
+        'is_duplicate': bool(info.get('is_duplicate')),
+        'is_duplicate_teacher': bool(info.get('is_duplicate_teacher')),
+        'is_duplicate_student': bool(info.get('is_duplicate_student')),
+        'plagiarism_ignored': bool(info.get('plagiarism_ignored')),
+        'is_coauthor': bool(info.get('is_coauthor')),
+        'type': str(info.get('type') or 'none'),
+        'duplicate_file_name': str(info.get('duplicate_file_name') or ''),
+        'matches': public_matches,
+        'warning_message': _duplicate_warning(info),
+    }
+
+
+def scope_duplicate_info(request, info, role=None):
+    """Duplicate metadata at the viewer boundary.
+
+    Teachers keep full details (another pupil's name/class/time are needed for
+    a plagiarism conversation). Pupils and public pages only learn that a
+    duplicate was detected; identifiers of the other work are replaced with
+    generic wording. ``role`` may be passed explicitly by callers that already
+    know the audience; otherwise the request determines it.
+    """
+    if not info:
+        return info
+    if role in ('teacher', 'student', 'public'):
+        teacher_view = role == 'teacher'
+    else:
+        teacher_view = request is not None and is_teacher(request)
+    if teacher_view:
+        return info
+    return _public_duplicate_info(info)

@@ -781,9 +781,14 @@ def normalize_authorship(result, allowed, provenance=(), tolerance_percent=25,
     """Turn uncalibrated model claims and file metadata into an evidence report.
 
     The output never lowers the grade. States are:
-    - suspected: at least one verifiable/medium signal, or the model threshold fired;
+    - suspected: at least one verified/medium signal (metadata, C2PA, or a quote
+      actually confirmed in the student's text);
     - none: files were inspected and no signals were found (not proof of authorship);
     - insufficient: no inspectable provenance (e.g. plain text) or no evidence at all.
+
+    A raw model boolean/percent is an uncalibrated estimate: it is preserved in
+    ``ai_provenance_report.model_estimate`` and mentioned in the details, but it
+    never produces ``detected``/``suspected`` on its own.
     """
     analysis = result.get('ai_authorship_analysis') or {}
     analysis = analysis if isinstance(analysis, dict) else {}
@@ -804,6 +809,8 @@ def normalize_authorship(result, allowed, provenance=(), tolerance_percent=25,
 
     tol = 25 if tolerance_percent is None else tolerance_percent
     percent_exceeds = (ai_percent is not None and ai_percent > tol)
+    # A raw model boolean/percent is an uncalibrated estimate, not evidence.
+    model_claim = bool(legacy_detected or ai_percent is not None)
 
     details = str(result.get('ai_generated_details') or '').strip()
     if details.lower() in {'none', 'null', 'false', 'ok', 'none.', 'null.', 'лише ознаки, не доведений факт'}:
@@ -852,7 +859,12 @@ def normalize_authorship(result, allowed, provenance=(), tolerance_percent=25,
     elif any(s['strength'] == 'medium' for s in signals):
         strongest = 'medium'
 
-    detected = bool(percent_exceeds or legacy_detected or strongest in {'strong', 'medium'})
+    # Evidence gate (P1-9): a model boolean/percent without at least one
+    # verified/medium signal is a guess. It is kept in the report as an
+    # uncalibrated model estimate, but it never raises `detected`/`suspected`.
+    has_verified_evidence = strongest in {'strong', 'medium'}
+    detected = bool(has_verified_evidence)
+    model_only_claim = bool(model_claim and not has_verified_evidence)
     if detected:
         state = 'suspected'
     elif checked_files:
@@ -873,15 +885,16 @@ def normalize_authorship(result, allowed, provenance=(), tolerance_percent=25,
             'ШІ не дозволено вчителем. Підозра потребує уточнення; самостійність оцінюється за критеріями завдання, без автоматичного штрафу за стиль чи метадані.')
 
     lines = []
-    for item in signals:
-        if not item['observation']:
-            continue
-        where = ' — '.join(part for part in (item['source'], item['location']) if part)
-        line = (where + ': ' if where else '') + item['observation']
-        if line not in lines:
-            lines.append(line)
-    if details and details not in lines and not any(details in line for line in lines):
-        lines.insert(0, details)
+    if not model_only_claim:
+        for item in signals:
+            if not item['observation']:
+                continue
+            where = ' — '.join(part for part in (item['source'], item['location']) if part)
+            line = (where + ': ' if where else '') + item['observation']
+            if line not in lines:
+                lines.append(line)
+        if details and details not in lines and not any(details in line for line in lines):
+            lines.insert(0, details)
 
     if state == 'suspected':
         lines.extend(['Це ознаки, а не доведений факт авторства. ' + note,
@@ -893,14 +906,37 @@ def normalize_authorship(result, allowed, provenance=(), tolerance_percent=25,
         if not allowed:
             lines.append('Бал оцінює наданий результат. Перед остаточним рішенням учитель може попросити пояснити кроки або показати чернетку.')
 
+    if model_only_claim:
+        estimate = []
+        if details:
+            estimate.append(details)
+        if ai_percent is not None:
+            estimate.append(f'~{ai_percent}%')
+        estimate_text = f" ({'; '.join(estimate)})" if estimate else ''
+        lines.append(
+            'Некалібрована оцінка моделі' + estimate_text + ': це припущення, а не доведений факт. '
+            'Потрібна перевірка вчителя; на бал вона не впливає.')
+        if percent_exceeds:
+            lines.append('Поріг відсотка сам по собі не є доказом використання ШІ.')
+
     report = {
-        'version': 'provenance-2026-11-09',
+        'version': 'provenance-2026-11-14-evidence-gate',
         'state': state,
         'confidence': confidence,
         'checked_files': checked_files,
         'signals': signals,
         'limitations': list(dict.fromkeys(limitations))[:12],
+        'evidence_gate': {
+            'verified_medium_signal': bool(has_verified_evidence),
+            'model_claim_ignored_as_uncalibrated': model_only_claim,
+        },
     }
+    if model_claim:
+        report['model_estimate'] = {
+            'detected_claim': legacy_detected,
+            'percent': ai_percent,
+            'calibrated': False,
+        }
     return {
         'ai_generated_detected': detected,
         'ai_generated_percent': ai_percent,

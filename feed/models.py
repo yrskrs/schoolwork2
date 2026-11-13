@@ -2358,6 +2358,9 @@ class Submission(models.Model):
     ai_provenance_report = models.JSONField(
         'Структурований звіт походження', default=dict, blank=True
     )
+    ai_technical_evidence = models.JSONField(
+        'Технічний аудит файлів (детерміновані факти)', default=dict, blank=True
+    )
     ai_authorship_teacher_label = models.CharField(
         'Мітка вчителя щодо походження',
         max_length=10,
@@ -2671,8 +2674,10 @@ class Submission(models.Model):
         return str(avg)
 
     def get_clean_ai_feedback_for_student(self):
+        # Student-facing view is built ONLY from the student's own feedback:
+        # the teacher's ai_feedback may contain private audit facts and file names.
         from .ai_student_feedback import compact_student_feedback
-        return compact_student_feedback(text=self.ai_feedback)
+        return compact_student_feedback(text=self.student_ai_feedback)
 
     def get_formatted_ai_feedback(self):
         """
@@ -2688,12 +2693,13 @@ class Submission(models.Model):
         return self.ai_feedback
 
     def get_student_ai_weaknesses_list(self):
+        # No fallback to the teacher-only ai_feedback.
         from .ai_student_feedback import student_feedback_parts
-        return student_feedback_parts(text=self.student_ai_feedback or self.ai_feedback)['weaknesses']
+        return student_feedback_parts(text=self.student_ai_feedback)['weaknesses']
 
     def get_student_ai_strengths_list(self):
         from .ai_student_feedback import student_feedback_parts
-        return student_feedback_parts(text=self.student_ai_feedback or self.ai_feedback)['strengths']
+        return student_feedback_parts(text=self.student_ai_feedback)['strengths']
 
     def get_student_ai_clean_feedback(self):
         return self.get_student_ai_public_feedback()
@@ -2708,8 +2714,10 @@ class Submission(models.Model):
 
     def get_student_ai_sections(self):
         from .ai_student_feedback import get_student_feedback_sections
+        # Student sections use only the student's own feedback, never the
+        # teacher's ai_feedback (P0-4: audit facts / file names must not leak).
         return get_student_feedback_sections(
-            text=self.student_ai_feedback or self.ai_feedback,
+            text=self.student_ai_feedback,
             grade=self.student_ai_grade or self.ai_suggested_grade,
             level=self.student_ai_level or self.ai_score_level
         )
@@ -4398,6 +4406,16 @@ MON_INFORMATICS_CRITERIA_TEXT = """МЕТОДИЧНИЙ ПОСІБНИК МІН�
      - 10-12 балів (Високий): суворе дотримання норм етики та безпеки; чітке цитування джерел; самостійність, відповідальність, дотримання термінів; усвідомлений захист етичної позиції."""
 
 
+ZERO_EVIDENCE_RULE = """НУЛЬОВА ТОЛЕРАНТНІСТЬ ДО ВИГАДАНИХ ДОКАЗІВ (обов'язково):
+ТЕХНІЧНИЙ ПАСПОРТ РОБОТИ УЧНЯ — це факти серверного аудиту файлу, а не оцінка моделі. Якщо в паспорті зафіксовано відсутність обов'язкового елемента роботи (0 формул; синтаксична помилка; лише статичний вивід; 0 блоків коду; усі слайди порожні; порожній документ; 1–2 слайди замість вимоги; заявлена функція відсутня; немає запитів або зв'язків бази даних), то КАТЕГОРИЧНО ЗАБОРОНЕНО писати у strengths, summary, grade_explanation і feedback_comment про успішне виконання цього елемента (наприклад, «застосовано функцію IF», «формули працюють», «чудовий алгоритм», «повне розкриття теми», «працююча гра»). Завдання вважається не виконаним або виконаним частково, бал знижується. Орієнтовні стелі: формули відсутні — не вище 6; синтаксична помилка — не вище 4; лише статичний вивід — не вище 6; усі слайди порожні — не вище 4; 1–2 слайди замість вимоги — не вище 6; 0 блоків Scratch — не вище 4; порожній документ — не вище 3; заявлена функція або конструкція відсутня, немає запитів або зв'язків — не вище 6.
+НЕДОЛІК ЛИШЕ ЗА ВИМОГОЮ: відсутність формул — це недолік лише тоді, коли вимога стосується формул або обчислень (формула, formula, =if, if, якщо, если, логічн, sum, rank, countif, обчисл, розрахун, spreadsheet, excel). Лише статичний вивід — лише для алгоритмічної вимоги (алгоритм, цикл, розгалуж, функці, обчисл). 0 блоків коду — лише для вимоги про скрипт, гру, анімацію, рух, керування, події. Якщо вимога не вимагала елемента, бал за його відсутність не знижуй, але вигадану похвалу все одно прибери.
+ЗАЯВЛЕНА ФУНКЦІЯ ЧИ КОНСТРУКЦІЯ: не хвали конкретну функцію (IF, SUM, SUMIF, COUNTIF, RANK, VLOOKUP, AVERAGE, MAX, MIN, ROUND, AND, OR, NOT, TEXT; також «ЯКЩО», «ЕСЛИ», IF-логіка, логічний вираз), якої немає у фактах техпаспорта, навіть якщо інші формули є. Не заявляй цикли, функції чи розгалуження, яких немає у фактах коду.
+НЕПЕРЕВІРЕНІ ДОКАЗИ: якщо вимога стосується формул, коду, слайдів, Scratch, бази даних або твору, а жоден паспорт не підтверджує цю родину (наприклад, лише PDF, зображення, CSV, архів, застарілий .doc/.xls, або аудит недоступний), не став completed за цю родину — лише unverifiable, і бал не вище 9 (не «Високий»), з поясненням, що потрібна ручна перевірка.
+УЗГОДЖЕНІСТЬ БАЛУ: якщо вигадане твердження видалено або обов'язковий елемент спростовано, бал не може бути 10–12 — застосуй загальну стелю 9, якщо немає суворішої стелі.
+ВЧИТЕЛЬСЬКИЙ WAIVER: приватні вказівки вчителя або custom_criteria з явним «не знижуй», «не штрафуй», «не враховуй», «не обов'язков», «достатньо», «лише зміст», «можна без» скасовують серверну стелю для відповідного елемента, але не дозволяють вигадану похвалу.
+Не супереч собі: не хвали те, за відсутність чого знижено бал, і не зазначай одночасно «формул немає» та «IF застосовано»."""
+
+
 class AICriteriaPreset(models.Model):
     """
     Шаблон критеріїв оцінювання для модуля ШІ (Google Gemini).
@@ -4562,6 +4580,11 @@ class AICriteriaPreset(models.Model):
         """
         prompt = (self.system_prompt or DEFAULT_NUS_GR_SYSTEM_PROMPT).strip()
 
+        # Нульова толерантність до вигаданих доказів має діяти навіть для
+        # пресетів, створених до появи правила, і для власних промптів учителя.
+        if 'НУЛЬОВА ТОЛЕРАНТНІСТЬ' not in prompt:
+            prompt += '\n\n' + ZERO_EVIDENCE_RULE
+
         # Гарантуємо наявність обов'язкового правила щодо обсягу завдання (Scope of Work),
         # навіть якщо пресет було створено раніше або вчитель використовує власний промпт
         if "SCOPE OF WORK" not in prompt:
@@ -4620,7 +4643,7 @@ class AICriteriaPreset(models.Model):
                 name="🌟 Оцінювання за групами результатів НУШ (ГР 1-4)",
                 description="Комплексне оцінювання за 4 обов'язковими групами результатів Держстандарту НУШ (Дослідження, Практична діяльність, Критичне мислення, Грамотність).",
                 evaluation_type='nus_gr',
-                system_prompt=DEFAULT_NUS_GR_SYSTEM_PROMPT,
+                system_prompt=DEFAULT_NUS_GR_SYSTEM_PROMPT + '\n\n' + ZERO_EVIDENCE_RULE,
                 gr_definitions=json.dumps([
                     {'code': 'ГР 1', 'name': 'Опрацювання інформації та дослідження проблемних ситуацій'},
                     {'code': 'ГР 2', 'name': 'Практична діяльність та виконання навчальних завдань'},
@@ -4645,7 +4668,7 @@ class AICriteriaPreset(models.Model):
                 name="🌟 НУШ: Інформатична освітня галузь (ГР 1-4)",
                 description="Офіційні методичні рекомендації МОН України «Як оцінювати в НУШ»: 4 групи результатів (Інформація та моделі, Створення продуктів і код, Цифрове середовище, Безпека та етика).",
                 evaluation_type='nus_gr',
-                system_prompt=DEFAULT_NUS_GR_SYSTEM_PROMPT,
+                system_prompt=DEFAULT_NUS_GR_SYSTEM_PROMPT + '\n\n' + ZERO_EVIDENCE_RULE,
                 gr_definitions=info_gr_defs,
                 document_name="Посібник МОН: Як оцінювати в НУШ (Інформатика).pdf",
                 extracted_criteria_text=MON_INFORMATICS_CRITERIA_TEXT,
@@ -4666,7 +4689,7 @@ class AICriteriaPreset(models.Model):
                 name="🌟 НУШ: Математична освітня галузь (ГР 1-3)",
                 description="Оцінювання з математики, алгебри та геометрії за групами результатів МОН: моделювання, розв'язання задач, критичне осмислення.",
                 evaluation_type='nus_gr',
-                system_prompt=DEFAULT_NUS_GR_SYSTEM_PROMPT,
+                system_prompt=DEFAULT_NUS_GR_SYSTEM_PROMPT + '\n\n' + ZERO_EVIDENCE_RULE,
                 gr_definitions=json.dumps([
                     {'code': 'ГР 1', 'name': 'Дослідження проблемних ситуацій та математичне моделювання'},
                     {'code': 'ГР 2', 'name': 'Розв\'язання математичних завдань, вправ та рівнянь'},
@@ -4682,7 +4705,7 @@ class AICriteriaPreset(models.Model):
                 name="🌟 НУШ: Мовно-літературна галузь (ГР 1-4)",
                 description="Оцінювання з української мови, літератури та іноземних мов за 4 групами результатів (Усна взаємодія, Робота з текстом, Письмова продукція, Мовні явища).",
                 evaluation_type='nus_gr',
-                system_prompt=DEFAULT_NUS_GR_SYSTEM_PROMPT,
+                system_prompt=DEFAULT_NUS_GR_SYSTEM_PROMPT + '\n\n' + ZERO_EVIDENCE_RULE,
                 gr_definitions=json.dumps([
                     {'code': 'ГР 1', 'name': 'Усна взаємодія (сприймання на слух, аудіювання, говоріння)'},
                     {'code': 'ГР 2', 'name': 'Письмова взаємодія / Робота з текстом (читання та аналіз)'},
@@ -4700,7 +4723,7 @@ class AICriteriaPreset(models.Model):
                 name="🌟 Оцінювання за стандартами НУШ (Загальне компетентнісне)",
                 description="Компетентнісний підхід, 4 рівні (Початковий, Середній, Достатній, Високий), формувальне оцінювання та мотиваційний відгук.",
                 evaluation_type='nus',
-                system_prompt=DEFAULT_NUS_SYSTEM_PROMPT,
+                system_prompt=DEFAULT_NUS_SYSTEM_PROMPT + '\n\n' + ZERO_EVIDENCE_RULE,
                 is_default=True,
                 is_system=True
             )
@@ -4712,7 +4735,7 @@ class AICriteriaPreset(models.Model):
                 name="📊 Класична / Традиційна система оцінювання (1-12 балів)",
                 description="Традиційна шкала 1-12 балів МОН: оцінювання за точністю, повнотою розв'язку, аналізом грубих і негрубих помилок.",
                 evaluation_type='traditional',
-                system_prompt=DEFAULT_TRADITIONAL_SYSTEM_PROMPT,
+                system_prompt=DEFAULT_TRADITIONAL_SYSTEM_PROMPT + '\n\n' + ZERO_EVIDENCE_RULE,
                 is_default=False,
                 is_system=True
             )

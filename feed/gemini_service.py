@@ -27,7 +27,9 @@ import glob
 import shutil
 import logging
 from django.utils import timezone
-from .models import AISettings, Submission, DEFAULT_NUS_SYSTEM_PROMPT, AICriteriaPreset
+from .models import (AISettings, Submission, DEFAULT_NUS_SYSTEM_PROMPT,
+                     DEFAULT_NUS_GR_SYSTEM_PROMPT, DEFAULT_TRADITIONAL_SYSTEM_PROMPT,
+                     AICriteriaPreset)
 from .duplicate_detector import check_submission_duplicates, get_normalized_file_content
 from .document_parsers import parse_drawingml_chart_xml, format_python_pptx_chart_info
 
@@ -2619,6 +2621,59 @@ def _video_container_recognized(path, ext):
     return False
 
 
+# Formats whose whole content is text and therefore visible to the model. A
+# failed passport for such a file is not a "hidden implementation" gap: the
+# model can still read the code/text. Everything else (office binaries, PDF,
+# images, archives, media, Access, legacy Office) hides its implementation
+# behind the container and must receive an unverified stub instead. The check
+# is extension-based on purpose: renaming a CSV to .xlsx must not bypass audit.
+_VISIBLE_TEXT_EXTENSIONS = {
+    '.txt', '.text', '.log', '.md', '.markdown', '.rst',
+    '.html', '.htm', '.xhtml', '.css', '.scss', '.sass', '.less', '.xml',
+    '.json', '.json5', '.jsonl', '.yaml', '.yml', '.toml', '.ini', '.cfg',
+    '.conf', '.env', '.csv', '.tsv', '.tex', '.properties', '.gradle',
+    '.ipynb', '.sh', '.bash', '.zsh', '.bat', '.cmd', '.ps1',
+    '.py', '.pyw', '.js', '.mjs', '.cjs', '.jsx', '.ts', '.tsx', '.vue',
+    '.svelte', '.c', '.cpp', '.cxx', '.cc', '.h', '.hpp', '.cs', '.java',
+    '.kt', '.kts', '.scala', '.groovy', '.pas', '.pp', '.dpr', '.inc',
+    '.php', '.phtml', '.rb', '.go', '.rs', '.swift', '.lua', '.sql',
+}
+
+
+def _technical_unverified_stub(filename, ext, reason=''):
+    """Passport placeholder for a file the deterministic audit cannot verify.
+
+    The guard must distinguish "the element is provably absent" (a verified
+    passport with ``absence`` flags) from "the format does not allow a
+    deterministic audit at all" (this stub). Only the former can lower a grade;
+    the stub may only downgrade claims about an unverifiable evidence family.
+    """
+    try:
+        from .ai_file_passport import infer_file_kind
+        kind = infer_file_kind(ext)
+    except Exception:
+        kind = 'unknown'
+    return {
+        'verified': False,
+        'kind': kind,
+        'extension': ext or '',
+        'file': filename,
+        'facts': {},
+        'absence': [],
+        'warnings': [],
+        'limitations': [reason or 'Формат не підтримує детермінований аудит'],
+    }
+
+
+def _serialize_adjustment_value(value):
+    """Lists/tuples must not reach the job payload as Python repr."""
+    if isinstance(value, (list, tuple)):
+        return '; '.join(str(item) for item in value)
+    if isinstance(value, dict):
+        return json.dumps(value, ensure_ascii=False)
+    return value
+
+
 def extract_submission_content(submission, path_overrides=None):
     """
     Видобуває текст та медіа-вміст із зданої учнем роботи:
@@ -2636,6 +2691,9 @@ def extract_submission_content(submission, path_overrides=None):
     text_parts = []
     inline_media = []
     inaccessible_materials = []
+    technical_passports = []
+    # Never reuse a passport from a previous extraction attempt for this object.
+    setattr(submission, '_technical_passports', technical_passports)
     unreadable_files = []
     readable_links = 0
 
@@ -2706,6 +2764,18 @@ def extract_submission_content(submission, path_overrides=None):
                         break
             if not f_obj or not hasattr(f_obj, 'path') or not os.path.exists(f_obj.path):
                 filename = getattr(sf, 'original_name', '') or os.path.basename(getattr(f_obj, 'name', '') or 'файл')
+                missing_ext = ''
+                try:
+                    missing_ext = sf.get_extension() or os.path.splitext(filename)[1].lower()
+                except Exception:
+                    missing_ext = os.path.splitext(filename)[1].lower()
+                # Plain text needs no audit stub: there is nothing hidden behind
+                # the format (and an inaccessible .txt must not become a false
+                # "unverified implementation" for an essay requirement).
+                if missing_ext not in {'.txt', '.text', '.log', '.md', '.markdown', '.rst'}:
+                    technical_passports.append(_technical_unverified_stub(
+                        filename, missing_ext,
+                        'Файл недоступний на сервері; детермінований аудит неможливий.'))
                 unreadable_files.append(filename)
                 reason = 'Прикріплений файл недоступний на сервері; його вміст не перевірено.'
                 inaccessible_materials.append({'type': 'file', 'target': filename, 'reason': reason})
@@ -2719,6 +2789,34 @@ def extract_submission_content(submission, path_overrides=None):
         from .ai_context import extract_file_evidence, OFFICE, IMAGES
         if ext in OFFICE | IMAGES | {'.pdf', '.sb3', '.hex', '.mdb', '.accdb'} or is_text_file(file_path):
             evidence = extract_file_evidence(file_path, ext)
+            # Deterministic server audit travels separately from the model text;
+            # the guard (Рівень 3) uses it to verify what the model claims.
+            passport = evidence.get('technical_passport') if isinstance(evidence, dict) else None
+            if isinstance(passport, dict):
+                technical_passports.append(dict(passport, file=filename))
+            else:
+                # Text/code formats are fully visible to the model, so a failed
+                # passport is not a hidden-implementation gap. The decision is
+                # extension-based (not content-sniffed): a CSV renamed to .xlsx
+                # previously looked like "plain text" and silently escaped the
+                # audit entirely.
+                plain_text = (ext in _VISIBLE_TEXT_EXTENSIONS
+                              or (not ext and is_text_file(file_path)))
+                # A file without an extension is still visible text/code:
+                # FIX-3 treats it as readable evidence, not a hidden
+                # implementation, so no unverified stub is added.
+                if not plain_text or ext == '.hex':
+                    if ext in IMAGES:
+                        stub_reason = ('Зображення/скан: структуру файлу детерміновано не '
+                                       'перевірено, доступний лише візуальний аналіз.')
+                    else:
+                        stub_reason = ((evidence.get('limitations') or [])
+                                       if isinstance(evidence, dict) else [])
+                        stub_reason = (stub_reason[0] if stub_reason else
+                                       'Формат не підтримує детермінований аудит; вміст '
+                                       'перевірено лише текстово/візуально.')
+                    technical_passports.append(
+                        _technical_unverified_stub(filename, ext, stub_reason))
             if not evidence['text'] and not evidence['media']:
                 unreadable_files.append(filename)
             text_parts.append(f"Вміст роботи учня ({filename}):\n{evidence['text']}")
@@ -2939,6 +3037,10 @@ def extract_submission_content(submission, path_overrides=None):
 
         # ── Й. АУДІО (голосові відповіді, усні пояснення) ─────────────────────
         elif ext in AUDIO_EVIDENCE_MIMES:
+            technical_passports.append(_technical_unverified_stub(
+                filename, ext,
+                'Аудіо не підтримує детермінований аудит структури; оцінюється лише '
+                'модельний аналіз запису.'))
             if os.path.getsize(file_path) <= AUDIO_EVIDENCE_LIMIT:
                 with open(file_path, 'rb') as audio_file:
                     inline_media.append({
@@ -2955,6 +3057,10 @@ def extract_submission_content(submission, path_overrides=None):
 
         # ── І. ВІДЕО (екранні записи, короткі демонстрації) ────────────────────
         elif ext in VIDEO_EVIDENCE_MIMES:
+            technical_passports.append(_technical_unverified_stub(
+                filename, ext,
+                'Відео не підтримує детермінований аудит структури; оцінюється лише '
+                'модельний аналіз запису.'))
             if not _video_container_recognized(file_path, ext):
                 unreadable_files.append(filename)
                 limitation = 'Контейнер відео не розпізнано; вміст не передано, потрібна ручна перевірка.'
@@ -2984,6 +3090,10 @@ def extract_submission_content(submission, path_overrides=None):
 
         # ── Ж. АРХІВИ (.zip, .tar, .gz, .tgz, .rar, .7z) ───────────────────────
         elif ext in ['.zip', '.rar', '.7z', '.tar', '.gz', '.tgz']:
+            technical_passports.append(_technical_unverified_stub(
+                filename, ext,
+                'Архів: вкладені файли не аудитуються детерміновано; потрібна '
+                'окрема перевірка вмісту.'))
             archive_summary = extract_text_from_archive(file_path, ext)
             text_parts.append(f"Вміст прикріпленого архіву ({filename}, {file_size_kb:.1f} КБ):\n{archive_summary}")
             limitation = 'Архів: вибірковий витяг, до 8 текстових файлів і 6 зображень; інші вкладення не перевірено. Не вважай їх відсутніми.'
@@ -3041,11 +3151,15 @@ def extract_submission_content(submission, path_overrides=None):
                 content = read_text_file(file_path)
                 text_parts.append(f"Вміст прикріпленого файлу ({filename}, {file_size_kb:.1f} КБ):\n```\n{content}\n```")
             else:
+                technical_passports.append(_technical_unverified_stub(
+                    filename, ext,
+                    'Формат потребує ручного перегляду; детермінований аудит недоступний.'))
                 unreadable_files.append(filename)
                 inaccessible_materials.append({'type': 'file', 'target': filename, 'reason': 'Цей формат потребує ручного перегляду; вміст не прочитано.'})
                 text_parts.append(f"[Прикріплено файл формату {ext} ({filename}, {file_size_kb:.1f} КБ)]")
 
     setattr(submission, '_inaccessible_materials', inaccessible_materials)
+    setattr(submission, '_technical_passports', technical_passports)
     readable_files = bool(submission_files) and len(unreadable_files) < len(submission_files)
     comment_without_urls = re.sub(r'https?://[^\s<>"\']+', '', submission.comment_student or '').strip()
     if (any(item.get('type') == 'url' for item in inaccessible_materials)
@@ -6083,6 +6197,7 @@ def apply_multi_task_evaluation_guardrail(
     answered_count: int = 0,
     teacher_scoped_task_nums: list[int] | None = None,
     scope: dict | None = None,
+    file_based: bool = False,
 ) -> tuple[str, str, list[dict], list[float], int | None, str, list[str], list[str], str]:
     """
     Педагогічний захист від галюцинацій ШІ при оцінюванні багатозадачних робіт:
@@ -6258,7 +6373,12 @@ def apply_multi_task_evaluation_guardrail(
         completed_tasks = max(1, ai_completed)
     elif double_count_task2_missing:
         completed_tasks = 2
-    elif len(paragraphs) < total_tasks and answered_count == 0 and len(raw_text) < 1500:
+    elif (not file_based and len(paragraphs) < total_tasks
+          and answered_count == 0 and len(raw_text) < 1500):
+        # Word-processing work can be split into paragraphs, a spreadsheet or a
+        # code project cannot. For file-based projects the paragraph heuristic
+        # wrongly overwrote 3/3 completed tasks with "1 of 3": trust the
+        # model's tasks_evaluated/tasks_completed_count instead.
         completed_tasks = max(1, len(paragraphs))
     elif answered_count > 0 and answered_count < total_tasks:
         completed_tasks = answered_count
@@ -6594,6 +6714,17 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
     settings = ai_settings or get_ai_settings()
     act_provider, act_key, act_model, act_url, is_backup_active = settings.get_active_config()
 
+    # The editable global system prompt in AISettings must really reach the
+    # evaluation, but only when a teacher actually customised it. Untouched
+    # factory defaults, stale defaults stored by an older version and an
+    # appended zero-evidence rule are all boilerplate and are not injected.
+    from .ai_context import system_prompt_is_boilerplate
+    global_system_prompt = (getattr(settings, 'system_prompt', '') or '').strip()
+    system_prompt_override = (
+        global_system_prompt
+        if global_system_prompt and not system_prompt_is_boilerplate(global_system_prompt)
+        else None)
+
     asgn = submission.assignment
     if force_thinking is not None:
         use_thinking = bool(force_thinking)
@@ -6616,7 +6747,9 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                          f"API Key для {act_provider.title()} не налаштовано в системі. Вкажіть ключ у Налаштуваннях ШІ.")
             submission.ai_status = 'failed'
             submission.ai_error_reason = error_msg
-            submission.save(update_fields=['ai_status', 'ai_error_reason'])
+            submission.ai_technical_evidence = {}
+            submission.save(update_fields=['ai_status', 'ai_error_reason',
+                                            'ai_technical_evidence'])
             log_ai_error(
                 teacher=teacher,
                 submission=submission,
@@ -6676,7 +6809,9 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
     if extract_error and not text_parts and not inline_media:
         submission.ai_status = 'unsupported'
         submission.ai_error_reason = extract_error
-        submission.save(update_fields=['ai_status', 'ai_error_reason'])
+        submission.ai_technical_evidence = {}
+        submission.save(update_fields=['ai_status', 'ai_error_reason',
+                                        'ai_technical_evidence'])
         return {'status': 'unsupported', 'error': extract_error}
 
     # Формуємо контекст завдання
@@ -6749,17 +6884,22 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
         format_requirements=eval_plan_dict.get('format_requirements', [])
     )
 
-    is_file_project = False
-    if hasattr(submission, 'files') and submission.files.exists():
-        is_file_project = any(
-            f.file.name.lower().endswith((
-                '.accdb', '.mdb', '.sqlite', '.db', '.sql',
-                '.py', '.cpp', '.cs', '.java', '.pas', '.html', '.css', '.js',
-                '.xlsx', '.xls', '.ods', '.csv',
-                '.pptx', '.ppt', '.odp',
-                '.zip', '.rar', '.7z'
-            )) for f in submission.files.all()
-        )
+    # P1-2: include the legacy single `Submission.file`, not only the
+    # SubmissionFile relation; otherwise a legacy project file is treated as a
+    # text answer and the paragraph heuristic overwrites 3/3 completed tasks.
+    try:
+        project_file_objects = submission.get_files()
+    except Exception:
+        project_file_objects = []
+    is_file_project = bool(project_file_objects) and any(
+        str(getattr(getattr(f, 'file', None), 'name', '') or '').lower().endswith((
+            '.accdb', '.mdb', '.sqlite', '.db', '.sql',
+            '.py', '.cpp', '.cs', '.java', '.pas', '.html', '.css', '.js',
+            '.xlsx', '.xls', '.ods', '.csv',
+            '.pptx', '.ppt', '.odp',
+            '.zip', '.rar', '.7z'
+        )) for f in project_file_objects
+    )
 
     qa_mapping_block = None
     questions_omitted = False
@@ -6782,7 +6922,8 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
     assessment_kwargs = dict(
         primary=primary_task_content if 'primary_task_content' in locals() else [],
         reference=teacher_files_content, coverage=material_coverage,
-        custom_prompt=custom_prompt, ai_settings=settings)
+        custom_prompt=custom_prompt or system_prompt_override, ai_settings=settings,
+        technical_passports=getattr(submission, '_technical_passports', []) or [])
     # Build both variants once, before the provider loop: the adapters below
     # must choose a representation, never rebuild the context.
     prompt_content, system_instruction = build_assessment_request(*assessment_args, **assessment_kwargs)
@@ -6823,6 +6964,7 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
     deferred_waits = []
     payload_info = {}
     server_adjustments = []
+    technical_findings = {}
 
     def note_adjustment(field, before, after, reason):
         if str(before) != str(after):
@@ -7064,6 +7206,7 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                     # produced repeat MAX_TOKENS outcomes.
                     output_budget = max(output_budget, 8192)
                 batch_meta = None
+                batch_failed = []
                 if batching_plan:
                     status_code, raw_text, err_msg, raw_data, batch_meta = evaluate_media_in_batches(
                         provider_prompt, provider_system, inline_media,
@@ -7248,6 +7391,28 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                 if result_json:
                     if batch_meta:
                         result_json['batched_evaluation'] = batch_meta
+                        batch_failed = [batch for batch in (batch_meta.get('batches') or [])
+                                        if isinstance(batch, dict) and batch.get('error')]
+                        if batch_failed:
+                            # P1-8: a failed batch means some pages were never
+                            # reviewed. The error must be visible to the teacher
+                            # and block the final numeric grade, not stay hidden
+                            # in raw_json.
+                            sub_evidence = result_json.get('submission_evidence')
+                            if not isinstance(sub_evidence, dict):
+                                sub_evidence = {}
+                                result_json['submission_evidence'] = sub_evidence
+                            inaccessible = sub_evidence.setdefault('inaccessible_materials', [])
+                            if not isinstance(inaccessible, list):
+                                inaccessible = sub_evidence['inaccessible_materials'] = []
+                            for batch in batch_failed:
+                                inaccessible.append({
+                                    'type': 'part',
+                                    'target': f"партія {batch.get('index')}",
+                                    'reason': ('Частину сторінок роботи не переглянуто: '
+                                               f"партія {batch.get('index')} — {batch.get('error')}. "
+                                               'Потрібна ручна перевірка; бал не може бути остаточним.'),
+                                })
                     proposed_grade = result_json.get('suggested_grade')
                     model_blocked = result_json.get('assessment_blocked') is True
                     has_evidence_rows = bool(result_json.get('criteria_results')
@@ -8017,9 +8182,300 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                             answered_count=answered_count,
                             teacher_scoped_task_nums=teacher_specific_task_nums if 'teacher_specific_task_nums' in locals() else None,
                             scope=scope if 'scope' in locals() else None,
+                            file_based=is_file_project,
                         )
                         note_adjustment('suggested_grade', grade_before, suggested_grade, 'multi_task_ceiling')
                         note_adjustment('level', level_before, level, 'multi_task_ceiling')
+
+                    # ── Технічний паспорт: прибрати вигадані похвали за відсутні елементи ──
+                    # The deterministic server audit is authoritative: a model may
+                    # not praise a formula/algorithm/slide that the file provably
+                    # does not contain. The guard also applies grade ceilings to
+                    # every grade source, so the cap survives the final GR-average
+                    # calculation below.
+                    technical_passports_for_guard = getattr(submission, '_technical_passports', []) or []
+                    # P0-1: an artifact task with no files at all (comment-only
+                    # or link-only submission) must still reach the guard —
+                    # FIX-1 builds a no-evidence implementation_unverified
+                    # signal from this profile. Essay/oral tasks
+                    # (expects_artifact=False) keep the previous no-op path.
+                    deliverable_type = ''
+                    if isinstance(deliverable, dict):
+                        deliverable_type = str(deliverable.get('type') or '').strip().lower()
+                    task_type_name = str(scope.get('task_type') or '').strip().lower()
+                    artifact_markers = {
+                        'spreadsheet', 'table', 'excel', 'code', 'program', 'programming',
+                        'coding', 'algorithm', 'database', 'access', 'scratch',
+                        'presentation', 'slides', 'document', 'practical', 'project',
+                        'file', 'artifact', 'python', 'game', 'animation', 'web',
+                        'html', 'interactive', 'informatics', 'sql', 'source_code',
+                        'таблиця', 'презентація', 'документ', 'програма', 'проєкт',
+                        'проект', 'практична', 'база даних', 'гра', 'анімація',
+                        'програмування', 'алгоритм', 'код',
+                    }
+                    oral_markers = {
+                        'oral', 'question_answer', 'questions', 'theory', 'test',
+                        'essay', 'dictation', 'survey', 'reading', 'усна', 'усний',
+                        'усне', 'тест', 'опитування', 'диктант', 'твір', 'есе',
+                    }
+
+                    def _requirement_pieces(values):
+                        pieces = []
+                        for value in values or []:
+                            if isinstance(value, dict):
+                                pieces.append(' '.join(
+                                    str(item) for item in value.values()
+                                    if isinstance(item, str)))
+                            elif value:
+                                pieces.append(str(value))
+                        return ' '.join(pieces)
+
+                    def _clean_requirement_source(text):
+                        """Remove material-container labels from the requirement.
+
+                        A presentation is often the *source* of the exercise
+                        ("з презентації виконайте завдання"), not the required
+                        deliverable. Slide labels must not activate the
+                        presentation evidence family and cap a text answer.
+                        """
+                        value = str(text or '')
+                        value = re.sub(r'(?i)\[?\s*(?:📽️\s*)?слайд\w*\s*№?\s*\d+\s*\]?',
+                                       ' ', value)
+                        value = re.sub(r'(?i)📽️', ' ', value)
+                        value = re.sub(
+                            r'(?i)\b(?:з|із|у|в)\s+(?:цієї\s+|цього\s+|наведеної\s+)?презентаці\w+',
+                            ' ', value)
+                        value = re.sub(r'(?i)\bна\s+слайд\w+', ' ', value)
+                        return re.sub(r'\s{2,}', ' ', value).strip()
+
+                    # The guard must see every place the teacher stated the
+                    # requirement: description, scope, custom criteria, attached
+                    # task file and question list. The same text also decides
+                    # whether an artifact was expected.
+                    guard_requirement_text = ' '.join(filter(None, [
+                        assignment_title,
+                        _clean_requirement_source(assignment_desc),
+                        _clean_requirement_source(combined_task_for_qs),
+                        custom_criteria,
+                        _clean_requirement_source(
+                            ' '.join(str(item) for item in (assigned_scope or []))),
+                        _clean_requirement_source(_requirement_pieces(t_reqs)),
+                        _clean_requirement_source(_requirement_pieces(mandatory_reqs)),
+                        _clean_requirement_source(_requirement_pieces(task_questions)),
+                        _clean_requirement_source(' '.join(
+                            str(item) for item in (
+                                primary_task_content if 'primary_task_content' in locals() else []
+                            )
+                            # Deterministic passport blocks are evidence, not the
+                            # teacher's requirement: their file names
+                            # ("presentation.txt") must not activate a family.
+                            if not str(item).lstrip().startswith(
+                                '[ТЕХНІЧНИЙ ПАСПОРТ')))[:4000],
+                    ]))
+                    technical_requirement_family = re.compile(
+                        r'формул|=if|\bif\b|\bякщо\b|\bесли\b|\bsum\b|\brank\b|'
+                        r'countif|sumif|обчисл|розрахун|formula|spreadsheet|\bexcel\b|'
+                        r'\bкод(?:у|ом|і|и)?\b|програм\w*|алгоритм\w*|\bpython\b|'
+                        r'пітон\w*|\bprogramming\b|javascript|\bscript\w*|скрипт\w*|'
+                        r'\bцикл(?:у|и|ів|ом|ах|ами)?\b|розроб\w*|\bcode\b|'
+                        r'scratch|скретч|\bспрайт\w*|\bгра\b|\bгри\b|\bгру\b|'
+                        r'анімац\w*|\bgame\b|animation|\baccess\b|баз[аи]\s+даних|'
+                        r'зв[’\'ʼ]?яз\w*|\bquery\b|relationship|\bdatabase\b',
+                        re.I)
+                    has_technical_requirement = bool(
+                        technical_requirement_family.search(guard_requirement_text))
+                    is_non_technical_task = bool(
+                        task_type_name in oral_markers or deliverable_type in oral_markers)
+                    # P0-1: an artifact can be expected either from the resolved
+                    # type or from a technical evidence family in the requirement
+                    # (e.g. a link-only Scratch task has task_type='programming'
+                    # and a requirement mentioning Scratch/game).
+                    expects_artifact = bool(
+                        (deliverable_type in artifact_markers)
+                        or (task_type_name in artifact_markers and not is_non_technical_task)
+                        or (has_technical_requirement and not is_non_technical_task))
+                    try:
+                        submission_file_objects = submission.get_files()
+                    except Exception:
+                        submission_file_objects = []
+                    has_submission_files = bool(submission_file_objects)
+                    evidence_profile = {
+                        'expects_artifact': expects_artifact,
+                        'has_files': has_submission_files,
+                        'has_link': bool(getattr(submission, 'link', '') or ''),
+                        'has_comment': bool(getattr(submission, 'comment_student', '') or ''),
+                        'task_type': task_type_name,
+                        'deliverable_type': deliverable_type,
+                    }
+                    if technical_passports_for_guard or evidence_profile['expects_artifact']:
+                        from .ai_evidence_guard import apply_technical_evidence_guard
+                        technical_guard = apply_technical_evidence_guard(
+                            result=result_json,
+                            passports=technical_passports_for_guard,
+                            requirement_text=guard_requirement_text,
+                            suggested_grade=suggested_grade,
+                            level=level,
+                            clean_gr_results=clean_gr_results,
+                            numeric_gr_grades=numeric_gr_grades,
+                            avg_gr_grade=avg_gr_grade,
+                            summary=summary,
+                            strengths=strengths,
+                            weaknesses=weaknesses,
+                            feedback_comment=feedback_comment,
+                            teacher_instructions=(getattr(assignment, 'teacher_ai_instructions', '') or ''),
+                            custom_criteria=custom_criteria or '',
+                            evidence_profile=evidence_profile,
+                        )
+                        suggested_grade = technical_guard['suggested_grade']
+                        level = technical_guard['level']
+                        clean_gr_results = technical_guard['clean_gr_results']
+                        numeric_gr_grades = technical_guard['numeric_gr_grades']
+                        avg_gr_grade = technical_guard['avg_gr_grade']
+                        summary = technical_guard['summary']
+                        strengths = technical_guard['strengths']
+                        weaknesses = technical_guard['weaknesses']
+                        feedback_comment = technical_guard['feedback_comment']
+                        serialized_adjustments = []
+                        for technical_adjustment in technical_guard.get('adjustments') or []:
+                            before = _serialize_adjustment_value(technical_adjustment.get('before'))
+                            after = _serialize_adjustment_value(technical_adjustment.get('after'))
+                            serialized_adjustments.append(dict(
+                                technical_adjustment, before=before, after=after))
+                            note_adjustment(
+                                technical_adjustment.get('field', 'suggested_grade'),
+                                before,
+                                after,
+                                technical_adjustment.get('reason') or 'technical_evidence_ceiling')
+                        if technical_guard.get('applied'):
+                            result_json['grade_explanation'] = (
+                                technical_guard.get('grade_explanation')
+                                or result_json.get('grade_explanation') or '')
+                        # Findings are persisted for the teacher even when the
+                        # guard changed nothing (the facts are the audit result),
+                        # but a no-op guard on a file-less essay must not add an
+                        # empty audit panel.
+                        has_absent_facts = bool(
+                            technical_passports_for_guard
+                            or technical_guard.get('active_flags')
+                            or technical_guard.get('waived_flags')
+                            or technical_guard.get('adjustments'))
+                        technical_findings = {
+                            'passports': [
+                                {
+                                    'file': item.get('file'),
+                                    'kind': item.get('kind'),
+                                    'extension': item.get('extension'),
+                                    'verified': item.get('verified') is not False,
+                                    'facts': item.get('facts') if isinstance(item.get('facts'), dict) else {},
+                                    'absence': item.get('absence') or [],
+                                    'warnings': item.get('warnings') or [],
+                                    'limitations': item.get('limitations') or [],
+                                }
+                                for item in technical_passports_for_guard
+                                if isinstance(item, dict)
+                            ],
+                            'active_flags': technical_guard.get('active_flags') or [],
+                            'waived_flags': technical_guard.get('waived_flags') or [],
+                            'adjustments': serialized_adjustments,
+                            'gaps_count': sum(
+                                1 for item in technical_passports_for_guard
+                                if isinstance(item, dict) and item.get('verified') is False),
+                            'no_evidence': not technical_passports_for_guard,
+                            'evidence_profile': evidence_profile,
+                        }
+                        if has_absent_facts:
+                            result_json['technical_passport_findings'] = technical_findings
+                            sub_evidence = result_json.get('submission_evidence')
+                            if not isinstance(sub_evidence, dict):
+                                sub_evidence = {}
+                                result_json['submission_evidence'] = sub_evidence
+                            sub_evidence['technical_passports'] = technical_findings['passports']
+                        else:
+                            # A no-op audit (e.g. a file-less essay) must not be
+                            # persisted or returned as an empty audit panel.
+                            technical_findings = {}
+
+                    # ── Детермінована стеля за повний збіг роботи (P1-7/FIX-5) ──
+                    # The prompt only *asks* the model to cap a proven duplicate
+                    # at 4; the model may ignore it. Apply the ceiling to every
+                    # grade source here (before the final GR-average calculation)
+                    # unless the teacher explicitly allowed the match.
+                    from .duplicate_detector import duplicate_ceiling
+                    duplicate_cap = duplicate_ceiling(dup_info if isinstance(dup_info, dict) else {})
+                    if duplicate_cap is not None:
+                        teacher_leniency_text = ' '.join(filter(None, [
+                            getattr(assignment, 'teacher_ai_instructions', '') or '',
+                            custom_criteria or '',
+                        ])).casefold()
+                        duplicate_leniency = any(marker in teacher_leniency_text for marker in (
+                            'не знижуй', 'не штрафуй', 'не враховуй', 'не зменшуй',
+                            'можна однаков', 'спільна робота', 'колективн', 'дозволено'))
+                        if not duplicate_leniency:
+                            def _capped_grade(value):
+                                number_text = str(value or '').strip().replace(',', '.')
+                                try:
+                                    number = int(float(number_text))
+                                except (TypeError, ValueError):
+                                    return number_text
+                                return str(min(number, duplicate_cap))
+
+                            grade_before_duplicate = suggested_grade
+                            suggested_grade = _capped_grade(suggested_grade)
+                            if suggested_grade != grade_before_duplicate:
+                                note_adjustment('suggested_grade', grade_before_duplicate,
+                                                suggested_grade, 'duplicate_ceiling')
+                                level = normalized_level(level, suggested_grade)
+                            if not is_traditional:
+                                for gr_row in clean_gr_results or []:
+                                    if not isinstance(gr_row, dict):
+                                        continue
+                                    gr_before = gr_row.get('grade')
+                                    gr_after = _capped_grade(gr_before)
+                                    if gr_after != str(gr_before):
+                                        gr_row['grade'] = gr_after
+                                        gr_row['level'] = level_for_grade(gr_after)
+                                        note_adjustment('clean_gr_results', gr_before,
+                                                        gr_after, 'duplicate_ceiling')
+                                numeric_gr_grades = [
+                                    min(float(value), float(duplicate_cap))
+                                    if isinstance(value, (int, float)) else value
+                                    for value in (numeric_gr_grades or [])]
+                                if avg_gr_grade is not None:
+                                    try:
+                                        avg_after = min(int(avg_gr_grade), int(duplicate_cap))
+                                    except (TypeError, ValueError):
+                                        avg_after = avg_gr_grade
+                                    if avg_after != avg_gr_grade:
+                                        note_adjustment('avg_gr_grade', avg_gr_grade,
+                                                        avg_after, 'duplicate_ceiling')
+                                        avg_gr_grade = avg_after
+                            # C (P1-7): matching facts contain a datetime
+                            # (`submitted_at`). A raw datetime makes
+                            # `json.dumps(raw_json)` fail and the teacher job
+                            # fails, so only JSON-safe fields are kept.
+                            safe_duplicate_matches = []
+                            for match in (dup_info or {}).get('matches') or []:
+                                if not isinstance(match, dict):
+                                    continue
+                                safe_match = {
+                                    key: match[key]
+                                    for key in ('file', 'other_file', 'reason',
+                                                'student_name', 'class', 'type',
+                                                'submission_id')
+                                    if key in match
+                                }
+                                submitted_at = match.get('submitted_at')
+                                if submitted_at is not None:
+                                    safe_match['submitted_at'] = (
+                                        submitted_at.isoformat()
+                                        if hasattr(submitted_at, 'isoformat')
+                                        else str(submitted_at))
+                                safe_duplicate_matches.append(safe_match)
+                            result_json['duplicate_ceiling'] = {
+                                'cap': duplicate_cap,
+                                'reason': 'duplicate_ceiling',
+                                'matches': safe_duplicate_matches,
+                            }
 
                     # Кінцева перевірка: якщо роботу відхилено — гарантуємо "Доопрацювати" та Початковий рівень (1-3)
                     if is_rejected_submission:
@@ -8091,6 +8547,13 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                     partial_labels = policy['labels'] if policy['partial'] else []
                     assessment_blocked = policy['blocked']
                     partial_assessment = policy['partial']
+                    if batch_failed:
+                        # P1-8: never show a final numeric grade when some pages
+                        # were not reviewed at all.
+                        assessment_blocked = True
+                        partial_assessment = False
+                        blocked_labels = list(blocked_labels) + [
+                            'частину сторінок роботи не переглянуто (помилка партії)']
                     if (not assessment_blocked and suggested_grade == 'Доопрацювати'
                             and policy.get('missing', 0) > 0
                             and not is_rejected_submission and not unclear_task):
@@ -8109,6 +8572,7 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                         or not assignment.allow_ai_usage
                         or model_fallback
                         or bool(result_json.get('batched_evaluation'))
+                        or bool(batch_failed)
                         or bool((scope.get('_duplicate_facts') or {}).get('is_duplicate_student')
                                 and not (scope.get('_duplicate_facts') or {}).get('plagiarism_ignored')))
                     full_feedback_parts = []
@@ -8179,6 +8643,10 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                     evidence_sections = feedback_evidence_sections(result_json)
                     full_feedback_parts.extend(evidence_sections)
                     combined_feedback = "\n\n".join(full_feedback_parts) if full_feedback_parts else feedback_comment
+                    # P0-4: the deterministic audit facts are persisted in
+                    # submission.ai_technical_evidence only and shown in a
+                    # teacher-only UI panel. They must never leak into
+                    # ai_feedback (which legacy student paths could render).
 
                     # ── ЄДИНЕ ВИЗНАЧЕННЯ ФІНАЛЬНОГО БАЛУ ──
                     # Усі проміжні перевірки вже виконано. Тут бал нормалізується
@@ -8242,10 +8710,12 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                     submission.ai_status = 'success'
                     submission.ai_error_reason = ''
                     submission.ai_reviewed_at = timezone.now()
+                    submission.ai_technical_evidence = technical_findings or {}
                     submission.save(update_fields=[
                         'ai_suggested_grade', 'ai_score_level', 'ai_feedback', 'ai_gr_results',
                         'ai_generated_detected', 'ai_generated_confidence', 'ai_generated_details',
                         'ai_generated_percent', 'ai_authorship_state', 'ai_provenance_report',
+                        'ai_technical_evidence',
                         'ai_model_used', 'ai_provider_used', 'ai_request_model',
                         'ai_connection_id',
                         'ai_prompt_tokens', 'ai_completion_tokens', 'ai_total_tokens',
@@ -8313,7 +8783,8 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                         'payload_manifest': dict(payload_info, sources=[
                             {'target': item.get('file'), 'limitations': item.get('limitations') or []}
                             for item in (material_coverage or [])]),
-                        'fallback_activated': fallback_happened
+                        'fallback_activated': fallback_happened,
+                        'technical_evidence': technical_findings,
                     }
                 else:
                     reason = report_failure('Неповна або некоректна відповідь JSON; оцінку не збережено.')
@@ -8364,7 +8835,10 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
     all_err_msg = " | ".join(attempted_errors) if attempted_errors else "Не вдалося отримати відповідь від жодної з налаштованих моделей або резервного API ШІ."
     submission.ai_status = 'failed'
     submission.ai_error_reason = all_err_msg
-    submission.save(update_fields=['ai_status', 'ai_error_reason'])
+    # P1-5: stale audit facts must not be shown as current after a failed run.
+    submission.ai_technical_evidence = {}
+    submission.save(update_fields=['ai_status', 'ai_error_reason',
+                                    'ai_technical_evidence'])
     return {'status': 'failed', 'error': all_err_msg}
 
 
@@ -9305,6 +9779,38 @@ def sanitize_ai_understanding_data(data: dict) -> dict:
     return _clean_val(data)
 
 
+def _redact_private_instruction_notes(value, private_text):
+    """Deterministically remove teacher-only notes from the AI understanding.
+
+    ``assignment.teacher_ai_instructions`` is private guidance for the grading
+    prompt. It must never appear in the understanding dialog shown to students
+    (also for cached data generated by an older version).
+    """
+    private_text = strip_html_tags(str(private_text or '')).strip()
+    if not private_text:
+        return value
+    needles = {private_text}
+    needles.update(line.strip() for line in re.split(r'[\n]+', private_text)
+                   if len(line.strip()) >= 12)
+    for sentence in re.split(r'(?<=[.!?])\s+', private_text):
+        if len(sentence.strip()) >= 30:
+            needles.add(sentence.strip())
+
+    def _clean(item):
+        if isinstance(item, str):
+            for needle in needles:
+                if needle and needle in item:
+                    item = item.replace(needle, '')
+            return re.sub(r'\s{2,}', ' ', item).strip(' \n\t;,.')
+        if isinstance(item, list):
+            return [_clean(entry) for entry in item]
+        if isinstance(item, dict):
+            return {key: _clean(entry) for key, entry in item.items()}
+        return item
+
+    return _clean(value)
+
+
 def generate_age_appropriate_student_guide(
     grade_str: str = "7 клас",
     age_str: str = "12-13 років",
@@ -9614,13 +10120,16 @@ def analyze_assignment_task_understanding(assignment, force_refresh=False, sourc
     grade_str, age_str = get_assignment_target_grades_and_ages(assignment)
     min_grade = get_assignment_min_grade(assignment)
 
-    from .ai_context import assignment_fingerprint, teacher_materials, ASSESSMENT_RULES
+    from .ai_context import (assignment_fingerprint, teacher_materials, ASSESSMENT_RULES,
+                            strip_appended_zero_evidence_rule, system_prompt_is_boilerplate)
     fingerprint = assignment_fingerprint(assignment)
     if not force_refresh and assignment.ai_task_understanding:
         try:
             cached_data = json.loads(assignment.ai_task_understanding)
             if isinstance(cached_data, dict) and cached_data.get('_source_fingerprint') == fingerprint and cached_data.get('analysis_mode') == 'ai':
                 cached_data = sanitize_ai_understanding_data(cached_data)
+                cached_data = _redact_private_instruction_notes(
+                    cached_data, getattr(assignment, 'teacher_ai_instructions', '') or '')
                 cur_expl = cached_data.get('student_explanation') or ''
                 if not cur_expl or len(cur_expl) < 50 or 'крок' not in cur_expl.lower():
                     cached_data['student_explanation'] = generate_age_appropriate_student_guide(
@@ -9672,11 +10181,10 @@ def analyze_assignment_task_understanding(assignment, force_refresh=False, sourc
         ai_prompting.teacher_data_block('assignment_description', assignment_desc),
         ai_prompting.data_boundary_rule(),
     ]
-    teacher_ai_instructions = getattr(assignment, 'teacher_ai_instructions', '') if assignment else ''
-    if teacher_ai_instructions and teacher_ai_instructions.strip():
-        prompt_lines.append(f"\nВКАЗІВКИ ВЧИТЕЛЯ ДЛЯ ШІ (КОНФІДЕНЦІЙНО):\n{teacher_ai_instructions.strip()}")
+    # P1-10: teacher_ai_instructions is private grading guidance. The
+    # understanding report contains a student-facing explanation, so the notes
+    # are deliberately NOT sent to this generation call.
     seen_rubrics = set()
-    from .models import DEFAULT_NUS_SYSTEM_PROMPT, DEFAULT_NUS_GR_SYSTEM_PROMPT, DEFAULT_TRADITIONAL_SYSTEM_PROMPT
     for class_group in assignment.classes.all():
         preset, grs = assignment.get_ai_policy(class_group)
         if preset:
@@ -9685,8 +10193,11 @@ def analyze_assignment_task_understanding(assignment, force_refresh=False, sourc
             if preset.pk in seen_rubrics:
                 continue
             seen_rubrics.add(preset.pk)
-            if preset.system_prompt.strip() not in {p.strip() for p in (DEFAULT_NUS_SYSTEM_PROMPT, DEFAULT_NUS_GR_SYSTEM_PROMPT, DEFAULT_TRADITIONAL_SYSTEM_PROMPT)}:
-                prompt_lines.append(f'ВКАЗІВКИ ШАБЛОНУ {preset.name}:\n{preset.system_prompt}')
+            if not system_prompt_is_boilerplate(preset.system_prompt):
+                # Stale factory defaults no longer bloat the understanding prompt.
+                preset_guidance = strip_appended_zero_evidence_rule(preset.system_prompt)
+                if preset_guidance:
+                    prompt_lines.append(f'ВКАЗІВКИ ШАБЛОНУ {preset.name}:\n{preset_guidance}')
             prompt_lines.append(f'ДОКУМЕНТ КРИТЕРІЇВ {preset.name}:\n{preset.extracted_criteria_text}')
             rubric_path = ((source_overrides or {}).get('preset') or {}).get(str(preset.pk)) \
                 or (preset.document_file.path if preset.document_file else '')
@@ -10039,6 +10550,9 @@ def analyze_assignment_task_understanding(assignment, force_refresh=False, sourc
     result_data['material_coverage'] = material_coverage
     if result_data['analysis_mode'] == 'local':
         result_data['teacher_recommendations'].append('ШІ недоступний: це попереднє локальне пояснення. Візуальну умову потрібно уточнити у вчителя.')
+    # P1-10: private teacher notes must not be saved into the dialog data.
+    result_data = _redact_private_instruction_notes(
+        result_data, getattr(assignment, 'teacher_ai_instructions', '') or '')
     # Фінальна санітизація всіх полів від будь-яких залишків HTML-розмітки
     result_data = sanitize_ai_understanding_data(result_data)
 

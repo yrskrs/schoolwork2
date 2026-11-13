@@ -250,8 +250,11 @@ class ParallelPrivacyTests(TestCase):
             ai_generated_details='Припущення про стиль.', ai_generated_confidence='high')
         call.return_value = 200, json.dumps(answer), '', {}
         result = evaluate_submission_with_gemini(self.sub)
+        # P1-9: model-only detected/percent не є доказом (evidence-gate), тому
+        # confidence='none', а змістовий бал не залежить від припущення про ШІ.
         self.assertEqual(result['suggested_grade'], '9')
-        self.assertEqual(result['ai_generated_confidence'], 'low')
+        self.assertEqual(result['ai_generated_confidence'], 'none')
+        self.assertFalse(result['ai_generated_detected'])
 
     @patch('feed.gemini_service.call_ai_api')
     def test_unverifiable_gr_blocks_numeric_grade(self, call):

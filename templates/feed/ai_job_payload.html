@@ -103,6 +103,60 @@
   </section>
   {% endif %}
 
+  {% if technical_evidence.available %}
+  <section style="background:var(--color-bg-secondary);border:1px solid rgba(var(--accent-rgb),.25);border-radius:14px;padding:16px 18px;margin-bottom:16px;">
+    <h2 style="margin:0 0 10px;font-size:17px;">🔎 Технічний аудит файлів</h2>
+    <p style="margin:0 0 10px;font-size:12px;color:var(--color-text-secondary);">Детерміновані факти серверного аудиту (не оцінка моделі). Дані призначені лише для вчителя.</p>
+    {% if technical_evidence.active_flags %}
+    <p style="margin:0 0 6px;font-size:13.5px;"><strong>Активні флаги:</strong> {{ technical_evidence.active_flags|join:", " }}</p>
+    {% endif %}
+    {% if technical_evidence.waived_flags %}
+    <p style="margin:0 0 6px;font-size:13.5px;"><strong>Знято вказівкою вчителя:</strong> {{ technical_evidence.waived_flags|join:", " }}</p>
+    {% endif %}
+    {% for passport in technical_evidence.passports %}
+    <div style="border:1px solid var(--color-border);border-radius:10px;padding:10px 12px;margin-bottom:8px;background:var(--color-surface);">
+      <div style="font-weight:700;word-break:break-word;">📄 {{ passport.file }}
+        {% if passport.verified %}<span style="font-size:11px;padding:1px 7px;border-radius:8px;background:rgba(var(--accent-rgb),.12);color:var(--color-primary);">аудит виконано</span>
+        {% else %}<span style="font-size:11px;padding:1px 7px;border-radius:8px;background:rgba(var(--warn-rgb),.15);color:var(--color-warning);">аудит недоступний</span>{% endif %}
+      </div>
+      {% if passport.kind or passport.extension %}
+      <div style="font-size:11.5px;color:var(--color-text-muted);margin-bottom:4px;">{{ passport.kind }}{% if passport.extension %} · {{ passport.extension }}{% endif %}</div>
+      {% endif %}
+      {% if passport.facts %}
+      <table style="width:100%;border-collapse:collapse;font-size:12.5px;margin-bottom:6px;">
+        {% for fact in passport.facts %}
+        <tr><td style="padding:1px 10px 1px 0;color:var(--color-text-muted);vertical-align:top;white-space:nowrap;">{{ fact.key }}</td><td style="padding:1px 0;word-break:break-word;">{{ fact.value }}</td></tr>
+        {% endfor %}
+      </table>
+      {% endif %}
+      {% if passport.absence %}
+      <p style="margin:0 0 4px;font-size:12.5px;"><strong>Підтверджено відсутнє:</strong> {{ passport.absence|join:", " }}</p>
+      {% endif %}
+      {% if passport.warnings %}
+      <ul style="margin:0 0 4px;padding-left:18px;font-size:12.5px;">{% for warning in passport.warnings %}<li style="margin-bottom:2px;">{{ warning }}</li>{% endfor %}</ul>
+      {% endif %}
+      {% if passport.limitations %}
+      <p style="margin:0;font-size:11.5px;color:var(--color-text-muted);">Межі аудиту: {{ passport.limitations|join:"; " }}</p>
+      {% endif %}
+    </div>
+    {% endfor %}
+    {% if technical_evidence.gaps_count %}
+    <p style="margin:0 0 6px;font-size:13px;">Файлів, які детерміновано перевірити не вдалося: <strong>{{ technical_evidence.gaps_count }}</strong>. Такі вимоги мають бути позначені як неперевірені.</p>
+    {% endif %}
+    {% if technical_evidence.adjustments %}
+    <p style="margin:8px 0 4px;font-size:13.5px;"><strong>Серверні зміни результату:</strong></p>
+    <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
+      <thead><tr style="text-align:left;color:var(--color-text-secondary);"><th>Поле</th><th>Було</th><th>Стало</th><th>Причина</th></tr></thead>
+      <tbody>
+      {% for row in technical_evidence.adjustments %}
+        <tr><td>{{ row.field }}</td><td>{{ row.before }}</td><td>{{ row.after }}</td><td>{{ row.reason }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+  </section>
+  {% endif %}
+
   <section style="background:var(--color-bg-secondary);border:1px solid rgba(var(--accent-rgb),.25);border-radius:14px;padding:16px 18px;">
     <h2 style="margin:0 0 10px;font-size:17px;">Події перевірки</h2>
     {% if events %}

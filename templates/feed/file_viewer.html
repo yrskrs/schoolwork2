@@ -693,7 +693,63 @@
     <div class="fv-panel-scroll" id="fv-panel-scroll">
         <section class="fv-review-panel" id="fv-panel-comments" role="tabpanel" aria-labelledby="fv-tab-comments" data-review-panel="comments" tabindex="0">{% include 'feed/components/viewer_grading.html' %}{% include 'feed/components/viewer_comments.html' %}</section>
         <section class="fv-review-panel" id="fv-panel-task" role="tabpanel" aria-labelledby="fv-tab-task" data-review-panel="task" tabindex="0" hidden>{% include 'feed/components/viewer_task_panel.html' %}</section>
-        <section class="fv-review-panel" id="fv-panel-ai" role="tabpanel" aria-labelledby="fv-tab-ai" data-review-panel="ai" tabindex="0" hidden>{% include 'feed/components/viewer_ai_panel.html' %}</section>
+        <section class="fv-review-panel" id="fv-panel-ai" role="tabpanel" aria-labelledby="fv-tab-ai" data-review-panel="ai" tabindex="0" hidden>{% include 'feed/components/viewer_ai_panel.html' %}
+            {% if technical_evidence.available %}
+            <details class="fv-ai-options" id="fv-technical-evidence" style="margin-top:14px;">
+                <summary>🔎 Технічний аудит файлів (детерміновані факти сервера)</summary>
+                <div style="padding:8px 4px;font-size:12px;line-height:1.5;color:var(--color-text-secondary);">
+                    <p style="margin:0 0 8px;">Це факти серверного аудиту файлів, а не оцінка моделі. Інформація призначена лише для вчителя й не показується учню. Після нової перевірки сторінку слід оновити, щоб побачити актуальні факти.</p>
+                    {% if technical_evidence.active_flags %}
+                    <p style="margin:0 0 6px;"><strong>Активні флаги:</strong> {{ technical_evidence.active_flags|join:", " }}</p>
+                    {% endif %}
+                    {% if technical_evidence.waived_flags %}
+                    <p style="margin:0 0 6px;"><strong>Знято вказівкою вчителя:</strong> {{ technical_evidence.waived_flags|join:", " }}</p>
+                    {% endif %}
+                    {% for passport in technical_evidence.passports %}
+                    <div style="border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:8px 10px;margin-bottom:8px;background:var(--color-bg-secondary);">
+                        <div style="font-weight:750;color:var(--color-text-primary);word-break:break-word;">
+                            📄 {{ passport.file }}
+                            {% if passport.verified %}<span class="badge badge-ai">аудит виконано</span>{% else %}<span class="badge badge-warning">аудит недоступний</span>{% endif %}
+                        </div>
+                        {% if passport.kind or passport.extension %}
+                        <div style="font-size:11px;color:var(--color-text-muted);margin-bottom:4px;">{{ passport.kind }}{% if passport.extension %} · {{ passport.extension }}{% endif %}</div>
+                        {% endif %}
+                        {% if passport.facts %}
+                        <table style="width:100%;border-collapse:collapse;font-size:11.5px;margin-bottom:6px;">
+                            {% for fact in passport.facts %}
+                            <tr><td style="padding:1px 8px 1px 0;color:var(--color-text-muted);vertical-align:top;white-space:nowrap;">{{ fact.key }}</td><td style="padding:1px 0;color:var(--color-text-primary);word-break:break-word;">{{ fact.value }}</td></tr>
+                            {% endfor %}
+                        </table>
+                        {% endif %}
+                        {% if passport.absence %}
+                        <p style="margin:0 0 4px;"><strong>Підтверджено відсутнє:</strong> {{ passport.absence|join:", " }}</p>
+                        {% endif %}
+                        {% if passport.warnings %}
+                        <ul style="margin:0 0 4px;padding-left:18px;">{% for warning in passport.warnings %}<li style="margin-bottom:2px;">{{ warning }}</li>{% endfor %}</ul>
+                        {% endif %}
+                        {% if passport.limitations %}
+                        <p style="margin:0;font-size:11px;color:var(--color-text-muted);">Межі аудиту: {{ passport.limitations|join:"; " }}</p>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                    {% if technical_evidence.gaps_count %}
+                    <p style="margin:0 0 6px;">Файлів, які детерміновано перевірити не вдалося: <strong>{{ technical_evidence.gaps_count }}</strong>. Позначте такі вимоги як неперевірені.</p>
+                    {% endif %}
+                    {% if technical_evidence.adjustments %}
+                    <p style="margin:8px 0 4px;"><strong>Серверні зміни результату:</strong></p>
+                    <table style="width:100%;border-collapse:collapse;font-size:11.5px;">
+                        <thead><tr style="text-align:left;color:var(--color-text-muted);"><th>Поле</th><th>Було</th><th>Стало</th><th>Причина</th></tr></thead>
+                        <tbody>
+                        {% for row in technical_evidence.adjustments %}
+                        <tr><td>{{ row.field }}</td><td>{{ row.before }}</td><td>{{ row.after }}</td><td>{{ row.reason }}</td></tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                    {% endif %}
+                </div>
+            </details>
+            {% endif %}
+        </section>
         <section class="fv-review-panel" id="fv-panel-info" role="tabpanel" aria-labelledby="fv-tab-info" data-review-panel="info" tabindex="0" hidden>{% include 'feed/components/viewer_submission_info.html' %}{% include 'feed/components/viewer_comment_history.html' %}</section>
     </div>
     {% include 'feed/components/viewer_save_footer.html' %}

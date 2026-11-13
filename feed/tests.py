@@ -20,6 +20,36 @@ from .fuzzy_search import fuzzy_search_submissions, translate_en_to_ua
 from .gemini_service import evaluate_submission_with_gemini
 
 
+def _xlsx_formula_bytes():
+    """Справжній .xlsx із формулами (техпаспорт підтверджує елемент)."""
+    import io
+    from openpyxl import Workbook
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.append(['Товар', 'Кількість', 'Ціна', 'Сума'])
+    sheet.append(['Зошит', 2, 15])
+    sheet['D2'] = '=SUM(B2:C2)'
+    sheet.append(['Ручка', 5, 8])
+    sheet['D3'] = '=SUM(B3:C3)'
+    sheet['D4'] = '=AVERAGE(D2:D3)'
+    buffer = io.BytesIO()
+    workbook.save(buffer)
+    return buffer.getvalue()
+
+
+def _python_calculator_bytes():
+    """Python-калькулятор із функцією, розгалуженням і циклом (не static)."""
+    return (
+        'def calculate(a, b, operation):\n'
+        "    if operation == '+':\n"
+        '        return a + b\n'
+        '    for value in (a, b):\n'
+        '        print(value)\n'
+        '    return 0\n\n'
+        "print(calculate(2, 2, '+'))\n"
+    ).encode('utf-8')
+
+
 class SchoolNetSubmissionsIntegrationTest(TestCase):
     def setUp(self):
         # Створюємо вчителя
@@ -512,13 +542,15 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
         }
         mock_http_post.return_value = (200, mock_data, json.dumps(mock_data))
 
-        # Створюємо роботу учня
+        # Створюємо роботу учня з реальною таблицею (вимога про формули):
+        # без файлу P0-1 дає обґрунтовану стелю 9, і тест про apply втратив би суть.
         sub = Submission.objects.create(
             assignment=self.assignment,
             first_name='Анна',
             last_name='Коваленко',
             class_group=self.class_group,
-            comment_student='Ось мій розв\'язок задачі #4'
+            comment_student='Ось мій розв\'язок задачі #4',
+            file=SimpleUploadedFile('work.xlsx', _xlsx_formula_bytes())
         )
 
 
@@ -531,6 +563,11 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
         self.assertEqual(sub.ai_suggested_grade, '11')
         self.assertEqual(sub.ai_status, 'success')
         self.assertIn('Чудово', sub.ai_feedback)
+
+        # P0-4: публічний коментар будується ЛИШЕ зі student_ai_feedback
+        # (fallback на ai_feedback прибрано, щоб не витікав аудит/файли).
+        sub.student_ai_feedback = '📌 **Висновок:** Чудово впоралась з усіма завданнями!'
+        sub.save(update_fields=['student_ai_feedback'])
 
         # Тест застосування оцінки в 1 клік
         self.client.login(username='teacher1', password='password123')
@@ -860,7 +897,10 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
 
         res = evaluate_submission_with_gemini(sub)
         self.assertEqual(res['status'], 'success')
-        self.assertEqual(res['suggested_grade'], '10')
+        # P0-1/FIX-3: файл без розширення не має синтаксичного паспорта, тому
+        # технічна родина (Excel-формули) не підтверджена -> стеля 9, а не 10.
+        # format_warning від моделі зберігається окремо й не скасовує цю межу.
+        self.assertEqual(res['suggested_grade'], '9')
         self.assertIn('format_warning', res)
         self.assertTrue(len(res['format_warning']) > 0)
 
@@ -1079,7 +1119,8 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
             first_name='Олег',
             last_name='Петренко',
             class_group=self.class_group,
-            comment_student="Розв'язання завдання"
+            comment_student="Розв'язання завдання",
+            file=SimpleUploadedFile('fallback_work.xlsx', _xlsx_formula_bytes())
         )
 
         res = evaluate_submission_with_gemini(sub)
@@ -1195,7 +1236,10 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
             class_group=self.class_group,
             first_name='Анна',
             last_name='Коваль',
-            comment_student='print(2 + 2)'
+            comment_student='print(2 + 2)',
+            # Реальний Python-файл: без нього P0-1 дає стелю 9 і тест про
+            # вибір пресета перестав би перевіряти оцінку 11.
+            file=SimpleUploadedFile('calculator.py', _python_calculator_bytes())
         )
 
         trad_preset = AICriteriaPreset.objects.filter(evaluation_type='traditional').first()
@@ -1273,7 +1317,10 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
             class_group=self.class_group,
             first_name='Михайло',
             last_name='Коцюбинський',
-            link='https://github.com/student/informatics-project'
+            link='https://github.com/student/informatics-project',
+            # Реальна таблиця з формулами, щоб перевіряти саме вибір ГР та
+            # середнє, а не no-evidence стелю P0-1.
+            file=SimpleUploadedFile('grades.xlsx', _xlsx_formula_bytes())
         )
 
         mock_post.return_value = (200, {
@@ -1313,6 +1360,13 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
         sub.refresh_from_db()
         self.assertEqual(sub.get_ai_gr_average(), 9)
         self.assertEqual(sub.get_ai_gr_average_display(), '9')
+
+        # P0-4: публічний чистий відгук будується лише зі student_ai_feedback
+        # (fallback на teacher-only ai_feedback прибрано).
+        sub.student_ai_feedback = (
+            '📌 **Висновок:** Робота виконана якісно та структуровано.\n'
+            '✅ **Сильні сторони:**\n• Чіткий алгоритм\n• Враховано принципи безпеки')
+        sub.save(update_fields=['student_ai_feedback'])
 
         # Перевірка конфіденційності: get_clean_ai_feedback_for_student() не повинно містити детальних оцінок ГР
         clean_feedback = sub.get_clean_ai_feedback_for_student()
@@ -1371,7 +1425,10 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
             class_group=self.class_group,
             first_name='Леся',
             last_name='Українка',
-            link='https://github.com/student/batch-project'
+            link='https://github.com/student/batch-project',
+            # Реальний .xlsx із формулами, щоб batch-перевірка не впиралась у
+            # no-evidence стелю для файлової вимоги.
+            file=SimpleUploadedFile('batch_work.xlsx', _xlsx_formula_bytes())
         )
 
         mock_post.return_value = (200, {
@@ -2708,6 +2765,13 @@ class SchoolNetSubmissionsIntegrationTest(TestCase):
         }
         mock_http_post.return_value = (200, mock_data, json.dumps(mock_data))
 
+        # Фікстура під Python: вимога про Excel-формули + .py-файл після
+        # v2/FIX-1 дала б implementation_unverified (стеля 9) і тест втратив би
+        # мету (перевірка prompt про плагіат), тому вимога — Python-програма.
+        self.assignment.description = (
+            'Напишіть програму мовою Python, яка реалізує функцію test().')
+        self.assignment.save(update_fields=['description'])
+
         file_content = b"# Shared code\ndef test(): return 1\n"
         f1 = SimpleUploadedFile("task1.py", file_content, content_type="text/x-python")
         sub1 = Submission.objects.create(
@@ -3309,14 +3373,24 @@ class AIRawJSONProtectionTests(TestCase):
         asg.classes.add(cg)
         sub = Submission.objects.create(assignment=asg, class_group=cg, last_name='Франко', first_name='Іван')
 
-        # Записуємо сирий JSON у ai_feedback
+        # Сирий JSON історично міг лежати в обох полях. Публічний шлях P0-4
+        # бере ЛИШЕ student_ai_feedback і ніколи не повертає сирий JSON.
         sub.ai_feedback = '{\n  "suggested_grade": "9",\n  "feedback_comment": "Іване, робота дуже змістовна!"\n}'
-        sub.save(update_fields=['ai_feedback'])
+        sub.student_ai_feedback = '📌 **Висновок:** Іване, робота дуже змістовна!'
+        sub.save(update_fields=['ai_feedback', 'student_ai_feedback'])
 
         clean = sub.get_clean_ai_feedback_for_student()
         self.assertNotIn('{', clean)
         self.assertNotIn('suggested_grade', clean)
         self.assertIn('Іване, робота дуже змістовна!', clean)
+
+        # Навіть якщо legacy student_ai_feedback містить сирий JSON — він не
+        # показується учню (fallback на ai_feedback теж прибрано).
+        sub.student_ai_feedback = sub.ai_feedback
+        sub.save(update_fields=['student_ai_feedback'])
+        legacy_clean = sub.get_clean_ai_feedback_for_student()
+        self.assertNotIn('{', legacy_clean)
+        self.assertNotIn('suggested_grade', legacy_clean)
 
 
 class AssignmentFileAIAndCoauthorTests(TestCase):
@@ -3531,10 +3605,15 @@ class AssignmentFileAIAndCoauthorTests(TestCase):
             extract_access_text_for_ai
         )
 
+        from feed import access_utils
+
         with tempfile.NamedTemporaryFile(suffix='.accdb', delete=False) as tmp:
             tmp_path = tmp.name
             tmp.write(b'\x00' * 100)
 
+        # Ізоляція глобального кешу mdbtools: інакше цей тест (замоканий
+        # subprocess) залишає _MDBTOOLS_AVAILABLE=True і ламає інші сюїти.
+        access_utils._MDBTOOLS_AVAILABLE = None
         try:
             # 1. Тест визначення версії БД
             with patch('subprocess.run') as mock_run:
@@ -3590,6 +3669,7 @@ class AssignmentFileAIAndCoauthorTests(TestCase):
                 self.assertIn('Звітів (Reports): 1', ai_text)
                 self.assertIn('SELECT * FROM Students WHERE Grade >= 10', ai_text)
         finally:
+            access_utils._MDBTOOLS_AVAILABLE = None
             if os.path.exists(tmp_path):
                 os.remove(tmp_path)
 
@@ -6339,6 +6419,9 @@ class QuestionAnswerMappingTests(TestCase):
             last_name='Петренко',
             ai_suggested_grade='10',
             ai_feedback='📌 **Висновок:** Початковий висновок ШІ.\n\n✅ **Сильні сторони:**\n• Пункт 1\n\n💬 **Рекомендація учню:** Добре.',
+            # P0-4: публічний коментар бере лише student_ai_feedback (без
+            # fallback на teacher-only ai_feedback).
+            student_ai_feedback='📌 **Висновок:** Початковий висновок ШІ.',
             ai_status='success'
         )
 
@@ -6355,6 +6438,7 @@ class QuestionAnswerMappingTests(TestCase):
         # 2. Зміна аналізу ШІ (наприклад після повторної перевірки)
         sub.ai_suggested_grade = '11'
         sub.ai_feedback = '📌 **Висновок:** Оновлений виправлений висновок ШІ після перевірки.\n\n✅ **Сильні сторони:**\n• Доопрацьовано завдання\n\n💬 **Рекомендація учню:** Відмінно.'
+        sub.student_ai_feedback = '📌 **Висновок:** Оновлений виправлений висновок ШІ після перевірки.'
         sub.save()
 
         # 3. Повторна публікація оцінки та відгуку ШІ

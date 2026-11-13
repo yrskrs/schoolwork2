@@ -11,6 +11,18 @@ _GRADE = re.compile(
     r'|\bГР\s*\d+|\b\d+(?:[.,]\d+)?\s*(?:/|з|із|out of)\s*12\b'
     r'|\b12\s*[-–]?\s*бальн\w*|\b\d+(?:[.,]\d+)?\s+б\.(?=\s|$)', re.IGNORECASE)
 _HEADING = re.compile(r'^\s*(?:[📌✅💡💬⚠️🎯📋📊🛠️]+\s*|\*\*[^*]+\*\*)')
+# Teacher-only deterministic audit block. It must never reach a student even
+# through an old stored ai_feedback or a legacy fallback path.
+_TECHNICAL_AUDIT_BLOCK = re.compile(
+    r'\n*\s*🔎\s*\*{0,2}\s*Технічний аудит файлів\s*:?\s*\*{0,2}[\s\S]*$',
+    re.IGNORECASE)
+
+
+def _without_technical_audit(value):
+    """Defense in depth: strip a teacher-only audit block from student text."""
+    if not isinstance(value, str):
+        return value
+    return _TECHNICAL_AUDIT_BLOCK.sub('', value).strip()
 
 
 def _short_text(value, limit):
@@ -29,7 +41,7 @@ def _short_text(value, limit):
 
 
 def _legacy_result(text):
-    text = str(text or '').strip()
+    text = _without_technical_audit(str(text or ''))
     if text.startswith('🤖 ['):
         text = text.split('\n', 1)[-1] if '\n' in text else ''
     candidate = text.strip('` \n')
@@ -72,7 +84,15 @@ def _legacy_result(text):
 
 
 def student_feedback_parts(result=None, text=''):
-    data = result if isinstance(result, dict) else _legacy_result(text)
+    if isinstance(result, dict):
+        data = {
+            key: ([_without_technical_audit(item) if isinstance(item, str) else item
+                   for item in value] if isinstance(value, list)
+                  else _without_technical_audit(value))
+            for key, value in result.items()
+        }
+    else:
+        data = _legacy_result(text)
     summary = _short_text(data.get('summary'), 180)
     seen = {summary.casefold()} if summary else set()
 
@@ -109,7 +129,9 @@ def compact_student_feedback(result=None, text=''):
     lines = ([f'📌 {parts["summary"]}'] if parts['summary'] else [])
     lines += [f'✅ {s}' for s in parts['strengths']]
     lines += [f'💡 {s}' for s in parts['weaknesses']]
-    return '\n'.join(lines)[:MAX_FEEDBACK_CHARS]
+    # Strip once more after formatting: the teacher-only audit block must not
+    # survive any legacy stored value or fallback path.
+    return _without_technical_audit('\n'.join(lines))[:MAX_FEEDBACK_CHARS]
 
 
 def public_ai_comment(text):

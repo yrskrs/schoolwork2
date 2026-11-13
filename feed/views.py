@@ -3093,6 +3093,10 @@ def _evaluate_student_submission(submission, source_overrides=None, pinned_model
     # Визначаємо preset та ГР завдання
     preset, selected_gr_codes = assignment.get_ai_policy(submission.class_group)
 
+    # A fresh run starts without previous audit facts: if this attempt fails, the
+    # teacher must not see the old passports as if they described the new run.
+    _clear_technical_evidence(submission)
+
     return evaluate_submission_with_gemini(
         submission,
         ai_settings=ai_settings,
@@ -3106,6 +3110,8 @@ def _evaluate_student_submission(submission, source_overrides=None, pinned_model
 def _perform_student_ai_check(submission, result):
     assignment = submission.assignment
     if not result or result.get('status') not in ('success', 'ok'):
+        # Failed self-check keeps no stale deterministic audit in the panel.
+        _clear_technical_evidence(submission)
         message = result.get('error') if result and result.get('privacy_blocked') else None
         return JsonResponse({'error': message or 'ШІ не зміг завершити перевірку. Спробуйте ще раз; спробу не використано.'}, status=503)
 
@@ -3164,6 +3170,11 @@ def _perform_student_ai_check(submission, result):
     submission.ai_prompt_tokens = metadata.get('prompt_tokens')
     submission.ai_completion_tokens = metadata.get('completion_tokens')
     submission.ai_total_tokens = metadata.get('total_tokens')
+    # Deterministic audit facts are persisted for the teacher panel only; they
+    # are never part of the student-facing response below.
+    technical_evidence = result.get('technical_evidence')
+    submission.ai_technical_evidence = (
+        technical_evidence if isinstance(technical_evidence, dict) else {})
 
     submission.save(update_fields=[
         'student_ai_checked', 'student_ai_checked_at',
@@ -3172,6 +3183,7 @@ def _perform_student_ai_check(submission, result):
         'ai_generated_detected', 'ai_generated_percent',
         'ai_generated_confidence', 'ai_generated_details',
         'ai_authorship_state', 'ai_provenance_report',
+        'ai_technical_evidence',
         'ai_suggested_grade', 'ai_score_level', 'ai_feedback', 'ai_gr_results',
         'ai_status', 'ai_error_reason', 'ai_reviewed_at', 'ai_model_used',
         'ai_provider_used', 'ai_request_model', 'ai_prompt_tokens', 'ai_completion_tokens', 'ai_total_tokens'
@@ -3200,6 +3212,7 @@ def _perform_student_ai_check(submission, result):
             ai_generated_details=submission.ai_generated_details,
             ai_authorship_state=submission.ai_authorship_state,
             ai_provenance_report=submission.ai_provenance_report,
+            ai_technical_evidence=submission.ai_technical_evidence,
             ai_suggested_grade=submission.ai_suggested_grade,
             ai_score_level=submission.ai_score_level,
             ai_feedback=submission.ai_feedback,
@@ -3290,15 +3303,18 @@ def accept_student_ai_grade(request, sub_id):
     if not submission.student_ai_checked or not submission.student_ai_grade:
         return JsonResponse({'error': 'Чернова оцінка відсутня'}, status=400)
 
-    # Копіюємо чернову оцінку учня до основних полів
+    # Копіюємо чернову оцінку учня до основних полів.
+    # Defense in depth: even a legacy student_ai_feedback must lose any
+    # teacher-only technical-audit block before it becomes a public comment.
+    clean_student_feedback = submission.get_clean_ai_feedback_for_student()
     try:
         submission.grade = validate_grade(submission.student_ai_grade)
     except ValidationError as exc:
         return JsonResponse({'error': exc.messages[0]}, status=400)
-    submission.teacher_comment = submission.student_ai_feedback
+    submission.teacher_comment = clean_student_feedback
     submission.ai_suggested_grade = submission.student_ai_grade
     submission.ai_score_level = submission.student_ai_level
-    submission.ai_feedback = submission.student_ai_feedback
+    submission.ai_feedback = clean_student_feedback
     submission.ai_gr_results = submission.student_ai_gr_results
     submission.ai_status = 'success'
     submission.graded_by = request.user
@@ -3383,6 +3399,72 @@ def submission_detail(request, submission_id):
         'dup_info': dup_info,
         'is_teacher': is_teacher,
     })
+
+
+def _technical_evidence_view(findings):
+    """Teacher-facing, template-ready view of deterministic file audit facts.
+
+    Accepts the dict stored in ``Submission.ai_technical_evidence`` (or in the
+    job result as ``technical_evidence`` / legacy ``technical_passport_findings``)
+    and prepares flat, autoescaped rows. These facts are teacher-only: they must
+    never be rendered on a student page or copied into student feedback.
+    """
+    if not isinstance(findings, dict) or not findings:
+        return {'available': False}
+    passports = []
+    for item in findings.get('passports') or []:
+        if not isinstance(item, dict):
+            continue
+        facts = item.get('facts') if isinstance(item.get('facts'), dict) else {}
+        fact_rows = []
+        for key, value in facts.items():
+            if value is None or value == '' or value == [] or value == {}:
+                continue
+            if isinstance(value, (list, tuple)):
+                value = ', '.join(str(part) for part in value) or '—'
+            elif isinstance(value, bool):
+                value = 'так' if value else 'ні'
+            fact_rows.append({'key': str(key), 'value': str(value)})
+        passports.append({
+            'file': item.get('file') or 'файл',
+            'verified': item.get('verified') is not False,
+            'kind': item.get('kind') or '',
+            'extension': item.get('extension') or '',
+            'facts': fact_rows,
+            'absence': [str(value) for value in (item.get('absence') or [])],
+            'warnings': [str(value) for value in (item.get('warnings') or [])],
+            'limitations': [str(value) for value in (item.get('limitations') or [])],
+        })
+    adjustments = []
+    for row in findings.get('adjustments') or []:
+        if isinstance(row, dict):
+            adjustments.append({
+                'field': row.get('field') or '',
+                'before': row.get('before'),
+                'after': row.get('after'),
+                'reason': row.get('reason') or '',
+            })
+    active_flags = [str(value) for value in (findings.get('active_flags') or [])]
+    waived_flags = [str(value) for value in (findings.get('waived_flags') or [])]
+    gaps_count = findings.get('gaps_count')
+    if not isinstance(gaps_count, int):
+        gaps_count = sum(1 for row in passports if not row['verified'])
+    return {
+        'available': bool(passports or active_flags or waived_flags),
+        'passports': passports,
+        'active_flags': active_flags,
+        'waived_flags': waived_flags,
+        'adjustments': adjustments,
+        'gaps_count': gaps_count,
+    }
+
+
+def _clear_technical_evidence(submission):
+    """Drop stale audit facts so a failed/new run never shows old facts as current."""
+    if submission is None or not getattr(submission, 'ai_technical_evidence', None):
+        return
+    submission.ai_technical_evidence = {}
+    submission.save(update_fields=['ai_technical_evidence'])
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -4025,6 +4107,8 @@ def view_file(request, submission_id):
     if payload_manifest:
         context['payload_manifest'] = payload_manifest
         context['payload_manifest_url'] = reverse('ai_job_payload', args=[payload_job.pk])
+    # Teacher-only deterministic audit panel (P0-4/P1-5). Never rendered to students.
+    context['technical_evidence'] = _technical_evidence_view(submission.ai_technical_evidence)
     return render(request, 'feed/file_viewer.html', context)
 
 
@@ -9764,13 +9848,23 @@ def ai_job_payload_view(request, job_id):
     if not allowed:
         raise Http404
     manifest = (job.result or {}).get('payload_manifest') or {}
+    result = job.result or {}
+    # P1-5: the deterministic audit is a first-class teacher-visible fact.
+    # Teacher evaluations carry it in the job result; student self-checks keep
+    # it on the submission (the job result stays a student-safe whitelist).
+    technical_findings = (result.get('technical_evidence')
+                          or result.get('technical_passport_findings')
+                          or {})
+    if not technical_findings and job.submission_id:
+        technical_findings = job.submission.ai_technical_evidence or {}
     return render(request, 'feed/ai_job_payload.html', {
         'job': job,
         'manifest': manifest,
         'sources': manifest.get('sources') or [],
-        'adjustments': (job.result or {}).get('server_adjustments') or [],
+        'adjustments': result.get('server_adjustments') or [],
         'events': job.events or [],
         'submission': job.submission,
+        'technical_evidence': _technical_evidence_view(technical_findings),
     })
 
 
