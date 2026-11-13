@@ -800,6 +800,29 @@ function toggleEditorSourceMode() {
             var subjectSelect = document.getElementById('id_subject') || document.querySelector('select[name="subject"]');
             var subjectName = subjectSelect && subjectSelect.selectedIndex >= 0 ? subjectSelect.options[subjectSelect.selectedIndex].text : '';
 
+            // Власні критерії вчителя вже введені у полі — передаємо їх ШІ як контекст.
+            var customCriteriaInput = document.getElementById('id_custom_criteria');
+            var customCriteria = customCriteriaInput && customCriteriaInput.value ? customCriteriaInput.value.trim() : '';
+
+            // Тип оцінювання беремо з обраного шаблону критеріїв (data-evaluation-type).
+            var presetSelect = document.getElementById('id_default_ai_preset');
+            var evaluationType = '';
+            if (presetSelect && presetSelect.selectedIndex >= 0) {
+                var presetOption = presetSelect.options[presetSelect.selectedIndex];
+                if (presetOption) {
+                    evaluationType = presetOption.getAttribute('data-evaluation-type') || '';
+                }
+            }
+
+            // Класи, вибрані у формі (ендпоінт/промпт очікують людські назви, а не id).
+            var criteriaClassNames = [];
+            document.querySelectorAll('input[name="classes"]:checked').forEach(function(box) {
+                var classLabel = box.closest('label') || box.parentElement;
+                var classLabelText = classLabel ? classLabel.textContent.replace(/\s+/g, ' ').trim() : '';
+                if (classLabelText) criteriaClassNames.push(classLabelText);
+            });
+            var classGroupName = criteriaClassNames.join(', ');
+
             if (!notes && !title && !desc) {
                 if (errorBox) {
                     errorBox.textContent = 'Будь ласка, опишіть своїми словами, що саме учень має зробити, або заповніть тему чи опис завдання.';
@@ -832,7 +855,10 @@ function toggleEditorSourceMode() {
                     teacher_notes: notes,
                     assignment_title: title,
                     assignment_description: desc,
-                    subject_name: subjectName
+                    subject_name: subjectName,
+                    custom_criteria: customCriteria,
+                    evaluation_type: evaluationType,
+                    class_group_name: classGroupName
                 })
             })
             .then(function(resp) {
@@ -928,11 +954,132 @@ function toggleEditorSourceMode() {
         var previewHtmlDesc = document.getElementById('ai-desc-preview-html');
         var badgeDesc = document.getElementById('ai-desc-model-badge');
         var btnApplyDesc = document.getElementById('btn-apply-desc-replace');
+        var btnAppendDesc = document.getElementById('btn-append-desc');
+        var factWarningDesc = document.getElementById('ai-desc-fact-warning');
+        var factListDesc = document.getElementById('ai-desc-fact-list');
+        var diffDetailsDesc = document.getElementById('ai-desc-diff-details');
+        var diffPreDesc = document.getElementById('ai-desc-diff');
 
         var richEditor = document.getElementById('rich-editor');
         var descTextarea = document.getElementById('{{ form.description.id_for_label }}') || document.querySelector('textarea[name="description"]');
 
         var lastGeneratedHtml = '';
+        var lastGeneratedMarkdown = '';
+        var lastSourceText = '';
+
+        // ── Допоміжні функції: факти-попередження та простий line-diff ──
+        function hideFactAndDiff() {
+            if (factWarningDesc) factWarningDesc.style.display = 'none';
+            if (factListDesc) factListDesc.replaceChildren();
+            if (diffDetailsDesc) diffDetailsDesc.style.display = 'none';
+            if (diffPreDesc) diffPreDesc.replaceChildren();
+        }
+
+        function renderFactWarnings(warnings) {
+            if (!factListDesc || !factWarningDesc) return;
+            factListDesc.replaceChildren();
+            if (!Array.isArray(warnings) || warnings.length === 0) {
+                factWarningDesc.style.display = 'none';
+                return;
+            }
+            warnings.forEach(function(warning) {
+                if (warning === null || warning === undefined) return;
+                var text = String(warning).trim();
+                if (!text) return;
+                var li = document.createElement('li');
+                li.textContent = text;
+                factListDesc.appendChild(li);
+            });
+            factWarningDesc.style.display = factListDesc.children.length ? 'block' : 'none';
+        }
+
+        // Обмежений LCS для рядків: повертає масив {type: '+','-',' ', text}.
+        function computeLineDiff(oldText, newText, maxLines) {
+            var limit = maxLines || 200;
+            var oldSource = String(oldText || '');
+            var oldLines = oldSource.trim() ? oldSource.replace(/\r\n/g, '\n').split('\n') : [];
+            var newLines = String(newText || '').replace(/\r\n/g, '\n').split('\n');
+            var oldTruncated = oldLines.length > limit;
+            var newTruncated = newLines.length > limit;
+            if (oldTruncated) oldLines = oldLines.slice(0, limit);
+            if (newTruncated) newLines = newLines.slice(0, limit);
+
+            var n = oldLines.length;
+            var m = newLines.length;
+            var dp = [];
+            for (var i = 0; i <= n; i++) {
+                dp.push(new Array(m + 1).fill(0));
+            }
+            for (var a = n - 1; a >= 0; a--) {
+                for (var b = m - 1; b >= 0; b--) {
+                    dp[a][b] = oldLines[a] === newLines[b]
+                        ? dp[a + 1][b + 1] + 1
+                        : Math.max(dp[a + 1][b], dp[a][b + 1]);
+                }
+            }
+            var result = [];
+            var oi = 0;
+            var ni = 0;
+            while (oi < n && ni < m) {
+                if (oldLines[oi] === newLines[ni]) {
+                    result.push({ type: ' ', text: oldLines[oi] });
+                    oi++;
+                    ni++;
+                } else if (dp[oi + 1][ni] >= dp[oi][ni + 1]) {
+                    result.push({ type: '-', text: oldLines[oi] });
+                    oi++;
+                } else {
+                    result.push({ type: '+', text: newLines[ni] });
+                    ni++;
+                }
+            }
+            while (oi < n) {
+                result.push({ type: '-', text: oldLines[oi] });
+                oi++;
+            }
+            while (ni < m) {
+                result.push({ type: '+', text: newLines[ni] });
+                ni++;
+            }
+            return { lines: result, truncated: oldTruncated || newTruncated };
+        }
+
+        function renderLineDiff(oldText, newText) {
+            if (!diffPreDesc || !diffDetailsDesc) return;
+            var source = String(oldText || '').trim();
+            var target = String(newText || '').trim();
+            if (!target) {
+                // Немає з чим порівнювати — ховаємо лише блок diff (факт-попередження лишається).
+                diffDetailsDesc.style.display = 'none';
+                diffPreDesc.replaceChildren();
+                return;
+            }
+            var diff = computeLineDiff(source, target, 200);
+            diffPreDesc.replaceChildren();
+            diff.lines.forEach(function(line) {
+                var row = document.createElement('div');
+                row.style.cssText = 'display:block;white-space:pre-wrap;word-break:break-word;padding:0 4px;border-radius:3px;';
+                if (line.type === '+') {
+                    row.style.background = 'rgba(22, 163, 74, 0.16)';
+                    row.style.color = 'var(--ok, #15803d)';
+                } else if (line.type === '-') {
+                    row.style.background = 'rgba(220, 38, 38, 0.14)';
+                    row.style.color = 'var(--danger, #b91c1c)';
+                } else {
+                    row.style.color = 'var(--color-text-muted, #64748b)';
+                }
+                // textContent — безпечно, без інтерпретації HTML моделі.
+                row.textContent = line.type + ' ' + line.text;
+                diffPreDesc.appendChild(row);
+            });
+            if (diff.truncated) {
+                var note = document.createElement('div');
+                note.style.cssText = 'display:block;margin-top:6px;font-style:italic;color:var(--color-text-muted, #64748b);';
+                note.textContent = '… показано перші 200 рядків';
+                diffPreDesc.appendChild(note);
+            }
+            diffDetailsDesc.style.display = 'block';
+        }
 
         if (!btnToggleDesc || !panelDesc) return;
 
@@ -1040,6 +1187,11 @@ function toggleEditorSourceMode() {
 
                 if (errorBoxDesc) errorBoxDesc.style.display = 'none';
                 if (resultBoxDesc) resultBoxDesc.style.display = 'none';
+                hideFactAndDiff();
+                if (btnAppendDesc) btnAppendDesc.style.display = 'none';
+
+                // Фіксуємо текст редактора на момент запиту — він потрібен для diff.
+                lastSourceText = currentDesc;
 
                 btnRunDesc.disabled = true;
                 if (spinnerDesc) spinnerDesc.style.display = 'inline-block';
@@ -1079,15 +1231,28 @@ function toggleEditorSourceMode() {
                     if (textDesc) textDesc.textContent = 'Сформулювати вказівки';
 
                     if (!res.ok || res.data.status !== 'success') {
+                        hideFactAndDiff();
+                        if (btnAppendDesc) btnAppendDesc.style.display = 'none';
                         if (errorBoxDesc) {
                             errorBoxDesc.textContent = res.data.message || 'Помилка під час звернення до ШІ. Перевірте налаштування ШІ.';
                             errorBoxDesc.style.display = 'block';
                         }
                     } else {
-                        lastGeneratedHtml = res.data.html;
-                        if (previewHtmlDesc) previewHtmlDesc.innerHTML = res.data.html;
+                        lastGeneratedHtml = res.data.html || '';
+                        lastGeneratedMarkdown = res.data.markdown || '';
+                        if (previewHtmlDesc) previewHtmlDesc.innerHTML = lastGeneratedHtml;
                         if (badgeDesc && res.data.model_used) {
                             badgeDesc.textContent = 'Модель: ' + res.data.model_used;
+                            if (res.data.prompt_version) {
+                                badgeDesc.title = 'prompt_version: ' + res.data.prompt_version;
+                            }
+                        }
+                        // Попередження про можливо втрачені факти (порожній масив — ховаємо блок).
+                        renderFactWarnings(res.data.fact_warnings);
+                        // Простий line-diff: поточний текст редактора → згенерований Markdown.
+                        renderLineDiff(lastSourceText, lastGeneratedMarkdown);
+                        if (btnAppendDesc) {
+                            btnAppendDesc.style.display = lastGeneratedHtml ? 'inline-flex' : 'none';
                         }
                         if (resultBoxDesc) {
                             resultBoxDesc.style.display = 'block';
@@ -1100,6 +1265,8 @@ function toggleEditorSourceMode() {
                     if (spinnerDesc) spinnerDesc.style.display = 'none';
                     if (iconDesc) iconDesc.style.display = 'inline';
                     if (textDesc) textDesc.textContent = 'Сформулювати вказівки';
+                    hideFactAndDiff();
+                    if (btnAppendDesc) btnAppendDesc.style.display = 'none';
                     if (errorBoxDesc) {
                         errorBoxDesc.textContent = 'Мережева помилка при зверненні до сервера: ' + err.message;
                         errorBoxDesc.style.display = 'block';
@@ -1127,6 +1294,34 @@ function toggleEditorSourceMode() {
                     setTimeout(function() {
                         editorContainer.style.borderColor = '';
                         editorContainer.style.boxShadow = '';
+                    }, 2200);
+                }
+                if (panelDesc) panelDesc.style.display = 'none';
+            });
+        }
+
+        if (btnAppendDesc) {
+            btnAppendDesc.addEventListener('click', function() {
+                if (!lastGeneratedHtml) return;
+                if (!window.confirm('Додати згенерований опис у кінець поточного тексту? Наявний текст і форматування залишаться без змін.')) return;
+                // Наявний текст зберігаємо: додаємо лише в кінець, з візуальним розділювачем <hr>.
+                if (richEditor) {
+                    var hasExistingHtml = richEditor.innerHTML.trim() !== '';
+                    richEditor.innerHTML += (hasExistingHtml ? '<hr>' : '') + lastGeneratedHtml;
+                }
+                if (descTextarea) {
+                    var hasExistingText = descTextarea.value.trim() !== '';
+                    descTextarea.value += (hasExistingText ? '\n\n<hr>\n' : '') + lastGeneratedHtml;
+                }
+                var appendTarget = richEditor || descTextarea;
+                if (appendTarget) {
+                    appendTarget.style.transition = 'box-shadow 0.3s ease, border-color 0.3s ease';
+                    appendTarget.style.borderColor = 'var(--ok)';
+                    appendTarget.style.boxShadow = '0 0 0 4px rgba(22, 163, 74, 0.25)';
+                    appendTarget.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    setTimeout(function() {
+                        appendTarget.style.borderColor = '';
+                        appendTarget.style.boxShadow = '';
                     }, 2200);
                 }
                 if (panelDesc) panelDesc.style.display = 'none';

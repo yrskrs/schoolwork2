@@ -9,6 +9,7 @@
         <option value="">— Не обрано (буде обиратись вручну) —</option>
         {% for preset in criteria_presets %}
         <option value="{{ preset.id }}"
+            data-evaluation-type="{{ preset.evaluation_type }}"
             {% if form.is_bound %}{% if form.data.default_ai_preset == preset.id|stringformat:"s" %}selected{% endif %}{% elif assignment and assignment.default_ai_preset_id == preset.id %}selected{% elif not assignment and last_ai_preset_id == preset.id %}selected{% endif %}>
             {{ preset.name }}
         </option>
