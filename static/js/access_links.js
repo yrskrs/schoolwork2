@@ -116,8 +116,22 @@
         qrImage.hidden = true;
         qrStatus.hidden = false;
         qrStatus.textContent = 'Завантаження QR-коду…';
+        let qrAttempt = 0;
         qrImage.onload = () => { qrImage.hidden = false; qrStatus.hidden = true; };
-        qrImage.onerror = () => { qrImage.hidden = true; qrStatus.hidden = false; qrStatus.textContent = 'Не вдалося завантажити QR-код. Закрийте вікно та спробуйте ще раз.'; };
+        qrImage.onerror = () => {
+          if (qrAttempt < 1) {
+            // Одна автоматична повторна спроба з обходом кешу для тимчасових збоїв мережі.
+            qrAttempt += 1;
+            qrStatus.hidden = false;
+            qrStatus.textContent = 'Повторна спроба завантаження QR-коду…';
+            qrImage.hidden = true;
+            qrImage.src = opener.dataset.qrUrl + (opener.dataset.qrUrl.includes('?') ? '&' : '?') + '_retry=' + Date.now();
+            return;
+          }
+          qrImage.hidden = true;
+          qrStatus.hidden = false;
+          qrStatus.textContent = 'Не вдалося завантажити QR-код. Закрийте вікно та спробуйте ще раз.';
+        };
         qrDialog.showModal();
         qrImage.src = opener.dataset.qrUrl;
       });

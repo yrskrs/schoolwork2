@@ -954,7 +954,9 @@ function toggleEditorSourceMode() {
         if (btnCopyDesc) {
             btnCopyDesc.addEventListener('click', function() {
                 var currentText = '';
-                if (richEditor && richEditor.innerText.trim()) {
+                if (window.isHtmlSourceMode && descTextarea && descTextarea.value.trim()) {
+                    currentText = descTextarea.value.trim();
+                } else if (richEditor && richEditor.innerText.trim()) {
                     currentText = richEditor.innerText.trim();
                 } else if (descTextarea && descTextarea.value.trim()) {
                     currentText = descTextarea.value.trim();
@@ -974,7 +976,9 @@ function toggleEditorSourceMode() {
             btnRunDesc.addEventListener('click', function() {
                 var notes = inputDescNotes ? inputDescNotes.value.trim() : '';
                 var currentDesc = '';
-                if (richEditor && richEditor.innerText.trim()) {
+                if (window.isHtmlSourceMode && descTextarea && descTextarea.value.trim()) {
+                    currentDesc = descTextarea.value.trim();
+                } else if (richEditor && richEditor.innerText.trim()) {
                     currentDesc = richEditor.innerText.trim();
                 } else if (descTextarea && descTextarea.value.trim()) {
                     currentDesc = descTextarea.value.trim();
@@ -985,6 +989,15 @@ function toggleEditorSourceMode() {
 
                 var subjectSelect = document.getElementById('id_subject') || document.querySelector('select[name="subject"]');
                 var subjectName = subjectSelect && subjectSelect.value ? subjectSelect.options[subjectSelect.selectedIndex].text : '';
+
+                // Класи, вибрані у формі (ендпоінт/промпт очікують людські назви, а не id).
+                var classNames = [];
+                document.querySelectorAll('input[name="classes"]:checked').forEach(function(box) {
+                    var label = box.closest('label') || box.parentElement;
+                    var labelText = label ? label.textContent.replace(/\s+/g, ' ').trim() : '';
+                    if (labelText) classNames.push(labelText);
+                });
+                var classGroupName = classNames.join(', ');
 
                 // Чи має завдання прикріплені матеріали: наявні файли або вже вибрані для завантаження.
                 var hasMaterials = false;
@@ -1031,6 +1044,7 @@ function toggleEditorSourceMode() {
                         assignment_title: title,
                         current_description: currentDesc,
                         subject_name: subjectName,
+                        class_group_name: classGroupName,
                         has_materials: hasMaterials
                     })
                 })
@@ -1078,6 +1092,7 @@ function toggleEditorSourceMode() {
         if (btnApplyDesc) {
             btnApplyDesc.addEventListener('click', function() {
                 if (!lastGeneratedHtml) return;
+                if (!window.confirm('Замінити поточний опис завдання згенерованим текстом?')) return;
                 if (richEditor) {
                     richEditor.innerHTML = lastGeneratedHtml;
                 }
