@@ -3467,14 +3467,28 @@ def parse_teacher_specific_task_numbers(description: str) -> list[int]:
     return sorted(found_nums)
 
 
+_HTML_KNOWN_TAG_RE = re.compile(
+    r'</?(?:'
+    r'a|abbr|article|aside|b|blockquote|br|caption|code|col|colgroup|dd|div|dl|dt|em|'
+    r'figcaption|figure|font|h[1-6]|hr|i|img|iframe|li|main|mark|nav|ol|p|pre|s|section|'
+    r'small|span|strike|strong|sub|sup|table|tbody|td|tfoot|th|thead|tr|u|ul|video|audio|'
+    r'source|style|script|o:p|v:[a-z]+|w:[a-z]+|m:[a-z]+'
+    r')\b[^>]*>',
+    re.IGNORECASE | re.DOTALL,
+)
+
+
 def strip_html_tags(text: str) -> str:
     """
-    Повністю видаляє HTML-теги, вбудовані стилі, атрибути та сутності з тексту,
-    перетворюючи його на чистий, охайний текстовий рядок без залишків розмітки.
+    Видаляє HTML-розмітку, стилі та сутності, зберігаючи звичайний текст.
+
+    На відміну від старого `<[^>]+>`, видаляються лише відомі HTML-теги.
+    Це захищає математичні та програмістські умови: `2 < 3 і 5 > 4`
+    більше не перетворюється на `2 4`.
 
     1. Замінює блочні теги (<br>, </p>, </div>, </li>, </tr>, </h1>..</h6>) на переноси рядка.
     2. Видаляє скрипти та стилі разом із їхнім вмістом.
-    3. Вирізає всі інші теги: <span ...>, <b>, <u>, <em> тощо.
+    3. Вирізає відомі HTML-теги: <span ...>, <b>, <u>, <em>, <o:p> тощо.
     4. Декодує HTML-сутності (&nbsp;, &quot;, &lt;, &gt;, &#39; тощо).
     5. Замінює нерозривні пробіли (\xa0, &nbsp;) та схлопує зайві пробіли.
     """
@@ -3483,20 +3497,16 @@ def strip_html_tags(text: str) -> str:
     if not isinstance(text, str):
         text = str(text)
 
-    # Заміна блочних розділювачів на переноси рядка, щоб слова не злипалися
-    s = re.sub(r'<(?:br\s*/?|/p|/div|/li|/tr|/h[1-6])>', '\n', text, flags=re.IGNORECASE)
-    # Видалення скриптів та стилів разом із вмістом
-    s = re.sub(r'<style[^>]*>[\s\S]*?</style>', '', s, flags=re.IGNORECASE)
-    s = re.sub(r'<script[^>]*>[\s\S]*?</script>', '', s, flags=re.IGNORECASE)
-    # Видалення всіх інших HTML-тегів
-    s = re.sub(r'<[^>]+>', '', s)
-    # Декодування HTML entities
+    # Коментарі та небезпечні блоки — повністю, разом із вмістом
+    s = re.sub(r'<!--[\s\S]*?-->', '', text)
+    s = re.sub(r'<(style|script)\b[^>]*>[\s\S]*?</\1\s*>', '', s, flags=re.IGNORECASE)
+    # Блочні розділювачі -> переноси рядків, щоб слова не злипалися
+    s = re.sub(r'<(?:br\s*/?|/p|/div|/li|/tr|/h[1-6])\s*>', '\n', s, flags=re.IGNORECASE)
+    # Тільки відомі HTML-теги: не чіпаємо «<», «>» у математиці та коді
+    s = _HTML_KNOWN_TAG_RE.sub('', s)
     s = html.unescape(s)
-    # Нормалізація нерозривних пробілів та замінників
     s = s.replace('\xa0', ' ').replace('&nbsp;', ' ')
-    # Схлопування зайвих горизонтальних пробілів в один
     s = re.sub(r'[ \t]+', ' ', s)
-    # Схлопування надлишкових переносів рядків (не більше двох поспіль)
     s = re.sub(r'\n\s*\n\s*\n+', '\n\n', s)
     return s.strip()
 
@@ -8487,52 +8497,235 @@ def generate_criteria_with_gemini(teacher_notes, assignment_title='', assignment
         except Exception as e:
             attempted_errors.append(f"{c_provider}/{c_model}: {str(e)}")
 
-    detail = f" ({'; '.join(attempted_errors)})" if attempted_errors else ""
+    if attempted_errors:
+        # Деталі провайдерів — тільки в лог, без витоку вчителю/учню.
+        logger.warning('generate_criteria_with_gemini: усі спроби ШІ невдалі: %s',
+                       '; '.join(attempted_errors))
     return {
         'status': 'error',
-        'message': f"Не вдалося згенерувати критерії через тимчасову недоступність моделі ШІ{detail}. Спробуйте ще раз або перевірте налаштування ШІ."
+        'message': 'Не вдалося згенерувати критерії через тимчасову недоступність моделі ШІ. Спробуйте ще раз або перевірте налаштування ШІ.'
     }
 
 
+_TASK_WORD = r'(?:завдан\w*|вправ\w*|пункт\w*|задач\w*)'
+
+_CHOICE_NEGATION_RE = re.compile(
+    r'\b(?:не\s+на\s+вибір|без\s+вибору|вибір\s+не\s+передбач\w*|'
+    r'не\s+обирати|не\s+потрібно\s+обирати|не\s+вибирати)\b',
+    re.IGNORECASE,
+)
+
+# «Не потрібно виконувати обидва» — це не обов'язковість, а вибір.
+_NEGATED_BOTH_RE = re.compile(
+    r'(?:\bне\s+(?:потрібно|треба|обов[’\']язково)\s+(?:виконувати|робити|опрацьовувати)\s+'
+    r'(?:обидв\w*|всі|усі)\b)|'
+    r'(?:\b(?:виконувати|робити|опрацьовувати)\s+(?:\w+\s+){0,2}(?:обидв\w*|всі|усі)\b'
+    r'[^.!?]{0,20}\bне\s+(?:потрібно|треба)\b)|'
+    r'(?:\b(?:обидв\w*|всі|усі)\b[^.!?]{0,20}\bне\s+(?:потрібно|треба)\b)',
+    re.IGNORECASE,
+)
+
+_CHOICE_PATTERNS = [
+    re.compile(r'\bна\s+вибір\b', re.IGNORECASE),
+    re.compile(r'\bвибір\b', re.IGNORECASE),
+    re.compile(r'\bобер(?:іть|и|е|уть|емо|еш)\b', re.IGNORECASE),
+    re.compile(r'\bвибер(?:іть|и|е|уть|емо|еш)\b', re.IGNORECASE),
+    re.compile(r'\bобр(?:ати|ав|али|ано)\b', re.IGNORECASE),
+    re.compile(r'\bвибр(?:ати|ав|али|ано)\b', re.IGNORECASE),
+    re.compile(r'\bодн(?:е|у|ого|і|ин|ій)\s+(?:із|з)\b', re.IGNORECASE),
+    re.compile(r'\b(?:два|три|чотири|\d+)\s+з\s+(?:двох|трьох|чотирьох|\d+)\b', re.IGNORECASE),
+    re.compile(r'\bна\s+(?:ваш\w*|власн\w*|розсуд)\b', re.IGNORECASE),
+    re.compile(r'\bза\s+бажанням\b', re.IGNORECASE),
+    re.compile(r'\bбудь-як\w*\b', re.IGNORECASE),
+    re.compile(r'\b(?:choose|select|one\s+of|any\s+of)\b', re.IGNORECASE),
+]
+
+_MANDATORY_PATTERNS = [
+    re.compile(r'\bобидв\w*\s+(?:\w+\s+){0,2}' + _TASK_WORD, re.IGNORECASE),
+    re.compile(_TASK_WORD + r'\s+(?:\w+\s+){0,2}обидв\w*', re.IGNORECASE),
+    re.compile(r'\b(?:виконати|зробити|опрацювати|розв[’\']?язати)\s+(?:\w+\s+){0,3}обидв\w*', re.IGNORECASE),
+    re.compile(r'\b(?:всі|усі)\s+(?:\w+\s+){0,2}' + _TASK_WORD, re.IGNORECASE),
+    re.compile(_TASK_WORD + r'\s+(?:\w+\s+){0,2}(?:всі|усі)\b', re.IGNORECASE),
+    re.compile(r'\bкожн(?:е|ий|ого|ому|і|у)\s+(?:\w+\s+){0,2}' + _TASK_WORD, re.IGNORECASE),
+    re.compile(_TASK_WORD + r'\s*(?:№\s*)?\d+\s*(?:,|і|й|та)\s*\d+', re.IGNORECASE),
+    re.compile(r'\b(?:виконати|зробити|опрацювати|розв[’\']?язати)\s+(?:\w+\s+){0,2}\d+\s*(?:,|і|й|та)\s*\d+', re.IGNORECASE),
+]
+
+_FORBIDDEN_BOTH_RE = re.compile(
+    r'(?:не\s+(?:потрібно|треба|обов[’\']язково).{0,60}(?:обидв|всі|усі))|'
+    r'(?:(?:обидв|всі|усі)\w*.{0,60}не\s+(?:потрібно|треба))',
+    re.IGNORECASE,
+)
+
+_SECTION_EMOJI = frozenset('📌📁📝✅📊🎯📋📎📄📑🗓⏰📅🔗🎬💡⚠️❗')
+_SECTION_KEYWORDS = (
+    'критері', 'вимог', 'термін', 'дедлайн', 'додатков', 'приміт', 'оцінюван',
+    'формат', 'план', 'етап', 'інструкц', 'матеріал', 'здач', 'порад',
+    'рекоменд', 'результат', 'перевір',
+)
+
+
+def _normalize_ai_text(text):
+    """Нормалізує текст для евристик без впливу на сам вивід."""
+    value = (text or '').replace('’', "'").replace('ʼ', "'")
+    return re.sub(r'\s+', ' ', value).strip()
+
+
+def _normalize_ai_line(line):
+    """Прибирає Markdown-розмітку, щоб аналізувати текст, а не зірочки."""
+    value = (line or '').strip()
+    value = re.sub(r'[*_`>#]+', ' ', value)
+    return re.sub(r'\s+', ' ', value).strip()
+
+
+def _has_unnegated_match(patterns, text):
+    """Шукає збіг, ігноруючи заперечення безпосередньо перед ним («не всі завдання»)."""
+    for pattern in patterns:
+        for match in pattern.finditer(text):
+            prefix = text[max(0, match.start() - 4):match.start()].lower()
+            if 'не ' in prefix or prefix.rstrip().endswith('не'):
+                continue
+            return True
+    return False
+
+
+def _detect_choice_intent(text):
+    """Повертає 'choice', 'mandatory' або 'unknown' для вказівок учителя.
+
+    Навмисно fail-open: у разі суперечності або невпевненості повертає 'unknown',
+    і тоді пост-фільтр не змінює відповідь моделі.
+    """
+    normalized = _normalize_ai_text(text)
+    if not normalized:
+        return 'unknown'
+    if _CHOICE_NEGATION_RE.search(normalized):
+        return 'mandatory'
+    if _NEGATED_BOTH_RE.search(normalized):
+        return 'choice'
+    has_choice = _has_unnegated_match(_CHOICE_PATTERNS, normalized)
+    has_mandatory = _has_unnegated_match(_MANDATORY_PATTERNS, normalized)
+    if has_choice and not has_mandatory:
+        return 'choice'
+    if has_mandatory and not has_choice:
+        return 'mandatory'
+    return 'unknown'
+
+
+def _is_choice_warning_header(line):
+    """Чи це заголовок блоку «Увага (вибір завдання...)», а не будь-яке попередження."""
+    normalized = _normalize_ai_line(line).lower()
+    normalized = re.sub(r'^[^\w]+', '', normalized, flags=re.UNICODE)
+    return normalized.startswith('увага') and 'вибір' in normalized
+
+
+def _is_new_section_start(line):
+    """Чи починається новий розділ після блоку вибору."""
+    stripped = (line or '').strip()
+    if not stripped:
+        return False
+    if stripped[0] in _SECTION_EMOJI:
+        return True
+    if stripped in ('---', '***', '___'):
+        return True
+    normalized = _normalize_ai_line(stripped)
+    if normalized.startswith('#'):
+        return True
+    low = normalized.lower()
+    if any(low.startswith(keyword) for keyword in _SECTION_KEYWORDS):
+        return True
+    if stripped.startswith('**') and stripped.endswith('**') and len(normalized) <= 80:
+        return True
+    return False
+
+
+def _find_choice_block_end(lines, start):
+    """Повертає індекс кінця блоку або None, якщо межу не визначено впевнено."""
+    index = start + 1
+    saw_content = False
+    while index < len(lines):
+        stripped = lines[index].strip()
+        if not stripped:
+            lookahead = index + 1
+            while lookahead < len(lines) and not lines[lookahead].strip():
+                lookahead += 1
+            if lookahead >= len(lines):
+                return lookahead
+            if _is_new_section_start(lines[lookahead]):
+                return index
+            # Порожній рядок усередині блоку — межу визначити не можна: fail-open.
+            return None
+        if _is_new_section_start(lines[index]) and saw_content:
+            return index
+        if saw_content and _is_choice_warning_header(lines[index]):
+            return index
+        saw_content = True
+        index += 1
+    return index
+
+
 def _clean_hallucinated_choice_block(result_text, teacher_notes, current_description):
+    """Видаляє ЛИШЕ галюцинований блок вибору, якщо вчитель прямо вимагає обов'язкові завдання.
+
+    Правила безпеки:
+    - intent 'choice' або 'unknown' -> текст не змінюється взагалі (fail-open);
+    - видаляється лише блок із заголовком «Увага ... вибір» з упевнено визначеним кінцем;
+    - якщо межу блоку не визначено або очищення дає порожній текст — повертається оригінал;
+    - видалення логуються без тексту вчителя/моделі.
     """
-    Захисний фільтр: якщо вчитель вимагає виконати обидва/всі завдання або взагалі не згадував вибір,
-    а модель скопіювала чи згенерувала блок '⚠️ Увага (вибір завдання)' або 'виконувати обидва не потрібно',
-    видаляємо цей галюцинований блок.
-    """
-    import re
-    notes_lower = (teacher_notes or '').lower()
-    combined_lower = f"{teacher_notes or ''} {current_description or ''}".lower()
-    explicit_all = any(w in notes_lower for w in ('обидва', 'обидві', 'всі', 'усі', 'кожне', 'кожен'))
-    has_choice = any(w in (notes_lower if teacher_notes else combined_lower) for w in ('на вибір', 'вибір', 'обрати одне', 'одне завдання', 'одне з', 'на вибір:'))
+    if not (result_text or '').strip():
+        return result_text
+    notes_intent = _detect_choice_intent(teacher_notes)
+    description_intent = _detect_choice_intent(current_description)
+    intent = notes_intent if notes_intent != 'unknown' else description_intent
+    if intent != 'mandatory':
+        return result_text
 
-    if explicit_all or (teacher_notes and not has_choice):
-        lines = result_text.splitlines()
-        filtered_lines = []
-        skip_block = False
-        for line in lines:
-            stripped = line.strip()
-            if '⚠️' in stripped and ('вибір' in stripped.lower() or 'увага' in stripped.lower()):
-                skip_block = True
-                continue
-            if skip_block:
-                if stripped.startswith(('📁', '📌', '#')) or 'вимоги до здачі' in stripped.lower():
-                    skip_block = False
-                    filtered_lines.append(line)
-                continue
-            else:
-                if 'виконувати обидва завдання не потрібно' in stripped.lower() or 'виконувати всі завдання не потрібно' in stripped.lower():
-                    continue
-                filtered_lines.append(line)
-        cleaned = '\n'.join(filtered_lines)
-        return re.sub(r'\n{3,}', '\n\n', cleaned).strip()
-    return result_text
+    lines = result_text.splitlines()
+    filtered = []
+    removed_lines = 0
+    index = 0
+    while index < len(lines):
+        if _is_choice_warning_header(lines[index]):
+            end = _find_choice_block_end(lines, index)
+            if end is None:
+                logger.warning(
+                    'ai_description_cleanup: не вдалося визначити межу блоку вибору; текст не змінено'
+                )
+                return result_text
+            removed_lines += end - index
+            index = end
+            continue
+        filtered.append(lines[index])
+        index += 1
+
+    final_lines = []
+    for line in filtered:
+        normalized = _normalize_ai_line(line)
+        if _FORBIDDEN_BOTH_RE.search(normalized):
+            removed_lines += 1
+            continue
+        final_lines.append(line)
+
+    cleaned = re.sub(r'\n{3,}', '\n\n', '\n'.join(final_lines)).strip()
+    if not cleaned:
+        logger.warning('ai_description_cleanup: очищення дало порожній текст; повернуто оригінал')
+        return result_text
+    if removed_lines:
+        logger.info('ai_description_cleanup: видалено рядків блоку вибору=%s', removed_lines)
+    return cleaned
 
 
-def refine_assignment_description_with_gemini(teacher_notes, assignment_title='', current_description='', subject_name='', class_group_name='', custom_model=None, has_materials=False):
+_DESC_REFINE_MAX_TOKENS = 3500
+_DESC_REFINE_RETRY_MAX_TOKENS = 7000
+
+
+def refine_assignment_description_with_gemini(teacher_notes, assignment_title='', current_description='', subject_name='', class_group_name='', custom_model=None, has_materials=False, no_submission_required=False):
     """
     Формулює чіткий, доброзичливий для учнів та однозначний для алгоритмів ШІ опис завдання
     на основі чернетки чи побажань вчителя.
+
+    Контекст форми (матеріали, режим здачі) передається явно, щоб не нав'язувати вчителю
+    типову структуру письмової роботи з файлом. Відповідь завжди українською мовою.
     Підтримує будь-якого налаштованого ШІ-провайдера та резервний API при збоях.
     """
     from markdown_it import MarkdownIt
@@ -8551,7 +8744,7 @@ def refine_assignment_description_with_gemini(teacher_notes, assignment_title=''
         if not act_key and act_provider != 'custom':
             return {'status': 'error', 'message': ('Додайте підключення та хоча б одну ввімкнену модель у Налаштуваннях ШІ.' if settings.unified_model_queue else f'API-ключ для {act_provider.title()} не налаштовано в системі.')}
 
-    teacher_notes = (teacher_notes or '').strip()
+    teacher_notes = strip_html_tags(teacher_notes or '').strip()
     assignment_title = (assignment_title or '').strip()
     current_description = strip_html_tags(current_description or '').strip()
     subject_name = (subject_name or '').strip()
@@ -8568,91 +8761,103 @@ def refine_assignment_description_with_gemini(teacher_notes, assignment_title=''
     if assignment_title:
         context_lines.append(f"Назва/тема завдання: {assignment_title}")
     if teacher_notes:
-        context_lines.append(f"НОВІ ВКАЗІВКИ / ПОБАЖАННЯ ВЧИТЕЛЯ (МАЮТЬ НАЙВИЩИЙ ПРІОРИТЕТ):\n«{teacher_notes}»")
+        context_lines.append(f"НОВІ ВКАЗІВКИ / ПОБАЖАННЯ ВЧИТЕЛЯ (найвищий пріоритет; збережи все, що не суперечить):\n«{teacher_notes}»")
     if current_description and current_description != teacher_notes:
-        context_lines.append(f"ПОПЕРЕДНІЙ ТЕКСТ У РЕДАКТОРІ (підлягає заміні/переробці згідно з новими вказівками):\n«{current_description}»")
+        context_lines.append(f"ПОПЕРЕДНІЙ ТЕКСТ У РЕДАКТОРІ (перероби згідно з новими вказівками; несуперечливі умови збережи):\n«{current_description}»")
     elif not teacher_notes and current_description:
         context_lines.append(f"ЧЕРНЕТКА / ВКАЗІВКИ ВЧИТЕЛЯ:\n«{current_description}»")
 
     materials_attached = bool(has_materials)
+    no_submission = bool(no_submission_required)
+    choice_intent = _detect_choice_intent(teacher_notes)
+    if choice_intent == 'unknown':
+        choice_intent = _detect_choice_intent(current_description)
 
     prompt_parts = [
         "Ти — досвідчений шкільний методист та фахівець з інтелектуальних систем оцінювання знань школярів.",
-        "Твоє завдання — перетворити чернетку чи вказівки вчителя на чітку, компактну інструкцію для учнів, яку також однозначно інтерпретуватиме автоматичне ШІ-оцінювання платформи.",
+        "Твоє завдання — перетворити чернетку чи вказівки вчителя на чітку, зрозумілу й лаконічну інструкцію для учнів, яку також однозначно інтерпретуватиме автоматичне ШІ-оцінювання платформи.",
+        "",
+        "МОВА ВІДПОВІДІ:",
+        "- Відповідай ВИКЛЮЧНО українською мовою. Українська — єдина мова відповіді, навіть якщо завдання стосується іноземної мови.",
+        "- Іншомовні приклади, цитати, назви чи команди з контексту зберігай без перекладу, але всі пояснення й інструкції формулюй українською.",
         "",
         "КОНТЕКСТ ЗАВДАННЯ:",
         "\n".join(context_lines) if context_lines else "(Тема завдання уточнюється)",
         "",
-        "ГОЛОВНІ ПРИНЦИПИ ТА ОБМЕЖЕННЯ (КРИТИЧНО ВАЖЛИВО):",
-        "1. ПРІОРИТЕТ ВКАЗІВОК ВЧИТЕЛЯ:",
-        "   - Якщо надано нові вказівки/побажання вчителя, вони мають АБСОЛЮТНИЙ пріоритет над попереднім текстом редактора.",
-        "   - Будь-які попередні умови, бали чи блоки, що суперечать новим вказівкам, мають бути ПОВНІСТЮ ВИДАЛЕНІ.",
+        "ГОЛОВНІ ПРИНЦИПИ (КРИТИЧНО ВАЖЛИВО):",
+        "1. ПРІОРИТЕТ ВКАЗІВОК УЧИТЕЛЯ:",
+        "- Нові вказівки/побажання вчителя мають пріоритет над попереднім текстом редактора.",
+        "- Зміни або видали лише те, що прямо суперечить новим вказівкам. Несуперечливі умови (дедлайн, матеріали, критерії, бали, формат) збережи.",
+        "- Не додавай вимог, яких немає в контексті: файл, форма здачі, бали, прив'язка до оцінки, збереження під прізвищем, дедлайн, формат.",
         "",
-        "2. ОРГАНІЗАЦІЙНА ІНСТРУКЦІЯ ТА ЗМІСТ:",
-        "   - Формулюй саме організаційні вказівки: що відкрити, що виконати, як зберегти і що здати.",
-        "   - Не вигадуй фактів, матеріалів, назв файлів, номерів сторінок чи балів, яких немає в контексті завдання.",
+        "2. ЗМІСТ ТА ОРГАНІЗАЦІЯ:",
+        "- Формулюй організаційні вказівки: що відкрити, що виконати, як підготувати й де продемонструвати результат.",
+        "- Не вигадуй фактів, матеріалів, назв файлів, номерів сторінок, балів, дедлайнів чи форматів, яких немає в контексті.",
+        "- Збережи всі суттєві вимоги вчителя, навіть якщо вони сформульовані коротко.",
     ]
     if materials_attached:
         prompt_parts += [
-            "   - До завдання прикріплені матеріали/файли: НЕ переказуй їхній покроковий зміст (клітинки, формули, задачі) — учні мають відкрити матеріали самостійно.",
+            "- До завдання прикріплені матеріали/файли/посилання/відео: НЕ переказуй їхній покроковий зміст (клітинки, формули, задачі), якщо вчитель прямо не просить; згадай, що учні мають відкрити матеріали, лише якщо це доречно.",
         ]
     else:
         prompt_parts += [
-            "   - До завдання НЕ прикріплено файлів: не згадуй «прикріплені матеріали» чи «файл завдання»; сформулюй зміст з того, що написав учитель, і збережи всі суттєві вимоги.",
+            "- До завдання НЕ прикріплено файлів, посилань чи відео: не згадуй «прикріплені матеріали» чи «файл завдання»; сформулюй зміст з того, що написав учитель, і збережи всі суттєві вимоги.",
         ]
     prompt_parts += [
         "",
-        "3. ВИБІР ЗАВДАННЯ ТА БАЛИ:",
-        "   - ЯКЩО ВЧИТЕЛЬ ПРЯМО ВКАЗАВ ВИБІР («на вибір», «обрати одне із»):",
-        "     * Додай блок «⚠️ **Увага (вибір завдання та оцінювання):**».",
-        "     * Обов'язково вживай ключову фразу: «Оберіть та виконайте **одне завдання на вибір** відповідно до бажаної оцінки:».",
-        "     * Перелічи лише ті варіанти з балами, які вказав учитель: «Завдання 1 (максимум N балів)».",
-        "     * НІКОЛИ не став тире або дефіс між номером завдання та кількістю балів (НЕ пиши «Завдання 1 - 8 балів», оскільки дефіс парсер системи сприймає як діапазон номерів від 1 до 8!).",
-        "   - ЯКЩО ЗАВДАННЯ ОБОВ'ЯЗКОВІ АБО ВИБОРУ НЕМАЄ:",
-        "     * Якщо вчитель написав «виконати обидва», «зробити всі», «1 і 2», або просто перелічив завдання без слів «на вибір» (вибору немає):",
-        "       - КАТЕГОРИЧНО ЗАБОРОНЕНО писати «на вибір», «одне завдання на вибір», «виконувати обидва не потрібно» або будь-що подібне!",
-        "       - Усі зазначені завдання є обов'язковими для виконання.",
-        "       - Блок «⚠️ **Увага (вибір завдання...)**» НЕ створювати взагалі!",
-        "   - ЯКЩО ВЧИТЕЛЬ НЕ ВКАЗАВ БАЛИ:",
-        "     * КАТЕГОРИЧНО ЗАБОРОНЕНО вигадувати чи підставляти будь-які вигадані бали, якщо вчитель їх прямо не зазначив!",
-        "",
-        "4. БЛОК «📁 ВИМОГИ ДО ЗДАЧІ»:",
-        "   - Зазнач очікуваний формат результату для завантаження (наприклад .xlsx, .docx, презентація, файл), якщо це випливає з опису або теми завдання.",
-        "",
-        "5. РЕКОМЕНДОВАНА ЛАКОНІЧНА СТРУКТУРА:",
-        "   📌 **Вказівки до роботи:**",
+        "3. ВИБІР ЗАВДАНЬ:",
     ]
-    if materials_attached:
+    if choice_intent == 'choice':
         prompt_parts += [
-            "   1. Відкрийте прикріплені матеріали/файл завдання та ознайомтеся з умовами.",
-            "   2. Виконайте завдання за вказівками у файлі.",
+            "- Учитель прямо вказав вибір. Сформулюй його точно за вказівкою: скільки варіантів і скільки потрібно обрати.",
+            "- Не додавай прив'язку до оцінки чи балів, якщо вчитель її не вказав; не вигадуй кількість варіантів і бали.",
+            "- Якщо вчитель уже сформулював вибір своїми словами, збережи його формулювання; не замінюй його шаблоном.",
+        ]
+    elif choice_intent == 'mandatory':
+        prompt_parts += [
+            "- Учитель указав, що завдання обов'язкові (обидва/всі). Не згадуй вибір, «одне завдання на вибір» чи «виконувати обидва не потрібно».",
+            "- Усі зазначені завдання мають бути виконані.",
         ]
     else:
         prompt_parts += [
-            "   1. Прочитайте умову завдання (вона наведена в цьому описі).",
-            "   2. Виконайте завдання за умовою.",
+            "- Якщо в контексті немає явного вибору, не згадуй вибір і не додавай блок вибору.",
         ]
     prompt_parts += [
-        "   3. Збережіть результат під своїм прізвищем.",
         "",
-        "   ⚠️ **Увага (вибір завдання та оцінювання):** (ЛИШЕ якщо вчитель прямо вказав вибір завдань; якщо вибору немає або завдання обов'язкові — ЦЬОГО БЛОКУ НЕ ПОВИННО БУТИ)",
+        "4. БАЛИ ТА ОЦІНЮВАННЯ:",
+        "- Згадуй бали/оцінку лише тоді, коли вчитель прямо їх указав; не вигадуй і не підставляй типові значення.",
+        "- Не додавай фраз про прив'язку до оцінки, якщо їх немає у вказівках.",
         "",
-        "   📁 **Вимоги до здачі:**",
-        "   • Прикріпіть та завантажте збережений файл роботи у формі здачі нижче.",
+        "5. ЗДАЧА РЕЗУЛЬТАТУ:",
+    ]
+    if no_submission:
+        prompt_parts += [
+            "- Завдання НЕ вимагає завантаження файлу або здачі роботи в системі. Не згадуй прикріплення файлів, форму здачі, «збережіть під прізвищем» чи файлові формати.",
+            "- Опиши, як учню продемонструвати результат (усно, у зошиті, на уроці, в системі), лише якщо це випливає з контексту.",
+        ]
+    else:
+        prompt_parts += [
+            "- Якщо з контексту випливає, що учні здають файл або роботу в певному форматі, вкажи це точно.",
+            "- Якщо файл/формат не згадані, не додавай файлових вимог. Не додавай «збережіть під прізвищем», якщо вчитель цього не просив.",
+        ]
+    prompt_parts += [
         "",
-        "6. ФОРМАТУВАННЯ:",
-        "   - Зрозуміла, доброзичлива українська мова, охайний чистий Markdown.",
-        "   - НЕ використовуй HTML-теги (<div>, <img>, <iframe>, <script> тощо) — лише чистий Markdown.",
-        "   - Надай ТІЛЬКИ готовий текст завдання без мета-вступів («Ось ваш опис:») та кінцевих приміток чи побажань успіху."
+        "6. СТРУКТУРА ТА ФОРМАТ:",
+        "- Структуруй текст зрозуміло: короткі заголовки, нумеровані кроки, списки — лише там, де це доречно.",
+        "- Не використовуй однаковий шаблон для всіх завдань і не додавай розділів, яких завдання не потребує.",
+        "- Пиши охайним чистим Markdown без HTML-тегів (<div>, <img>, <iframe>, <script> тощо).",
+        "- Надай ТІЛЬКИ готовий текст завдання без мета-вступів («Ось ваш опис:») та кінцевих приміток чи побажань успіху.",
     ]
 
     full_prompt = "\n".join(prompt_parts)
 
+    raw_temperature = getattr(settings, 'temperature', None)
     try:
-        temp_val = float(getattr(settings, 'temperature', 0.3) or 0.3)
-        temperature = max(0.0, min(1.0, temp_val))
-    except (ValueError, TypeError):
-        temperature = 0.3
+        temperature = 0.2 if raw_temperature is None else float(raw_temperature)
+    except (TypeError, ValueError):
+        temperature = 0.2
+    temperature = max(0.0, min(1.0, temperature))
+    thinking_enabled = bool(getattr(settings, 'default_thinking_mode', False))
 
     attempts_configs = settings.get_request_configs(custom_model=custom_model)
     attempted_errors = []
@@ -8663,70 +8868,86 @@ def refine_assignment_description_with_gemini(teacher_notes, assignment_title=''
         c_model = cfg['model']
         c_url = cfg['custom_url']
         c_is_backup = cfg['is_backup']
+        c_connection_id = cfg.get('connection_id') or None
         is_failover = (cfg_idx > 0) or (c_is_backup != is_backup_active)
 
-        try:
-            thinking_budget_val = 0 if ('flash' in c_model.lower() and c_provider == 'gemini') else None
-            status_code, raw_text, err_msg, raw_data = call_ai_api(
-                prompt_text=full_prompt,
-                system_prompt="",
-                inline_media=None,
-                provider=c_provider,
-                api_key=c_key,
-                model_name=c_model,
-                custom_url=c_url,
-                temperature=temperature,
-                max_output_tokens=3500,
-                timeout=35,
-                json_mode=False,
-                thinking_budget=thinking_budget_val,
-                action='description_refinement'
-            )
+        # MAX_TOKENS не є приводом вважати модель недоступною: пробуємо той самий
+        # підключення з більшим бюджетом, перш ніж переходити до наступної моделі.
+        for token_budget in (_DESC_REFINE_MAX_TOKENS, _DESC_REFINE_RETRY_MAX_TOKENS):
+            try:
+                thinking_budget_val = None
+                if 'flash' in c_model.lower() and c_provider == 'gemini' and not thinking_enabled:
+                    thinking_budget_val = 0
+                status_code, raw_text, err_msg, raw_data = call_ai_api(
+                    prompt_text=full_prompt,
+                    system_prompt="",  # оцінювальний system_prompt тут не застосовується: це генерація опису
+                    inline_media=None,
+                    provider=c_provider,
+                    api_key=c_key,
+                    model_name=c_model,
+                    custom_url=c_url,
+                    temperature=temperature,
+                    max_output_tokens=token_budget,
+                    timeout=35,
+                    json_mode=False,
+                    thinking_budget=thinking_budget_val,
+                    action='description_refinement',
+                    connection_id=c_connection_id,
+                )
 
-            if status_code == 200 and raw_text:
-                result_text = raw_text.strip()
-                if result_text.startswith('```'):
-                    lines = result_text.splitlines()
-                    if lines and lines[0].startswith('```'):
-                        lines = lines[1:]
-                    if lines and lines[-1].startswith('```'):
-                        lines = lines[:-1]
-                    result_text = "\n".join(lines).strip()
+                if status_code == 200 and raw_text:
+                    result_text = raw_text.strip()
+                    if result_text.startswith('```'):
+                        lines = result_text.splitlines()
+                        if lines and lines[0].startswith('```'):
+                            lines = lines[1:]
+                        if lines and lines[-1].startswith('```'):
+                            lines = lines[:-1]
+                        result_text = "\n".join(lines).strip()
 
-                if result_text:
-                    if is_failover:
-                        try:
-                            settings.last_failover_at = timezone.now()
-                            settings.last_failover_reason = f"Автоматичний перехід до {c_provider.title()} ({c_model}) при формулюванні опису завдання."
-                            settings.save(update_fields=['last_failover_at', 'last_failover_reason'])
-                        except Exception:
-                            pass
+                    if result_text:
+                        cleaned_text = _clean_hallucinated_choice_block(
+                            result_text, teacher_notes, current_description)
+                        if not cleaned_text.strip():
+                            attempted_errors.append(
+                                f"{c_provider}/{c_model}: порожній опис після очищення")
+                            break
+                        if is_failover:
+                            try:
+                                settings.last_failover_at = timezone.now()
+                                settings.last_failover_reason = f"Автоматичний перехід до {c_provider.title()} ({c_model}) при формулюванні опису завдання."
+                                settings.save(update_fields=['last_failover_at', 'last_failover_reason'])
+                            except Exception:
+                                pass
 
-                    # Фільтруємо випадково галюцинований блок вибору, якщо вчитель вимагав обидва/всі завдання
-                    result_text = _clean_hallucinated_choice_block(result_text, teacher_notes, current_description)
+                        # Відповідь моделі — недовірений вміст: не рендеримо сирий HTML
+                        # (html=False) і додатково санітизуємо результат перед віддачею
+                        # у браузер, де він вставляється через innerHTML.
+                        from .utils import sanitize_html
+                        md = MarkdownIt('commonmark', {'breaks': True, 'html': False})
+                        rendered_html = sanitize_html(md.render(cleaned_text))
 
-                    # Відповідь моделі — недовірений вміст: не рендеримо сирий HTML
-                    # (html=False) і додатково санітизуємо результат перед віддачею
-                    # у браузер, де він вставляється через innerHTML.
-                    from .utils import sanitize_html
-                    md = MarkdownIt('commonmark', {'breaks': True, 'html': False})
-                    rendered_html = sanitize_html(md.render(result_text))
+                        model_display = f"{c_model} ({c_provider.title()})" if c_provider != 'gemini' else c_model
+                        return {
+                            'status': 'success',
+                            'markdown': cleaned_text,
+                            'html': rendered_html,
+                            'model_used': model_display,
+                        }
 
-                    model_display = f"{c_model} ({c_provider.title()})" if c_provider != 'gemini' else c_model
-                    return {
-                        'status': 'success',
-                        'markdown': result_text,
-                        'html': rendered_html,
-                        'model_used': model_display
-                    }
+                if err_msg and 'MAX_TOKENS' in str(err_msg) and token_budget < _DESC_REFINE_RETRY_MAX_TOKENS:
+                    attempted_errors.append(
+                        f"{c_provider}/{c_model}: ліміт токенів ({token_budget}); повтор із {_DESC_REFINE_RETRY_MAX_TOKENS}")
+                    continue
 
-            if status_code == 429:
-                attempted_errors.append(f"{c_provider}/{c_model}: вичерпано ліміт запитів (429 Rate Limit)")
-            else:
-                attempted_errors.append(f"{c_provider}/{c_model}: {err_msg or f'Помилка {status_code}'}")
-
-        except Exception as e:
-            attempted_errors.append(f"{c_provider}/{c_model}: {str(e)}")
+                if status_code == 429:
+                    attempted_errors.append(f"{c_provider}/{c_model}: вичерпано ліміт запитів (429 Rate Limit)")
+                else:
+                    attempted_errors.append(f"{c_provider}/{c_model}: {err_msg or f'Помилка {status_code}'}")
+                break
+            except Exception as e:
+                attempted_errors.append(f"{c_provider}/{c_model}: {str(e)}")
+                break
 
     if attempted_errors:
         # Деталі провайдерів/помилок пишемо в лог, а не у відповідь вчителю.

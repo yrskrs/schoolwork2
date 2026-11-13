@@ -8598,26 +8598,45 @@ def teacher_generate_assignment_criteria(request):
 
     if request.content_type == 'application/json':
         try:
-            body = json.loads(request.body)
+            body = json.loads(request.body or b'{}')
         except Exception:
-            body = {}
-        teacher_notes = body.get('teacher_notes', '').strip()
-        assignment_title = body.get('assignment_title', '').strip()
-        assignment_description = body.get('assignment_description', '').strip()
-        subject_name = body.get('subject_name', '').strip()
-        class_group_name = body.get('class_group_name', '').strip()
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Некоректний формат JSON-запиту.'
+            }, status=400)
+        if not isinstance(body, dict):
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Некоректний формат JSON-запиту.'
+            }, status=400)
     else:
-        teacher_notes = request.POST.get('teacher_notes', '').strip()
-        assignment_title = request.POST.get('assignment_title', '').strip()
-        assignment_description = request.POST.get('assignment_description', '').strip()
-        subject_name = request.POST.get('subject_name', '').strip()
-        class_group_name = request.POST.get('class_group_name', '').strip()
+        body = request.POST
+
+    values = {}
+    for field, limit, label in _AI_CRITERIA_FIELD_LIMITS:
+        value, error = _clean_ai_text_field(body, field, limit, label)
+        if error:
+            return JsonResponse({'status': 'error', 'message': error}, status=400)
+        values[field] = value
+
+    teacher_notes = values['teacher_notes']
+    assignment_title = values['assignment_title']
+    assignment_description = values['assignment_description']
+    subject_name = values['subject_name']
+    class_group_name = values['class_group_name']
 
     if not teacher_notes and not assignment_description and not assignment_title:
         return JsonResponse({
             'status': 'error',
             'message': 'Будь ласка, опишіть своїми словами вимоги до завдання або заповніть тему чи опис.'
         }, status=400)
+
+    teacher = get_teacher_or_none(request)
+    if teacher and _ai_refine_rate_limited(teacher):
+        return JsonResponse({
+            'status': 'error',
+            'message': 'Забагато запитів до ШІ. Зачекайте хвилину й спробуйте ще раз.'
+        }, status=429)
 
     res = generate_criteria_with_gemini(
         teacher_notes=teacher_notes,
@@ -8627,17 +8646,21 @@ def teacher_generate_assignment_criteria(request):
         class_group_name=class_group_name
     )
 
-    if res.get('status') == 'success':
+    if res.get('status') == 'success' and (res.get('criteria') or '').strip():
         return JsonResponse({
             'status': 'success',
             'criteria': res.get('criteria', ''),
             'model_used': res.get('model_used', '')
         })
-    else:
+    if res.get('status') == 'success':
         return JsonResponse({
             'status': 'error',
-            'message': res.get('message', 'Не вдалося згенерувати критерії.')
+            'message': 'Не вдалося згенерувати критерії: модель повернула порожню відповідь. Спробуйте ще раз.'
         }, status=400)
+    return JsonResponse({
+        'status': 'error',
+        'message': res.get('message', 'Не вдалося згенерувати критерії.')
+    }, status=400)
 
 
 _AI_DESC_FIELD_LIMITS = {
@@ -8648,19 +8671,52 @@ _AI_DESC_FIELD_LIMITS = {
     'class_group_name': 120,
 }
 
+_AI_DESC_FIELD_LABELS = {
+    'teacher_notes': 'Вказівки вчителя',
+    'current_description': 'Поточний опис',
+    'assignment_title': 'Тема завдання',
+    'subject_name': 'Предмет',
+    'class_group_name': 'Клас',
+}
 
-def _clean_ai_description_field(body, key):
-    """Валідує текстове поле AJAX-запиту ШІ-помічника. Повертає (значення, помилка)."""
+_AI_CRITERIA_FIELD_LIMITS = (
+    ('teacher_notes', 8000, 'Вказівки вчителя'),
+    ('assignment_title', 300, 'Тема завдання'),
+    ('assignment_description', 8000, 'Опис завдання'),
+    ('subject_name', 120, 'Предмет'),
+    ('class_group_name', 120, 'Клас'),
+)
+
+
+def _clean_ai_text_field(body, key, limit, label):
+    """Валідує текстове поле AJAX-запиту ШІ. Повертає (значення, помилка)."""
     value = body.get(key, '')
     if value is None:
         return '', None
     if not isinstance(value, str):
         return None, 'Некоректні дані запиту: текстові поля мають бути рядками.'
     value = value.strip()
-    limit = _AI_DESC_FIELD_LIMITS.get(key, 8000)
     if len(value) > limit:
-        return None, f'Текст задовгий: максимум {limit} символів на поле.'
+        return None, f'Поле «{label}» задовге: максимум {limit} символів.'
     return value, None
+
+
+def _clean_ai_description_field(body, key):
+    """Валідує текстове поле AJAX-запиту ШІ-помічника. Повертає (значення, помилка)."""
+    limit = _AI_DESC_FIELD_LIMITS.get(key, 8000)
+    label = _AI_DESC_FIELD_LABELS.get(key, key)
+    return _clean_ai_text_field(body, key, limit, label)
+
+
+def _as_bool(value):
+    """Гнучко читає булеве поле з JSON або форми."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        return value.strip().lower() in ('1', 'true', 'yes', 'on', 'так')
+    return False
 
 
 def _ai_refine_rate_limited(teacher):
@@ -8697,10 +8753,12 @@ def teacher_refine_assignment_description(request):
                 'status': 'error',
                 'message': 'Некоректний формат JSON-запиту.'
             }, status=400)
-        has_materials = body.get('has_materials') in (True, 'true', 'True', '1', 1)
+        has_materials = _as_bool(body.get('has_materials'))
+        no_submission_required = _as_bool(body.get('no_submission_required'))
     else:
         body = request.POST
-        has_materials = body.get('has_materials') in ('1', 'true', 'True', 'on')
+        has_materials = _as_bool(body.get('has_materials'))
+        no_submission_required = _as_bool(body.get('no_submission_required'))
 
     values = {}
     for field in _AI_DESC_FIELD_LIMITS:
@@ -8734,21 +8792,26 @@ def teacher_refine_assignment_description(request):
         current_description=current_description,
         subject_name=subject_name,
         class_group_name=class_group_name,
-        has_materials=has_materials
+        has_materials=has_materials,
+        no_submission_required=no_submission_required,
     )
 
-    if res.get('status') == 'success':
+    if res.get('status') == 'success' and (res.get('markdown') or '').strip():
         return JsonResponse({
             'status': 'success',
             'html': res.get('html', ''),
             'markdown': res.get('markdown', ''),
             'model_used': res.get('model_used', '')
         })
-    else:
+    if res.get('status') == 'success':
         return JsonResponse({
             'status': 'error',
-            'message': res.get('message', 'Не вдалося сформулювати опис завдання.')
+            'message': 'Не вдалося сформулювати опис: модель повернула порожній результат. Спробуйте ще раз.'
         }, status=400)
+    return JsonResponse({
+        'status': 'error',
+        'message': res.get('message', 'Не вдалося сформулювати опис завдання.')
+    }, status=400)
 
 
 

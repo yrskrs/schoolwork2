@@ -999,17 +999,35 @@ function toggleEditorSourceMode() {
                 });
                 var classGroupName = classNames.join(', ');
 
-                // Чи має завдання прикріплені матеріали: наявні файли або вже вибрані для завантаження.
+                // Чи має завдання будь-які матеріали: файли (без позначених на видалення),
+                // хмарні файли, посилання, YouTube або вже вибрані для завантаження файли.
                 var hasMaterials = false;
                 var materialsForm = descTextarea ? descTextarea.closest('form') : null;
                 if (materialsForm) {
-                    var existingMaterialCount = materialsForm.querySelectorAll('.existing-file-item').length;
+                    var existingMaterialCount = 0;
+                    materialsForm.querySelectorAll('.existing-file-item').forEach(function(item) {
+                        var deleteBox = item.querySelector('.delete-file-checkbox');
+                        if (!deleteBox || !deleteBox.checked) existingMaterialCount += 1;
+                    });
                     var queuedMaterialCount = 0;
                     materialsForm.querySelectorAll('input[type="file"]').forEach(function(fileInput) {
                         if (fileInput.files && fileInput.files.length) queuedMaterialCount += fileInput.files.length;
                     });
-                    hasMaterials = existingMaterialCount > 0 || queuedMaterialCount > 0;
+                    var cloudMaterialCount = materialsForm.querySelectorAll('.cloud-imported-material').length;
+                    var extraLinkCount = materialsForm.querySelectorAll('.extra-link-row').length;
+                    var extraYoutubeCount = materialsForm.querySelectorAll('.extra-youtube-row').length;
+                    var primaryLink = document.getElementById('id_link_url');
+                    var primaryYoutube = document.getElementById('id_youtube_url');
+                    var hasPrimaryLink = !!(primaryLink && primaryLink.value.trim());
+                    var hasPrimaryYoutube = !!(primaryYoutube && primaryYoutube.value.trim());
+                    hasMaterials = existingMaterialCount > 0 || queuedMaterialCount > 0 ||
+                        cloudMaterialCount > 0 || extraLinkCount > 0 || extraYoutubeCount > 0 ||
+                        hasPrimaryLink || hasPrimaryYoutube;
                 }
+
+                // Прапорець «Не вимагає здачі робіт» впливає на те, чи згадувати файл/форму здачі.
+                var noSubmissionBox = document.getElementById('id_no_submission_required');
+                var noSubmission = !!(noSubmissionBox && noSubmissionBox.checked);
 
                 if (!notes && !currentDesc && !title) {
                     if (errorBoxDesc) {
@@ -1045,7 +1063,8 @@ function toggleEditorSourceMode() {
                         current_description: currentDesc,
                         subject_name: subjectName,
                         class_group_name: classGroupName,
-                        has_materials: hasMaterials
+                        has_materials: hasMaterials,
+                        no_submission_required: noSubmission
                     })
                 })
                 .then(function(resp) {
