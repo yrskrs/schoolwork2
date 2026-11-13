@@ -524,7 +524,7 @@ class SystemAILogicAndFailoverTests(TestCase):
 
     @patch('feed.gemini_service.call_ai_api')
     def test_refine_prompt_respects_materials_and_does_not_hardcode_scores(self, mock_call):
-        """Промпт не згадує файли, яких немає, не хардкодить бали і не змішує вибір із різною вагою."""
+        """Промпт динамічний: не стверджує наявність матеріалів, не хардкодить бали й шаблон здачі."""
         settings = get_ai_settings()
         settings.is_enabled = True
         settings.api_key = 'AIzaValidKey'
@@ -535,10 +535,19 @@ class SystemAILogicAndFailoverTests(TestCase):
         self.client.post(url, {'teacher_notes': 'Зробити таблицю в Excel'})
         prompt_without = mock_call.call_args.kwargs['prompt_text']
         self.assertIn('НЕ прикріплено файлів', prompt_without)
+        # Немає позитивного ствердження про матеріали (лише заборона їх згадувати).
+        self.assertNotIn('До завдання прикріплені матеріали', prompt_without)
         self.assertNotIn('Відкрийте прикріплені', prompt_without)
-        self.assertNotIn('максимум 8 балів', prompt_without)
-        self.assertNotIn('максимум 12 балів', prompt_without)
-        self.assertIn('максимум N балів', prompt_without)
+        # Жодного літерала балів/оцінки чи жорсткого шаблону здачі.
+        self.assertNotIn('максимум', prompt_without)
+        self.assertNotIn('максимум N балів', prompt_without)
+        self.assertNotIn('Збережіть під прізвищем', prompt_without)
+        self.assertNotIn('бажана оцінка', prompt_without)
+        self.assertNotIn('📌', prompt_without)
+        self.assertNotIn('📁', prompt_without)
+        # Без явного вибору промпт нейтральний: не нав'язує блок вибору.
+        self.assertIn('Якщо в контексті немає явного вибору', prompt_without)
+        self.assertNotIn('Учитель прямо вказав вибір', prompt_without)
 
         mock_call.reset_mock()
         self.client.post(url, {'teacher_notes': 'Зробити таблицю в Excel', 'has_materials': 'true'})
@@ -546,5 +555,6 @@ class SystemAILogicAndFailoverTests(TestCase):
         self.assertIn('прикріплені матеріали', prompt_with)
         self.assertIn('НЕ переказуй', prompt_with)
         self.assertNotIn('НЕ прикріплено файлів', prompt_with)
-        # Різні бали без вибору не повинні перетворюватись на «одне завдання на вибір».
-        self.assertIn('вибору немає', prompt_with)
+        self.assertNotIn('максимум', prompt_with)
+        # Матеріали не перетворюються на жорсткий шаблон здачі файлу.
+        self.assertNotIn('📁', prompt_with)

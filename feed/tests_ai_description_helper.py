@@ -174,3 +174,150 @@ class AssignmentDescriptionRefineEndpointTests(TestCase):
         data = response.json()
         self.assertIn('Увага (вибір', data['markdown'])
         self.assertIn('Завдання 1 (максимум 8 балів)', data['markdown'])
+
+
+class AssignmentDescriptionAICallConfigTests(TestCase):
+    """Контракт виклику call_ai_api: no_submission, temperature, thinking, MAX_TOKENS retry."""
+
+    def setUp(self):
+        cache.clear()
+        self.user = User.objects.create_user(
+            'teacher_callcfg', password='pass', is_superuser=True, is_staff=True)
+        self.teacher = Teacher.objects.create(user=self.user, full_name='Учитель')
+        self.client = Client()
+        self.client.force_login(self.user)
+        self.url = reverse('teacher_refine_assignment_description')
+        settings = get_ai_settings()
+        settings.unified_model_queue = False
+        settings.ai_provider = 'gemini'
+        settings.api_key = 'AIzaValidKey'
+        settings.model_name = 'gemini-3.8-flash'
+        settings.custom_api_url = ''
+        settings.active_api_type = 'primary'
+        settings.auto_failover_enabled = False
+        settings.backup_api_key = ''
+        settings.backup_ai_provider = 'gemini'
+        settings.backup_model_name = ''
+        settings.backup_custom_api_url = ''
+        settings.saved_models_list = '[]'
+        settings.is_enabled = True
+        settings.temperature = 0.2
+        settings.default_thinking_mode = False
+        settings.save()
+
+    def tearDown(self):
+        cache.clear()
+
+    def post_json(self, payload):
+        return self.client.post(
+            self.url, data=json.dumps(payload), content_type='application/json')
+
+    @patch('feed.gemini_service.call_ai_api')
+    def test_no_submission_required_is_forwarded_to_prompt(self, mock_call):
+        mock_call.return_value = (200, '**Опис**', None, {})
+        response = self.post_json({
+            'teacher_notes': 'Усно розкажіть про рослини',
+            'no_submission_required': True,
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('НЕ вимагає завантаження', mock_call.call_args.kwargs['prompt_text'])
+
+    @patch('feed.gemini_service.call_ai_api')
+    def test_empty_markdown_returns_400(self, mock_call):
+        mock_call.return_value = (200, '   ', None, {})
+        response = self.post_json({'teacher_notes': 'Опис завдання'})
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()['status'], 'error')
+
+    @patch('feed.gemini_service.call_ai_api')
+    def test_script_in_teacher_notes_is_stripped_before_prompt(self, mock_call):
+        mock_call.return_value = (200, '**Опис**', None, {})
+        response = self.post_json({
+            'teacher_notes': '<script>alert(1)</script>Зробити таблицю'})
+        self.assertEqual(response.status_code, 200)
+        prompt = mock_call.call_args.kwargs['prompt_text']
+        self.assertNotIn('alert(1)', prompt)
+        self.assertNotIn('<script>alert', prompt)
+        self.assertIn('Зробити таблицю', prompt)
+
+    @patch('feed.gemini_service.call_ai_api')
+    def test_temperature_zero_is_preserved(self, mock_call):
+        settings = get_ai_settings()
+        settings.temperature = 0.0
+        settings.save()
+        mock_call.return_value = (200, '**Опис**', None, {})
+        self.post_json({'teacher_notes': 'Опис завдання'})
+        self.assertEqual(mock_call.call_args.kwargs['temperature'], 0.0)
+
+    @patch('feed.gemini_service.call_ai_api')
+    def test_thinking_budget_is_zero_for_flash_when_thinking_disabled(self, mock_call):
+        mock_call.return_value = (200, '**Опис**', None, {})
+        self.post_json({'teacher_notes': 'Опис завдання'})
+        self.assertEqual(mock_call.call_args.kwargs['thinking_budget'], 0)
+
+    @patch('feed.gemini_service.call_ai_api')
+    def test_thinking_budget_is_none_when_default_thinking_mode_enabled(self, mock_call):
+        settings = get_ai_settings()
+        settings.default_thinking_mode = True
+        settings.save()
+        mock_call.return_value = (200, '**Опис**', None, {})
+        self.post_json({'teacher_notes': 'Опис завдання'})
+        self.assertIsNone(mock_call.call_args.kwargs['thinking_budget'])
+
+    @patch('feed.gemini_service.call_ai_api')
+    def test_max_tokens_retries_with_larger_budget(self, mock_call):
+        mock_call.side_effect = [
+            (200, '', 'MAX_TOKENS: response truncated', {}),
+            (200, '**Опис**', '', {}),
+        ]
+        response = self.post_json({'teacher_notes': 'Опис завдання'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['markdown'], '**Опис**')
+        self.assertEqual(mock_call.call_count, 2)
+        budgets = [call.kwargs['max_output_tokens'] for call in mock_call.call_args_list]
+        self.assertEqual(budgets, [3500, 7000])
+
+
+class AssignmentCriteriaEndpointValidationTests(TestCase):
+    """Захист endpoint-у генерації критеріїв: типи, JSON, порожня відповідь -> 400."""
+
+    def setUp(self):
+        cache.clear()
+        self.user = User.objects.create_user(
+            'teacher_criteria', password='pass', is_superuser=True, is_staff=True)
+        self.teacher = Teacher.objects.create(user=self.user, full_name='Учитель')
+        self.client = Client()
+        self.client.force_login(self.user)
+        self.url = reverse('teacher_generate_assignment_criteria')
+        settings = get_ai_settings()
+        settings.is_enabled = True
+        settings.api_key = 'AIzaValidKey'
+        settings.save()
+
+    def tearDown(self):
+        cache.clear()
+
+    def post_json(self, payload):
+        return self.client.post(
+            self.url, data=json.dumps(payload), content_type='application/json')
+
+    @patch('feed.gemini_service.call_ai_api')
+    def test_non_string_teacher_notes_returns_400(self, mock_call):
+        response = self.post_json({'teacher_notes': 123})
+        self.assertEqual(response.status_code, 400)
+        mock_call.assert_not_called()
+
+    @patch('feed.gemini_service.call_ai_api')
+    def test_invalid_json_returns_400(self, mock_call):
+        response = self.client.post(
+            self.url, data=b'{not json', content_type='application/json')
+        self.assertEqual(response.status_code, 400)
+        mock_call.assert_not_called()
+
+    @patch('feed.gemini_service.call_ai_api')
+    def test_empty_criteria_response_returns_400(self, mock_call):
+        mock_call.return_value = (200, '   ', None, {})
+        response = self.post_json({
+            'teacher_notes': 'Критерії для практичної роботи'})
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()['status'], 'error')
