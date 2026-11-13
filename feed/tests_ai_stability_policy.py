@@ -100,6 +100,10 @@ class AssessmentStabilityPolicyTests(TestCase):
         self.assertIn('половини', system)
 
     def test_model_blocked_but_verified_criteria_can_be_partial(self):
+        """Заблокований моделлю бал не блокує оцінку, якщо критерії підтверджені (traditional-оцінювання)."""
+        self.assignment.default_ai_preset = self.traditional
+        self.assignment.default_ai_grs = '[]'
+        self.assignment.save()
         result = self.result(
             assessment_blocked=True,
             criteria_results=[

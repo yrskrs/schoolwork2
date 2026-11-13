@@ -26,19 +26,31 @@ class ProvenanceTests(TestCase):
     setUp = fixtures.AssessmentV4Tests.setUp
     evaluate = fixtures.AssessmentV4Tests.evaluate
     result = fixtures.AssessmentV4Tests.result
-    def test_uncalibrated_percent_and_empty_claim_are_not_proof(self):
-        parsed = normalize_authorship({'ai_generated_detected': True, 'ai_generated_percent': 100}, False)
-        self.assertFalse(parsed['ai_generated_detected'])
-        self.assertIsNone(parsed['ai_generated_percent'])
+    def test_tolerance_calibrates_percent_and_empty_claim_is_not_evidence(self):
+        """Відсоток нижче допуску не звинувачує; поріг задає AISettings, а не сама модель."""
+        below = normalize_authorship({'ai_generated_percent': 10}, False, tolerance_percent=25)
+        self.assertFalse(below['ai_generated_detected'])
+        self.assertEqual(below['ai_generated_percent'], 10)
+        self.assertEqual(below['ai_authorship_state'], 'insufficient')
+
+        above = normalize_authorship({'ai_generated_percent': 80}, False, tolerance_percent=25)
+        self.assertTrue(above['ai_generated_detected'])
+        self.assertEqual(above['ai_generated_percent'], 80)
+        self.assertEqual(above['ai_generated_confidence'], 'low')
+
         negative = normalize_authorship({'ai_generated_detected': False, 'ai_generated_details': 'Ознак ШІ не знайдено.'}, False)
         self.assertFalse(negative['ai_generated_detected'])
+        self.assertEqual(negative['ai_generated_confidence'], 'none')
 
-    def test_style_is_low_confidence_and_does_not_invent_penalty(self):
+    def test_unverified_style_is_not_evidence_and_does_not_invent_penalty(self):
+        """Стиль без цитати з роботи не доводить використання ШІ й не створює штрафу."""
         result = {'ai_authorship_analysis': {'evidence': [{'basis': 'text_style', 'observation': 'Типовий вступ.'}]}}
         for allowed in (False, True):
             parsed = normalize_authorship(result, allowed)
-            self.assertEqual(parsed['ai_generated_confidence'], 'low')
-            self.assertIn('не доведений факт', parsed['ai_generated_details'])
+            self.assertFalse(parsed['ai_generated_detected'])
+            self.assertEqual(parsed['ai_generated_confidence'], 'none')
+            self.assertEqual(parsed['ai_authorship_state'], 'insufficient')
+            self.assertIn('не встановлено', parsed['ai_generated_details'])
             self.assertIsNone(parsed['ai_generated_percent'])
 
     def test_metadata_found_in_image_and_office_image_before_optimization(self):
@@ -68,10 +80,17 @@ class ProvenanceTests(TestCase):
         self.assertIn('не доводить', result['limitations'][0])
 
     def test_allowed_and_banned_policy_sent_to_model_with_concrete_evidence(self):
+        # Оцінювання за традиційною шкалою, щоб перевірити саме політику та бал,
+        # а не блокування через відсутні результати ГР.
+        self.assignment.default_ai_preset = self.traditional
+        self.assignment.default_ai_grs = '[]'
+        self.assignment.save()
+        source_name = self.sub.file.name.rsplit('/', 1)[-1]
         for allowed in (False, True):
             self.assignment.allow_ai_usage = allowed; self.assignment.save()
             result, call = self.evaluate(self.result(ai_authorship_analysis={'evidence': [
-                {'source': 'Робота', 'basis': 'self_disclosure', 'observation': 'Учень заявив про використання ШІ.'}]}))
+                {'source': source_name, 'location': 'абзац 1', 'basis': 'self_disclosure',
+                 'observation': 'У роботі є пряме зізнання: «Безпечні паролі. Не відкривай підозрілих посилань.»'}]}))
             self.assertTrue(result['ai_generated_detected'])
             self.assertEqual(result['suggested_grade'], '8')
             self.assertIn('ai_usage_allowed', call.call_args.kwargs['prompt_text'])
