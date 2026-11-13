@@ -200,5 +200,5 @@ def access_qr(request, pk):
     output = io.BytesIO()
     image.save(output)
     response = HttpResponse(output.getvalue(), content_type='image/svg+xml')
-    response['Content-Security-Policy'] = "default-src 'none'; sandbox"
+    response['Content-Security-Policy'] = "default-src 'none'; script-src 'none'; object-src 'none'; style-src 'unsafe-inline'"
     return response

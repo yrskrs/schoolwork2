@@ -278,9 +278,13 @@ class PublicAccessTests(TestCase):
         response = self.client.get(reverse('access_qr', args=[link.pk]), **LAN)
         self.assertEqual(response.status_code, 200)
         self.assertIn(b'<svg', response.content)
+        self.assertNotIn('sandbox', response.headers.get('Content-Security-Policy', ''))
+        self.assertIn("default-src 'none'", response.headers.get('Content-Security-Policy', ''))
         response = self.client.get(reverse('access_links'), **LAN)
         self.assertContains(response, 'Tailscale не підключено')
         self.assertContains(response, link.name)
+        self.assertNotContains(response, 'loading="lazy" width="240"')
+        self.assertContains(response, f'data-src="{reverse("access_qr", args=[link.pk])}"')
 
     def test_target_deletion_or_roster_deactivation_disables_link(self):
         link = self.link('student', student=self.pupil)

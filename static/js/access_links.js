@@ -91,7 +91,12 @@
   document.querySelectorAll('.access-qr').forEach(section => {
     section.addEventListener('toggle', () => {
       const image = section.querySelector('img[data-src]');
-      if (section.open && image && !image.hasAttribute('src')) image.src = image.dataset.src;
+      if (section.open && image) {
+        image.loading = 'eager';
+        if (!image.getAttribute('src') || (image.complete && image.naturalWidth === 0)) {
+          image.src = image.dataset.src;
+        }
+      }
     });
   });
 

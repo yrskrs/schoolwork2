@@ -110,7 +110,7 @@
         </div>
         <details class="access-qr">
           <summary>Показати QR-код</summary>
-          <img loading="lazy" width="240" height="240" data-src="{% url 'access_qr' link.pk %}" alt="QR-код доступу: {{ link.name }}">
+          <img width="240" height="240" data-src="{% url 'access_qr' link.pk %}" alt="QR-код доступу: {{ link.name }}">
         <noscript><a href="{% url 'access_qr' link.pk %}">Відкрити QR-код</a></noscript>
         </details>
       {% else %}
@@ -224,4 +224,4 @@
 </dialog>
 </main></div></div>
 {% endblock %}
-{% block extra_scripts %}<script src="{% static 'js/access_links.js' %}?v=20261107c"></script>{% endblock %}
+{% block extra_scripts %}<script src="{% static 'js/access_links.js' %}?v=20261113a"></script>{% endblock %}
