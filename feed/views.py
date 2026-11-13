@@ -8640,6 +8640,60 @@ def teacher_generate_assignment_criteria(request):
         }, status=400)
 
 
+@teacher_required
+@require_POST
+def teacher_refine_assignment_description(request):
+    """
+    AJAX endpoint: перефразування та структурування опису завдання для учнів та ШІ
+    за допомогою підключеної моделі ШІ на основі чернетки вчителя.
+    """
+    from .gemini_service import refine_assignment_description_with_gemini
+
+    if request.content_type == 'application/json':
+        try:
+            body = json.loads(request.body)
+        except Exception:
+            body = {}
+        teacher_notes = body.get('teacher_notes', '').strip()
+        assignment_title = body.get('assignment_title', '').strip()
+        current_description = body.get('current_description', '').strip()
+        subject_name = body.get('subject_name', '').strip()
+        class_group_name = body.get('class_group_name', '').strip()
+    else:
+        teacher_notes = request.POST.get('teacher_notes', '').strip()
+        assignment_title = request.POST.get('assignment_title', '').strip()
+        current_description = request.POST.get('current_description', '').strip()
+        subject_name = request.POST.get('subject_name', '').strip()
+        class_group_name = request.POST.get('class_group_name', '').strip()
+
+    if not teacher_notes and not current_description and not assignment_title:
+        return JsonResponse({
+            'status': 'error',
+            'message': 'Будь ласка, вкажіть тему, чернетку або опис завдання.'
+        }, status=400)
+
+    res = refine_assignment_description_with_gemini(
+        teacher_notes=teacher_notes,
+        assignment_title=assignment_title,
+        current_description=current_description,
+        subject_name=subject_name,
+        class_group_name=class_group_name
+    )
+
+    if res.get('status') == 'success':
+        return JsonResponse({
+            'status': 'success',
+            'html': res.get('html', ''),
+            'markdown': res.get('markdown', ''),
+            'model_used': res.get('model_used', '')
+        })
+    else:
+        return JsonResponse({
+            'status': 'error',
+            'message': res.get('message', 'Не вдалося сформулювати опис завдання.')
+        }, status=400)
+
+
 
 def api_classes_list(request):
     """Повертає класи вчителя або класи, дозволені публічним посиланням."""

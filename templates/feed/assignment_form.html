@@ -911,6 +911,181 @@ function toggleEditorSourceMode() {
             }
         });
     }
+
+    // ── AI Description Assistant ─────────────────────────────────────────────
+    (function() {
+        var btnToggleDesc = document.getElementById('btn-toggle-ai-desc-helper');
+        var panelDesc = document.getElementById('ai-desc-assistant-panel');
+        var btnCloseDesc = document.getElementById('btn-close-ai-desc-helper');
+        var btnCopyDesc = document.getElementById('btn-copy-desc-from-editor');
+        var btnRunDesc = document.getElementById('btn-run-refine-description');
+        var inputDescNotes = document.getElementById('id_ai_desc_notes');
+        var spinnerDesc = document.getElementById('ai-desc-spinner');
+        var iconDesc = document.getElementById('ai-desc-btn-icon');
+        var textDesc = document.getElementById('ai-desc-btn-text');
+        var errorBoxDesc = document.getElementById('ai-desc-error-box');
+        var resultBoxDesc = document.getElementById('ai-desc-result-box');
+        var previewHtmlDesc = document.getElementById('ai-desc-preview-html');
+        var badgeDesc = document.getElementById('ai-desc-model-badge');
+        var btnApplyDesc = document.getElementById('btn-apply-desc-replace');
+
+        var richEditor = document.getElementById('rich-editor');
+        var descTextarea = document.getElementById('{{ form.description.id_for_label }}') || document.querySelector('textarea[name="description"]');
+
+        var lastGeneratedHtml = '';
+
+        if (!btnToggleDesc || !panelDesc) return;
+
+        btnToggleDesc.addEventListener('click', function() {
+            if (panelDesc.style.display === 'none' || !panelDesc.style.display) {
+                panelDesc.style.display = 'block';
+                if (inputDescNotes) inputDescNotes.focus();
+            } else {
+                panelDesc.style.display = 'none';
+            }
+        });
+
+        if (btnCloseDesc) {
+            btnCloseDesc.addEventListener('click', function() {
+                panelDesc.style.display = 'none';
+            });
+        }
+
+        if (btnCopyDesc) {
+            btnCopyDesc.addEventListener('click', function() {
+                var currentText = '';
+                if (richEditor && richEditor.innerText.trim()) {
+                    currentText = richEditor.innerText.trim();
+                } else if (descTextarea && descTextarea.value.trim()) {
+                    currentText = descTextarea.value.trim();
+                }
+                if (currentText) {
+                    if (inputDescNotes) {
+                        inputDescNotes.value = currentText;
+                        inputDescNotes.focus();
+                    }
+                } else {
+                    alert('У редакторі поки що немає тексту. Введіть чернетку завдання або опишіть вимоги.');
+                }
+            });
+        }
+
+        if (btnRunDesc) {
+            btnRunDesc.addEventListener('click', function() {
+                var notes = inputDescNotes ? inputDescNotes.value.trim() : '';
+                var currentDesc = '';
+                if (richEditor && richEditor.innerText.trim()) {
+                    currentDesc = richEditor.innerText.trim();
+                } else if (descTextarea && descTextarea.value.trim()) {
+                    currentDesc = descTextarea.value.trim();
+                }
+
+                var titleInput = document.getElementById('id_title') || document.querySelector('input[name="title"]');
+                var title = titleInput ? titleInput.value.trim() : '';
+
+                var subjectSelect = document.getElementById('id_subject') || document.querySelector('select[name="subject"]');
+                var subjectName = subjectSelect && subjectSelect.selectedIndex >= 0 ? subjectSelect.options[subjectSelect.selectedIndex].text : '';
+
+                if (!notes && !currentDesc && !title) {
+                    if (errorBoxDesc) {
+                        errorBoxDesc.textContent = 'Будь ласка, введіть чернетку завдання або заповніть тему чи опис.';
+                        errorBoxDesc.style.display = 'block';
+                    }
+                    if (inputDescNotes) inputDescNotes.focus();
+                    return;
+                }
+
+                if (errorBoxDesc) errorBoxDesc.style.display = 'none';
+                if (resultBoxDesc) resultBoxDesc.style.display = 'none';
+
+                btnRunDesc.disabled = true;
+                if (spinnerDesc) spinnerDesc.style.display = 'inline-block';
+                if (iconDesc) iconDesc.style.display = 'none';
+                if (textDesc) textDesc.textContent = 'ШІ формулює опис...';
+
+                var csrfToken = '';
+                var csrfInput = document.querySelector('[name=csrfmiddlewaretoken]');
+                if (csrfInput) csrfToken = csrfInput.value;
+
+                fetch("{% url 'teacher_refine_assignment_description' %}", {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrfToken,
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    body: JSON.stringify({
+                        teacher_notes: notes,
+                        assignment_title: title,
+                        current_description: currentDesc,
+                        subject_name: subjectName
+                    })
+                })
+                .then(function(resp) {
+                    return resp.json().then(function(data) {
+                        return { ok: resp.ok, data: data };
+                    });
+                })
+                .then(function(res) {
+                    btnRunDesc.disabled = false;
+                    if (spinnerDesc) spinnerDesc.style.display = 'none';
+                    if (iconDesc) iconDesc.style.display = 'inline';
+                    if (textDesc) textDesc.textContent = 'Сформулювати вказівки';
+
+                    if (!res.ok || res.data.status !== 'success') {
+                        if (errorBoxDesc) {
+                            errorBoxDesc.textContent = res.data.message || 'Помилка під час звернення до ШІ. Перевірте налаштування ШІ.';
+                            errorBoxDesc.style.display = 'block';
+                        }
+                    } else {
+                        lastGeneratedHtml = res.data.html;
+                        if (previewHtmlDesc) previewHtmlDesc.innerHTML = res.data.html;
+                        if (badgeDesc && res.data.model_used) {
+                            badgeDesc.textContent = 'Модель: ' + res.data.model_used;
+                        }
+                        if (resultBoxDesc) {
+                            resultBoxDesc.style.display = 'block';
+                            resultBoxDesc.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                        }
+                    }
+                })
+                .catch(function(err) {
+                    btnRunDesc.disabled = false;
+                    if (spinnerDesc) spinnerDesc.style.display = 'none';
+                    if (iconDesc) iconDesc.style.display = 'inline';
+                    if (textDesc) textDesc.textContent = 'Сформулювати вказівки';
+                    if (errorBoxDesc) {
+                        errorBoxDesc.textContent = 'Мережева помилка при зверненні до сервера: ' + err.message;
+                        errorBoxDesc.style.display = 'block';
+                    }
+                });
+            });
+        }
+
+        if (btnApplyDesc) {
+            btnApplyDesc.addEventListener('click', function() {
+                if (!lastGeneratedHtml) return;
+                if (richEditor) {
+                    richEditor.innerHTML = lastGeneratedHtml;
+                }
+                if (descTextarea) {
+                    descTextarea.value = lastGeneratedHtml;
+                }
+                var editorContainer = richEditor || descTextarea;
+                if (editorContainer) {
+                    editorContainer.style.transition = 'box-shadow 0.3s ease, border-color 0.3s ease';
+                    editorContainer.style.borderColor = 'var(--ok)';
+                    editorContainer.style.boxShadow = '0 0 0 4px rgba(22, 163, 74, 0.25)';
+                    editorContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    setTimeout(function() {
+                        editorContainer.style.borderColor = '';
+                        editorContainer.style.boxShadow = '';
+                    }, 2200);
+                }
+                if (panelDesc) panelDesc.style.display = 'none';
+            });
+        }
+    })();
 })();
 </script>
 <style>

@@ -12,14 +12,82 @@
 
 <!-- Опис завдання з форматуванням тексту -->
 <div class="form-group" style="margin:0;">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:6px;">
         <label class="form-label" for="{{ form.description.id_for_label }}" style="margin:0;font-weight:700;">
             📝 Опис та вказівки до завдання
         </label>
-        <button type="button" class="btn btn-secondary btn-sm" id="btn-toggle-editor-mode" onclick="toggleEditorSourceMode()" style="font-size:11px;padding:2px 8px;font-weight:600;" title="Перемкнути між візуальним редактором та HTML-кодом">
-            &lt;/&gt; HTML / Візуально
-        </button>
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+            <button type="button" id="btn-toggle-ai-desc-helper" class="btn btn-sm"
+                    style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:4px 11px;border-radius:20px;background:var(--ai-fill);color:var(--on-fill);border:none;cursor:pointer;box-shadow:var(--shadow-sm);transition:transform 0.15s ease,box-shadow 0.15s ease;">
+                <span>✨</span>
+                <span>Помічник ШІ: сформулювати для учнів та ШІ</span>
+            </button>
+            <button type="button" class="btn btn-secondary btn-sm" id="btn-toggle-editor-mode" onclick="toggleEditorSourceMode()" style="font-size:11px;padding:2px 8px;font-weight:600;" title="Перемкнути між візуальним редактором та HTML-кодом">
+                &lt;/&gt; HTML / Візуально
+            </button>
+        </div>
     </div>
+
+    <!-- Панель ШІ-помічника для вдосконалення опису завдання -->
+    <div id="ai-desc-assistant-panel" style="display:none;background:var(--color-bg-secondary, #f8fafc);border:1.5px solid var(--info);border-radius:12px;padding:16px;margin-bottom:14px;box-shadow:0 6px 20px rgba(var(--info-rgb),0.12);">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px;">
+            <div style="display:flex;align-items:flex-start;gap:10px;">
+                <div style="font-size:24px;line-height:1;background:rgba(var(--info-rgb),0.12);padding:8px;border-radius:10px;">🤖</div>
+                <div>
+                    <div style="font-weight:700;font-size:14.5px;color:var(--color-text-primary, #1e293b);">Помічник ШІ: структурування опису та вказівок</div>
+                    <div style="font-size:12px;color:var(--color-text-muted, #64748b);margin-top:2px;">
+                        Опишіть завдання своїми словами (навіть коротко або з побажаннями щодо вибору/балів). ШІ перетворить його на чітку, покрокову інструкцію для учнів та автоматично підготує однозначні формулювання вибору завдань і критеріїв для ШІ-перевірки.
+                    </div>
+                </div>
+            </div>
+            <button type="button" id="btn-close-ai-desc-helper" style="background:none;border:none;font-size:18px;cursor:pointer;color:var(--color-text-muted, #64748b);padding:4px 8px;border-radius:6px;line-height:1;" title="Закрити панель">✕</button>
+        </div>
+
+        <div style="margin-bottom:10px;">
+            <label for="id_ai_desc_notes" style="display:block;font-size:12.5px;font-weight:600;margin-bottom:5px;color:var(--color-text-secondary, #334155);">
+                Ваша чернетка або вказівки (своїми словами):
+            </label>
+            <textarea id="id_ai_desc_notes" class="form-textarea" rows="3" style="width:100%;font-size:13px;line-height:1.45;"
+                      placeholder="Наприклад: Завдання 1 - 8 балів, Завдання 2 - 12 балів. Робити одне на вибір на бажану оцінку. Прикріпити таблицю excel."></textarea>
+        </div>
+
+        <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;">
+            <button type="button" id="btn-copy-desc-from-editor" class="btn btn-sm" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;background:var(--surface);border:1px solid var(--color-border, #cbd5e1);color:var(--color-text-primary, #1e293b);padding:6px 11px;border-radius:6px;cursor:pointer;">
+                <span>📋</span>
+                <span>Взяти поточний текст із редактора</span>
+            </button>
+            <div style="display:flex;gap:8px;">
+                <button type="button" id="btn-run-refine-description" class="btn btn-sm btn-primary" style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;padding:6px 15px;border-radius:6px;background:var(--ai-fill);color:var(--on-fill);border:none;cursor:pointer;box-shadow:var(--shadow-sm);">
+                    <span id="ai-desc-spinner" style="display:none;width:14px;height:14px;border:2px solid #fff;border-top-color:transparent;border-radius:50%;animation:descSpin 0.8s linear infinite;"></span>
+                    <span id="ai-desc-btn-icon">✨</span>
+                    <span id="ai-desc-btn-text">Сформулювати вказівки</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Повідомлення про помилку -->
+        <div id="ai-desc-error-box" style="display:none;margin-top:10px;padding:9px 13px;background:var(--color-danger-light);border:1px solid color-mix(in srgb, var(--danger) 40%, transparent);color:var(--color-danger);border-radius:6px;font-size:12.5px;"></div>
+
+        <!-- Блок згенерованого результату -->
+        <div id="ai-desc-result-box" style="display:none;margin-top:14px;background:var(--surface);border:1.5px solid var(--ai);border-radius:8px;padding:14px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+                <div style="font-weight:700;font-size:13.5px;color:var(--color-info);display:flex;align-items:center;gap:6px;">
+                    <span>✅</span> Згенерований опис завдання:
+                </div>
+                <div style="font-size:11px;color:var(--color-text-muted, #64748b);" id="ai-desc-model-badge"></div>
+            </div>
+            <div id="ai-desc-preview-html" style="font-size:13.5px;line-height:1.6;color:var(--color-text-primary, #1e293b);background:var(--color-bg-secondary, #f8fafc);padding:12px;border-radius:6px;border:1px solid var(--color-border);max-height:260px;overflow-y:auto;margin-bottom:12px;"></div>
+            <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;">
+                <button type="button" id="btn-apply-desc-replace" class="btn btn-sm btn-primary" style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;padding:6px 14px;border-radius:6px;background:var(--color-success);color:#fff;border:none;cursor:pointer;">
+                    <span>📥</span>
+                    <span>Замінити опис у редакторі</span>
+                </button>
+            </div>
+        </div>
+    </div>
+    <style>
+        @keyframes descSpin { to { transform: rotate(360deg); } }
+    </style>
 
     <!-- Панель інструментів форматування (WYSIWYG Toolbar) -->
     <div class="wysiwyg-toolbar" id="wysiwyg-toolbar" style="display:flex;flex-wrap:wrap;gap:4px;background:var(--color-bg-secondary);border:1px solid var(--color-border);border-bottom:none;border-top-left-radius:var(--radius-md);border-top-right-radius:var(--radius-md);padding:6px 10px;align-items:center;">

@@ -3359,12 +3359,23 @@ def parse_teacher_specific_task_numbers(description: str) -> list[int]:
     text = description.strip()
     found_nums: set[int] = set()
 
+    # «завдання 4 бали» means four points, not task number four. Do not let
+    # score/percentage/time units become an assigned task number.
+    NUMBER_UNIT_PAT = re.compile(
+        r'\s*(?:бал(?:ів|и|а|ами|ах)?|очк(?:ів|и|а)?|%|відсотк\w*|хв(?:илин\w*)?|'
+        r'год(?:ин\w*)?|стор(?:ін\w*|\.)?|клас(?:у|ів)?|грн|грив\w*|б\.)', re.IGNORECASE)
+
     # Спершу обробляємо діапазони «завдання 1-3», «вправа 2-4», «№ 1-2»
     range_pat = re.compile(
         r'(?:\b(?:практичн[а-яіїє]*|лабораторн[а-яіїє]*)\s+)?(?:\b(?:завдан[а-яіїє]*|вправ[а-яіїє]*|пункт[а-яіїє]*|номер[а-яіїє]*)\b|(?:завд|впр|ном)\b\.?|\bп\.\s*|№)\s*(?:№\s*)?(\d+)\s*[-–—]\s*(\d+)',
         re.IGNORECASE
     )
     for m in range_pat.finditer(text):
+        if NUMBER_UNIT_PAT.match(text, m.end()):
+            # The number after hyphen is a score (e.g. «Завдання 1 - 8 балів»), not a task range.
+            # Treat the first number as a single task number.
+            found_nums.add(int(m.group(1)))
+            continue
         start, end = int(m.group(1)), int(m.group(2))
         if start < end <= start + 15:
             for n in range(start, end + 1):
@@ -3380,11 +3391,6 @@ def parse_teacher_specific_task_numbers(description: str) -> list[int]:
     # Дозволяємо: пробіли, коми, «та», «і», «й», «та й», «і», «and», «№»
     SEP_PAT = re.compile(r'(?:\s*(?:,|та|і|й|and)\s*|\s+)(?:№\s*)?', re.IGNORECASE)
     NUM_PAT = re.compile(r'\d+')
-    # «завдання 4 бали» means four points, not task number four. Do not let
-    # score/percentage/time units become an assigned task number.
-    NUMBER_UNIT_PAT = re.compile(
-        r'\s*(?:бал(?:ів|и|а|ами|ах)?|очк(?:ів|и|а)?|%|відсотк\w*|хв(?:илин\w*)?|'
-        r'год(?:ин\w*)?|стор(?:ін\w*|\.)?|клас(?:у|ів)?|грн|грив\w*|б\.)', re.IGNORECASE)
 
     # Потім шукаємо всі входження ключового слова та числа після нього
     for kw_match in KEYWORD_PAT.finditer(text):
@@ -6026,8 +6032,13 @@ def apply_multi_task_evaluation_guardrail(
     instr_lower = (teacher_instructions_text or "").lower()
     is_choice = any(kw in instr_lower for kw in [
         'на вибір', 'одне завдання на вибір', 'будь-яке завдання на вибір',
-        'одне з наведених', 'одне із наведених', 'виберіть одне', 'обери одне'
+        'одне з наведених', 'одне із наведених', 'виберіть одне', 'обери одне',
+        'обрати одне', 'обрати одне із', 'обрати одне з', 'обрати яке', 'вибрати одне',
+        'вибрати одне із', 'вибрати одне з', 'вибрати яке', 'виконати одне', 'на яку оцінку бажає'
     ])
+    if not is_choice and scope:
+        if scope.get('is_choice_based') or (scope.get('final_task_understanding') or {}).get('is_choice_based'):
+            is_choice = True
     if is_choice:
         summary, weaknesses, feedback_comment = sanitize_unassigned_task_mentions(
             summary, weaknesses, feedback_comment, is_single_task=True
@@ -6618,6 +6629,13 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
         primary_task_content=primary_task_content if 'primary_task_content' in locals() else None,
         teacher_files_content=(primary_task_content if 'primary_task_content' in locals() else []) + teacher_files_content,
     )
+    if assignment and getattr(assignment, 'ai_task_understanding', None):
+        try:
+            tu_obj = json.loads(assignment.ai_task_understanding)
+            if isinstance(tu_obj, dict) and tu_obj.get('is_choice_based'):
+                scope['is_choice_based'] = True
+        except Exception:
+            pass
     teacher_specific_task_nums = scope.get('teacher_specific_task_nums') or []
     task_questions = scope.get('task_questions') or []
     combined_task_for_qs = scope.get('clean_instruction_text') or assignment_desc or ""
@@ -8406,6 +8424,153 @@ def generate_criteria_with_gemini(teacher_notes, assignment_title='', assignment
     return {
         'status': 'error',
         'message': f"Не вдалося згенерувати критерії через тимчасову недоступність моделі ШІ{detail}. Спробуйте ще раз або перевірте налаштування ШІ."
+    }
+
+
+def refine_assignment_description_with_gemini(teacher_notes, assignment_title='', current_description='', subject_name='', class_group_name='', custom_model=None):
+    """
+    Формулює чіткий, доброзичливий для учнів та однозначний для алгоритмів ШІ опис завдання
+    на основі чернетки чи побажань вчителя.
+    Підтримує будь-якого налаштованого ШІ-провайдера та резервний API при збоях.
+    """
+    from markdown_it import MarkdownIt
+
+    settings = get_ai_settings()
+    if not settings.is_enabled:
+        return {'status': 'error', 'message': 'Модуль ШІ вимкнено в налаштуваннях системи.'}
+
+    act_provider, act_key, act_model, act_url, is_backup_active = settings.get_active_config()
+    if not act_key and act_provider != 'custom':
+        if settings.has_backup_configured():
+            b_prov, b_key, b_model, b_url = settings.get_backup_config()
+            if b_key or b_prov == 'custom':
+                act_provider, act_key, act_model, act_url = b_prov, b_key, b_model, b_url
+                is_backup_active = not is_backup_active
+        if not act_key and act_provider != 'custom':
+            return {'status': 'error', 'message': ('Додайте підключення та хоча б одну ввімкнену модель у Налаштуваннях ШІ.' if settings.unified_model_queue else f'API-ключ для {act_provider.title()} не налаштовано в системі.')}
+
+    teacher_notes = (teacher_notes or '').strip()
+    assignment_title = (assignment_title or '').strip()
+    current_description = strip_html_tags(current_description or '').strip()
+    subject_name = (subject_name or '').strip()
+    class_group_name = (class_group_name or '').strip()
+
+    if not teacher_notes and not current_description and not assignment_title:
+        return {'status': 'error', 'message': 'Будь ласка, вкажіть тему, чернетку або опис завдання.'}
+
+    context_lines = []
+    if subject_name:
+        context_lines.append(f"Предмет: {subject_name}")
+    if class_group_name:
+        context_lines.append(f"Клас: {class_group_name}")
+    if assignment_title:
+        context_lines.append(f"Назва/тема завдання: {assignment_title}")
+    if current_description:
+        context_lines.append(f"Поточний опис/чернетка вчителя:\n«{current_description}»")
+    if teacher_notes and teacher_notes != current_description:
+        context_lines.append(f"Побажання/коментар учителя:\n«{teacher_notes}»")
+
+    prompt_parts = [
+        "Ти — досвідчений шкільний методист та фахівець з інтелектуальних систем оцінювання знань школярів.",
+        "Твоє завдання — перетворити чернетку чи вказівки вчителя на чітку, структуровану, доброзичливу інструкцію для учнів, яку також коректно і без збоїв інтерпретуватиме автоматичне ШІ-оцінювання платформи.",
+        "",
+        "КОНТЕКСТ ЗАВДАННЯ:",
+        "\n".join(context_lines) if context_lines else "(Тема завдання уточнюється)",
+        "",
+        "КРИТИЧНІ ПРАВИЛА ДЛЯ ПЛАТФОРМИ ОЦІНЮВАННЯ:",
+        "1. ВИБІР ЗАВДАНЬ ТА БАЛИ:",
+        "   - Якщо учень має обрати одне із завдань або завдань на різний бал (наприклад, Завдання 1 на 8 балів, Завдання 2 на 12 балів):",
+        "     * ОБОВ'ЯЗКОВО вживай стандартну ключову фразу: «Оберіть та виконайте одне завдання на вибір» (або «Виконайте одне завдання на вибір»).",
+        "     * НІКОЛИ не став тире або дефіс між номером завдання та кількістю балів (НЕ пиши «Завдання 1 - 8 балів», оскільки дефіс може бути розпізнаний системою як діапазон номерів від 1 до 8!).",
+        "     * ЗАВЖДИ пиши бали у круглих дужках: «Завдання 1 (максимум 8 балів)», «Завдання 2 (максимум 12 балів)».",
+        "     * Чітко підкресли, що учень обирає лише ОДНЕ завдання відповідно до бажаної оцінки.",
+        "2. СТРУКТУРА ОПИСУ:",
+        "   - 🎯 Мета/Вступ: 1 лаконічне речення про тему роботи.",
+        "   - 📋 Що потрібно зробити: чіткі, пронумеровані або марковані кроки чи варіанти завдань.",
+        "   - 📁 Вимоги до здачі: який файл чи результат учень має завантажити (електронна таблиця .xlsx, документ Word, презентація, скриншот тощо).",
+        "3. ТОН ТА ФОРМАТУВАННЯ:",
+        "   - Зрозуміла, сучасна українська мова, охайне форматування у Markdown (жирний шрифт, списки, доречні емодзі).",
+        "   - Надай ТІЛЬКИ готовий текст завдання без мета-вступів («Ось ваш опис:») та кінцевих приміток."
+    ]
+
+    full_prompt = "\n".join(prompt_parts)
+
+    try:
+        temp_val = float(getattr(settings, 'temperature', 0.3) or 0.3)
+        temperature = max(0.0, min(1.0, temp_val))
+    except (ValueError, TypeError):
+        temperature = 0.3
+
+    attempts_configs = settings.get_request_configs(custom_model=custom_model)
+    attempted_errors = []
+
+    for cfg_idx, cfg in enumerate(attempts_configs):
+        c_provider = cfg['provider']
+        c_key = cfg['api_key']
+        c_model = cfg['model']
+        c_url = cfg['custom_url']
+        c_is_backup = cfg['is_backup']
+        is_failover = (cfg_idx > 0) or (c_is_backup != is_backup_active)
+
+        try:
+            thinking_budget_val = 0 if ('flash' in c_model.lower() and c_provider == 'gemini') else None
+            status_code, raw_text, err_msg, raw_data = call_ai_api(
+                prompt_text=full_prompt,
+                system_prompt="",
+                inline_media=None,
+                provider=c_provider,
+                api_key=c_key,
+                model_name=c_model,
+                custom_url=c_url,
+                temperature=temperature,
+                max_output_tokens=3500,
+                timeout=35,
+                json_mode=False,
+                thinking_budget=thinking_budget_val
+            )
+
+            if status_code == 200 and raw_text:
+                result_text = raw_text.strip()
+                if result_text.startswith('```'):
+                    lines = result_text.splitlines()
+                    if lines and lines[0].startswith('```'):
+                        lines = lines[1:]
+                    if lines and lines[-1].startswith('```'):
+                        lines = lines[:-1]
+                    result_text = "\n".join(lines).strip()
+
+                if result_text:
+                    if is_failover:
+                        try:
+                            settings.last_failover_at = timezone.now()
+                            settings.last_failover_reason = f"Автоматичний перехід до {c_provider.title()} ({c_model}) при формулюванні опису завдання."
+                            settings.save(update_fields=['last_failover_at', 'last_failover_reason'])
+                        except Exception:
+                            pass
+
+                    md = MarkdownIt('commonmark', {'breaks': True, 'html': True})
+                    rendered_html = md.render(result_text)
+
+                    model_display = f"{c_model} ({c_provider.title()})" if c_provider != 'gemini' else c_model
+                    return {
+                        'status': 'success',
+                        'markdown': result_text,
+                        'html': rendered_html,
+                        'model_used': model_display
+                    }
+
+            if status_code == 429:
+                attempted_errors.append(f"{c_provider}/{c_model}: вичерпано ліміт запитів (429 Rate Limit)")
+            else:
+                attempted_errors.append(f"{c_provider}/{c_model}: {err_msg or f'Помилка {status_code}'}")
+
+        except Exception as e:
+            attempted_errors.append(f"{c_provider}/{c_model}: {str(e)}")
+
+    detail = f" ({'; '.join(attempted_errors)})" if attempted_errors else ""
+    return {
+        'status': 'error',
+        'message': f"Не вдалося сформулювати опис завдання через тимчасову недоступність моделі ШІ{detail}. Спробуйте ще раз або перевірте налаштування ШІ."
     }
 
 

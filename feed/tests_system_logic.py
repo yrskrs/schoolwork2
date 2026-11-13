@@ -363,3 +363,51 @@ class SystemAILogicAndFailoverTests(TestCase):
         data = resp.json()
         self.assertEqual(data['status'], 'success')
         self.assertIn('Високий рівень', data['criteria'])
+
+    @patch('feed.gemini_service.call_ai_api')
+    def test_teacher_refine_assignment_description_ajax(self, mock_call):
+        """AJAX ендпоінт перефразування та структурування опису завдання для учнів та ШІ."""
+        settings = get_ai_settings()
+        settings.is_enabled = True
+        settings.api_key = 'AIzaValidKey'
+        settings.save()
+
+        ai_refined_md = """🎯 **Мета:** навчитися застосовувати логічні функції в Excel.
+
+📋 **Що потрібно зробити:**
+Оберіть та виконайте **одне завдання на вибір** відповідно до бажаної оцінки:
+- **Завдання 1 (максимум 8 балів):** побудувати таблицю маркування парт.
+- **Завдання 2 (максимум 12 балів):** розв'язати лінійне рівняння.
+
+📁 **Вимоги до здачі:**
+Надішліть збережений файл таблиці (.xlsx)."""
+
+        mock_call.return_value = (200, ai_refined_md, None, {})
+
+        resp = self.client.post(
+            reverse('teacher_refine_assignment_description'),
+            {
+                'assignment_title': 'Опрацювання табличних даних',
+                'current_description': 'Завдання 1 - 8 балів, завдання 2 - 12 балів',
+                'teacher_notes': 'Одне на вибір',
+                'subject_name': 'Інформатика'
+            }
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data['status'], 'success')
+        self.assertIn('одне завдання на вибір', data['markdown'])
+        self.assertIn('<p>', data['html'])
+        self.assertIn('<strong>Завдання 1 (максимум 8 балів):</strong>', data['html'])
+
+    def test_parse_teacher_specific_task_numbers_with_score_units(self):
+        """Перевірка, що дефіс перед балами ('Завдання 1 - 8 балів') не сприймається як діапазон завдань 1..8."""
+        from feed.gemini_service import parse_teacher_specific_task_numbers
+        desc = 'Виконання Завдання 1 - 8 балів<div>Виконання завдання 2 - 12 балів</div>'
+        nums = parse_teacher_specific_task_numbers(desc)
+        self.assertEqual(nums, [1, 2])
+
+        # Справжній діапазон без одиниць вимірювання балів
+        range_desc = 'Виконати практичні завдання 1-3 зі сторінки підручника'
+        range_nums = parse_teacher_specific_task_numbers(range_desc)
+        self.assertEqual(range_nums, [1, 2, 3])
