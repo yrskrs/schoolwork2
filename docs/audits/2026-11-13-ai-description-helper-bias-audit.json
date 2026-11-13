@@ -1,0 +1,424 @@
+{
+  "audit": "AI description helper bias / hardcoded instructions audit",
+  "project": "SchoolNet",
+  "version": "4.9.4",
+  "commit": "42f2738c30dea808db38e7e2958042af780c914d",
+  "date": "2026-11-13",
+  "timezone": "Europe/Kiev",
+  "mode": "read-only; no external AI API calls; no application code changed",
+  "scope": [
+    "feed/gemini_service.py:refine_assignment_description_with_gemini (8532-8738)",
+    "feed/gemini_service.py:_clean_hallucinated_choice_block (8497-8529)",
+    "feed/views.py:teacher_refine_assignment_description (8680-8751)",
+    "templates/feed/components/assignment_editor/basic.html",
+    "templates/feed/assignment_form.html (917-1101)",
+    "feed/tests_ai_description_helper.py",
+    "feed/tests_system_logic.py (368-550)",
+    "scripts/ai-lab.sh",
+    "feed/gemini_service.py:generate_criteria_with_gemini (8359-8495)",
+    "feed/gemini_service.py:generate_age_appropriate_student_guide (8832+)"
+  ],
+  "verdict": {
+    "hardcoded_bias_present": true,
+    "can_override_teacher_conditions": true,
+    "production_safe_as_is": false,
+    "reason": "Fixed task template and choice-by-grade wording in prompt; unsafe post-filter that deletes legitimate content and may return an empty description as success."
+  },
+  "answers": {
+    "are_there_biases_or_hardcoded_injections": "Yes. The prompt hardcodes a single task template (written work with a file), a mandatory choice-by-grade phrase, a forced file-submission block, and Ukrainian output language. The post-filter hardcodes Ukrainian keyword heuristics and deletes content based on substring matches.",
+    "do_they_affect_teacher_conditions": "Yes, in both directions: the helper adds requirements the teacher did not ask for (file upload, desired grade, max points), and the filter deletes legitimate teacher conditions (real choice blocks, deadlines, criteria, warnings). The generated description is also consumed by the AI grader, so distortions affect grades.",
+    "does_it_work_for_other_tasks": "Not sufficiently. It breaks or distorts for oral/no-submission tasks, tests, link/video materials, 'choose 2 of 3', non-grade choices, traditional assessment, foreign-language tasks, math/CS text with < and >, and long descriptions.",
+    "what_to_do_first": "Make the post-filter fail-open, never return empty success, pass no_submission_required/evaluation_type/language/material-link facts to the prompt, remove contradictory/forced template lines, add regression tests."
+  },
+  "findings": [
+    {
+      "id": "P-01",
+      "category": "prompt",
+      "severity": "Critical",
+      "title": "Prompt enforces one fixed task template copied verbatim by the model",
+      "where": "feed/gemini_service.py:8619-8620, 8622-8641",
+      "evidence": "Live screenshot .local-audits/qa-4.9.4/ai-live-generation-materials.png shows model output reproducing the prompt skeleton almost verbatim: '📌 Вказівки до роботи', '3. Збережіть результат під своїм прізвищем.', '📁 Вимоги до здачі', '• Прикріпіть та завантажте збережений файл…'.",
+      "impact": "Irrelevant structure for oral/test/classroom tasks; substitutes teacher methodology; adds requirements not stated by teacher.",
+      "recommendation": "Build structure dynamically per task type; replace the example skeleton with short principles."
+    },
+    {
+      "id": "P-02",
+      "category": "prompt",
+      "severity": "Critical",
+      "title": "Forced file submission ignores no_submission_required",
+      "where": "feed/gemini_service.py:8636, 8640-8641; feed/models.py:777-781; templates/feed/components/assignment_editor/publication.html:14-21; feed/views.py:8731-8738",
+      "evidence": "Mocked end-to-end run with notes 'Усна відповідь, нічого здавати не треба' still produced prompt sections '📁 Вимоги до здачі', 'Прикріпіть та завантажте…', 'Збережіть результат під своїм прізвищем'. The flag is never passed to the helper.",
+      "impact": "Generated instructions contradict the form setting and hide the submit button on the assignment page.",
+      "recommendation": "Pass no_submission_required/task_type; omit file sections for non-submission tasks; add conditional branch for oral/test work."
+    },
+    {
+      "id": "P-03",
+      "category": "prompt",
+      "severity": "Critical",
+      "title": "Output language hardcoded to Ukrainian",
+      "where": "feed/gemini_service.py:8644; filter keyword lists at :8506-8507",
+      "evidence": "English notes 'Students choose one of 3 tasks; no file needed' still produce a Ukrainian-language requirement; the filter does not recognize English choice wording and deletes the legitimate choice block.",
+      "impact": "Foreign-language/bilingual assignments get Ukrainian instructions and can lose their choice block.",
+      "recommendation": "Pass language parameter (or infer from subject/notes); make filter language-neutral/structural."
+    },
+    {
+      "id": "P-04",
+      "category": "prompt",
+      "severity": "High",
+      "title": "Materials detection only counts files; links/YouTube/material flags ignored",
+      "where": "templates/feed/assignment_form.html:1003-1011; feed/gemini_service.py:8595-8602; feed/models.py:664-679, 1755-1815",
+      "evidence": "Notes referencing a video/link produce the prompt branch 'До завдання НЕ прикріплено файлів: …', i.e. a false fact. hasMaterials does not account for link_url/youtube/AssignmentLink/is_task_source_for_ai or files marked for deletion.",
+      "impact": "Model may forbid mentioning real materials or assume none exist; wrong context.",
+      "recommendation": "Pass has_files/has_links/has_youtube and names/URLs; separate 'materials' from 'submission file'."
+    },
+    {
+      "id": "P-05",
+      "category": "prompt",
+      "severity": "High",
+      "title": "Choice forced to 'one task per desired grade'; no '2 of 3' or non-grade choice",
+      "where": "feed/gemini_service.py:8606-8617",
+      "evidence": "Prompt mandates phrase 'Оберіть та виконайте одне завдання на вибір відповідно до бажаної оцінки:' and example 'Завдання 1 (максимум N балів)' whenever choice is detected; evaluation_type is not passed. Live screenshot shows model inserted 'відповідно до бажаної оцінки' although teacher did not mention it.",
+      "impact": "Wrong wording for choice-by-topic, choose-2-of-3, equal-weight choice, traditional/ungraded tasks.",
+      "recommendation": "Add choice modes none/one_of_N/M_of_N/tiered_by_grade/free; pass evaluation_type; mention grades only if explicitly given."
+    },
+    {
+      "id": "P-06",
+      "category": "prompt",
+      "severity": "High",
+      "title": "Self-contradiction between §3 (forbid choice block) and §5 (includes choice block)",
+      "where": "feed/gemini_service.py:8613-8615 versus :8638",
+      "evidence": "§3 says never create the ⚠️ block without teacher-stated choice; §5's recommended structure still contains the same header. Model behavior is non-deterministic; the post-filter exists only as a band-aid.",
+      "impact": "Hallucinated choice blocks on mandatory tasks and inconsistent output.",
+      "recommendation": "Remove the ⚠️ line from the generic structure; build separate prompt variants for choice vs mandatory tasks."
+    },
+    {
+      "id": "P-07",
+      "category": "prompt",
+      "severity": "Medium",
+      "title": "Absolute priority wording may delete non-conflicting details",
+      "where": "feed/gemini_service.py:8570-8575, 8587-8589",
+      "evidence": "'АБСОЛЮТНИЙ пріоритет' + 'мають бути ПОВНІСТЮ ВИДАЛЕНІ' and the existing editor text is labelled as 'to be replaced'; no rule to preserve non-conflicting requirements.",
+      "impact": "Risk of losing deadlines, materials, criteria, file formats when teacher adds a short note.",
+      "recommendation": "Delete/change only what directly contradicts new instructions; preserve all other conditions."
+    },
+    {
+      "id": "P-08",
+      "category": "prompt",
+      "severity": "Medium",
+      "title": "Literal N placeholder and fixed numbering may cause invented task numbers",
+      "where": "feed/gemini_service.py:8609",
+      "evidence": "Prompt example uses 'Завдання 1 (максимум N балів)'; no rule to take numbers from context.",
+      "impact": "Possible literal N output or invented/missing task numbers for real tasks.",
+      "recommendation": "Remove literal N or explain it; instruct to reuse factual numbering from teacher context."
+    },
+    {
+      "id": "P-09",
+      "category": "prompt",
+      "severity": "Low",
+      "title": "Teacher input inserted without data/instruction separation; notes are not HTML-cleaned",
+      "where": "feed/gemini_service.py:8554-8556, 8570-8575",
+      "evidence": "teacher_notes are only stripped, not strip_html_tags; current_description is HTML-stripped. In HTML-source mode the copy button copies raw HTML into notes (templates/feed/assignment_form.html:954-968).",
+      "impact": "Prompt pollution; minor prompt-injection surface.",
+      "recommendation": "Wrap teacher input in delimiters with a 'data, not instructions' rule; clean HTML in notes too."
+    },
+    {
+      "id": "G-01",
+      "category": "guardrail",
+      "severity": "Critical",
+      "title": "Post-filter deletes legitimate choice blocks on common wording",
+      "where": "feed/gemini_service.py:8507, 8509",
+      "evidence": "Repro: 'Оберіть один варіант', 'Оберіть 2 з 3 завдань', 'на ваш розсуд', 'Оберіть один із трьох', 'Виберіть одну з трьох вправ', 'Виконати одне із завдань' all cause the ⚠️ choice block to be removed (298 -> 111 chars). If notes already contain the word 'вибір' (e.g. '2 з 3 завдань на вибір'), the filter does not run at all, so behavior is inconsistent.",
+      "impact": "Teacher's explicit choice condition silently disappears for common wordings without the literal word 'вибір'.",
+      "recommendation": "Fail-open, wider intent classifier, or structured output instead of word lists."
+    },
+    {
+      "id": "G-02",
+      "category": "guardrail",
+      "severity": "Critical",
+      "title": "Substring matches vsі/usi/kozhen/obydva override explicit choice",
+      "where": "feed/gemini_service.py:8506, 8509",
+      "evidence": "Repro: 'Не всі завдання обов'язкові, можна обрати одне', 'Поясніть усім учням, завдання на вибір', 'На кожен урок — одне завдання на вибір', 'Поясніть обидві формули, завдання на вибір' all delete the legitimate choice block.",
+      "impact": "Explicit teacher choice is destroyed; students get mandatory-task framing.",
+      "recommendation": "Use word boundaries and semantic phrases; handle negation; never let explicit_all override a detected choice."
+    },
+    {
+      "id": "G-03",
+      "category": "guardrail",
+      "severity": "Critical",
+      "title": "Filter swallows arbitrary following sections until next marker",
+      "where": "feed/gemini_service.py:8518-8522",
+      "evidence": "Repro: content after the block such as 'Термін здачі: до п'ятниці', '**Критерії оцінювання:**', '**Додаткові умови:**' disappears if it does not start with 📁/📌/# or contain 'вимоги до здачі'. If block is last, everything after it is lost.",
+      "impact": "Data loss: deadlines, criteria, requirements disappear from the description.",
+      "recommendation": "Delete only the exact block range; if end is not certain, do not modify text."
+    },
+    {
+      "id": "G-04",
+      "category": "guardrail",
+      "severity": "High",
+      "title": "Empty description returned as success; apply button silently no-ops (client guard prevents wipe)",
+      "where": "feed/gemini_service.py:8706, 8716-8721; templates/feed/assignment_form.html:1068, 1092-1101",
+      "evidence": "Repro: output consisting only of the ⚠️ block -> filter returns '' -> helper returns status success with empty markdown/html -> endpoint returns HTTP 200 success. UI shows an empty 'generated description' box; the apply button does nothing because of the guard `if (!lastGeneratedHtml) return;` (templates/feed/assignment_form.html:1094).",
+      "impact": "Wrong API contract: success does not mean valid output; the teacher sees no error and cannot understand why nothing was generated. The editor is not wiped today only because of the client-side guard; if it is removed, the same code path becomes destructive.",
+      "recommendation": "Never return success with empty text; re-check result non-empty after cleanup; treat empty-after-cleanup as a failed attempt (try next model) and return an explicit error code to the UI."
+    },
+    {
+      "id": "G-05",
+      "category": "guardrail",
+      "severity": "High",
+      "title": "Any generic ⚠️ Uvaha warning is removed",
+      "where": "feed/gemini_service.py:8515",
+      "evidence": "Trigger is ⚠️ + ('вибір' or 'увага'); when the filter runs, a generic warning '⚠️ Увага: не забудьте зберегти файл' is deleted. If notes contain a choice word, the filter does not run and the warning is kept. Without the emoji ('**Увага:**') it is not recognized, so behavior is inconsistent.",
+      "impact": "Teacher warnings/details silently removed whenever the filter is triggered.",
+      "recommendation": "Trigger only on the specific choice-block header, not on the word 'увага'."
+    },
+    {
+      "id": "G-06",
+      "category": "guardrail",
+      "severity": "High",
+      "title": "Filter does not run for the draft-only path",
+      "where": "feed/gemini_service.py:8506, 8509",
+      "evidence": "Repro: notes empty, current_description contains 'виконати обидва' -> explicit_all uses only notes and the filter requires non-empty notes, so a hallucinated choice block remains.",
+      "impact": "Inconsistent behavior between notes and editor-draft paths.",
+      "recommendation": "Use combined notes+description intent classifier."
+    },
+    {
+      "id": "G-07",
+      "category": "guardrail",
+      "severity": "High",
+      "title": "Negated choice is treated as choice; forbidden phrases with markup are missed",
+      "where": "feed/gemini_service.py:8507, 8524",
+      "evidence": "Repro: 'Не на вибір, обов'язково' -> has_choice=True -> block remains. 'Обидва завдання виконувати не потрібно', 'Не потрібно виконувати обидва завдання', variants with '**' are not recognized. Header without ⚠️ emoji is not recognized.",
+      "impact": "False negatives; hallucinated choice text survives into the description and can affect the grader's choice detection.",
+      "recommendation": "Handle negation, normalize Markdown before matching, support header without emoji."
+    },
+    {
+      "id": "D-01",
+      "category": "context",
+      "severity": "High",
+      "title": "Only a small subset of form context reaches the helper",
+      "where": "feed/views.py:8680-8751; templates/feed/assignment_form.html:1040-1049",
+      "evidence": "Endpoint accepts only teacher_notes/current_description/assignment_title/subject_name/class_group_name/has_materials. Missing: no_submission_required, ai_thinking_mode/default_thinking_mode, links/YouTube, is_task_source_for_ai, evaluation_type, language, task type, assignment_id for server-side facts.",
+      "impact": "Model has to guess; guesses follow the fixed template.",
+      "recommendation": "Pass a complete context object; derive facts server-side for edit mode."
+    },
+    {
+      "id": "D-02",
+      "category": "context",
+      "severity": "High",
+      "title": "has_materials is a client-side DOM heuristic, not a DB fact",
+      "where": "templates/feed/assignment_form.html:1003-1011",
+      "evidence": "Counts .existing-file-item and file inputs; ignores links/YouTube; counts files marked for deletion; does not distinguish task-source file from supporting material; may differ between create and edit.",
+      "impact": "Wrong materials branch in the prompt.",
+      "recommendation": "Pass structured material facts from the server; distinguish material types."
+    },
+    {
+      "id": "D-03",
+      "category": "reliability",
+      "severity": "High",
+      "title": "Hardcoded max_output_tokens=3500 / timeout=35 / thinking_budget=0 for Gemini flash",
+      "where": "feed/gemini_service.py:8668-8683; AISettings.default_thinking_mode at feed/models.py:3679; MAX_TOKENS handling at feed/gemini_service.py:584-599, 725-731",
+      "evidence": "MAX_TOKENS is treated as a failed attempt; unlike evaluation (retry with larger budget at :7031-7091), description refinement has no retry. All default queue models are flash, and thinking is forcibly disabled for them regardless of the setting. system_prompt is empty, so global/system instructions do not apply.",
+      "impact": "Long/complex tasks fail with a misleading 'temporary unavailable' message; thinking mode ignored; no retries.",
+      "recommendation": "Respect thinking settings; retry with larger token budget; make limits configurable; explain truncation to the teacher."
+    },
+    {
+      "id": "D-04",
+      "category": "context",
+      "severity": "High",
+      "title": "strip_html_tags corrupts math/CS conditions with < and >",
+      "where": "feed/gemini_service.py:3470-3505; applied at :8556",
+      "evidence": "Repro: 'Порівняйте 2 < 3 і 5 > 4' -> 'Порівняйте 2 4'; 'Знайти x, якщо x < 10 > 3' -> 'Знайти x, якщо x 3'.",
+      "impact": "Broken task conditions for math, physics, programming.",
+      "recommendation": "Do not HTML-strip plain text blindly; use a parser that preserves standalone <>/< pairs; add tests."
+    },
+    {
+      "id": "D-05",
+      "category": "context",
+      "severity": "Medium",
+      "title": "Raw HTML can leak into teacher_notes",
+      "where": "feed/gemini_service.py:8554; templates/feed/assignment_form.html:954-968",
+      "evidence": "Copy button in HTML-source mode copies textarea value (raw HTML) into notes; server strips HTML only from current_description.",
+      "impact": "Prompt pollution; model receives markup despite the no-HTML rule.",
+      "recommendation": "strip_html_tags for teacher_notes too (or sanitize text server-side)."
+    },
+    {
+      "id": "D-06",
+      "category": "context",
+      "severity": "Low",
+      "title": "No validation that generated text preserves teacher facts; blind replace",
+      "where": "feed/gemini_service.py:8706-8721; templates/feed/assignment_form.html:1092-1101",
+      "evidence": "No check that numbers/scores/dates/file formats from notes remain; no diff view; full innerHTML replacement after confirm().",
+      "impact": "Silent loss of important teacher facts and formatting.",
+      "recommendation": "Validate key facts, show diff, offer replace/append, preserve formatting."
+    },
+    {
+      "id": "D-07",
+      "category": "config",
+      "severity": "Medium",
+      "title": "AISettings generation config does not reach the helper (temperature 0.0 -> 0.3, thinking ignored, system_prompt dead, connection_id/manifest missing)",
+      "where": "feed/gemini_service.py:8652, 8669, 8672, 8680, 8683; feed/models.py:3671-3682; feed/views.py:8731-8738",
+      "evidence": "`float(getattr(settings, 'temperature', 0.3) or 0.3)` converts an explicit 0.0 to 0.3 (and fallback 0.3 differs from the model default 0.2). default_thinking_mode/ai_thinking_mode are ignored; thinking is forced off for any Gemini flash model by name. AISettings.system_prompt is never read by description/criteria generators. custom_model, connection_id and manifest are not passed, so AIRequestLog has an empty connection_id and the payload_manifest (sha256/prompt size) used by evaluation is absent. The helper timeout is 35 s for non-Gemini; evaluation uses 50 s for Gemini, 35 s for others, 90 s only for router-retry.",
+      "impact": "School-level generation settings silently do not apply; deterministic mode is impossible; diagnostics are weaker than for evaluation.",
+      "recommendation": "Introduce a shared resolve_generation_config helper (temperature without `or`, thinking from settings, configurable max tokens/timeout) and pass connection_id/manifest; either use or remove the global system_prompt."
+    },
+    {
+      "id": "R-01",
+      "category": "tests",
+      "severity": "High",
+      "title": "Filter tests cover only two happy paths",
+      "where": "feed/tests_ai_description_helper.py:131, 157",
+      "evidence": "No tests for false positives (common choice wording), generic warnings, block at end, following criteria, empty result, empty notes, English notes, no_submission_required, MAX_TOKENS.",
+      "impact": "Regressions and destructive behavior go unnoticed.",
+      "recommendation": "Add at least 20 filter regression tests and 5 end-to-end endpoint tests."
+    },
+    {
+      "id": "R-02",
+      "category": "tests",
+      "severity": "Medium",
+      "title": "Tests enshrine hardcoded prompt strings",
+      "where": "feed/tests_system_logic.py:526-550",
+      "evidence": "Asserts prompt contains 'максимум N балів', 'вибору немає', 'НЕ прикріплено файлів'. This fixes current hardcoding as a contract.",
+      "impact": "Genericity refactor will break tests even if behavior improves.",
+      "recommendation": "Test behavior/context relevance, not literal prompt fragments."
+    },
+    {
+      "id": "R-03",
+      "category": "process",
+      "severity": "Medium",
+      "title": "ai-lab.sh assertions weakened in the same commit",
+      "where": "scripts/ai-lab.sh:35-36 (git show HEAD -- scripts/ai-lab.sh)",
+      "evidence": "== 7 -> >= 7; == 35 -> >= 35; all(group.students.count() == 5) removed.",
+      "impact": "Weakened verification of the test lab; unrelated to the helper fix and easy to miss.",
+      "recommendation": "Restore strict assertions in a separate commit or document the reason."
+    },
+    {
+      "id": "R-04",
+      "category": "observability",
+      "severity": "Low",
+      "title": "No logging when the guardrail changes output",
+      "where": "feed/gemini_service.py:8497-8529",
+      "evidence": "No logger calls in the cleanup function; AIErrorLog is only written by evaluation/analysis code, not by description/criteria generators; refine does not pass connection_id/manifest, so AIRequestLog.connection_id is empty and the payload_manifest (sha256/prompt size) used by evaluation is absent (AIRequestLog itself has no hash fields).",
+      "impact": "Impossible to measure false-positive rate in production.",
+      "recommendation": "Log filter hits and removed size; optionally return a debug flag."
+    },
+    {
+      "id": "R-05",
+      "category": "ux",
+      "severity": "Low",
+      "title": "UI copy nudges teachers toward choice+grades+file scenario",
+      "where": "templates/feed/components/assignment_editor/basic.html:39, 51",
+      "evidence": "Panel text mentions 'побажаннями щодо вибору/балів'; placeholder shows 'Завдання 1 - 8 балів ... Робити одне на вибір на бажану оцінку. Прикріпити таблицю excel.'",
+      "impact": "Reinforces the same biased scenario; confusing for oral/test tasks.",
+      "recommendation": "Neutral placeholder with examples of different task types."
+    },
+    {
+      "id": "R-06",
+      "category": "ux",
+      "severity": "Low",
+      "title": "Replace description is a blind full replacement",
+      "where": "templates/feed/assignment_form.html:1092-1101",
+      "evidence": "innerHTML and textarea value replaced entirely after confirm(); no diff, no append option, no formatting preservation.",
+      "impact": "Loss of teacher formatting/curation; worse in combination with G-04.",
+      "recommendation": "Show changes and offer replace/append; preserve teacher formatting where possible."
+    },
+    {
+      "id": "R-07",
+      "category": "infrastructure",
+      "severity": "Low",
+      "title": "Rate limit is per-process (LocMemCache); failover bookkeeping can mislabel backups",
+      "where": "feed/views.py:8666-8675; schoolnet/settings.py:187-188; feed/gemini_service.py:8544-8552, 8657, 8666",
+      "evidence": "LocMemCache multiplies the 20/min limit by the number of gunicorn workers and resets on restart. Manual inversion of is_backup_active can make is_failover=True for the first config when the primary key is missing, writing a false 'automatic failover' reason.",
+      "impact": "Weak protection of expensive calls in multi-process deployments; misleading failover journal.",
+      "recommendation": "Use a shared cache or DB-based sliding window; derive is_failover from the actual config returned by get_request_configs()."
+    },
+    {
+      "id": "X-01",
+      "category": "adjacent_generator",
+      "severity": "Medium",
+      "title": "Criteria generator hardcodes 12-point NUS/4 levels",
+      "where": "feed/gemini_service.py:8410-8413; templates/feed/components/assignment_editor/criteria.html:45; templates/feed/assignment_form.html:847",
+      "evidence": "Prompt requires 12-point scale and 4 levels regardless of preset evaluation_type; UI button says 'Згенерувати критерії (12 балів)'.",
+      "impact": "Same class of genericity problem for another task-generation feature.",
+      "recommendation": "Pass evaluation type/scale; prompt variants for traditional/credit-based assessment."
+    },
+    {
+      "id": "X-02",
+      "category": "adjacent_generator",
+      "severity": "Medium",
+      "title": "Student guide generator hardcodes file submission",
+      "where": "feed/gemini_service.py:8832+, e.g. 8935, 8946, 8957, 8975, 8985, 9026",
+      "evidence": "Step 4 always tells the student to save/upload a file; no no_submission_required handling.",
+      "impact": "Contradicts oral/no-submission assignments.",
+      "recommendation": "Add conditional branches by submission mode."
+    },
+    {
+      "id": "X-03",
+      "category": "architecture",
+      "severity": "Medium",
+      "title": "No shared prompt infrastructure/versioning across generators",
+      "where": "feed/gemini_service.py:8359-8495, 8532-8745, 8832+",
+      "evidence": "Each generator builds its own prompt with its own hardcoded strings; no versioning, snapshot tests or shared rules.",
+      "impact": "Fixes do not propagate; recurrent hardcoded bias.",
+      "recommendation": "Introduce a shared prompt builder/config with versioning and snapshot tests."
+    },
+    {
+      "id": "X-04",
+      "category": "adjacent_endpoint",
+      "severity": "High",
+      "title": "Criteria endpoint returns 500 on non-string JSON, has no rate limit, leaks provider details",
+      "where": "feed/views.py:8599-8608; feed/gemini_service.py:8490-8494",
+      "evidence": "POST JSON {\"teacher_notes\": 123}, {\"teacher_notes\": null}, {\"assignment_description\": {\"a\": 1}} -> AttributeError -> HTTP 500 (3/3 checks, DEBUG=False). Invalid JSON is silently converted to {} and then rejected with a generic empty-input 400 instead of an explicit format error. No rate limit is applied and provider/model error details are returned to the teacher.",
+      "impact": "Another task-generation endpoint is less robust and less safe than the description helper; users see 500 and internal details.",
+      "recommendation": "Reuse _clean_ai_description_field/strip_html_tags, add rate limit, return 400 for invalid payloads, sanitize error messages."
+    }
+  ],
+  "priority_actions": {
+    "P0": [
+      "Rewrite filter as fail-open; delete only exact choice block with confident boundaries; otherwise leave text unchanged.",
+      "Never return success with empty markdown/html; re-check after cleanup.",
+      "Pass no_submission_required/task_type to the prompt and remove forced file-submission sections for such tasks.",
+      "Add 20+ filter regression tests and 5+ endpoint tests."
+    ],
+    "P1": [
+      "Build prompt structure dynamically by task type; remove contradictory generic template.",
+      "Pass evaluation_type, language, and material facts (files/links/YouTube, task-source flag).",
+      "Support choice modes none/one_of_N/M_of_N/tiered_by_grade/free; mention grades only when explicitly given.",
+      "Fix strip_html_tags for math/CS text.",
+      "Respect thinking settings; retry on MAX_TOKENS with larger budget; make limits configurable; fix temperature 0.0 handling.",
+      "Validate preservation of teacher facts; show diff instead of blind replace.",
+      "Harden the criteria endpoint: validate types/JSON, add rate limit, hide provider details."
+    ],
+    "P2": [
+      "Neutral UI copy with multiple task-type examples.",
+      "Log guardrail hits and removed size; write failures to AIErrorLog.",
+      "Shared prompt infrastructure/versioning across all generators.",
+      "Restore strict ai-lab.sh assertions.",
+      "Update CHANGELOG/README with real limitations.",
+      "Use a shared cache/DB rate limit for multi-process deployments."
+    ]
+  },
+  "positives": [
+    "Input validation, field length limits and per-teacher rate limiting.",
+    "XSS protection: MarkdownIt(html=False) + sanitize_html; raw model HTML never executed.",
+    "Teacher-priority principle is conceptually correct (over-absolute wording is the issue).",
+    "Forbids inventing scores; parser-aligned hyphen rule.",
+    "Materials-present/absent branch is a good idea, though only files are covered.",
+    "Preview before replace, model badge, copy-from-editor button.",
+    "Model failover and AI request metrics with action='description_refinement'.",
+    "16 helper tests pass."
+  ],
+  "evidence_files": [
+    "docs/audits/assets/2026-11-13-ai-helper/ai-live-generation-materials.png",
+    "docs/audits/assets/2026-11-13-ai-helper/ai-live-generation.png",
+    ".local-audits/qa-4.9.4/report.json",
+    ".local-audits/refine-description-audit/prompt-findings.md",
+    ".local-audits/refine-description-audit/pipeline-findings.md"
+  ],
+  "limitations": [
+    "Read-only audit; application code unchanged.",
+    "External AI APIs were not called; end-to-end runs used mocked call_ai_api.",
+    "Live screenshots were captured before commit 42f2738 (18:00 vs 18:39); they indicate model template-copying tendency, not post-commit behavior.",
+    "Full feed test suite was not run; only 16 helper tests (OK) and focused checks.",
+    "Severity is an expert judgment, not a formal risk model."
+  ]
+}
