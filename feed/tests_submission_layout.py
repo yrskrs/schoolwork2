@@ -63,7 +63,7 @@ class StudentSubmissionLayoutTests(TestCase):
         self.assertTrue(form.xpath('.//footer//button[@type="submit" and @id="submission-send-button"]'))
         for name in ['full_name', 'class_group', 'files', 'link', 'comment_student', 'csrfmiddlewaretoken']:
             self.assertTrue(form.xpath('.//*[@name=$name]', name=name), name)
-        self.assertNotIn('open', page.get_element_by_id('submission-optional-fields').attrib)
+        self.assertTrue(page.get_element_by_id('submission-optional-fields') is not None)
         self.assertNotIn('open', page.get_element_by_id('submission-condition-details').attrib)
         ids = Counter(page.xpath('//*[@id]/@id'))
         self.assertEqual([key for key, count in ids.items() if count > 1], [])
@@ -73,7 +73,7 @@ class StudentSubmissionLayoutTests(TestCase):
         page = self.page(response)
         self.assertIn('full_name', response.context['form'].errors)
         self.assert_class_summary(page, self.classes[1].name)
-        self.assertIn('open', page.get_element_by_id('submission-optional-fields').attrib)
+        self.assertTrue(page.get_element_by_id('submission-optional-fields') is not None)
         self.assertEqual(page.get_element_by_id('id_comment_student').text.lstrip('\n'), 'Відповідь на завдання')
         self.assertFalse(Submission.objects.exists())
 

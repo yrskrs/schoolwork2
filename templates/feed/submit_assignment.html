@@ -177,16 +177,16 @@
 }
 
 #submit-form .file-drop-zone {
-    border: 2px dashed var(--color-border) !important;
-    border-radius: var(--radius-sm) !important;
-    background: var(--color-bg-secondary) !important;
+    border: 2px dashed rgba(var(--accent-rgb), 0.6) !important;
+    border-radius: var(--radius-md, 10px) !important;
+    background: rgba(var(--accent-rgb), 0.03) !important;
     transition: all 0.2s ease !important;
 }
 
 #submit-form .file-drop-zone:hover,
 #submit-form .file-drop-zone.dragover {
     border-color: var(--color-primary) !important;
-    background: rgba(var(--accent-rgb), 0.05) !important;
+    background: rgba(var(--accent-rgb), 0.08) !important;
 }
 </style>
 {% endblock %}

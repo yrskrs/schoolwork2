@@ -97,91 +97,89 @@
 </section>
 <section class="submission-form-card" aria-labelledby="submission-work-title">
 <h2 id="submission-work-title" class="school-submission-step"><span class="school-step-number">2</span> Твоя виконана робота</h2>
-<p class="school-form-help">Прикріпи свій результат, а не матеріали вчителя. Підходять Word, Excel, Access, PDF, фото та архіви.</p>
-<!-- Блок завантаження файлів (Компактна зона Drag-and-Drop) -->
-<div class="form-group" style="margin:0;">
-    <label class="form-label" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
-        <span>📁 Прикріпити файли з пристрою</span>
-        <span style="font-size:11px;font-weight:700;color:var(--color-primary);background:rgba(var(--accent-rgb),0.08);padding:2px 8px;border-radius:10px;">Word, Excel, Access, PDF, фото</span>
-    </label>
-    <div class="file-drop-zone" id="file-drop-zone" role="button" tabindex="0" aria-label="Прикріпити файли з пристрою" onclick="document.getElementById('id_files').click();"
-         style="border:2px dashed var(--color-border);border-radius:var(--radius-sm);padding:12px 14px;text-align:center;background:var(--color-bg-secondary);cursor:pointer;transition:all 0.2s;display:flex;align-items:center;justify-content:center;gap:12px;">
-        <span style="font-size:26px;flex-shrink:0;">📁</span>
-        <div style="text-align:left;">
-            <div style="font-weight:800;font-size:13px;color:var(--color-text-primary);" id="file-drop-label">
-                Натисни або перетягни файли сюди
-            </div>
-            <div style="font-size:11px;color:var(--color-text-muted);">
-                Можна кілька файлів одразу
+<p class="school-form-help">Прикріпи свій результат, а не матеріали вчителя.</p>
+
+<div class="submission-work-grid">
+    <!-- Ліва колонка: файли з пристрою -->
+    <div class="submission-work-col">
+        <div class="submission-work-label-row">
+            <span class="submission-work-label">Файли з пристрою</span>
+            <span class="submission-format-badge">Word, Excel, Access, PDF, фото</span>
+        </div>
+        <div class="file-drop-zone" id="file-drop-zone" role="button" tabindex="0" aria-label="Прикріпити файли з пристрою" onclick="document.getElementById('id_files').click();">
+            <div class="file-drop-title" id="file-drop-label">Натисни або перетягни файли сюди</div>
+            <div class="file-drop-hint">Можна кілька файлів одразу</div>
+            <span class="btn btn-secondary submission-file-picker" aria-hidden="true">Вибрати файли</span>
+            <div style="display:none;">
+                {{ form.files }}
             </div>
         </div>
-        <span class="btn btn-secondary submission-file-picker" aria-hidden="true">Вибрати файли</span>
-        <div style="display:none;">
-            {{ form.files }}
+
+        <!-- Список обраних файлів -->
+        <div id="selected-files-container" style="display:none;margin-top:8px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+                <div style="font-size:11.5px;font-weight:700;color:var(--color-text-primary);" id="selected-files-summary">
+                    📎 Обрані файли:
+                </div>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('id_files').click();" style="font-size:10px;padding:1px 6px;">
+                    ➕ Додати ще
+                </button>
+            </div>
+            <div id="selected-files-list" style="display:flex;flex-direction:column;gap:4px;"></div>
         </div>
+
+        <!-- Попередження про заблокований / відкритий у програмі файл -->
+        <div id="file-access-warning" style="display:none;margin-top:8px;padding:10px 14px;background:var(--color-warning-light);border:1.5px solid var(--warn);border-radius:var(--radius-sm);font-size:12px;color:var(--color-warning);line-height:1.45;animation:fadeIn 0.2s ease-in-out;">
+            <div style="display:flex;align-items:flex-start;gap:8px;">
+                <span style="font-size:18px;line-height:1;flex-shrink:0;">⚠️</span>
+                <div style="flex:1;">
+                    <div style="font-weight:800;color:var(--color-warning);margin-bottom:2px;" id="file-access-warning-title">Увага щодо файлу</div>
+                    <div id="file-access-warning-text"></div>
+                </div>
+                <button type="button" onclick="document.getElementById('file-access-warning').style.display='none'" style="background:none;border:none;color:var(--color-warning);font-weight:bold;cursor:pointer;font-size:14px;padding:0 4px;" title="Закрити сповіщення">✕</button>
+            </div>
+        </div>
+
+        {% if form.files.errors %}
+        <div style="color:var(--color-danger);font-size:11px;margin-top:4px;">{{ form.files.errors|join:" " }}</div>
+        {% endif %}
     </div>
 
-    <!-- Список обраних файлів -->
-    <div id="selected-files-container" style="display:none;margin-top:6px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
-            <div style="font-size:11.5px;font-weight:700;color:var(--color-text-primary);" id="selected-files-summary">
-                📎 Обрані файли:
-            </div>
-            <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('id_files').click();" style="font-size:10px;padding:1px 6px;">
-                ➕ Додати ще
-            </button>
+    <!-- Права колонка: посилання, текстова відповідь або коментар -->
+    <div class="submission-work-col" id="submission-optional-fields">
+        <div class="submission-work-label-row">
+            <span class="submission-work-label">Посилання, текст або коментар</span>
         </div>
-        <div id="selected-files-list" style="display:flex;flex-direction:column;gap:4px;"></div>
-    </div>
-
-    <!-- Попередження про заблокований / відкритий у програмі файл -->
-    <div id="file-access-warning" style="display:none;margin-top:8px;padding:10px 14px;background:var(--color-warning-light);border:1.5px solid var(--warn);border-radius:var(--radius-sm);font-size:12px;color:var(--color-warning);line-height:1.45;animation:fadeIn 0.2s ease-in-out;">
-        <div style="display:flex;align-items:flex-start;gap:8px;">
-            <span style="font-size:18px;line-height:1;flex-shrink:0;">⚠️</span>
-            <div style="flex:1;">
-                <div style="font-weight:800;color:var(--color-warning);margin-bottom:2px;" id="file-access-warning-title">Увага щодо файлу</div>
-                <div id="file-access-warning-text"></div>
+        <div class="submission-inputs-group">
+            <div class="form-group" style="margin:0;">
+                <label for="{{ form.link.id_for_label }}" style="display:none;">{{ form.link.label }}</label>
+                {{ form.link }}
+                {% if form.link.errors %}
+                <div style="color:var(--color-danger);font-size:11px;margin-top:2px;">{{ form.link.errors|join:" " }}</div>
+                {% endif %}
             </div>
-            <button type="button" onclick="document.getElementById('file-access-warning').style.display='none'" style="background:none;border:none;color:var(--color-warning);font-weight:bold;cursor:pointer;font-size:14px;padding:0 4px;" title="Закрити сповіщення">✕</button>
+
+            <div class="form-group" style="margin:0;flex:1;display:flex;flex-direction:column;">
+                <label for="{{ form.comment_student.id_for_label }}" style="display:none;">{{ form.comment_student.label }}</label>
+                {{ form.comment_student }}
+                <span style="display:none;">висновки по своїй роботі</span>
+                {% if form.comment_student.errors %}
+                <div style="color:var(--color-danger);font-size:11px;margin-top:2px;">{{ form.comment_student.errors|join:" " }}</div>
+                {% endif %}
+            </div>
         </div>
     </div>
-
-    {% if form.files.errors %}
-    <div style="color:var(--color-danger);font-size:11px;margin-top:2px;">{{ form.files.errors|join:" " }}</div>
-    {% endif %}
 </div>
 
-<details class="submission-optional-fields" id="submission-optional-fields" {% if form.errors or form.link.value or form.comment_student.value %}open{% endif %}>
-    <summary>Посилання, текстова відповідь або коментар</summary>
-    <div class="submission-optional-body">
-<!-- Посилання (компактне поле) -->
-<div class="form-group" style="margin:0;">
-    <label for="{{ form.link.id_for_label }}" class="form-label" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
-        <span>🔗 {{ form.link.label }}</span>
-        <span style="font-size:11px;font-weight:600;color:var(--color-text-muted);background:var(--color-bg-secondary);padding:2px 8px;border-radius:10px;border:1px solid var(--color-border);">(необов'язково)</span>
-    </label>
-    {{ form.link }}
-    {% if form.link.errors %}
-    <div style="color:var(--color-danger);font-size:11px;margin-top:2px;">{{ form.link.errors|join:" " }}</div>
-    {% endif %}
-</div>
-
-<!-- Коментар учня / Висновки -->
-<div class="form-group" style="margin:0;">
-    <label for="{{ form.comment_student.id_for_label }}" class="form-label" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
-        <span>💬 {{ form.comment_student.label }}</span>
-        <span style="font-size:11px;font-weight:600;color:var(--color-text-muted);background:var(--color-bg-secondary);padding:2px 8px;border-radius:10px;border:1px solid var(--color-border);">(необов'язково)</span>
-    </label>
-    {{ form.comment_student }}
-    <div style="font-size:11.5px;color:var(--color-text-secondary);margin-top:4px;line-height:1.4;">
-        💡 <em>Тут ви можете залишити висновки по своїй роботі (якщо забули записати у файлі), номер завдання, коментар або співавторів. Поле автоматично розширюється при введенні тексту.</em>
+{% if assignment.allow_student_ai_check %}
+<!-- 🤖 Інформаційний бейдж про доступну перевірку ШІ (Варіант В: у блоці виконання роботи) -->
+<div class="submission-step-ai-check" style="margin-top: 14px; padding: 10px 14px; border-radius: var(--radius-sm); border: 1.5px dashed var(--ai); background: linear-gradient(135deg, rgba(var(--accent-rgb), 0.06) 0%, rgba(var(--ai-rgb), 0.08) 100%); display: flex; align-items: center; gap: 10px;">
+    <span style="font-size: 20px; flex-shrink: 0;" aria-hidden="true">🤖</span>
+    <div style="font-size: 12.5px; color: var(--color-text-secondary); line-height: 1.4;">
+        <strong style="color: var(--color-text-primary);">Після здачі доступна перевірка роботи через ШІ!</strong>
+        Отримайте попередні результати та оцінку від ШІ одразу після надсилання.
     </div>
-    {% if form.comment_student.errors %}
-    <div style="color:var(--color-danger);font-size:11px;margin-top:2px;">{{ form.comment_student.errors|join:" " }}</div>
-    {% endif %}
 </div>
-
-    </div>
-</details>
+{% endif %}
 
 </section>

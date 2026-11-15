@@ -55,14 +55,102 @@ body .submission-workspace .submission-identification-grid { grid-template-colum
 body .submission-workspace #btn-toggle-student-mode { font-size: 13px !important; min-height: 32px; }
 body .submission-workspace #submit-form .form-input,
 body .submission-workspace #submit-form .form-select { min-height: 48px !important; font-size: 16px !important; }
-body .submission-workspace #submit-form .file-drop-zone { flex-direction: column; gap: 12px !important; padding: 26px 18px !important; border-color: var(--color-primary) !important; border-radius: 12px !important; }
-body .submission-workspace #file-drop-zone > span:first-child { display: none; }
-body .submission-workspace #file-drop-zone > div { text-align: center !important; }
-body .submission-workspace #file-drop-label { font-size: 18px !important; line-height: 1.5; }
-body .submission-workspace #file-drop-label + div { font-size: 14px !important; line-height: 1.5; }
-body .submission-workspace .submission-file-picker { min-height: 44px; padding: 10px 18px; color: var(--color-primary-text); border-color: var(--color-primary); background: var(--color-surface); font-weight: 700; }
-body .submission-workspace .submission-optional-fields { background: var(--color-surface); }
-body .submission-workspace .submission-optional-fields > summary { padding: 14px; font-size: 15px; line-height: 1.5; }
+body .submission-workspace .submission-work-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+    gap: 16px;
+    align-items: stretch;
+}
+body .submission-workspace .submission-work-col {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+body .submission-workspace .submission-work-label-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 24px;
+    margin-bottom: 6px;
+    gap: 8px;
+}
+body .submission-workspace .submission-work-label {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--color-text-primary);
+}
+body .submission-workspace .submission-format-badge {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--color-primary-text, #0ea5e9);
+    background: rgba(var(--accent-rgb, 14, 165, 233), 0.1);
+    border: 1px solid rgba(var(--accent-rgb, 14, 165, 233), 0.25);
+    padding: 2px 8px;
+    border-radius: 999px;
+    white-space: nowrap;
+}
+body .submission-workspace .submission-inputs-group {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    flex: 1;
+}
+body .submission-workspace .submission-inputs-group textarea.form-input {
+    flex: 1;
+    min-height: 98px !important;
+    height: 100% !important;
+    resize: vertical;
+}
+body .submission-workspace #submit-form .file-drop-zone {
+    flex: 1;
+    min-height: 152px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px !important;
+    padding: 16px 14px !important;
+    border: 2px dashed rgba(var(--accent-rgb, 14, 165, 233), 0.6) !important;
+    border-radius: var(--radius-md, 10px) !important;
+    background: rgba(var(--accent-rgb, 14, 165, 233), 0.03) !important;
+    text-align: center !important;
+    box-sizing: border-box;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+body .submission-workspace #submit-form .file-drop-zone:hover,
+body .submission-workspace #submit-form .file-drop-zone.dragover {
+    border-color: var(--color-primary) !important;
+    background: rgba(var(--accent-rgb, 14, 165, 233), 0.08) !important;
+}
+body .submission-workspace #file-drop-label {
+    font-size: 14.5px !important;
+    font-weight: 700 !important;
+    line-height: 1.4 !important;
+    color: var(--color-text-primary) !important;
+}
+body .submission-workspace .file-drop-hint,
+body .submission-workspace #file-drop-label + div {
+    font-size: 12px !important;
+    line-height: 1.4 !important;
+    color: var(--color-text-secondary) !important;
+    margin-bottom: 8px;
+}
+body .submission-workspace .submission-file-picker {
+    min-height: 34px !important;
+    height: 34px !important;
+    padding: 6px 16px !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    border-radius: var(--radius-sm, 6px) !important;
+    border: 1px solid var(--color-border) !important;
+    background: var(--color-surface) !important;
+    color: var(--color-text-primary) !important;
+}
+body .submission-workspace .submission-file-picker:hover {
+    border-color: var(--color-primary) !important;
+    color: var(--color-primary-text) !important;
+}
 body .submission-workspace .submission-sidebar { display: flex; flex-direction: column; gap: 18px; }
 body .submission-workspace .submission-send-bar { position: static; margin: 0; padding: 22px !important; border: 2px solid var(--color-success); border-radius: var(--radius-lg); box-shadow: none; gap: 16px; }
 body .submission-workspace .submission-send-bar h2 { font-size: 20px; margin: 0; color: var(--color-text-primary); }
@@ -82,8 +170,12 @@ body .submission-workspace #btn-add-coauthor > span:first-child { font-size: 23p
 body .submission-workspace #btn-add-coauthor small { display: block; font-size: 12px; font-weight: 500; margin-top: 4px; }
 body .submission-workspace .submission-side-disclosure { margin-top: 12px; padding-top: 12px; }
 body .submission-workspace .submission-side-disclosure > summary { min-height: 32px; font-size: 14px; line-height: 1.5; }
-body .submission-workspace .submission-ai-info > div { padding: 14px 16px !important; align-items: flex-start !important; }
-body .submission-workspace .submission-ai-info > div > div { font-size: 14px !important; line-height: 1.6 !important; }
+body .submission-workspace .submission-ai-card {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    background: var(--color-surface);
+    padding: 16px 18px !important;
+}
 body .submission-workspace .submission-condition-body { margin-top: 16px; }
 body .submission-workspace .submission-condition-body table { display: block; max-width: 100%; overflow: auto; }
 body .submission-workspace .submission-condition-body pre { max-width: 100%; overflow: auto; }
@@ -94,6 +186,9 @@ body .submission-workspace :is(a, button, summary, [role="button"]):focus-visibl
     body .assignment-workspace .assignment-detail-sidebar { gap: 16px; }
     body .assignment-workspace .assignment-detail-completion { order: -1; }
     body .submission-workspace .submission-sidebar { gap: 16px; }
+}
+@media (max-width: 680px) {
+    body .submission-workspace .submission-work-grid { grid-template-columns: minmax(0, 1fr); gap: 14px; }
 }
 @media (max-width: 600px) {
     body .assignment-workspace .assignment-description-header { padding: 18px 16px 0 !important; }
