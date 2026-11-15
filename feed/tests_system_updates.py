@@ -371,3 +371,23 @@ class SystemUpdatesViewAndAPITests(TestCase):
         data = resp.json()
         self.assertEqual(data['status'], 'ok')
         self.assertEqual(data['version'], get_current_local_version())
+
+    def test_healthz_and_dialogs_bypass_first_run_setup_redirect(self):
+        """Перевіряє, що /healthz/ та /ui/dialog/ оминають перенаправлення на /setup/ при відсутності адміністратора."""
+        import feed.middleware as mw
+        orig_has_admin = mw._has_admin
+        try:
+            mw._has_admin = None
+            with patch('feed.middleware.check_has_admin', return_value=False):
+                resp_home = self.client.get('/')
+                self.assertEqual(resp_home.status_code, 302)
+                self.assertEqual(resp_home.url, reverse('first_run_setup'))
+
+                resp_health = self.client.get(reverse('healthz'))
+                self.assertEqual(resp_health.status_code, 200)
+                self.assertEqual(resp_health.json()['status'], 'ok')
+
+                resp_dialog = self.client.get(reverse('ui_dialog', args=['guide']))
+                self.assertEqual(resp_dialog.status_code, 200)
+        finally:
+            mw._has_admin = orig_has_admin

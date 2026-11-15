@@ -25,7 +25,7 @@ def main():
     os.environ['DJANGO_SETTINGS_MODULE'] = 'schoolnet.test_settings'
     os.environ['JOURNAL_API_BASE_URL'] = ''
     os.environ['ROSTER_PEERS'] = '[]'
-    chrome = shutil.which('google-chrome') or shutil.which('chromium')
+    chrome = shutil.which('google-chrome') or shutil.which('chromium') or os.environ.get('CHROME_BINARY')
     assert chrome, 'Chrome/Chromium is required'
     artifacts = Path(os.environ.get('QA_ARTIFACTS', '/tmp/schoolnet-access-ui'))
     artifacts.mkdir(parents=True, exist_ok=True)
@@ -131,10 +131,14 @@ def main():
                 cdp.evaluate(f"document.querySelector('#id_name').value={json.dumps(name)};document.querySelector('#id_kind').value={json.dumps(kind)};document.querySelector('#id_kind').dispatchEvent(new Event('change'))")
                 if field:
                     assert cdp.evaluate(f"!document.querySelector('[data-link-field={field}]').hidden")
+                    assert cdp.evaluate("!document.querySelector('[data-link-field=restrict_access]').hidden"), 'restrict_access must be visible for targets'
                     cdp.evaluate(f"document.querySelector('#id_{field}').value='{value}'")
+                else:
+                    assert cdp.evaluate("document.querySelector('[data-link-field=restrict_access]').hidden"), 'restrict_access must be hidden for site'
                 cdp.evaluate("document.querySelector('#access-link-form button[type=submit]').click()")
                 cdp.until(f"[...document.querySelectorAll('.access-link-card h2')].some(e=>e.textContent==={json.dumps(name)})")
             assert AccessLink.objects.count() == 4
+            assert cdp.evaluate("document.body?.innerText.includes('🔒 Обмежений доступ')"), 'Scope badge missing'
             point = cdp.evaluate("(()=>{const e=document.querySelector('[data-copy]');e.scrollIntoView({block:'center'});const r=e.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()")
             cdp.call('Input.dispatchMouseEvent', {'type':'mousePressed', 'button':'left', 'clickCount':1, **point})
             cdp.call('Input.dispatchMouseEvent', {'type':'mouseReleased', 'button':'left', 'clickCount':1, **point})

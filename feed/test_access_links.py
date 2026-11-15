@@ -47,7 +47,8 @@ class PublicAccessTests(TestCase):
         TailscaleConnection.objects.create(enabled=True, public_url='https://' + HOST)
 
     def link(self, kind='site', **kwargs):
-        return AccessLink.objects.create(teacher=self.teacher, name='Урок', kind=kind, **kwargs)
+        kwargs.setdefault('name', 'Урок')
+        return AccessLink.objects.create(teacher=self.teacher, kind=kind, **kwargs)
 
     def enter(self, link, client=None):
         client = client or self.client
@@ -476,6 +477,53 @@ class PublicAccessTests(TestCase):
         valid_form = AccessLinkForm(data, teacher=self.teacher)
         self.assertTrue(valid_form.is_valid(), valid_form.errors)
         self.assertTrue(valid_form.cleaned_data['restrict_access'])
+
+    def test_personal_link_without_restrict_access_still_locks_student_identity(self):
+        # Персональне посилання учня навіть зі знятим restrict_access
+        # повинно гарантувати фіксацію особистості й забороняти здачу під чужим ім'ям
+        link = self.link('student', student=self.pupil, restrict_access=False)
+        self.enter(link)
+        response = self.client.post(reverse('submit_assignment', args=[self.one.pk]), {
+            'student_id': self.outsider.pk, 'full_name': 'Підміна Імені', 'class_group': self.b.pk,
+            'other_student': 'on', 'coauthor_ids': f'[{self.peer.pk}]', 'coauthors': ['Чужий Учень'],
+            'comment_student': 'Відповідь учня без обмеження навігації',
+        }, **PUBLIC)
+        self.assertEqual(response.status_code, 302)
+        saved = Submission.objects.order_by('-pk').first()
+        self.assertEqual(saved.student_id, self.pupil.pk)
+        self.assertEqual(saved.class_group_id, self.a.pk)
+        self.assertEqual(Submission.objects.filter(assignment=self.one, last_name='Чужий').count(), 0)
+
+    def test_personal_link_submission_to_wrong_class_assignment_gives_clear_error(self):
+        # Коли учень за персональним посиланням намагається здати завдання,
+        # яке призначене для іншого класу, форма показує зрозумілу помилку
+        link = self.link('student', student=self.outsider, restrict_access=False)
+        self.enter(link)
+        response = self.client.post(reverse('submit_assignment', args=[self.one.pk]), {
+            'comment_student': 'Спроба здати чуже завдання',
+        }, **PUBLIC)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Це завдання призначено для іншого класу')
+
+    def test_access_link_badges_and_edit_restrict_access_toggle(self):
+        self.client.force_login(self.user)
+        # Створюємо одне посилання з restrict_access=True та одне з restrict_access=False
+        link_restricted = self.link('class', name='Обмежений 8-А', class_group=self.a, restrict_access=True)
+        link_open = self.link('class', name='Вільний 8-А', class_group=self.a, restrict_access=False)
+        response = self.client.get(reverse('access_links'), **LAN)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '🔒 Обмежений доступ')
+        self.assertContains(response, '🌐 Без обмеження')
+        # Редагуємо посилання, перемикаючи restrict_access
+        edit_data = {
+            'action': 'save', 'link_id': link_open.pk, 'name': 'Вільний 8-А змінено',
+            'kind': 'class', 'class_group': self.a.pk, 'restrict_access': 'on',
+        }
+        resp = self.client.post(reverse('access_links'), edit_data, **LAN)
+        self.assertEqual(resp.status_code, 302)
+        link_open.refresh_from_db()
+        self.assertTrue(link_open.restrict_access)
+        self.assertEqual(link_open.name, 'Вільний 8-А змінено')
 
     def assert_student_dialogs(self, client=None):
         client = client or self.client

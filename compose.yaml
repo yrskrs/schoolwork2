@@ -1,16 +1,16 @@
 name: ${COMPOSE_PROJECT_NAME:-schoolwork2}
 services:
   app:
-    image: ${SCHOOLWORK_IMAGE:-schoolwork2-app:4.10.1}
+    image: ${SCHOOLWORK_IMAGE:-schoolwork2-app:4.10.2}
     build:
       context: .
       dockerfile: Dockerfile
       args:
         VCS_REF: ${VCS_REF:-local}
         SOURCE_DIGEST: ${SOURCE_DIGEST:-unknown}
-        APP_VERSION: '4.10.1'
+        APP_VERSION: '4.10.2'
     container_name: schoolnet_app
-    restart: "no"
+    restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
@@ -41,9 +41,9 @@ services:
       start_period: 45s
 
   ai_worker:
-    image: ${SCHOOLWORK_IMAGE:-schoolwork2-app:4.10.1}
+    image: ${SCHOOLWORK_IMAGE:-schoolwork2-app:4.10.2}
     container_name: schoolnet_ai_worker
-    restart: "no"
+    restart: unless-stopped
     command: ["python", "manage.py", "process_ai_jobs"]
     env_file:
       - .env
@@ -77,7 +77,7 @@ services:
       args:
         VCS_REF: ${VCS_REF:-local}
         APP_VERSION: '4.5.7'
-    restart: "no"
+    restart: unless-stopped
     environment:
       CODE_RUNNER_TOKEN: '${CODE_RUNNER_TOKEN:-${SECRET_KEY}}'
       CODE_RUNNER_IMAGE: '${CODE_RUNNER_IMAGE:-schoolwork2-python-runner:4.5.7}'
@@ -99,7 +99,7 @@ services:
   postgres:
     image: postgres:16
     container_name: schoolnet_postgres
-    restart: "no"
+    restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-schoolnet_db}
       POSTGRES_USER: ${POSTGRES_USER:-schoolnet_user}
@@ -120,7 +120,7 @@ services:
       context: .
       dockerfile: docker/Dockerfile.updater
     container_name: schoolnet_updater
-    restart: "no"
+    restart: unless-stopped
     environment:
       SCHOOLWORK_ROOT: /workspace
       ENV_FILE: /workspace/.env

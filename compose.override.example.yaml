@@ -1,0 +1,20 @@
+# Приклад локального перевизначення для розробника (Workstation Override)
+# Скопіюйте цей файл у compose.override.yaml (ігнорується git):
+#   cp compose.override.example.yaml compose.override.yaml
+#
+# Це гарантує, що контейнери на локальній машині НЕ запускатимуться автоматично
+# після перезавантаження системи (restart: "no"), не зачіпаючи бойовий сервер.
+
+services:
+  app:
+    restart: "no"
+  ai_worker:
+    restart: "no"
+  code_runner:
+    restart: "no"
+  postgres:
+    restart: "no"
+  updater:
+    restart: "no"
+  network_info:
+    restart: "no"

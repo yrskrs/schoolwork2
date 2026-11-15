@@ -20,6 +20,9 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+      - name: Scope-based SemVer policy check
+        run: |
+          python3 scripts/check_version_policy.py
       - name: Build the exact source under test
         run: |
           docker build --build-arg "VCS_REF=$GITHUB_SHA" --build-arg "APP_VERSION=$(cat VERSION)" --build-arg "SOURCE_DIGEST=$(python3 scripts/source_fingerprint.py)" -t schoolnet-ci:tested .
@@ -33,3 +36,4 @@ jobs:
           docker build -f docker/Dockerfile.qa --build-arg APP_IMAGE=schoolnet-ci:tested -t schoolnet-ci:browser .
           docker run --rm --network none --shm-size=512m schoolnet-ci:browser
           docker run --rm --network none --shm-size=512m schoolnet-ci:browser python scripts/test_submission_notifications_ui.py
+          docker run --rm --network none --shm-size=512m schoolnet-ci:browser python scripts/test_access_links_ui.py

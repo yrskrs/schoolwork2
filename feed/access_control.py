@@ -120,19 +120,37 @@ def media_allowed(request, raw_path):
 def bind_submission_form(request, form):
     """Enforce scope in Django validation, including tampered hidden inputs."""
     link = link_for(request)
-    if not link or not getattr(link, 'restrict_access', True):
+    if not link:
+        return form
+    # Персональне посилання учня завжди фіксує особу та клас автора роботи,
+    # навіть якщо прапорець restrict_access знято для вільного перегляду сайту.
+    if link.kind == 'student' and link.student_id:
+        form.public_personal_access = True
+        student_class = link.student.class_group
+        assignment = getattr(form, 'assignment', None)
+        if form.is_bound and assignment and assignment.classes.exists() and not assignment.classes.filter(pk=student_class.pk).exists():
+            assigned_names = ', '.join(c.name for c in assignment.classes.all())
+            form.add_error(None, f'Це завдання призначено для іншого класу ({assigned_names}). '
+                                 f'Учень класу {student_class.name} не може здавати до нього роботу.')
+        if 'class_group' in form.fields:
+            current_qs = form.fields['class_group'].queryset
+            if not current_qs.filter(pk=student_class.pk).exists():
+                from feed.models import ClassGroup
+                form.fields['class_group'].queryset = ClassGroup.objects.filter(
+                    pk__in=list(current_qs.values_list('pk', flat=True)) + [student_class.pk]
+                )
+        form.initial.update(student_id=link.student_id, full_name=link.student.get_full_name(),
+                            other_student=False, coauthor_ids='[]', class_group=link.student.class_group_id)
+        for key in ('student_id', 'full_name', 'other_student', 'coauthor_ids', 'class_group'):
+            if key in form.fields:
+                form.fields[key].disabled = True
+    if not getattr(link, 'restrict_access', True):
         return form
     form.fields['class_group'].queryset = scope_classes(request, form.fields['class_group'].queryset)
     class_id = link.restricted_class_id
     if class_id:
         form.initial['class_group'] = class_id
         form.fields['class_group'].disabled = True
-    if link.kind == 'student':
-        form.public_personal_access = True
-        form.initial.update(student_id=link.student_id, full_name=link.student.get_full_name(),
-                            other_student=False, coauthor_ids='[]')
-        for key in ('student_id', 'full_name', 'other_student', 'coauthor_ids'):
-            form.fields[key].disabled = True
     return form
 
 

@@ -4,14 +4,14 @@ services:
     volumes:
       - lan_inventory:/run/school-lan:ro
   network_info:
-    image: ${SCHOOLWORK_IMAGE:-schoolwork2-app:4.7.0}
+    image: ${SCHOOLWORK_IMAGE:-schoolwork2-app:4.10.2}
     entrypoint: ["python", "-m", "school_sync.network_inventory"]
     network_mode: host
     user: '65534:65534'
     read_only: true
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
-    restart: "no"
+    restart: unless-stopped
     environment:
       SCHOOL_LAN_INFO_FILE: /inventory/addresses.json
     volumes:

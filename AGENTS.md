@@ -23,12 +23,13 @@ $$\text{Версія} = \mathbf{MAJOR} \,.\, \mathbf{EXTERNAL} \,.\, \mathbf{INT
    - Ніколи не додавайте літерні суфікси на кшталт `4.8.13a` ... `4.8.13n`.
    - Номер версії має бути суворо числовим: `X.Y.Z`.
 
-### Обов'язкова синхронізація 4 файлів при релізі:
+### Обов'язкова синхронізація при релізі:
 Коли створюється реліз, обов'язково оновлюються:
 1. `VERSION`
 2. `RELEASES.json` (новий запис нагорі з `title`, `date`, `changes`)
-3. `CHANGELOG.md` (новий заголовок `## [X.Y.Z] - YYYY-MM-DD - [TAG] ...`)
-4. `feed/changelog.py` (`SITE_VERSION`, `SITE_VERSION_SHORT`, перший елемент `CHANGELOG_DATA`)
+3. `CHANGELOG.md` (новий заголовок `## 4.X.Y — YYYY-MM-DD — [TAG] ...`)
+4. `feed/changelog.py` (`SITE_VERSION`, `SITE_VERSION_SHORT`, перший елемент `CHANGELOG_DATA` з `is_latest: True`)
+5. Супутні файли версій: `Dockerfile` (`ARG APP_VERSION`), `compose.yaml` (`APP_VERSION`, теги образів) та `README.md`.
 
 Перед створенням коміту завжди запускайте перевірку:
 ```bash
@@ -42,7 +43,7 @@ python3 scripts/check_version_policy.py
 Перед комітом релізу або важливих змін обов'язково виконайте перевірки:
 1. **Тести механізму оновлень**:
    ```bash
-   .venv/bin/python3 manage.py test feed.tests_system_updates
+   .venv/bin/python3 manage.py test feed.tests_system_updates --settings=schoolnet.test_settings
    PYTHONPATH=. .venv/bin/python3 scripts/test_updater_service.py
    PYTHONPATH=. .venv/bin/python3 scripts/test_updater_jobs.py
    PYTHONPATH=. .venv/bin/python3 scripts/test_update_helpers.py
@@ -70,11 +71,11 @@ python3 scripts/check_version_policy.py
 
 - **Цей комп'ютер — робоча станція, а НЕ постійний production-сервер**:
   Локальний ПК використовується для розробки, написання коду та тестування. Постійне обслуговування користувачів ведеться на бойовому сервері, а не на цій машині.
+- **Розділення бойового та локального налаштування**:
+  - У репозиторії (відстежуваних `compose.yaml`, `compose.lan.yaml`) обов'язково зафіксовано **`restart: unless-stopped`**, оскільки бойовий сервер оновлюється через `updater_service.py` і сервіси школи повинні автоматично підніматися після збоїв чи перезавантаження хоста.
+  - На локальному ПК розробника для вимкнення автозавантаження використовується файл **`compose.override.yaml`** (доданий до `.gitignore`). Для швидкого налаштування створіть його з шаблону: `cp compose.override.example.yaml compose.override.yaml`.
 - **Образи та контейнери лише для тестування**:
   Збирати Docker-образи чи піднімати сервіси через `docker compose` на цьому ПК дозволено **виключно для тимчасової перевірки** (прогін тестів, верифікація працездатності збірки, зняття скриншотів, налагодження).
 - **Не накопичувати хлам**:
   - Заборонено залишати на диску старі версії образів (`schoolwork2-app:*`), проміжні нетеґовані збірки та невикористовуваний кеш.
   - Після завершення тестування завжди зупиняйте контейнери (`docker compose down`) та видаляйте непотрібні тестові образи (`docker image prune -f`, `python3 scripts/image_retention.py --project schoolwork2 --apply` або повне видалення тестових образів).
-- **Автозавантаження суворо вимкнено**:
-  - У всіх compose-файлах (`compose.yaml`, `compose.lan.yaml`, `compose.ai-lab.yaml`) має бути встановлено `restart: "no"`.
-  - Заборонено повертати `restart: unless-stopped` або `restart: always` на локальному ПК, щоб контейнери не запускалися автоматично при старті комп'ютера.

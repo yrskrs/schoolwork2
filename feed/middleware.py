@@ -215,14 +215,14 @@ class FirstRunSetupMiddleware:
         if _has_admin is True:
             return self.get_response(request)
 
-        # 2. Дозволяємо технічні шляхи та саму сторінку налаштування
+        # 2. Дозволяємо технічні шляхи, модальні діалоги довідки/журналу та саму сторінку налаштування
         if (
             path.startswith('/static/') or
             path.startswith('/media/') or
             path == '/favicon.ico' or
             path.startswith('/setup/') or
             path.startswith('/api/') or
-            path.startswith('/ui/dialog/') or
+            path.startswith('/ui/dialog/') or  # Публічні модальні вікна довідки/журналу без доступу до даних
             path.startswith('/healthz')
         ):
             return self.get_response(request)
