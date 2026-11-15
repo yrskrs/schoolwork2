@@ -1,9 +1,11 @@
 # Документація
 
-[Головна інструкція](../README.md) · [Історія версій](../CHANGELOG.md)
+[Головна інструкція](../README.md) · [Історія версій](../CHANGELOG.md) · [Політика нумерації версій](VERSIONING_POLICY.md) · [Правила для ШІ](../AGENTS.md)
 
 ## Інструкції та експлуатація
 
+- [Політика нумерації версій та стандарт релізів (Scope-based SemVer)](VERSIONING_POLICY.md)
+- [Обов'язкові правила для систем ШІ та агентів](../AGENTS.md)
 - [Паралельна ШІ-перевірка, квоти та захист даних — локальна реалізація](guides/AI_CHECKING.md)
 - [Очищення старих Docker-образів](guides/IMAGE_RETENTION.md)
 - [CLOUD_BACKUPS](guides/CLOUD_BACKUPS.md)
