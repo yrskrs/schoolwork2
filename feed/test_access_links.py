@@ -495,10 +495,15 @@ class PublicAccessTests(TestCase):
         self.assertEqual(Submission.objects.filter(assignment=self.one, last_name='Чужий').count(), 0)
 
     def test_personal_link_submission_to_wrong_class_assignment_gives_clear_error(self):
-        # Коли учень за персональним посиланням намагається здати завдання,
-        # яке призначене для іншого класу, форма показує зрозумілу помилку
+        # Коли учень за персональним посиланням відкриває або намагається здати завдання,
+        # яке призначене для іншого класу, форма показує зрозуміле попередження/помилку
         link = self.link('student', student=self.outsider, restrict_access=False)
         self.enter(link)
+        # 1. На GET-запиті показується попереджувальний банер
+        get_response = self.client.get(reverse('submit_assignment', args=[self.one.pk]), **PUBLIC)
+        self.assertEqual(get_response.status_code, 200)
+        self.assertContains(get_response, 'це завдання призначено для іншого класу')
+        # 2. На POST-запиті сабміт блокується з валідаційною помилкою
         response = self.client.post(reverse('submit_assignment', args=[self.one.pk]), {
             'comment_student': 'Спроба здати чуже завдання',
         }, **PUBLIC)

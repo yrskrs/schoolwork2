@@ -128,10 +128,15 @@ def bind_submission_form(request, form):
         form.public_personal_access = True
         student_class = link.student.class_group
         assignment = getattr(form, 'assignment', None)
-        if form.is_bound and assignment and assignment.classes.exists() and not assignment.classes.filter(pk=student_class.pk).exists():
+        if assignment and assignment.classes.exists() and not assignment.classes.filter(pk=student_class.pk).exists():
             assigned_names = ', '.join(c.name for c in assignment.classes.all())
-            form.add_error(None, f'Це завдання призначено для іншого класу ({assigned_names}). '
-                                 f'Учень класу {student_class.name} не може здавати до нього роботу.')
+            form.wrong_class_warning = (
+                f'⚠️ Зверніть увагу: це завдання призначено для іншого класу ({assigned_names}). '
+                f'Ваш клас — {student_class.name}, тому здати роботу до цього завдання неможливо.'
+            )
+            if form.is_bound:
+                form.add_error(None, f'Це завдання призначено для іншого класу ({assigned_names}). '
+                                     f'Учень класу {student_class.name} не може здавати до нього роботу.')
         if 'class_group' in form.fields:
             current_qs = form.fields['class_group'].queryset
             if not current_qs.filter(pk=student_class.pk).exists():

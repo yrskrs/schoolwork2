@@ -2,7 +2,7 @@
 # Скопіюйте цей файл у compose.override.yaml (ігнорується git):
 #   cp compose.override.example.yaml compose.override.yaml
 #
-# Це гарантує, що контейнери на локальній машині НЕ запускатимуться автоматично
+# Це гарантує, що базові контейнери на локальній машині НЕ запускатимуться автоматично
 # після перезавантаження системи (restart: "no"), не зачіпаючи бойовий сервер.
 
 services:
@@ -16,5 +16,7 @@ services:
     restart: "no"
   updater:
     restart: "no"
-  network_info:
-    restart: "no"
+
+  # Якщо ви додатково запускаєте compose.lan.yaml, розкоментуйте:
+  # network_info:
+  #   restart: "no"

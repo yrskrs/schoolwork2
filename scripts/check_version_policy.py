@@ -179,6 +179,8 @@ def main():
     if compose_lan.exists() and raw_version:
         content = compose_lan.read_text(encoding='utf-8')
         lan_tags = re.findall(r'schoolwork2-app:([^\s\}\'\"]+)', content)
+        if not lan_tags:
+            errors.append(f'compose.lan.yaml не містить тег образу schoolwork2-app:{raw_version}.')
         for tag in lan_tags:
             if tag != raw_version:
                 errors.append(f'compose.lan.yaml містить застарілий тег образу schoolwork2-app:{tag} != VERSION ("{raw_version}").')

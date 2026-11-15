@@ -29,7 +29,7 @@ $$\text{Версія} = \mathbf{MAJOR} \,.\, \mathbf{EXTERNAL} \,.\, \mathbf{INT
 2. `RELEASES.json` (новий запис нагорі з `title`, `date`, `changes`)
 3. `CHANGELOG.md` (новий заголовок `## 4.X.Y — YYYY-MM-DD — [TAG] ...`)
 4. `feed/changelog.py` (`SITE_VERSION`, `SITE_VERSION_SHORT`, перший елемент `CHANGELOG_DATA` з `is_latest: True`)
-5. Супутні файли версій: `Dockerfile` (`ARG APP_VERSION`), `compose.yaml` (`APP_VERSION`, теги образів) та `README.md`.
+5. Супутні файли версій: `Dockerfile` (`ARG APP_VERSION`), `compose.yaml` (`APP_VERSION`, теги образів), `compose.lan.yaml` (теги образів) та `README.md`.
 
 Перед створенням коміту завжди запускайте перевірку:
 ```bash

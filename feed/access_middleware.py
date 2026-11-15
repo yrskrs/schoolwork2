@@ -26,7 +26,7 @@ class PublicAccessMiddleware:
                 if pk and connection.enabled:
                     link = AccessLink.objects.select_related('class_group', 'student__class_group', 'assignment').filter(pk=pk).first()
                     if link and link.active:
-                        if not request.public_open_access or getattr(link, 'restrict_access', True):
+                        if not request.public_open_access or getattr(link, 'restrict_access', True) or link.kind == 'student':
                             request.access_link = link
         response = self.get_response(request)
         if request.public_access or request.path_info.startswith('/access/'):
