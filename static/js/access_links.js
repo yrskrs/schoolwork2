@@ -32,6 +32,125 @@
     updateKind();
   }
 
+  // ─── 1.1 Фільтрація учнів за класом ────────────────────────────────────────
+  const studentSelect = document.getElementById('id_student');
+  const studentFilter = document.getElementById('student-class-filter');
+  let studentOptionsCache = null;
+
+  if (studentSelect && studentFilter) {
+    studentOptionsCache = Array.from(studentSelect.options).map(opt => ({
+      value: opt.value,
+      text: opt.textContent,
+      classId: opt.dataset.classId || ''
+    }));
+
+    function applyStudentFilter(classId, preserveVal = null) {
+      const targetVal = preserveVal !== null ? preserveVal : studentSelect.value;
+      studentSelect.innerHTML = '';
+      let found = false;
+
+      studentOptionsCache.forEach(item => {
+        if (!item.value) {
+          const opt = new Option(item.text, item.value);
+          studentSelect.appendChild(opt);
+          return;
+        }
+        if (!classId || item.classId === classId) {
+          const opt = new Option(item.text, item.value);
+          opt.dataset.classId = item.classId;
+          if (item.value === targetVal) {
+            opt.selected = true;
+            found = true;
+          }
+          studentSelect.appendChild(opt);
+        }
+      });
+
+      if (!found && targetVal) {
+        studentSelect.value = '';
+      }
+    }
+
+    studentFilter.addEventListener('change', () => {
+      applyStudentFilter(studentFilter.value);
+    });
+
+    // Ініціалізація при редагуванні існуючого посилання
+    if (studentSelect.value) {
+      const current = studentOptionsCache.find(it => it.value === studentSelect.value);
+      if (current && current.classId) {
+        studentFilter.value = current.classId;
+        applyStudentFilter(current.classId, current.value);
+      }
+    }
+  }
+
+  // ─── 1.2 Фільтрація завдань за класом ───────────────────────────────────────
+  const assignmentSelect = document.getElementById('id_assignment');
+  const assignmentFilter = document.getElementById('assignment-class-filter');
+  let assignmentOptionsCache = null;
+
+  if (assignmentSelect && assignmentFilter) {
+    assignmentOptionsCache = Array.from(assignmentSelect.options).map(opt => ({
+      value: opt.value,
+      text: opt.textContent,
+      classIds: (opt.dataset.classIds || '').split(',').filter(Boolean)
+    }));
+
+    function applyAssignmentFilter(classId, preserveVal = null) {
+      const targetVal = preserveVal !== null ? preserveVal : assignmentSelect.value;
+      assignmentSelect.innerHTML = '';
+      let found = false;
+
+      assignmentOptionsCache.forEach(item => {
+        if (!item.value) {
+          const opt = new Option(item.text, item.value);
+          assignmentSelect.appendChild(opt);
+          return;
+        }
+        let matches = false;
+        if (!classId) {
+          matches = true;
+        } else if (classId === 'none') {
+          matches = item.classIds.length === 0;
+        } else {
+          matches = item.classIds.includes(classId);
+        }
+        if (matches) {
+          const opt = new Option(item.text, item.value);
+          opt.dataset.classIds = item.classIds.join(',');
+          if (item.value === targetVal) {
+            opt.selected = true;
+            found = true;
+          }
+          assignmentSelect.appendChild(opt);
+        }
+      });
+
+      if (!found && targetVal) {
+        assignmentSelect.value = '';
+      }
+    }
+
+    assignmentFilter.addEventListener('change', () => {
+      applyAssignmentFilter(assignmentFilter.value);
+    });
+
+    // Ініціалізація при редагуванні існуючого завдання
+    if (assignmentSelect.value) {
+      const current = assignmentOptionsCache.find(it => it.value === assignmentSelect.value);
+      if (current) {
+        if (current.classIds.length === 1 && assignmentFilter.querySelector(`option[value="${current.classIds[0]}"]`)) {
+          assignmentFilter.value = current.classIds[0];
+          applyAssignmentFilter(current.classIds[0], current.value);
+        } else if (current.classIds.length === 0 && assignmentFilter.querySelector('option[value="none"]')) {
+          assignmentFilter.value = 'none';
+          applyAssignmentFilter('none', current.value);
+        }
+      }
+    }
+  }
+
   // ─── 2. Копіювання посилань у буфер обміну ─────────────────────────────────
   const copyStatus = document.getElementById('access-copy-status');
 

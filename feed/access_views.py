@@ -14,7 +14,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_http_methods, require_GET
-from .models import TailscaleConnection, AccessLink, AccessVisitor, AccessLinkEvent
+from .models import TailscaleConnection, AccessLink, AccessVisitor, AccessLinkEvent, ClassGroup
 from .access_forms import AccessLinkForm, ConnectionForm, PublicAccessModeForm
 from .access_control import COOKIE, SALT
 from .views import teacher_required
@@ -100,9 +100,13 @@ def access_links(request):
     for link in page_obj.object_list:
         link.public_address = connection.public_url + reverse('access_enter', args=[link.token]) if connection.public_url else ''
     list_query = urlencode({'q': query, 'status': status, 'per_page': per_page})
+    teacher_classes = (
+        teacher.classes.filter(integration_active=True)
+        | ClassGroup.objects.filter(assignment__teacher=teacher, integration_active=True)
+    ).distinct().order_by('grade', 'letter', 'name')
     return render(request, 'feed/access_links.html', {
         'teacher': teacher, 'form': form, 'editing': instance, 'links': page_obj.object_list,
-        'connection': connection, 'mode_form': mode_form,
+        'connection': connection, 'mode_form': mode_form, 'teacher_classes': teacher_classes,
         'total_count': counts['total'], 'active_count': counts['active'],
         'inactive_count': counts['total'] - counts['active'],
         'access_query': query, 'selected_status': status, 'per_page': per_page,
@@ -178,11 +182,12 @@ def access_enter(request, token):
     if link.restricted_class_id:
         request.session['selected_class'] = link.restricted_class_id
     destination = reverse('assignment_detail', args=[link.assignment_id]) if link.kind == 'assignment' else reverse('index')
+    is_https = request.is_secure() or request.META.get('HTTP_TAILSCALE_FUNNEL_REQUEST') == '?1'
     response = redirect(destination)
     response.set_cookie(COOKIE, signing.dumps({'link': link.pk}, salt=SALT), max_age=60 * 60 * 24 * 365,
-                        secure=True, httponly=True, samesite='Lax')
+                        secure=is_https, httponly=True, samesite='Lax')
     response.set_signed_cookie(BROWSER_COOKIE, browser, salt=SALT, max_age=60 * 60 * 24 * 365,
-                              secure=True, httponly=True, samesite='Lax')
+                              secure=is_https, httponly=True, samesite='Lax')
     return response
 
 

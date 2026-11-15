@@ -1,6 +1,6 @@
 {% extends 'base.html' %}{% load static %}
 {% block title %}Посилання доступу{% endblock %}
-{% block extra_head %}<link rel="stylesheet" href="{% static 'css/access_links.css' %}?v=20261115a">{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'css/access_links.css' %}?v=20261115b">{% endblock %}
 {% block content %}
 <div class="page-wrapper"><div class="feed-layout">
 {% include 'feed/components/teacher_sidebar.html' %}
@@ -33,6 +33,28 @@
     {{ form.non_field_errors }}
     {% for field in form %}
       <div class="form-group" data-link-field="{{ field.name }}">
+        {% if field.name == 'student' %}
+          <div class="access-subfilter" id="access-student-filter-row">
+            <label class="form-label form-label-sm" for="student-class-filter">Фільтр учнів за класом</label>
+            <select id="student-class-filter" class="form-input form-input-sm" aria-label="Фільтр учнів за класом">
+              <option value="">Усі класи</option>
+              {% for c in teacher_classes %}
+                <option value="{{ c.pk }}">{{ c.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        {% elif field.name == 'assignment' %}
+          <div class="access-subfilter" id="access-assignment-filter-row">
+            <label class="form-label form-label-sm" for="assignment-class-filter">Фільтр завдань за класом</label>
+            <select id="assignment-class-filter" class="form-input form-input-sm" aria-label="Фільтр завдань за класом">
+              <option value="">Усі класи</option>
+              <option value="none">Без прив'язки до класу (загальні)</option>
+              {% for c in teacher_classes %}
+                <option value="{{ c.pk }}">{{ c.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        {% endif %}
         {% if field.field.widget.input_type == 'checkbox' %}
           <label class="access-mode-switch" for="{{ field.id_for_label }}">
             {{ field }}
@@ -241,4 +263,4 @@
 </dialog>
 </main></div></div>
 {% endblock %}
-{% block extra_scripts %}<script src="{% static 'js/access_links.js' %}?v=20261115a"></script>{% endblock %}
+{% block extra_scripts %}<script src="{% static 'js/access_links.js' %}?v=20261115b"></script>{% endblock %}

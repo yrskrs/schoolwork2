@@ -140,7 +140,6 @@ def bind_submission_form(request, form):
         if 'class_group' in form.fields:
             current_qs = form.fields['class_group'].queryset
             if not current_qs.filter(pk=student_class.pk).exists():
-                from feed.models import ClassGroup
                 form.fields['class_group'].queryset = ClassGroup.objects.filter(
                     pk__in=list(current_qs.values_list('pk', flat=True)) + [student_class.pk]
                 )

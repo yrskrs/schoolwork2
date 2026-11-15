@@ -31,7 +31,72 @@ class ConnectionForm(forms.ModelForm):
         return data
 
 
+class StudentSelect(forms.Select):
+    def create_option(self, name, value, label, selected, index, subindex=None, attrs=None):
+        option = super().create_option(name, value, label, selected, index, subindex=subindex, attrs=attrs)
+        if value and hasattr(value, 'instance') and value.instance:
+            cg_id = getattr(value.instance, 'class_group_id', None)
+            if cg_id:
+                option['attrs']['data-class-id'] = str(cg_id)
+        return option
+
+
+class AssignmentSelect(forms.Select):
+    def create_option(self, name, value, label, selected, index, subindex=None, attrs=None):
+        option = super().create_option(name, value, label, selected, index, subindex=subindex, attrs=attrs)
+        if value and hasattr(value, 'instance') and value.instance:
+            inst = value.instance
+            class_ids = [str(c.pk) for c in inst.classes.all()]
+            option['attrs']['data-class-ids'] = ','.join(class_ids)
+        return option
+
+
+class AssignmentChoiceField(forms.ModelChoiceField):
+    widget = AssignmentSelect
+
+    def label_from_instance(self, obj):
+        classes = list(obj.classes.all())
+        classes_str = ", ".join(c.name for c in classes) if classes else "Всі класи"
+
+        # Localized and explicit date formatting with Europe/Kyiv timezone
+        date_parts = []
+        if obj.created_at:
+            local_created = timezone.localtime(obj.created_at)
+            date_parts.append(f"створено {local_created.strftime('%d.%m.%Y')}")
+        if obj.due_date:
+            date_parts.append(f"дедлайн {obj.due_date.strftime('%d.%m.%Y')}")
+        elif obj.scheduled_at:
+            local_sched = timezone.localtime(obj.scheduled_at)
+            date_parts.append(f"публікація {local_sched.strftime('%d.%m.%Y')}")
+        date_str = f" · {', '.join(date_parts)}" if date_parts else ""
+
+        subject_str = f" · {obj.subject.name}" if obj.subject else ""
+
+        status_names = {
+            Assignment.STATUS_PUBLISHED: 'Опубліковано',
+            Assignment.STATUS_DRAFT: 'Чернетка',
+            Assignment.STATUS_SCHEDULED: 'Відкладено',
+            Assignment.STATUS_ARCHIVED: 'Архів',
+        }
+        status_label = status_names.get(obj.status, obj.get_status_display() or 'Завдання')
+        status_icon = {
+            Assignment.STATUS_PUBLISHED: '✅',
+            Assignment.STATUS_DRAFT: '📝',
+            Assignment.STATUS_SCHEDULED: '⏰',
+            Assignment.STATUS_ARCHIVED: '📦',
+        }.get(obj.status, '📄')
+        status_text = f"[{status_icon} {status_label}]"
+
+        return f"{status_text} [{classes_str}] {obj.title}{subject_str}{date_str}"
+
+
+class StudentChoiceField(forms.ModelChoiceField):
+    widget = StudentSelect
+
+
 class AccessLinkForm(forms.ModelForm):
+    student = StudentChoiceField(queryset=Student.objects.none(), label='Учень', required=False)
+    assignment = AssignmentChoiceField(queryset=Assignment.objects.none(), label='Завдання', required=False)
     expires_at = forms.DateTimeField(label='Діє до (час Києва)', required=False,
         input_formats=['%Y-%m-%dT%H:%M'], widget=forms.DateTimeInput(format='%Y-%m-%dT%H:%M', attrs={'type': 'datetime-local'}))
 
@@ -50,9 +115,17 @@ class AccessLinkForm(forms.ModelForm):
 
     def __init__(self, *args, teacher, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields['class_group'].queryset = teacher.classes.filter(integration_active=True)
-        self.fields['student'].queryset = Student.objects.filter(class_group__in=teacher.classes.all(), integration_active=True, class_group__integration_active=True)
-        self.fields['assignment'].queryset = Assignment.objects.filter(teacher=teacher)
+        self.fields['class_group'].queryset = teacher.classes.filter(integration_active=True).order_by('grade', 'letter', 'name')
+        self.fields['student'].queryset = Student.objects.filter(
+            class_group__in=teacher.classes.all(),
+            integration_active=True,
+            class_group__integration_active=True
+        ).select_related('class_group').order_by('class_group__grade', 'class_group__letter', 'class_group__name', 'last_name', 'first_name')
+        asgn_qs = Assignment.objects.filter(teacher=teacher)
+        # Exclude archived tasks from link creation unless currently editing an archived link
+        if not (self.instance and self.instance.assignment and self.instance.assignment.status == Assignment.STATUS_ARCHIVED):
+            asgn_qs = asgn_qs.exclude(status=Assignment.STATUS_ARCHIVED)
+        self.fields['assignment'].queryset = asgn_qs.prefetch_related('classes').select_related('subject').order_by('-created_at', '-pk')
         for name, field in self.fields.items():
             if isinstance(field.widget, forms.CheckboxInput):
                 field.widget.attrs['class'] = 'form-checkbox'

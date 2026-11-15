@@ -46,11 +46,16 @@ def main():
         teacher = Teacher.objects.create(user=user, full_name='Тестовий учитель')
         group = ClassGroup.objects.create(name='7-А')
         teacher.classes.add(group)
+        group2 = ClassGroup.objects.create(name='8-Б')
+        teacher.classes.add(group2)
         pupil = Student.objects.create(class_group=group, last_name='Петренко', first_name='Олена')
         peer = Student.objects.create(class_group=group, last_name='Іваненко', first_name='Іван')
+        pupil2 = Student.objects.create(class_group=group2, last_name='Сидоренко', first_name='Василь')
         subject = Subject.objects.create(name='Інформатика'); teacher.subjects.add(subject)
         assignment = Assignment.objects.create(teacher=teacher, subject=subject, title='Навчальне завдання', status='published', published_at=timezone.now())
         assignment.classes.add(group)
+        assignment2 = Assignment.objects.create(teacher=teacher, subject=subject, title='Друге завдання 8-Б', status='published', published_at=timezone.now())
+        assignment2.classes.add(group2)
         client = Client(); client.force_login(user)
         application = get_wsgi_application()
         host = 'school.tail123.ts.net'
@@ -132,12 +137,58 @@ def main():
                 if field:
                     assert cdp.evaluate(f"!document.querySelector('[data-link-field={field}]').hidden")
                     assert cdp.evaluate("!document.querySelector('[data-link-field=restrict_access]').hidden"), 'restrict_access must be visible for targets'
+                    if kind == 'student':
+                        assert cdp.evaluate("!!document.querySelector('#student-class-filter')"), 'Student class filter missing'
+                        # Test cross-class filtering
+                        cdp.evaluate(f"document.querySelector('#student-class-filter').value='{group.pk}';document.querySelector('#student-class-filter').dispatchEvent(new Event('change'))")
+                        assert cdp.evaluate(f"document.querySelector('#id_student option[value=\"{pupil.pk}\"]') !== null"), '7-A pupil must be visible'
+                        assert cdp.evaluate(f"document.querySelector('#id_student option[value=\"{pupil2.pk}\"]') === null"), '8-B pupil must be hidden when 7-A filter is active'
+                        cdp.evaluate(f"document.querySelector('#student-class-filter').value='{group2.pk}';document.querySelector('#student-class-filter').dispatchEvent(new Event('change'))")
+                        assert cdp.evaluate(f"document.querySelector('#id_student option[value=\"{pupil2.pk}\"]') !== null"), '8-B pupil must be visible'
+                        assert cdp.evaluate(f"document.querySelector('#id_student option[value=\"{pupil.pk}\"]') === null"), '7-A pupil must be hidden when 8-B filter is active'
+                        cdp.evaluate("document.querySelector('#student-class-filter').value='';document.querySelector('#student-class-filter').dispatchEvent(new Event('change'))")
+                        assert cdp.evaluate(f"document.querySelector('#id_student option[value=\"{pupil.pk}\"]') !== null")
+                        assert cdp.evaluate(f"document.querySelector('#id_student option[value=\"{pupil2.pk}\"]') !== null")
+                        cdp.evaluate(f"document.querySelector('#student-class-filter').value='{group.pk}';document.querySelector('#student-class-filter').dispatchEvent(new Event('change'))")
+                    elif kind == 'assignment':
+                        assert cdp.evaluate("!!document.querySelector('#assignment-class-filter')"), 'Assignment class filter missing'
+                        # Test cross-class filtering
+                        cdp.evaluate(f"document.querySelector('#assignment-class-filter').value='{group.pk}';document.querySelector('#assignment-class-filter').dispatchEvent(new Event('change'))")
+                        assert cdp.evaluate(f"document.querySelector('#id_assignment option[value=\"{assignment.pk}\"]') !== null"), '7-A assignment must be visible'
+                        assert cdp.evaluate(f"document.querySelector('#id_assignment option[value=\"{assignment2.pk}\"]') === null"), '8-B assignment must be hidden when 7-A filter is active'
+                        cdp.evaluate(f"document.querySelector('#assignment-class-filter').value='{group2.pk}';document.querySelector('#assignment-class-filter').dispatchEvent(new Event('change'))")
+                        assert cdp.evaluate(f"document.querySelector('#id_assignment option[value=\"{assignment2.pk}\"]') !== null"), '8-B assignment must be visible'
+                        assert cdp.evaluate(f"document.querySelector('#id_assignment option[value=\"{assignment.pk}\"]') === null"), '7-A assignment must be hidden when 8-B filter is active'
+                        cdp.evaluate("document.querySelector('#assignment-class-filter').value='none';document.querySelector('#assignment-class-filter').dispatchEvent(new Event('change'))")
+                        assert cdp.evaluate(f"document.querySelector('#id_assignment option[value=\"{assignment.pk}\"]') === null")
+                        assert cdp.evaluate(f"document.querySelector('#id_assignment option[value=\"{assignment2.pk}\"]') === null")
+                        cdp.evaluate("document.querySelector('#assignment-class-filter').value='';document.querySelector('#assignment-class-filter').dispatchEvent(new Event('change'))")
+                        assert cdp.evaluate(f"document.querySelector('#id_assignment option[value=\"{assignment.pk}\"]') !== null")
+                        assert cdp.evaluate(f"document.querySelector('#id_assignment option[value=\"{assignment2.pk}\"]') !== null")
+                        cdp.evaluate(f"document.querySelector('#assignment-class-filter').value='{group.pk}';document.querySelector('#assignment-class-filter').dispatchEvent(new Event('change'))")
                     cdp.evaluate(f"document.querySelector('#id_{field}').value='{value}'")
                 else:
                     assert cdp.evaluate("document.querySelector('[data-link-field=restrict_access]').hidden"), 'restrict_access must be hidden for site'
                 cdp.evaluate("document.querySelector('#access-link-form button[type=submit]').click()")
                 cdp.until(f"[...document.querySelectorAll('.access-link-card h2')].some(e=>e.textContent==={json.dumps(name)})")
             assert AccessLink.objects.count() == 4
+
+            # Verify ?edit= preselection and subfiltering for student and assignment links
+            student_link = AccessLink.objects.get(kind='student')
+            navigate(f"{local}/teacher/access-links/?edit={student_link.pk}", "!!document.querySelector('#access-link-form')")
+            assert cdp.evaluate("document.querySelector('#id_kind').value==='student'")
+            assert cdp.evaluate(f"document.querySelector('#student-class-filter').value==='{group.pk}'"), 'Student class filter must auto-select class on ?edit='
+            assert cdp.evaluate(f"document.querySelector('#id_student').value==='{pupil.pk}'"), 'Student select must preserve chosen pupil on ?edit='
+            assert cdp.evaluate(f"document.querySelector('#id_student option[value=\"{pupil2.pk}\"]') === null"), 'Other class pupil must be filtered out on ?edit='
+
+            assignment_link = AccessLink.objects.get(kind='assignment')
+            navigate(f"{local}/teacher/access-links/?edit={assignment_link.pk}", "!!document.querySelector('#access-link-form')")
+            assert cdp.evaluate("document.querySelector('#id_kind').value==='assignment'")
+            assert cdp.evaluate(f"document.querySelector('#assignment-class-filter').value==='{group.pk}'"), 'Assignment class filter must auto-select class on ?edit='
+            assert cdp.evaluate(f"document.querySelector('#id_assignment').value==='{assignment.pk}'"), 'Assignment select must preserve chosen assignment on ?edit='
+            assert cdp.evaluate(f"document.querySelector('#id_assignment option[value=\"{assignment2.pk}\"]') === null"), 'Other class assignment must be filtered out on ?edit='
+
+            navigate(local + '/teacher/access-links/', "!!document.querySelector('#access-link-form')")
             assert cdp.evaluate("document.body?.innerText.includes('🔒 Обмежений доступ')"), 'Scope badge missing'
             point = cdp.evaluate("(()=>{const e=document.querySelector('[data-copy]');e.scrollIntoView({block:'center'});const r=e.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()")
             cdp.call('Input.dispatchMouseEvent', {'type':'mousePressed', 'button':'left', 'clickCount':1, **point})
@@ -158,7 +209,7 @@ def main():
             check_student_dialogs('open-mode')
             navigate(local + '/teacher/access-links/', "!!document.querySelector('#public-access-mode-form')")
             cdp.evaluate("document.querySelector('#id_allow_without_link').checked=false;document.querySelector('#public-access-mode-form button').click()")
-            cdp.until("document.querySelector('#id_allow_without_link')?.checked===false")
+            cdp.until("document.querySelector('#id_allow_without_link')?.checked===false && document.body?.innerText.includes('Захищений режим')")
             navigate(public + '/', "document.body?.innerText.includes('Потрібне посилання')")
             personal = AccessLink.objects.get(kind='student')
             navigate(public + '/', "document.body?.innerText.includes('Потрібне посилання')")

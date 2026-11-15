@@ -510,6 +510,43 @@ class PublicAccessTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Це завдання призначено для іншого класу')
 
+    def test_student_link_in_open_mode_retains_access_link_and_identity_locking(self):
+        # У відкритому режимі (allow_without_link=True) персональне посилання учня
+        # повинно зберігати request.access_link (не скидатися в None), гарантувати
+        # фіксацію особи учня та блокувати несанкціоновані ендпоінти поза public_names.
+        TailscaleConnection.objects.update(allow_without_link=True)
+        link = self.link('student', student=self.pupil, restrict_access=False)
+        self.enter(link)
+
+        # 1. Перевіряємо форму здачі: поля заблоковані, особа зафіксована за учнем
+        get_response = self.client.get(reverse('submit_assignment', args=[self.one.pk]), **PUBLIC)
+        self.assertEqual(get_response.status_code, 200)
+        form = get_response.context['form']
+        self.assertTrue(getattr(form, 'public_personal_access', False))
+        self.assertTrue(form.fields['student_id'].disabled)
+        self.assertTrue(form.fields['full_name'].disabled)
+        self.assertTrue(form.fields['class_group'].disabled)
+
+        # 2. Спроба підмінити ім'я/клас на сабміті ігнорується, дані беруться з посилання
+        post_response = self.client.post(reverse('submit_assignment', args=[self.one.pk]), {
+            'student_id': self.outsider.pk,
+            'full_name': 'Підміна у відкритому режимі',
+            'class_group': self.b.pk,
+            'comment_student': 'Здача у відкритому режимі',
+        }, **PUBLIC)
+        self.assertEqual(post_response.status_code, 302)
+        sub = Submission.objects.filter(assignment=self.one, comment_student='Здача у відкритому режимі').first()
+        self.assertIsNotNone(sub)
+        self.assertEqual(sub.student_id, self.pupil.pk)
+        self.assertEqual(sub.class_group_id, self.a.pk)
+
+        # 3. Перевіряємо захист public_names: дозволені публічні сторінки доступні (200),
+        # а внутрішні вчительські ендпоінти поза public_names блокуються (404)
+        self.assertEqual(self.client.get(reverse('index'), **PUBLIC).status_code, 200)
+        self.assertEqual(self.client.get(reverse('assignment_detail', args=[self.one.pk]), **PUBLIC).status_code, 200)
+        self.assertEqual(self.client.get('/teacher/', **PUBLIC).status_code, 404)
+        self.assertEqual(self.client.get('/teacher/access-links/', **PUBLIC).status_code, 404)
+
     def test_access_link_badges_and_edit_restrict_access_toggle(self):
         self.client.force_login(self.user)
         # Створюємо одне посилання з restrict_access=True та одне з restrict_access=False
@@ -561,6 +598,91 @@ class PublicAccessTests(TestCase):
         link.revoked_at = timezone.now(); link.save()
         for kind in ('guide', 'changelog'):
             self.assertEqual(self.get(reverse('ui_dialog', args=[kind])).status_code, 403)
+
+    def test_access_link_form_student_and_assignment_custom_widgets_and_labels(self):
+        form = AccessLinkForm(teacher=self.teacher)
+        rendered_student = str(form['student'])
+        self.assertIn(f'data-class-id="{self.a.pk}"', rendered_student)
+        self.assertIn(f'>{self.pupil.last_name} {self.pupil.first_name}', rendered_student)
+
+        rendered_assignment = str(form['assignment'])
+        self.assertIn(f'data-class-ids="{self.a.pk}"', rendered_assignment)
+        self.assertIn('✅ Опубліковано', rendered_assignment)
+        self.assertIn(f'[{self.a.name}] {self.one.title}', rendered_assignment)
+        self.assertIn('Інформатика', rendered_assignment)
+        self.assertIn('створено', rendered_assignment)
+
+    def test_access_links_view_renders_subfilters_for_student_and_assignment(self):
+        self.client.force_login(self.user)
+        response = self.client.get(reverse('access_links'), **LAN)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="student-class-filter"')
+        self.assertContains(response, 'id="assignment-class-filter"')
+        self.assertContains(response, f'value="{self.a.pk}">{self.a.name}</option>')
+        self.assertContains(response, 'value="none">Без прив\'язки до класу (загальні)</option>')
+
+    def test_access_enter_cookie_security_lan_vs_tunnel(self):
+        link = self.link('site')
+        # 1. Запит через тунель з заголовком Funnel (HTTPS) встановлює secure=True
+        resp_tunnel = self.client.post(reverse('access_enter', args=[link.token]), **PUBLIC)
+        self.assertEqual(resp_tunnel.status_code, 302)
+        cookie_tunnel = resp_tunnel.cookies.get(COOKIE)
+        self.assertIsNotNone(cookie_tunnel)
+        self.assertTrue(cookie_tunnel['secure'])
+
+        # 2. Запит через локальну мережу LAN (звичайний HTTP) встановлює secure=False, щоб cookie не відкидався браузером
+        resp_lan = self.client.post(reverse('access_enter', args=[link.token]), **LAN)
+        self.assertEqual(resp_lan.status_code, 302)
+        cookie_lan = resp_lan.cookies.get(COOKIE)
+        self.assertIsNotNone(cookie_lan)
+        self.assertFalse(cookie_lan['secure'])
+
+    def test_lan_and_tunnel_image_and_media_delivery(self):
+        link = self.link('assignment', assignment=self.one)
+        # 1. QR-код як через LAN, так і через тунель віддає SVG з валідним безпечним CSP
+        self.client.force_login(self.user)
+        resp_qr_lan = self.client.get(reverse('access_qr', args=[link.pk]), **LAN)
+        self.assertEqual(resp_qr_lan.status_code, 200)
+        self.assertEqual(resp_qr_lan['Content-Type'], 'image/svg+xml')
+        self.assertIn('image/svg+xml', resp_qr_lan['Content-Type'])
+        self.assertIn("default-src 'none'", resp_qr_lan['Content-Security-Policy'])
+
+        resp_qr_tunnel = self.client.get(reverse('access_qr', args=[link.pk]), **PUBLIC)
+        self.assertEqual(resp_qr_tunnel.status_code, 200)
+        self.assertEqual(resp_qr_tunnel['Content-Type'], 'image/svg+xml')
+        self.assertIn("default-src 'none'", resp_qr_tunnel['Content-Security-Policy'])
+
+        # 2. Аватарка вчителя та матеріали уроку через LAN і тунель
+        media_root = Path(settings.MEDIA_ROOT)
+        avatar_path = media_root / 'avatars' / 'qa_teacher.png'
+        avatar_path.parent.mkdir(parents=True, exist_ok=True)
+        avatar_path.write_bytes(b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDRFAKE_PNG')
+        self.teacher.avatar_image = 'avatars/qa_teacher.png'
+        self.teacher.save()
+
+        material_path = media_root / 'assignments' / str(self.one.pk) / 'lesson_material.txt'
+        material_path.parent.mkdir(parents=True, exist_ok=True)
+        material_path.write_bytes(b'Lesson material content')
+        AssignmentFile.objects.create(assignment=self.one, file=f'assignments/{self.one.pk}/lesson_material.txt')
+
+        # LAN: прямий доступ до аватарки та матеріалу
+        resp_avatar_lan = self.client.get('/media/avatars/qa_teacher.png', **LAN)
+        self.assertEqual(resp_avatar_lan.status_code, 200)
+
+        resp_mat_lan = self.client.get(f'/media/assignments/{self.one.pk}/lesson_material.txt', **LAN)
+        self.assertEqual(resp_mat_lan.status_code, 200)
+
+        # Тунель: аватарка доступна завжди, а матеріал доступний лише за наявності чинного гранту
+        resp_avatar_tunnel = self.client.get('/media/avatars/qa_teacher.png', **PUBLIC)
+        self.assertEqual(resp_avatar_tunnel.status_code, 200)
+
+        client = Client()
+        resp_mat_unauthorized = client.get(f'/media/assignments/{self.one.pk}/lesson_material.txt', **PUBLIC)
+        self.assertEqual(resp_mat_unauthorized.status_code, 403)
+
+        self.enter(link, client)
+        resp_mat_authorized = client.get(f'/media/assignments/{self.one.pk}/lesson_material.txt', **PUBLIC)
+        self.assertEqual(resp_mat_authorized.status_code, 200)
 
 
 class TailscaleAdapterTests(TestCase):

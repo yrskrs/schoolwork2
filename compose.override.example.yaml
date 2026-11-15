@@ -17,6 +17,9 @@ services:
   updater:
     restart: "no"
 
-  # Якщо ви додатково запускаєте compose.lan.yaml, розкоментуйте:
+  # network_info визначений у compose.lan.yaml.
+  # Якщо ви розкоментовуєте його для локальних LAN-тестів, обов'язково залишайте рядок image,
+  # щоб docker compose не видавав помилку при запуску без compose.lan.yaml:
   # network_info:
+  #   image: ${SCHOOLWORK_IMAGE:-schoolwork2-app:4.11.0}
   #   restart: "no"
