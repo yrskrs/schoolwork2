@@ -53,7 +53,7 @@
         }
 
         const optionalFields = document.getElementById('submission-optional-fields');
-        if (optionalFields) {
+        if (optionalFields && optionalFields.tagName === 'DETAILS') {
             optionalFields.addEventListener('toggle', function () {
                 if (optionalFields.open && window.autoResizeComment) {
                     window.autoResizeComment(commentInput);

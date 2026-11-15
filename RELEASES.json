@@ -1,5 +1,18 @@
 [
   {
+    "version": "4.13.1",
+    "date": "2026-11-15",
+    "title": "[UI] Актуалізація cache-buster стилів, мобільного брейкпоінта та HTTPS-детекції cookie",
+    "changes": [
+      "Синхронізація cache-buster для assignment_workspace.css: оновлено query-параметри ?ui=20261115 на сторінках submit_assignment.html та assignment_detail.html.",
+      "Оновлення cache-buster на сторінках входу: оновлено підключення access_links.css?v=20261115b у шаблонах access_enter.html та access_required.html.",
+      "Розширення мобільного брейкпоінта до 767px: змінено медіа-запит сітки блоку здачі роботи з 680px на 767px (max-width: 767px) для бездоганного відображення в 1 колонку на смартфонах і планшетах.",
+      "Безпечна детекція HTTPS для cookie доступу: в access_enter задіяно хелпер _trusted_https, що коректно визначає захищене з'єднання через зворотні проксі без хибних secure=True на LAN.",
+      "Документування HTTPS/Funnel у .env.example: додано роз'яснення та закоментовані рекомендовані значення для SCHOOLNET_TRUST_PROXY_HTTPS і CSRF_TRUSTED_ORIGINS.",
+      "Очищення рудиментів: прибрано застарілий CSS-селектор .submission-optional-fields > summary та оптимізовано обробник у submission_layout.js."
+    ]
+  },
+  {
     "version": "4.13.0",
     "date": "2026-11-15",
     "title": "[UI] Відновлення підписів полів, підказок щодо висновків та плейсхолдерів у формі здачі роботи",

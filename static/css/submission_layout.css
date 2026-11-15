@@ -24,7 +24,6 @@
 .submission-help-text { margin: 10px 0 0; font-size: 12px; line-height: 1.6; color: var(--color-text-secondary); }
 .submission-ai-info { display: flex; flex-direction: column; gap: 8px; }
 .submission-optional-fields { border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-bg-secondary); }
-.submission-optional-fields > summary { padding: 10px 12px; cursor: pointer; font-size: 13px; font-weight: 650; color: var(--color-text-primary); }
 .submission-optional-body { display: flex; flex-direction: column; gap: 12px; padding: 0 12px 12px; }
 .submission-send-bar { position: sticky; bottom: max(8px, env(safe-area-inset-bottom)); z-index: 25; display: flex; flex-direction: column; gap: 10px; margin-top: 14px; padding: 12px 14px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface); box-shadow: 0 -3px 18px rgba(0, 0, 0, 0.1); }
 #submission-send-button { width: 100%; min-height: 44px; padding: 10px 18px; font-size: 14px; font-weight: 750; background: #059669; border-color: #059669; color: #fff; white-space: normal; }

@@ -17,6 +17,7 @@ from django.views.decorators.http import require_http_methods, require_GET
 from .models import TailscaleConnection, AccessLink, AccessVisitor, AccessLinkEvent, ClassGroup
 from .access_forms import AccessLinkForm, ConnectionForm, PublicAccessModeForm
 from .access_control import COOKIE, SALT
+from .https_hardening import _trusted_https
 from .views import teacher_required
 from . import tailscale_service
 
@@ -182,7 +183,7 @@ def access_enter(request, token):
     if link.restricted_class_id:
         request.session['selected_class'] = link.restricted_class_id
     destination = reverse('assignment_detail', args=[link.assignment_id]) if link.kind == 'assignment' else reverse('index')
-    is_https = request.is_secure() or request.META.get('HTTP_TAILSCALE_FUNNEL_REQUEST') == '?1'
+    is_https = bool(request.is_secure() or _trusted_https(request))
     response = redirect(destination)
     response.set_cookie(COOKIE, signing.dumps({'link': link.pk}, salt=SALT), max_age=60 * 60 * 24 * 365,
                         secure=is_https, httponly=True, samesite='Lax')

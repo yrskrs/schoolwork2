@@ -89,7 +89,7 @@ class PublicAccessTests(TestCase):
         response = self.client.get(reverse('access_enter', args=[link.token]), **PUBLIC)
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'class="access-landing"')
-        self.assertContains(response, 'access_links.css?v=20261113d')
+        self.assertContains(response, 'access_links.css?v=20261115b')
         from django.contrib.staticfiles import finders
         css_path = finders.find('css/access_links.css')
         self.assertTrue(css_path, 'access_links.css не знайдено у staticfiles')

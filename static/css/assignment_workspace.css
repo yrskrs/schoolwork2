@@ -186,7 +186,7 @@ body .submission-workspace :is(a, button, summary, [role="button"]):focus-visibl
     body .assignment-workspace .assignment-detail-completion { order: -1; }
     body .submission-workspace .submission-sidebar { gap: 16px; }
 }
-@media (max-width: 680px) {
+@media (max-width: 767px) {
     body .submission-workspace .submission-work-grid { grid-template-columns: minmax(0, 1fr); gap: 14px; }
 }
 @media (max-width: 600px) {
