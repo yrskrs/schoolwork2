@@ -97,13 +97,13 @@
 </section>
 <section class="submission-form-card" aria-labelledby="submission-work-title">
 <h2 id="submission-work-title" class="school-submission-step"><span class="school-step-number">2</span> Твоя виконана робота</h2>
-<p class="school-form-help">Прикріпи свій результат, а не матеріали вчителя.</p>
+<p class="school-form-help">Прикріпи свій результат, а не матеріали вчителя. Підходять Word, Excel, Access, PDF, фото та архіви.</p>
 
 <div class="submission-work-grid">
     <!-- Ліва колонка: файли з пристрою -->
     <div class="submission-work-col">
         <div class="submission-work-label-row">
-            <span class="submission-work-label">Файли з пристрою</span>
+            <span class="submission-work-label">📁 Файли з пристрою</span>
             <span class="submission-format-badge">Word, Excel, Access, PDF, фото</span>
         </div>
         <div class="file-drop-zone" id="file-drop-zone" role="button" tabindex="0" aria-label="Прикріпити файли з пристрою" onclick="document.getElementById('id_files').click();">
@@ -147,22 +147,29 @@
 
     <!-- Права колонка: посилання, текстова відповідь або коментар -->
     <div class="submission-work-col" id="submission-optional-fields">
-        <div class="submission-work-label-row">
-            <span class="submission-work-label">Посилання, текст або коментар</span>
-        </div>
         <div class="submission-inputs-group">
+            <!-- Посилання (компактне поле) -->
             <div class="form-group" style="margin:0;">
-                <label for="{{ form.link.id_for_label }}" style="display:none;">{{ form.link.label }}</label>
+                <label for="{{ form.link.id_for_label }}" class="form-label submission-work-label-row" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                    <span class="submission-work-label">🔗 {{ form.link.label }}</span>
+                    <span style="font-size:11px;font-weight:600;color:var(--color-text-muted);background:var(--color-bg-secondary);padding:2px 8px;border-radius:10px;border:1px solid var(--color-border);">(необов'язково)</span>
+                </label>
                 {{ form.link }}
                 {% if form.link.errors %}
                 <div style="color:var(--color-danger);font-size:11px;margin-top:2px;">{{ form.link.errors|join:" " }}</div>
                 {% endif %}
             </div>
 
+            <!-- Коментар учня / Висновки -->
             <div class="form-group" style="margin:0;flex:1;display:flex;flex-direction:column;">
-                <label for="{{ form.comment_student.id_for_label }}" style="display:none;">{{ form.comment_student.label }}</label>
+                <label for="{{ form.comment_student.id_for_label }}" class="form-label submission-work-label-row" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                    <span class="submission-work-label">💬 {{ form.comment_student.label }}</span>
+                    <span style="font-size:11px;font-weight:600;color:var(--color-text-muted);background:var(--color-bg-secondary);padding:2px 8px;border-radius:10px;border:1px solid var(--color-border);">(необов'язково)</span>
+                </label>
                 {{ form.comment_student }}
-                <span style="display:none;">висновки по своїй роботі</span>
+                <div style="font-size:11.5px;color:var(--color-text-secondary);margin-top:6px;line-height:1.4;">
+                    💡 <em>Тут ви можете залишити висновки по своїй роботі (якщо забули записати у файлі), номер завдання або коментар. Поле автоматично розширюється при введенні тексту.</em>
+                </div>
                 {% if form.comment_student.errors %}
                 <div style="color:var(--color-danger);font-size:11px;margin-top:2px;">{{ form.comment_student.errors|join:" " }}</div>
                 {% endif %}

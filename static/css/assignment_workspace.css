@@ -97,8 +97,7 @@ body .submission-workspace .submission-inputs-group {
 }
 body .submission-workspace .submission-inputs-group textarea.form-input {
     flex: 1;
-    min-height: 98px !important;
-    height: 100% !important;
+    min-height: 84px !important;
     resize: vertical;
 }
 body .submission-workspace #submit-form .file-drop-zone {

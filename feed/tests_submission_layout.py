@@ -64,6 +64,9 @@ class StudentSubmissionLayoutTests(TestCase):
         for name in ['full_name', 'class_group', 'files', 'link', 'comment_student', 'csrfmiddlewaretoken']:
             self.assertTrue(form.xpath('.//*[@name=$name]', name=name), name)
         self.assertTrue(page.get_element_by_id('submission-optional-fields') is not None)
+        self.assertTrue(form.xpath('.//label[@for="id_link"] and not(.//label[@for="id_link" and contains(@style,"display:none")])'))
+        self.assertTrue(form.xpath('.//label[@for="id_comment_student"] and not(.//label[@for="id_comment_student" and contains(@style,"display:none")])'))
+        self.assertIn('висновки по своїй роботі', page.get_element_by_id('submission-optional-fields').text_content())
         self.assertNotIn('open', page.get_element_by_id('submission-condition-details').attrib)
         ids = Counter(page.xpath('//*[@id]/@id'))
         self.assertEqual([key for key, count in ids.items() if count > 1], [])

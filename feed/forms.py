@@ -678,7 +678,7 @@ class SubmissionForm(forms.Form):
         label='Або посилання на роботу',
         required=False,
         widget=forms.URLInput(attrs={
-            'placeholder': 'Посилання на роботу (за потреби)',
+            'placeholder': 'https://...',
             'class': 'form-input',
             'id': 'id_link',
         })
@@ -687,7 +687,7 @@ class SubmissionForm(forms.Form):
         label='Висновки по роботі або коментар',
         required=False,
         widget=forms.Textarea(attrs={
-            'placeholder': 'Текстова відповідь або коментар до роботи',
+            'placeholder': 'Напишіть висновки по роботі (якщо забули записати у файлі), номер завдання або коментар...',
             'class': 'form-input',
             'rows': 3,
             'id': 'id_comment_student',
