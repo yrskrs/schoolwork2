@@ -1,6 +1,6 @@
 {% extends 'base.html' %}{% load static %}
 {% block title %}Посилання доступу{% endblock %}
-{% block extra_head %}<link rel="stylesheet" href="{% static 'css/access_links.css' %}?v=20261113d">{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'css/access_links.css' %}?v=20261115a">{% endblock %}
 {% block content %}
 <div class="page-wrapper"><div class="feed-layout">
 {% include 'feed/components/teacher_sidebar.html' %}
@@ -31,7 +31,21 @@
   <div class="access-form-body">
     <form method="post" id="access-link-form">{% csrf_token %}<input type="hidden" name="action" value="save">{% if editing %}<input type="hidden" name="link_id" value="{{ editing.pk }}">{% endif %}
     {{ form.non_field_errors }}
-    {% for field in form %}<div class="form-group" data-link-field="{{ field.name }}"><label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}{{ field.errors }}</div>{% endfor %}
+    {% for field in form %}
+      <div class="form-group" data-link-field="{{ field.name }}">
+        {% if field.field.widget.input_type == 'checkbox' %}
+          <label class="access-mode-switch" for="{{ field.id_for_label }}">
+            {{ field }}
+            <strong>{{ field.label }}</strong>
+          </label>
+        {% else %}
+          <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+          {{ field }}
+        {% endif %}
+        {% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}
+        {{ field.errors }}
+      </div>
+    {% endfor %}
     <p class="access-kind-help" id="access-kind-help"></p>
     <button class="btn btn-primary" type="submit">{% if editing %}Зберегти зміни{% else %}Створити посилання{% endif %}</button>{% if editing %} <a class="btn btn-secondary" href="{% url 'access_links' %}">Скасувати редагування</a>{% endif %}
     </form>
@@ -95,7 +109,7 @@
     </summary>
 
     <div class="access-card-body">
-      <p class="access-card-sub">{{ link.get_kind_display }}{% if link.class_group %} · {{ link.class_group }}{% endif %}{% if link.student %} · {{ link.student }}{% endif %}{% if link.assignment %} · {{ link.assignment.title }}{% endif %}</p>
+      <p class="access-card-sub">{{ link.get_kind_display }}{% if link.class_group %} · {{ link.class_group }}{% endif %}{% if link.student %} · {{ link.student }}{% endif %}{% if link.assignment %} · {{ link.assignment.title }}{% endif %}{% if link.kind != 'site' %} · {% if link.restrict_access %}<span class="access-scope-tag" title="Обмежено лише цим об'єктом">🔒 Обмежений доступ</span>{% else %}<span class="access-scope-tag" title="Без обмеження">🌐 Без обмеження</span>{% endif %}{% endif %}</p>
       <dl class="access-stats">
         <div><dt>Переходи</dt><dd>{{ link.visits }}</dd></div>
         <div><dt>Унікальні браузери</dt><dd>{{ link.browser_count }}</dd></div>
@@ -153,6 +167,9 @@
                 {% if link.class_group %}<span>{{ link.class_group }}</span>{% endif %}
                 {% if link.student %}<span>{{ link.student }}</span>{% endif %}
                 {% if link.assignment %}<span>{{ link.assignment.title }}</span>{% endif %}
+                {% if link.kind != 'site' %}
+                  {% if link.restrict_access %}<span class="access-scope-tag" title="Обмежено лише цим об'єктом">🔒 Обмежено</span>{% else %}<span class="access-scope-tag" title="Без обмеження">🌐 Без обмеження</span>{% endif %}
+                {% endif %}
               </div>
             </td>
             <td class="col-status">
@@ -224,4 +241,4 @@
 </dialog>
 </main></div></div>
 {% endblock %}
-{% block extra_scripts %}<script src="{% static 'js/access_links.js' %}?v=20261113b"></script>{% endblock %}
+{% block extra_scripts %}<script src="{% static 'js/access_links.js' %}?v=20261115a"></script>{% endblock %}

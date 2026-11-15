@@ -54,7 +54,7 @@ def link_for(request):
 
 def scope_assignments(request, queryset):
     link = link_for(request)
-    if not link or link.kind == 'site':
+    if not link or link.kind == 'site' or not getattr(link, 'restrict_access', True):
         return queryset
     if link.kind == 'assignment':
         return queryset.filter(pk=link.assignment_id)
@@ -68,7 +68,7 @@ def scope_assignments(request, queryset):
 
 def scope_classes(request, queryset):
     link = link_for(request)
-    if not link or link.kind == 'site':
+    if not link or link.kind == 'site' or not getattr(link, 'restrict_access', True):
         return queryset
     if link.kind == 'assignment':
         assigned = link.assignment.classes.all()
@@ -78,14 +78,14 @@ def scope_classes(request, queryset):
 
 def scope_students(request, queryset):
     link = link_for(request)
-    if link and link.kind == 'student':
+    if link and link.kind == 'student' and getattr(link, 'restrict_access', True):
         return queryset.filter(pk=link.student_id)
     return queryset.filter(class_group__in=scope_classes(request, ClassGroup.objects.all()))
 
 
 def scope_submissions(request, queryset):
     link = link_for(request)
-    if not link or link.kind == 'site':
+    if not link or link.kind == 'site' or not getattr(link, 'restrict_access', True):
         return queryset
     queryset = queryset.filter(assignment__in=scope_assignments(request, Assignment.objects.all()))
     if link.kind == 'student':
@@ -120,7 +120,7 @@ def media_allowed(request, raw_path):
 def bind_submission_form(request, form):
     """Enforce scope in Django validation, including tampered hidden inputs."""
     link = link_for(request)
-    if not link:
+    if not link or not getattr(link, 'restrict_access', True):
         return form
     form.fields['class_group'].queryset = scope_classes(request, form.fields['class_group'].queryset)
     class_id = link.restricted_class_id

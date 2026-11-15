@@ -37,16 +37,27 @@ class AccessLinkForm(forms.ModelForm):
 
     class Meta:
         model = AccessLink
-        fields = ['name', 'kind', 'class_group', 'student', 'assignment', 'expires_at']
-        labels = {'class_group': 'Клас', 'student': 'Учень', 'assignment': 'Завдання'}
+        fields = ['name', 'kind', 'class_group', 'student', 'assignment', 'restrict_access', 'expires_at']
+        labels = {
+            'class_group': 'Клас',
+            'student': 'Учень',
+            'assignment': 'Завдання',
+            'restrict_access': 'Обмежувати доступ лише вибраним (клас / учень / завдання)',
+        }
+        help_texts = {
+            'restrict_access': 'Якщо прапорець встановлено, для учня відкриється лише вибраний клас, учень чи завдання, навіть коли загальний доступ до сайту відкритий.',
+        }
 
     def __init__(self, *args, teacher, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['class_group'].queryset = teacher.classes.filter(integration_active=True)
         self.fields['student'].queryset = Student.objects.filter(class_group__in=teacher.classes.all(), integration_active=True, class_group__integration_active=True)
         self.fields['assignment'].queryset = Assignment.objects.filter(teacher=teacher)
-        for field in self.fields.values():
-            field.widget.attrs.setdefault('class', 'form-input')
+        for name, field in self.fields.items():
+            if isinstance(field.widget, forms.CheckboxInput):
+                field.widget.attrs['class'] = 'form-checkbox'
+            else:
+                field.widget.attrs.setdefault('class', 'form-input')
         self.fields['expires_at'].help_text = 'Порожнє поле — до скасування.'
 
     def clean(self):
@@ -58,6 +69,8 @@ class AccessLinkForm(forms.ModelForm):
                     self.add_error(key, 'Оберіть значення для цього типу доступу.')
             else:
                 data[key] = None
+        if data.get('kind') == 'site':
+            data['restrict_access'] = False
         if data.get('expires_at') and data['expires_at'] <= timezone.now():
             self.add_error('expires_at', 'Час завершення має бути в майбутньому.')
         return data

@@ -23,10 +23,11 @@ class PublicAccessMiddleware:
                 request.META['wsgi.url_scheme'] = 'https'
             if request.public_access and not is_teacher(request):
                 pk = grant_from_cookie(request)
-                if pk and connection.enabled and not request.public_open_access:
+                if pk and connection.enabled:
                     link = AccessLink.objects.select_related('class_group', 'student__class_group', 'assignment').filter(pk=pk).first()
                     if link and link.active:
-                        request.access_link = link
+                        if not request.public_open_access or getattr(link, 'restrict_access', True):
+                            request.access_link = link
         response = self.get_response(request)
         if request.public_access or request.path_info.startswith('/access/'):
             response['Cache-Control'] = 'private, no-store'
@@ -77,7 +78,7 @@ class PublicAccessMiddleware:
                 raise Http404
         if 'submission_id' in kwargs:
             get_object_or_404(scope_submissions(request, Submission.objects.filter(assignment__status__in=['published', 'archived'])), pk=kwargs['submission_id'])
-        if link and link.restricted_class_id:
+        if link and getattr(link, 'restrict_access', True) and link.restricted_class_id:
             for key in ('class', 'class_id', 'class_group_id'):
                 value = request.GET.get(key)
                 if value and value not in ('all', str(link.restricted_class_id)):

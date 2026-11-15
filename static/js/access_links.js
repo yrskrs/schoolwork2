@@ -16,6 +16,13 @@
       const field = document.getElementById(`id_${name}`);
       if (field) field.disabled = targets[kind.value] !== name;
     });
+    const restrictRow = document.querySelector('[data-link-field="restrict_access"]');
+    if (restrictRow) {
+      const isTarget = kind.value !== 'site';
+      restrictRow.hidden = !isTarget;
+      const restrictField = document.getElementById('id_restrict_access');
+      if (restrictField) restrictField.disabled = !isTarget;
+    }
     const help = document.getElementById('access-kind-help');
     if (help) help.textContent = descriptions[kind.value] || '';
   }

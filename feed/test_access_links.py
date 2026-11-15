@@ -440,6 +440,43 @@ class PublicAccessTests(TestCase):
         client = Client(enforce_csrf_checks=True); client.force_login(self.user)
         self.assertEqual(client.post(reverse('access_links'), {'action': 'access_mode', 'allow_without_link': 'on'}, **LAN).status_code, 403)
 
+    def test_class_link_with_restrict_access_restricts_even_in_open_mode(self):
+        TailscaleConnection.objects.update(allow_without_link=True)
+        link = self.link('class', class_group=self.a, restrict_access=True)
+        self.enter(link)
+        # Class A assignments are allowed
+        response = self.get(reverse('assignment_detail', args=[self.one.pk]))
+        self.assertEqual(response.status_code, 200)
+        # Class B assignments are forbidden (404)
+        response = self.get(reverse('assignment_detail', args=[self.two.pk]))
+        self.assertEqual(response.status_code, 404)
+        # Changing class to class B in query param raises 404
+        response = self.get(f'/?class={self.b.pk}')
+        self.assertEqual(response.status_code, 404)
+
+    def test_class_link_without_restrict_access_allows_other_classes_in_open_mode(self):
+        TailscaleConnection.objects.update(allow_without_link=True)
+        link = self.link('class', class_group=self.a, restrict_access=False)
+        self.enter(link)
+        # Class A assignment is accessible
+        self.assertEqual(self.get(reverse('assignment_detail', args=[self.one.pk])).status_code, 200)
+        # Class B assignment is also accessible because restriction was disabled on the link
+        self.assertEqual(self.get(reverse('assignment_detail', args=[self.two.pk])).status_code, 200)
+
+    def test_link_form_restrict_access_handling(self):
+        form = AccessLinkForm(teacher=self.teacher)
+        self.assertIn('restrict_access', form.fields)
+        # Site link clears restrict_access
+        data = {'name': 'Увесь сайт', 'kind': 'site', 'restrict_access': 'on'}
+        valid_form = AccessLinkForm(data, teacher=self.teacher)
+        self.assertTrue(valid_form.is_valid(), valid_form.errors)
+        self.assertFalse(valid_form.cleaned_data['restrict_access'])
+        # Class link preserves restrict_access
+        data = {'name': '8-А', 'kind': 'class', 'class_group': self.a.pk, 'restrict_access': 'on'}
+        valid_form = AccessLinkForm(data, teacher=self.teacher)
+        self.assertTrue(valid_form.is_valid(), valid_form.errors)
+        self.assertTrue(valid_form.cleaned_data['restrict_access'])
+
     def assert_student_dialogs(self, client=None):
         client = client or self.client
         for kind, teacher_marker in [('guide', 'guide-tab-btn-teacher'), ('changelog', 'changelog-pane-teacher')]:

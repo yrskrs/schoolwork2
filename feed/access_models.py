@@ -30,6 +30,7 @@ class AccessLink(models.Model):
     class_group = models.ForeignKey('feed.ClassGroup', null=True, blank=True, on_delete=models.SET_NULL)
     student = models.ForeignKey('feed.Student', null=True, blank=True, on_delete=models.SET_NULL)
     assignment = models.ForeignKey('feed.Assignment', null=True, blank=True, on_delete=models.SET_NULL)
+    restrict_access = models.BooleanField('Обмежувати доступ лише вибраним (клас/учень/завдання)', default=True)
     expires_at = models.DateTimeField('Діє до', null=True, blank=True)
     revoked_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -51,6 +52,8 @@ class AccessLink(models.Model):
 
     @property
     def restricted_class_id(self):
+        if not self.restrict_access:
+            return None
         if self.kind == 'student' and self.student_id:
             return self.student.class_group_id
         return self.class_group_id if self.kind == 'class' else None
