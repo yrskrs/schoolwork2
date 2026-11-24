@@ -1,3 +1,9 @@
+## 4.13.4 — 2026-11-24 — [CORE] Збільшені таймаути для локальних ШІ-моделей (`custom`) при тестуванні та оцінюванні
+
+- **Адаптований таймаут тесту підключення для локального ШІ (`feed/gemini_service.py`, `static/js/ai_model_controls.js`, `templates/feed/settings.html`).** Для провайдера `custom` (LM Studio, Ollama, vLLM) у `test_ai_connection` таймаут збільшено з `15` до `90` секунд, `max_output_tokens` — до `2048`, а браузерний `AbortController` — з `22` до `95` секунд (`?ui=20261124b`). Це усуває `timed out` при холодному старті та `<think>`-міркуваннях 14B+ моделей (перевірено на `qwen/qwen3-14b`).
+- **Адаптовані таймаути перевірки робіт і генерацій для `custom` (`feed/gemini_service.py`).** В `evaluate_submission_with_gemini` (включно з пакетним оцінюванням медіа) таймаут для `custom` підвищено до `120` с (замість `35` с), а для генерації критеріїв, покращення опису та розуміння умови завдання — до `90` с (замість `35–40` с).
+- **Автотести:** додано `test_custom_local_connection_test_uses_extended_timeout` у `feed.tests_ai_connections`.
+
 ## 4.13.3 — 2026-11-24 — [SYS] Фіксація часового поясу Europe/Kyiv у контейнерах і логах, прискорення та прогрес бекапу при оновленні
 
 - **Часовий пояс `Europe/Kyiv` у Docker-контейнерах (`Dockerfile`, `docker/Dockerfile.updater`, `runner/Dockerfile`, `compose.yaml`, `.env.example`).** Встановлено `tzdata` та `TZ=Europe/Kyiv` у всіх Docker-образах, а також передано `TZ: '${TZ:-Europe/Kyiv}'` усім службам у `compose.yaml`. Це усуває 2-годинне відставання (UTC) у контейнерних логах, журналі оновлень і датах файлів на сервері.

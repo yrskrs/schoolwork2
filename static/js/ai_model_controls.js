@@ -24,7 +24,8 @@
         const original = button ? button.textContent : '';
         if (button) {button.disabled = true; button.textContent = '⏳ Тестування…'; button.setAttribute('aria-busy', 'true');}
         status(result, '⏳ Перевіряємо ' + config.provider.toUpperCase() + ' / ' + config.model_name + '…', 'pending');
-        const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), 22000);
+        const abortMs = config.provider === 'custom' ? 95000 : 22000;
+        const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), abortMs);
         try {
             const body = new FormData(); Object.entries(config).forEach(([key,value]) => body.append(key, value));
             const token = document.querySelector('[name="csrfmiddlewaretoken"]');

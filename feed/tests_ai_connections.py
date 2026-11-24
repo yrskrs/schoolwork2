@@ -202,6 +202,14 @@ class AIConnectionsTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(call.call_count, 1)
 
+    @patch('feed.gemini_service.call_ai_api', return_value=(200, 'Зʼєднання успішне', '', {}))
+    def test_custom_local_connection_test_uses_extended_timeout(self, call):
+        custom_id = self.add_connection('custom', model='qwen/qwen3-14b', key='', connection_url='http://192.168.1.12:1234')
+        response = self.client.post(reverse('api_test_gemini_connection'), {'connection_id': custom_id, 'model_name': 'qwen/qwen3-14b'})
+        self.assertTrue(response.json()['success'])
+        self.assertGreaterEqual(call.call_args.kwargs['timeout'], 90)
+        self.assertEqual(call.call_args.kwargs['custom_url'], 'http://192.168.1.12:1234')
+
     @patch('feed.gemini_service.call_ai_api')
     def test_review_falls_back_once_per_model_and_persists_successful_request_usage(self, call):
         self.add_connection('gemini', 'gemini-first')
