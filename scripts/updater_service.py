@@ -65,11 +65,21 @@ def update_state(**kwargs):
         save_status()
 
 
+def _local_timestamp(fmt):
+    tz_name = os.environ.get('TZ') or 'Europe/Kyiv'
+    try:
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+        return datetime.now(ZoneInfo(tz_name)).strftime(fmt)
+    except Exception:
+        return time.strftime(fmt)
+
+
 def append_log(line):
     line = str(line).strip()
     if not line:
         return
-    entry = f'[{time.strftime("%H:%M:%S")}] {line}'
+    entry = f'[{_local_timestamp("%H:%M:%S")}] {line}'
     print(entry, flush=True)
     with STATE_LOCK:
         logs = CURRENT_STATE['logs']
@@ -114,7 +124,8 @@ def run_command(command, env=None, timeout=600):
         try:
             while selector.get_map():
                 if time.monotonic() > deadline:
-                    raise TimeoutError(f'Перевищено час виконання ({timeout} с): {command[0]}')
+                    label = Path(command[1]).name if command[0] in ('bash', 'sh', 'python', 'python3') and len(command) > 1 else command[0]
+                    raise TimeoutError(f'Перевищено час виконання ({timeout} с): {label}')
                 for key, _ in selector.select(1):
                     chunk = os.read(key.fd, 65536)
                     if not chunk:
@@ -155,6 +166,7 @@ class Deployment:
     """Freeze Compose config and translate bind paths for the host Docker daemon."""
     def __init__(self):
         self.env = dict(os.environ, COMPOSE_PROJECT_NAME=os.environ.get('COMPOSE_PROJECT_NAME', PROJECT),
+                        TZ=os.environ.get('TZ') or 'Europe/Kyiv',
                         MAINTENANCE_LOCK_HELD='1', PYTHONUNBUFFERED='1')
         files = [ROOT / 'compose.yaml', ROOT / '.release-image.yaml', ROOT / 'compose.override.yaml']
         command = ['docker', 'compose', '--env-file', str(ROOT / '.env')]
@@ -276,7 +288,7 @@ def perform_rollback(deployment, backup, old_image, old_commit, old_version):
         flags += ['--no-safety-backup', '--keep-code']
     elif PROJECT == 'schoolwork2':
         flags += ['--no-safety-backup']
-    run_command(['bash', str(ROOT / 'scripts/restore.sh'), str(backup), *flags], deployment.env, 600)
+    run_command(['bash', str(ROOT / 'scripts/restore.sh'), str(backup), *flags], deployment.env, 1800)
     run_command(['python3', str(ROOT / 'scripts/configure_integration_network.py')], deployment.env, 90)
     run_command(['git', 'reset', '--hard', old_commit], deployment.env, 60)
     deployment.select_image(old_image)
@@ -398,14 +410,14 @@ def execute_update_job(target_ref='origin/main', target_ver=None, releases_list=
         writers_stopped = True
         deployment.dc('stop', *WRITERS, timeout=120)
         if PROJECT == 'schooltest5':
-            backup = Path(tempfile.mkdtemp(prefix=time.strftime('%Y%m%d-%H%M%S-'), dir=ROOT / 'backups'))
-            run_command(['bash', str(ROOT / 'scripts/backup.sh'), '--output', str(backup), '--keep-stopped'], deployment.env, 600)
+            backup = Path(tempfile.mkdtemp(prefix=_local_timestamp('%Y%m%d-%H%M%S-'), dir=ROOT / 'backups'))
+            run_command(['bash', str(ROOT / 'scripts/backup.sh'), '--output', str(backup), '--keep-stopped'], deployment.env, 1800)
         elif PROJECT == 'schooljournal':
             output = run_command(['bash', str(ROOT / 'scripts/backup.sh'), '--quiesced'], deployment.env, 1200)
             backup = Path(output.splitlines()[-1])
         else:
             deployment.env['SCHOOLNET_BACKUP_KEEP_STOPPED'] = '1'
-            output = run_command(['bash', str(ROOT / 'scripts/backup.sh')], deployment.env, 600)
+            output = run_command(['bash', str(ROOT / 'scripts/backup.sh')], deployment.env, 1800)
             backup = Path(output.split('Резервна копія перевірена:', 1)[1].strip().splitlines()[0])
         if not backup.exists():
             raise RuntimeError('Резервну копію не знайдено після backup.sh')

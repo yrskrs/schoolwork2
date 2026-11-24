@@ -1,14 +1,14 @@
 name: ${COMPOSE_PROJECT_NAME:-schoolwork2}
 services:
   app:
-    image: ${SCHOOLWORK_IMAGE:-schoolwork2-app:4.13.2}
+    image: ${SCHOOLWORK_IMAGE:-schoolwork2-app:4.13.3}
     build:
       context: .
       dockerfile: Dockerfile
       args:
         VCS_REF: ${VCS_REF:-local}
         SOURCE_DIGEST: ${SOURCE_DIGEST:-unknown}
-        APP_VERSION: '4.13.2'
+        APP_VERSION: '4.13.3'
     container_name: schoolnet_app
     restart: unless-stopped
     depends_on:
@@ -17,6 +17,7 @@ services:
     env_file:
       - .env
     environment:
+      TZ: '${TZ:-Europe/Kyiv}'
       AI_JOBS_EAGER: 'False'
       AI_CACHE_DIR: '/var/cache/schoolnet/ai'
       CLOUD_IMPORT_ROOT: '/var/cache/schoolnet/cloud-imports'
@@ -41,13 +42,14 @@ services:
       start_period: 45s
 
   ai_worker:
-    image: ${SCHOOLWORK_IMAGE:-schoolwork2-app:4.13.2}
+    image: ${SCHOOLWORK_IMAGE:-schoolwork2-app:4.13.3}
     container_name: schoolnet_ai_worker
     restart: unless-stopped
     command: ["python", "manage.py", "process_ai_jobs"]
     env_file:
       - .env
     environment:
+      TZ: '${TZ:-Europe/Kyiv}'
       AI_JOBS_EAGER: 'False'
       AI_CACHE_DIR: '/var/cache/schoolnet/ai'
       CLOUD_IMPORT_ROOT: '/var/cache/schoolnet/cloud-imports'
@@ -79,6 +81,7 @@ services:
         APP_VERSION: '4.5.7'
     restart: unless-stopped
     environment:
+      TZ: '${TZ:-Europe/Kyiv}'
       CODE_RUNNER_TOKEN: '${CODE_RUNNER_TOKEN:-${SECRET_KEY}}'
       CODE_RUNNER_IMAGE: '${CODE_RUNNER_IMAGE:-schoolwork2-python-runner:4.5.7}'
       CODE_RUNNER_NAMESPACE: '${COMPOSE_PROJECT_NAME:-schoolwork2}'
@@ -101,6 +104,7 @@ services:
     container_name: schoolnet_postgres
     restart: unless-stopped
     environment:
+      TZ: '${TZ:-Europe/Kyiv}'
       POSTGRES_DB: ${POSTGRES_DB:-schoolnet_db}
       POSTGRES_USER: ${POSTGRES_USER:-schoolnet_user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-schoolnet_password}
@@ -122,6 +126,7 @@ services:
     container_name: schoolnet_updater
     restart: unless-stopped
     environment:
+      TZ: '${TZ:-Europe/Kyiv}'
       SCHOOLWORK_ROOT: /workspace
       ENV_FILE: /workspace/.env
       COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME:-schoolwork2}

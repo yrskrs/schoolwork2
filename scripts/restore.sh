@@ -2,6 +2,7 @@
 # Verify first; pause BOTH writers; restore SQL atomically; install staged uploads.
 set -euo pipefail
 umask 077
+export TZ="${TZ:-Europe/Kyiv}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 TARGET_BACKUP='' AUTO_CONFIRM=0 VERIFY_ONLY=0 NO_SAFETY_BACKUP=0 LEGACY=()

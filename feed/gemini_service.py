@@ -10148,7 +10148,7 @@ def analyze_assignment_task_understanding(assignment, force_refresh=False, sourc
                     'status': 'success',
                     'data': cached_data,
                     'cached': True,
-                    'updated_at': assignment.ai_task_understanding_updated_at.strftime('%d.%m.%Y о %H:%M') if assignment.ai_task_understanding_updated_at else None
+                    'updated_at': timezone.localtime(assignment.ai_task_understanding_updated_at).strftime('%d.%m.%Y о %H:%M') if assignment.ai_task_understanding_updated_at else None
                 }
         except Exception:
             pass
@@ -10569,5 +10569,5 @@ def analyze_assignment_task_understanding(assignment, force_refresh=False, sourc
         'status': 'success',
         'data': result_data,
         'cached': False,
-        'updated_at': assignment.ai_task_understanding_updated_at.strftime('%d.%m.%Y о %H:%M') if assignment.ai_task_understanding_updated_at else None
+        'updated_at': timezone.localtime(assignment.ai_task_understanding_updated_at).strftime('%d.%m.%Y о %H:%M') if assignment.ai_task_understanding_updated_at else None
     }

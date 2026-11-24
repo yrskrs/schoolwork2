@@ -2,6 +2,7 @@
 # Fast-forward code, take a verified snapshot, then replace both application services.
 set -euo pipefail
 umask 077
+export TZ="${TZ:-Europe/Kyiv}"
 update_main() {
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"

@@ -1,6 +1,7 @@
 FROM ubuntu:24.04
-ENV DEBIAN_FRONTEND=noninteractive PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
+ENV DEBIAN_FRONTEND=noninteractive PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 TZ=Europe/Kyiv
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    tzdata \
     python3 python3-venv python3-tk python3-pil xvfb openbox xdotool \
     fonts-dejavu-core libgl1 libegl1 libxkbcommon-x11-0 libxcb-cursor0 \
     libxrender1 libxi6 libsm6 libxext6 libasound2t64 ca-certificates \

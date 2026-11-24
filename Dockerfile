@@ -1,8 +1,9 @@
 # Використовуємо офіційний легкий образ Python
 FROM python:3.12-slim
 
-# Встановлюємо системні залежності, необхідні для psycopg та деяких пакетів обробки файлів
+# Встановлюємо системні залежності, необхідні для psycopg, обробки файлів та локального часового поясу
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    tzdata \
     build-essential \
     libpq-dev \
     gcc \
@@ -12,14 +13,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     mdbtools \
     fonts-dejavu-core \
     fonts-liberation \
+    && ln -snf /usr/share/zoneinfo/Europe/Kyiv /etc/localtime \
+    && echo "Europe/Kyiv" > /etc/timezone \
     && rm -rf /var/lib/apt/lists/*
 
 # Налаштовуємо робочу директорію
 WORKDIR /app
 
-# Налаштування Python
+# Налаштування Python та часового поясу
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
+ENV TZ=Europe/Kyiv
 
 # Копіюємо залежності локального запуску та фіксований серверний lock-файл
 COPY requirements.txt requirements-docker.lock /app/
@@ -34,7 +38,7 @@ COPY . /app/
 RUN mkdir -p /app/media /app/staticfiles /app/logs
 RUN chmod -R 755 /app/media /app/staticfiles /app/logs
 ARG VCS_REF=local
-ARG APP_VERSION=4.13.2
+ARG APP_VERSION=4.13.3
 ARG SOURCE_DIGEST=unknown
 RUN python -c 'import json,os,pathlib; pathlib.Path("/app/build-info.json").write_text(json.dumps({"revision":os.environ.get("VCS_REF","local"),"source_digest":os.environ.get("SOURCE_DIGEST","unknown")}))'
 

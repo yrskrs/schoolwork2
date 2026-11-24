@@ -35,7 +35,7 @@ import logging
 from .assignment_ai_policy import export_ai_policy, import_ai_policy
 from .outside_students import teaching_classes
 from functools import wraps
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone as dt_timezone
 
 # Concurrency control for background preview generation (LibreOffice & pdftoppm)
 _PREVIEW_LOCK = threading.Lock()
@@ -6320,7 +6320,7 @@ def teacher_students_export(request):
             pass
 
     response = HttpResponse(content_type='text/csv; charset=utf-8-sig')
-    filename = f"students_list_{class_suffix}_{timezone.now().strftime('%Y%m%d')}.csv"
+    filename = f"students_list_{class_suffix}_{timezone.localtime(timezone.now()).strftime('%Y%m%d')}.csv"
     response['Content-Disposition'] = f'attachment; filename="{filename}"'
 
     writer = csv.writer(response, delimiter=';', quotechar='"', quoting=csv.QUOTE_MINIMAL)
@@ -6954,7 +6954,7 @@ def teacher_reports_pdf(request):
     generate_teacher_report_pdf(buffer, report_meta, list(submissions), mode=mode)
     buffer.seek(0)
 
-    filename = f"zvit_otsinok_{timezone.now().strftime('%Y%m%d_%H%M')}.pdf"
+    filename = f"zvit_otsinok_{timezone.localtime(timezone.now()).strftime('%Y%m%d_%H%M')}.pdf"
     response = HttpResponse(buffer.getvalue(), content_type='application/pdf')
     response['Content-Disposition'] = f'attachment; filename="{filename}"'
     return response
@@ -6977,8 +6977,8 @@ def archive_old_activity_logs(days=30):
     logs_dir = os.path.join(settings.MEDIA_ROOT, 'logs_archives')
     os.makedirs(logs_dir, exist_ok=True)
 
-    min_date = old_logs[0].timestamp.strftime("%Y%m%d")
-    max_date = old_logs[-1].timestamp.strftime("%Y%m%d")
+    min_date = timezone.localtime(old_logs[0].timestamp).strftime("%Y%m%d")
+    max_date = timezone.localtime(old_logs[-1].timestamp).strftime("%Y%m%d")
     filename = f"Архів_логів_{min_date}_{max_date}.csv"
     filepath = os.path.join(logs_dir, filename)
 
@@ -7022,7 +7022,7 @@ def get_logs_archives_list():
             if f.endswith('.csv'):
                 fpath = os.path.join(logs_dir, f)
                 fsize = os.path.getsize(fpath)
-                mtime = datetime.fromtimestamp(os.path.getmtime(fpath))
+                mtime = timezone.localtime(datetime.fromtimestamp(os.path.getmtime(fpath), tz=dt_timezone.utc))
                 archives_list.append({
                     'filename': f,
                     'size': f"{round(fsize/1024, 1)} КБ" if fsize > 1024 else f"{fsize} Б",
@@ -7167,7 +7167,7 @@ def get_master_school_archive_info():
     master_zip_path = os.path.join(settings.MEDIA_ROOT, 'school_archives', "Архів_робіт_школи.zip")
     if os.path.exists(master_zip_path):
         f_size = os.path.getsize(master_zip_path)
-        f_time = datetime.fromtimestamp(os.path.getmtime(master_zip_path))
+        f_time = timezone.localtime(datetime.fromtimestamp(os.path.getmtime(master_zip_path), tz=dt_timezone.utc))
         files_count = 0
         try:
             with zipfile.ZipFile(master_zip_path, 'r') as zf:
@@ -9007,7 +9007,7 @@ def teacher_description_history(request):
     return JsonResponse({'status': 'success', 'revisions': [
         {
             'id': item.pk,
-            'created_at': item.created_at.strftime('%d.%m.%Y %H:%M'),
+            'created_at': timezone.localtime(item.created_at).strftime('%d.%m.%Y %H:%M'),
             'model_used': item.model_used,
             'prompt_version': item.prompt_version,
             'fact_warnings': item.fact_warnings or [],

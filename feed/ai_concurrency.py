@@ -4,6 +4,7 @@ import logging
 import time
 from typing import Dict, Optional, Tuple
 from django.core.cache import caches
+from django.utils import timezone
 
 logger = logging.getLogger(__name__)
 
@@ -132,7 +133,7 @@ def record_model_context_limit(provider: str, model: str, error_message: str, es
             'model': model,
             'error': clean_err,
             'est_tokens': est_tokens or 0,
-            'flagged_at': time.strftime('%d.%m.%Y %H:%M'),
+            'flagged_at': timezone.localtime(timezone.now()).strftime('%d.%m.%Y %H:%M'),
         }
         cache.set(LIMIT_KEY, limits, timeout=86400 * 30)
     except Exception as e:

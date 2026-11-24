@@ -3960,6 +3960,14 @@ class AISettings(models.Model):
 # ЖУРНАЛ ПОМИЛОК ТА ЗБОЇВ ШІ (AI ERROR LOG)
 # ═══════════════════════════════════════════════════════════════════════════════
 
+def _format_local_dt(dt, fmt):
+    """Format an aware or naive datetime in the configured Django local timezone."""
+    if not dt:
+        return ''
+    local_dt = timezone.localtime(dt) if timezone.is_aware(dt) else dt
+    return local_dt.strftime(fmt)
+
+
 class AIErrorLog(models.Model):
     """
     Журнал збоїв та помилок ШІ при зверненні до API.
@@ -4009,7 +4017,7 @@ class AIErrorLog(models.Model):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f"[{self.created_at.strftime('%d.%m %H:%M')}] {self.model_name or self.provider}: {self.error_type or self.error_message[:40]}"
+        return f"[{_format_local_dt(self.created_at, '%d.%m %H:%M')}] {self.model_name or self.provider}: {self.error_type or self.error_message[:40]}"
 
 
 class AIRequestLog(models.Model):
@@ -4037,7 +4045,7 @@ class AIRequestLog(models.Model):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f"{self.model_name} [{self.status_code}] - {self.total_tokens} токенів ({self.created_at.strftime('%d.%m %H:%M:%S')})"
+        return f"{self.model_name} [{self.status_code}] - {self.total_tokens} токенів ({_format_local_dt(self.created_at, '%d.%m %H:%M:%S')})"
 
 
 class AIGenerationThrottle(models.Model):
@@ -4064,7 +4072,7 @@ class AIGenerationThrottle(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.teacher_id}:{self.action} @ {self.created_at:%d.%m %H:%M:%S}"
+        return f"{self.teacher_id}:{self.action} @ {_format_local_dt(self.created_at, '%d.%m %H:%M:%S')}"
 
 
 class AIGenerationRateWindow(models.Model):
@@ -4166,7 +4174,7 @@ class AIErrorReport(models.Model):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f"Звіт #{self.pk} ({self.created_at.strftime('%d.%m.%Y %H:%M')}) — {self.verdict_title or self.verdict}"
+        return f"Звіт #{self.pk} ({_format_local_dt(self.created_at, '%d.%m.%Y %H:%M')}) — {self.verdict_title or self.verdict}"
 
 
 

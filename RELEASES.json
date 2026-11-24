@@ -1,5 +1,17 @@
 [
   {
+    "version": "4.13.3",
+    "date": "2026-11-24",
+    "title": "[SYS] Фіксація часового поясу Europe/Kyiv у контейнерах і логах, прискорення та прогрес бекапу при оновленні",
+    "changes": [
+      "Єдиний часовий пояс Europe/Kyiv у Docker-образах і сервісах: у Dockerfile, docker/Dockerfile.updater та runner/Dockerfile додано tzdata й TZ=Europe/Kyiv, у compose.yaml передано TZ=${TZ:-Europe/Kyiv} усім службам (задокументовано в .env.example).",
+      "Локальний час у логах оновлювача та бекапах: у scripts/updater_service.py (_local_timestamp) і скриптах backup.sh, restore.sh, update.sh забезпечено формування часу в Europe/Kyiv замість UTC.",
+      "Локальний час у Python-моделях і представленнях: у feed/models.py (_format_local_dt для __str__ моделей AIErrorLog, AIRequestLog, AIGenerationThrottle, AIErrorReport), feed/ai_concurrency.py (flagged_at), feed/views.py та feed/gemini_service.py прямі .strftime() переведено на timezone.localtime(...).",
+      "Надійність і швидкість scripts/backup.sh під час оновлень: додано покрокове логування, прискорену архівацію /app/media через gzip -1, < /dev/null для docker compose команд, очищення .partial-залишків при збої, збільшено таймаути backup.sh та restore.sh у updater_service.py з 600 до 1800 с, а також інформативну назву скрипта в повідомленні таймауту.",
+      "Автотести: додано test_log_model_str_formats_in_local_kyiv_timezone у feed.tests_ai_error_reports та перевірено набір тестів оновлень і ШІ."
+    ]
+  },
+  {
     "version": "4.13.2",
     "date": "2026-11-24",
     "title": "[UI] Виправлення кнопки тесту моделей на вкладці «Моделі» та підтримка кореневого URL локального ШІ",

@@ -302,3 +302,20 @@ class AIErrorReportsAndModelStatsTests(TestCase):
         response = self.client.get(url, {'report_id': report.pk, 'report_download': 'markdown'})
         self.assertEqual(response.status_code, 302)
         self.assertNotIn(report.report_text, response.content.decode())
+
+    def test_log_model_str_formats_in_local_kyiv_timezone(self):
+        from datetime import datetime, timezone as dt_timezone
+        from .models import AIRequestLog
+
+        utc_time = datetime(2026, 11, 24, 18, 5, 30, tzinfo=dt_timezone.utc)
+        err = AIErrorLog.objects.create(provider='custom', model_name='local-model', error_message='Test')
+        req = AIRequestLog.objects.create(provider='custom', model_name='local-model', status_code=200)
+        rep = AIErrorReport.objects.create(report_text='Test report', verdict_title='OK')
+        for model, pk in ((AIErrorLog, err.pk), (AIRequestLog, req.pk), (AIErrorReport, rep.pk)):
+            model.objects.filter(pk=pk).update(created_at=utc_time)
+        err.refresh_from_db()
+        req.refresh_from_db()
+        rep.refresh_from_db()
+        self.assertIn('24.11 20:05', str(err))
+        self.assertIn('24.11 20:05:30', str(req))
+        self.assertIn('24.11.2026 20:05', str(rep))
