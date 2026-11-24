@@ -383,8 +383,53 @@ PY
 
 ---
 
+## 15. Локальний профіль ШІ (4.17.0)
 
-## 15. Додаток: команди перевірок
+Після відмови від A+В (він не вкладається в 300 с на цій відеокарті) зроблено варіант **Б в окремому місці** — на рівні локального підключення, з автоматичним визначенням локальності:
+
+| Що | Де | Деталі |
+| --- | --- | --- |
+| Визначення локального ШІ | `feed/ai_local.py` | `localhost`, `127.0.0.1`, `::1`, `host.docker.internal`, `*.local/.lan/.internal/.home`, приватні `10/8`, `172.16/12`, `192.168/16`, link-local. Лише `provider='custom'`; учитель може явно вибрати «локальна / не локальна / автоматично» |
+| Ліміти на підключенні | `feed/ai_connections.py`, `feed/models.py` | `local_deadline` 600 с (120–1800, ≤ `AI_JOB_TIMEOUT−60`), `local_timeout` 300 с (60–600), `local_image_px` 512–1024 |
+| Розширення бюджету | `feed/gemini_service.py`, `feed/ai_transport.py`, `feed/ai_scheduler.py` | перед спробою локальної моделі дедлайн = now + 600 с, таймаут запиту = 300 с, lease слота = весь бюджет; хмарні — 300/50 с без змін |
+| Швидший режим | `feed/ai_payload.py` | `optimize_media(..., image_px)`; для `custom` розмір більше не зашитий у 1024 |
+| Інтерфейс | `ai_connections.html`, `viewer_ai_panel.html`, `ai_jobs.js` | блок «Локальна модель» у картці підключення; «локальна, ліміт N хв» у виборі моделі для роботи; підказка під списком |
+| Жорсткий таймаут | `schoolnet/settings.py`, `.env.example`, `docs/guides/AI_CHECKING.md` | `AI_JOB_TIMEOUT` 600 → 900 с |
+
+**Виміри прискорення** (RTX 4060, `qwen3-vl-8b-instruct`, 6 сторінок, LM Studio, контекст 22 016): 1024 px — 4 305 токенів, ≈108 с; 768 px — 2 619 токенів, ≈58 с; 512 px — 1 179 токенів, ≈20 с; генерація ≈13 ток./с. Тобто «швидший режим» — це налаштування розміру сторінки, а не зміна моделі.
+
+**Тести:** `feed.tests_ai_local` (13), оновлений `feed.tests_ai_time_budget` (локальна перевірка отримує 600/300, публічний custom — 240), `optimize_media` з `image_px`. Повний набір — 1640 тестів, 10 падінь лише середовищні (Windows: LibreOffice/poppler/symlink/chmod).
+
+## 16. Розгортання 4.17.0 на 192.168.1.13
+
+Сервер: `yrsadmin@192.168.1.13`, проєкт `/home/yrsadmin/schoolwork2`, Compose v5.8.0, 66 ГБ вільного диска. До оновлення — 4.14.3 (`6930ce0`).
+
+**Порядок і безпека:**
+
+1. Переддеплойна перевірка на сервері: `bash -n scripts/backup.sh`, `python3 -m py_compile scripts/updater_service.py`, `PYTHONPATH=. python3 scripts/test_updater_service.py` (4 OK), `scripts/test_update_helpers.py` (OK), `scripts/test_updater_jobs.py` (27 OK). Це закрило ризик неперевірених змін оновлювача.
+2. Окремий контрольний бекап `backups/2026-11-24_23-54-35_aC9bMn`: **2 хв 02 с**, перевірка `gzip -t` + `sha256sum` паралельно, служби піднялися здорові.
+3. `bash scripts/update.sh` — **4 хв 37 с** разом із другим бекапом. Збірка образу повністю з кешу: 13 кроків, сума `DONE` — **5 с**, експорт шару 1.3 с. Тобто час оновлення майже весь — це бекап (~2 хв) + зупинка/старт/healthcheck (~1.5–2 хв), а не компіляція.
+4. `update.sh` сам: бекап → fast-forward → build → stop → `up --wait` → healthcheck → `migrate --check` → `verify_release.py` → очищення образів (видалено 1 старий, залишено 5).
+
+**Результат:**
+
+| Перевірка | Результат |
+| --- | --- |
+| `/healthz/` | `{"status":"ok","version":"4.17.0","revision":"b5a13001…","source_digest":"12e6916c…"}` |
+| `docker compose ps` | app, ai_worker, postgres, updater, code_runner — healthy |
+| `manage.py migrate --check` | OK (міграція `0085` застосована) |
+| Дані: живі vs відновлені з бекапу | assignment `101=101`, submission `472=472`, submissionfile `454=454`, student `296=296`, user `1=1` |
+| Медіа: контейнер vs архів | `3265 = 3265` файлів |
+| Сторінка `/teacher/view-file/617/?assignment=104&from=assignment_submissions` | HTTP 200 (0.4 с), 224 КБ; є назва завдання, учень «Юрченко Максим», файл `дід.xlsx`, без traceback |
+| Локальні моделі в перевірці | `qwen3-14b` і `qwen3-vl-8b-instruct` (LocalAI, `192.168.1.12`) показані як «локальна, ліміт 10 хв» |
+| Налаштування → Підключення | блок «Локальна модель», «Виявлено локальну адресу», поля `600 / 300 / 1024` |
+| `AI_JOB_TIMEOUT` / `AI_REQUEST_DEADLINE` у застосунку | `900` / `300` |
+
+Для перевірки сторінки використано **тимчасову сесію** вчителя (`yrsadmin`), створену через Django shell; після перевірки її **видалено** (`session deleted: True`). Оцінки, файли й завдання не змінювалися; з даних змінилася лише міграція `0085` (`allow_manual_student_entry=True` для наявних завдань, за рішенням власника).
+
+---
+
+## 17. Додаток: команди перевірок
 
 ```bash
 # локально (Windows)
