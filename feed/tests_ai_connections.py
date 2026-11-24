@@ -159,6 +159,38 @@ class AIConnectionsTests(TestCase):
         public = json.loads(page.get_element_by_id('ai-connections-data').text)
         self.assertFalse(any('api_key' in item for item in public))
 
+    def test_ai_connections_data_is_present_on_models_and_statistics_tabs(self):
+        self.settings = save_connection(self.settings.pk, {
+            'connection_provider': 'custom',
+            'connection_url': 'http://192.168.1.12:1234',
+            'connection_model': 'local-model',
+        })
+        conn_id = self.settings.provider_connections[-1]['id']
+        for section in ('models', 'statistics'):
+            response = self.client.get(reverse('teacher_settings'), {'tab': 'ai', 'ai_section': section})
+            self.assertEqual(response.status_code, 200)
+            page = html.fromstring(response.content)
+            public = json.loads(page.get_element_by_id('ai-connections-data').text)
+            self.assertEqual([c['id'] for c in public], [conn_id])
+            self.assertFalse(any('api_key' in item for item in public))
+        models_response = self.client.get(reverse('teacher_settings'), {'tab': 'ai', 'ai_section': 'models'})
+        self.assertContains(models_response, conn_id)
+
+    def test_custom_provider_endpoint_handles_root_and_versioned_urls(self):
+        from .gemini_service import get_provider_endpoint
+        self.assertEqual(
+            get_provider_endpoint('custom', model_name='local-model', custom_url='http://192.168.1.12:1234')[0],
+            'http://192.168.1.12:1234/v1/chat/completions',
+        )
+        self.assertEqual(
+            get_provider_endpoint('custom', model_name='local-model', custom_url='http://192.168.1.12:1234/v1')[0],
+            'http://192.168.1.12:1234/v1/chat/completions',
+        )
+        self.assertEqual(
+            get_provider_endpoint('custom', model_name='local-model', custom_url='http://192.168.1.12:1234/custom')[0],
+            'http://192.168.1.12:1234/custom/chat/completions',
+        )
+
     @patch('feed.gemini_service.call_ai_api', return_value=(200, 'Підключено', '', {}))
     def test_connection_test_uses_exact_selected_key_without_client_copy(self, call):
         self.add_connection('groq', key='first-key')

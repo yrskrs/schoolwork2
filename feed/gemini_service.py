@@ -287,7 +287,7 @@ def get_provider_endpoint(provider, model_name=None, api_key=None, custom_url=No
     elif provider == 'custom':
         base = (custom_url or 'http://localhost:11434/v1').strip().rstrip('/')
         if not base.endswith('/chat/completions'):
-            url = f"{base}/chat/completions"
+            url = f"{base}/v1/chat/completions" if not urlparse(base).path else f"{base}/chat/completions"
         else:
             url = base
     else:

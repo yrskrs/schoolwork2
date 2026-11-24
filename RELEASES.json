@@ -1,5 +1,16 @@
 [
   {
+    "version": "4.13.2",
+    "date": "2026-11-24",
+    "title": "[UI] Виправлення кнопки тесту моделей на вкладці «Моделі» та підтримка кореневого URL локального ШІ",
+    "changes": [
+      "Виправлення тестування моделей на вкладках «Моделі» та «Статистика»: перенесено json_script ai-connections-data з компонента ai_connections.html на загальний рівень вкладки ШІ в settings.html (з оновленням ?ui=20261124 для ai_model_controls.js), що усунуло хибну помилку «Оберіть підключення та натисніть «Тест» біля моделі на вкладці «Моделі»». ",
+      "Запасний ідентифікатор підключення у testModelDirect: у static/js/ai_model_controls.js додано fallback на явно переданий connectionId, якщо список підключень у DOM відсутній.",
+      "Автоматичний шлях /v1/chat/completions для власного API (custom): у feed/gemini_service.py (get_provider_endpoint) для адрес без шляху (наприклад, http://192.168.1.12:1234 у LM Studio/Ollama) автоматично додається /v1/chat/completions зі збереженням сумісності з URL, які вже містять /v1 або власний шлях.",
+      "Регресійні автотести: додано перевірки наявності ai-connections-data на вкладках models і statistics та побудови endpoint для кореневих, /v1 і кастомних URL у feed.tests_ai_connections."
+    ]
+  },
+  {
     "version": "4.13.1",
     "date": "2026-11-15",
     "title": "[UI] Актуалізація cache-buster стилів, мобільного брейкпоінта та HTTPS-детекції cookie",

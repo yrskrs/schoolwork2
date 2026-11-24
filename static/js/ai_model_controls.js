@@ -36,12 +36,14 @@
         finally {clearTimeout(timer); if (button) {button.disabled = false; button.textContent = original; button.removeAttribute('aria-busy');}}
     }
     window.testModelDirect = function (name, button, provider, connectionId) {
-        const candidates = savedConnections().filter(item => item.provider === provider && (!connectionId || item.id === connectionId));
+        const connections = savedConnections();
+        const candidates = connections.filter(item => item.provider === provider && (!connectionId || item.id === connectionId));
         const result = resultFor(button);
-        if (candidates.length !== 1) {
+        const resolvedId = candidates.length === 1 ? candidates[0].id : (connectionId && !connections.length ? connectionId : '');
+        if (!resolvedId) {
             status(result, 'Оберіть підключення та натисніть «Тест» біля моделі на вкладці «Моделі».', 'error'); return;
         }
-        runTest({connection_id: candidates[0].id, provider: provider, model_name: name}, button, result);
+        runTest({connection_id: resolvedId, provider: provider, model_name: name}, button, result);
     };
     window.filterCatalogByProvider = function (providerName) {
         const sections = document.querySelectorAll('[data-catalog-provider]');

@@ -645,6 +645,7 @@
             <div id="tab-section-ai" class="settings-tab-pane" data-ai-settings data-ai-section="{{ ai_section }}" style="{% if active_tab != 'ai' %}display:none;{% endif %}">
 
                 {% include 'feed/components/ai_settings_tabs.html' %}
+                {{ ai_connections|json_script:'ai-connections-data' }}
 
                 {% if ai_section == 'connection' %}
                 <section id="ai-panel-connection" class="ai-settings-panel" data-ai-panel="connection" role="tabpanel" aria-labelledby="ai-tab-connection" tabindex="0" {% if ai_section != 'connection' %}hidden{% endif %}>
@@ -1313,7 +1314,7 @@
 {% block extra_scripts %}
 <script src="{% static 'js/ai_settings.js' %}"></script>
 <script src="{% static 'js/ai_usage_chart.js' %}?ui=20261018-r4"></script>
-<script src="{% static 'js/ai_model_controls.js' %}"></script>
+<script src="{% static 'js/ai_model_controls.js' %}?ui=20261124"></script>
 <script>
 // Видалення шаблону критеріїв (як зі списку, так і з модального вікна)
 function deleteCriteriaPreset(id, name) {
