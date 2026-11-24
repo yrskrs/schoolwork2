@@ -6613,10 +6613,11 @@ def evaluate_media_in_batches(prompt_text, system_prompt, media, *, provider, ap
             batch_prompt = (prompt_text + f"\n\n[ПАРТІЯ {index}/{len(chunks)}] "
                             "Оцінюй лише надані сторінки. Пункти, яких немає на цих сторінках, "
                             "познач unverifiable; не вигадуй доказів і не роби висновків про весь файл.")
+            batch_out_budget = min(max_output_tokens, 1500) if provider == 'custom' else max_output_tokens
             batch_status, batch_text, batch_error, batch_data = call_ai_api(
                 prompt_text=batch_prompt, system_prompt=system_prompt, inline_media=chunk,
                 provider=provider, api_key=api_key, model_name=model_name, custom_url=custom_url,
-                temperature=0.0, max_output_tokens=max_output_tokens, timeout=timeout,
+                temperature=0.0, max_output_tokens=batch_out_budget, timeout=timeout,
                 json_mode=True, thinking_budget=thinking_budget, connection_id=connection_id, seed=seed)
             parsed = (extract_json_from_text(batch_text, allow_partial=False)
                       if batch_status == 200 and batch_text else None)
@@ -6628,25 +6629,32 @@ def evaluate_media_in_batches(prompt_text, system_prompt, media, *, provider, ap
         finally:
             close_old_connections()
 
+    from django.conf import settings as django_settings
     batch_results = []
     runnable = []
     deadline = evaluation_deadline.get()
-    for index, chunk in enumerate(chunks, 1):
-        if deadline is not None and _time.monotonic() >= deadline:
-            batch_results.append({'index': index, 'status': 0, 'media': len(chunk),
-                                  'parsed': None, 'error': 'deadline', 'text': None, 'data': {}})
-            continue
-        emit_event('batch_start', f'Партія {index}/{len(chunks)}: сторінок {len(chunk)}.',
-                   provider=provider, model=model_name)
-        runnable.append((index, chunk))
-    if runnable:
-        from concurrent.futures import ThreadPoolExecutor
-        from django.conf import settings as django_settings
-        import contextvars
-        workers = 1 if provider == 'custom' else max(1, min(len(runnable), int(getattr(django_settings, 'AI_BATCH_CONCURRENCY', 3))))
-        if workers == 1:
-            batch_results.extend(run_batch(index, chunk) for index, chunk in runnable)
-        else:
+    workers = 1 if provider == 'custom' else max(1, min(len(chunks), int(getattr(django_settings, 'AI_BATCH_CONCURRENCY', 3))))
+    if workers == 1:
+        for index, chunk in enumerate(chunks, 1):
+            if deadline is not None and _time.monotonic() >= deadline:
+                batch_results.append({'index': index, 'status': 0, 'media': len(chunk),
+                                      'parsed': None, 'error': 'deadline', 'text': None, 'data': {}})
+                continue
+            emit_event('batch_start', f'Партія {index}/{len(chunks)}: сторінок {len(chunk)}.',
+                       provider=provider, model=model_name)
+            batch_results.append(run_batch(index, chunk))
+    else:
+        for index, chunk in enumerate(chunks, 1):
+            if deadline is not None and _time.monotonic() >= deadline:
+                batch_results.append({'index': index, 'status': 0, 'media': len(chunk),
+                                      'parsed': None, 'error': 'deadline', 'text': None, 'data': {}})
+                continue
+            emit_event('batch_start', f'Партія {index}/{len(chunks)}: сторінок {len(chunk)}.',
+                       provider=provider, model=model_name)
+            runnable.append((index, chunk))
+        if runnable:
+            from concurrent.futures import ThreadPoolExecutor
+            import contextvars
             contexts = [contextvars.copy_context() for _ in runnable]
             with ThreadPoolExecutor(max_workers=workers) as pool:
                 futures = [pool.submit(contexts[position].run, run_batch, index, chunk)
@@ -7036,41 +7044,53 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
             record_model_context_limit
         )
 
+        provider_media = list(inline_media or [])
+        if c_provider == 'custom' and len(provider_media) > 4:
+            # Local GPUs with limited context/time budgets rely on already-extracted
+            # text for bulky reference slide decks instead of encoding dozens of clipart/slide pages.
+            focused_media = [
+                item for item in provider_media
+                if not (isinstance(item, dict) and item.get('evidence_role') == 'reference' and item.get('text_available'))
+            ]
+            if focused_media:
+                provider_media = focused_media
+
         provider_prompt, provider_system = prompt_content, system_instruction
         if c_provider in ('gemini', 'groq', 'openrouter', 'custom'):
             provider_prompt, provider_system = prompt_compact, system_compact
 
         from .ai_payload import estimate_text_tokens
-        media_tokens_per_item = 2200 if c_provider == 'custom' else (1500 if clean_model_name(c_model, c_provider) == 'qwen/qwen3.8-27b' else 1000)
+        media_tokens_per_item = 1300 if c_provider == 'custom' else (1500 if clean_model_name(c_model, c_provider) == 'qwen/qwen3.8-27b' else 1000)
         from .ai_payload import media_image_units
         # Gemini and native-PDF OpenRouter receive one PDF object; other
         # providers receive one image per converted page.
         convert_pdf = not (c_provider == 'gemini' or (c_provider == 'openrouter'
                           and clean_model_name(c_model, c_provider) != 'openrouter/free'))
-        current_images_count = media_image_units(inline_media, convert_pdf)
+        current_images_count = media_image_units(provider_media, convert_pdf)
         has_other_multimodal = any(
             (get_model_capabilities(c['model'], c['provider']).get('max_images') is None or
              get_model_capabilities(c['model'], c['provider']).get('max_images', 0) >= current_images_count) and
             get_model_capabilities(c['model'], c['provider']).get('supports_vision', True)
             for i, c in enumerate(attempts_configs) if i > cfg_idx
         )
+        # No larger multimodal model in the queue: split pages instead of refusing.
         batching_limit = max_images_allowed
         batching_plan = bool(max_images_allowed is not None and current_images_count > max_images_allowed
                              and model_supports_vision and not has_other_multimodal)
         text_est_tokens = estimate_text_tokens(provider_prompt + provider_system)
-        est_tokens = text_est_tokens + len(inline_media or []) * media_tokens_per_item
+        est_tokens = text_est_tokens + len(provider_media) * media_tokens_per_item
         if (not batching_plan and c_provider == 'custom' and model_supports_vision
                 and current_images_count > 1 and est_tokens > model_context_tokens
                 and text_est_tokens + media_tokens_per_item < model_context_tokens):
             image_budget = max(0, int(model_context_tokens * 0.65) - text_est_tokens)
-            token_batch_limit = max(1, min(4, image_budget // media_tokens_per_item))
+            token_batch_limit = max(1, min(2, image_budget // media_tokens_per_item))
             if token_batch_limit < current_images_count:
                 batching_plan = True
                 batching_limit = token_batch_limit
 
         if caps.get('media_policy') == 'text_only' and (
                 current_images_count or any((item.get('mime_type') or '').startswith(('audio/', 'video/'))
-                                            for item in inline_media)):
+                                            for item in provider_media)):
             skip_msg = (f'{c_provider}/{c_model}: у цій конфігурації модель призначена лише для текстових '
                         f'робіт (Free ITPM 7 000); візуальні докази передайте моделі з більшим бюджетом.')
             emit_event('model_skipped', skip_msg, provider=c_provider, model=c_model,
@@ -7230,14 +7250,14 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                 batch_failed = []
                 if batching_plan:
                     status_code, raw_text, err_msg, raw_data, batch_meta = evaluate_media_in_batches(
-                        provider_prompt, provider_system, inline_media,
+                        provider_prompt, provider_system, provider_media,
                         provider=c_provider, api_key=c_key, model_name=c_model, custom_url=c_url,
                         max_images=batching_limit, max_output_tokens=output_budget,
                         timeout=50 if c_provider == 'gemini' else (120 if c_provider == 'custom' else (90 if router_retry else 35)),
                         thinking_budget=thinking_budget_val, connection_id=c_conn_id, seed=42)
                     from .ai_payload import payload_manifest as _payload_manifest
                     payload_info.update(_payload_manifest(
-                        provider_prompt, provider_system, inline_media, c_provider, c_model))
+                        provider_prompt, provider_system, provider_media, c_provider, c_model))
                     payload_info['batching'] = {
                         'limit': batch_meta.get('limit'), 'batch_count': batch_meta.get('batch_count'),
                         'synthesis_status': batch_meta.get('synthesis_status')}
@@ -7248,7 +7268,7 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                     status_code, raw_text, err_msg, raw_data = call_ai_api(
                         prompt_text=provider_prompt,
                         system_prompt=provider_system,
-                        inline_media=inline_media,
+                        inline_media=provider_media,
                         provider=c_provider,
                         api_key=c_key,
                         model_name=c_model,
@@ -7310,26 +7330,26 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                     time.sleep(delay)
                     continue
 
-                if (c_provider == 'custom' and not batching_plan and len(inline_media or []) > 1
+                if (c_provider == 'custom' and not batching_plan and len(provider_media) > 1
                         and is_context_limit_error(status_code, str(err_msg or ''))):
                     from .ai_concurrency import parse_context_limit_tokens
                     parsed_ctx, parsed_prompt_toks = parse_context_limit_tokens(str(err_msg or ''))
                     actual_ctx = parsed_ctx or model_context_tokens
                     actual_prompt_toks = parsed_prompt_toks or est_tokens
-                    tokens_per_img = max(1200, (actual_prompt_toks - text_est_tokens) // max(1, len(inline_media)))
-                    recovery_limit = max(1, min(4, int(max(0, actual_ctx * 0.60 - text_est_tokens) // tokens_per_img)))
+                    tokens_per_img = max(1200, (actual_prompt_toks - text_est_tokens) // max(1, len(provider_media)))
+                    recovery_limit = max(1, min(2, int(max(0, actual_ctx * 0.60 - text_est_tokens) // tokens_per_img)))
                     recovery_out_budget = min(output_budget, max(1500, int(actual_ctx * 0.20)))
                     record_model_context_limit(c_provider, c_model, error_message=str(err_msg or ''), est_tokens=actual_ctx)
                     emit_event('retry', f'{c_provider}/{c_model}: контекст {actual_ctx} токенів; перемикаю на пакетну перевірку (по {recovery_limit} стор.).',
                                provider=c_provider, model=c_model, position=cfg_idx + 1, total=len(attempts_configs), status_code=status_code)
                     from .ai_payload import payload_manifest as _payload_manifest
                     status_code, raw_text, err_msg, raw_data, batch_meta = evaluate_media_in_batches(
-                        provider_prompt, provider_system, inline_media,
+                        provider_prompt, provider_system, provider_media,
                         provider=c_provider, api_key=c_key, model_name=c_model, custom_url=c_url,
                         max_images=recovery_limit, max_output_tokens=recovery_out_budget,
                         timeout=120, thinking_budget=thinking_budget_val, connection_id=c_conn_id, seed=42)
                     payload_info.update(_payload_manifest(
-                        provider_prompt, provider_system, inline_media, c_provider, c_model))
+                        provider_prompt, provider_system, provider_media, c_provider, c_model))
                     payload_info['batching'] = {
                         'limit': batch_meta.get('limit'), 'batch_count': batch_meta.get('batch_count'),
                         'synthesis_status': batch_meta.get('synthesis_status')}

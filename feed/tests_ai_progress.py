@@ -528,3 +528,22 @@ class EvaluationProgressTests(TestCase):
         self.assertEqual(result['status'], 'success')
         self.assertGreater(call.call_count, 2)
         self.assertEqual(get_model_context_limit('custom', 'qwen3-vl-8b-instruct')['est_tokens'], 22016)
+
+    @patch('feed.gemini_service.call_ai_api')
+    def test_custom_prunes_text_extracted_reference_slides_but_keeps_student_media(self, call):
+        from .tests_ai_payload import picture
+        self.add_connection('custom', 'qwen3-vl-8b-instruct', connection_url='http://192.168.1.12:1234')
+        student_img = dict(picture(color='blue'), source='Робота учня: 555.xlsx')
+        ref_slides = [
+            dict(picture(color=c), source=f'Матеріал вчителя: слайд {i}', evidence_role='reference', text_available=True)
+            for i, c in enumerate(('red', 'green', 'yellow', 'navy', 'purple'), 1)
+        ]
+        call.return_value = self.answer()
+        with patch('feed.gemini_service.extract_submission_content', return_value=(['Таблиця 555.xlsx'], [student_img], None)), \
+             patch('feed.ai_context.teacher_materials', return_value=([], ['Текст презентації'], ref_slides, [])):
+            result = evaluate_submission_with_gemini(self.sub)
+        self.assertEqual(result['status'], 'success')
+        call.assert_called_once()
+        sent_media = call.call_args.kwargs['inline_media']
+        self.assertEqual(len(sent_media), 1)
+        self.assertIn('555.xlsx', sent_media[0]['source'])

@@ -324,25 +324,27 @@ def optimize_media(media, provider):
     cache = evidence_cache()
     media = [dict(item) for item in media]
     optimized, seen, covered = [], {}, {}
-    if provider == 'gemini':
-        for item in media:
-            if item['mime_type'] == 'application/pdf':
-                raw = base64.b64decode(item['data'])
-                key = 'pdf-visible-images-v4-' + hashlib.sha256(raw).hexdigest()
-                signatures = cache.get(key)
-                if signatures is None:
-                    try:
-                        signatures = _pdf_covered_images(raw)
-                    except Exception:
-                        signatures = set()
-                    cache.set(key, signatures, 86400 * 7)
-                for signature in signatures:
-                    covered.setdefault(signature,item)
+    for item in media:
+        if item.get('covered_signatures'):
+            for signature in item['covered_signatures']:
+                covered.setdefault(signature, item)
+        elif provider == 'gemini' and item['mime_type'] == 'application/pdf':
+            raw = base64.b64decode(item['data'])
+            key = 'pdf-visible-images-v4-' + hashlib.sha256(raw).hexdigest()
+            signatures = cache.get(key)
+            if signatures is None:
+                try:
+                    signatures = _pdf_covered_images(raw)
+                except Exception:
+                    signatures = set()
+                cache.set(key, signatures, 86400 * 7)
+            for signature in signatures:
+                covered.setdefault(signature, item)
     allow_webp = (provider or '').lower() != 'custom'
     for item in media:
         raw = base64.b64decode(item['data'])
         digest = hashlib.sha256(raw).hexdigest()
-        key = ('lossless-ai-image-v1-' if allow_webp else 'lossless-ai-image-std-v2-') + digest
+        key = ('lossless-ai-image-v1-' if allow_webp else 'lossless-ai-image-std-v3-') + digest
         prepared = cache.get(key)
         if prepared is None:
             prepared = {'mime_type': item['mime_type'], 'data': item['data'], 'signature': digest}
@@ -359,10 +361,10 @@ def optimize_media(media, provider):
                                     prepared.update(mime_type='image/webp', data=base64.b64encode(buffer.getvalue()).decode())
                             else:
                                 # Local OpenAI-compatible backends (e.g. LM Studio) only accept PNG/JPEG
-                                # and allocate high vision token counts for very large pages.
+                                # and allocate high vision token counts above 1024px.
                                 resized = image
-                                if max(image.size) > 1280:
-                                    scale = 1280.0 / max(image.size)
+                                if max(image.size) > 1024:
+                                    scale = 1024.0 / max(image.size)
                                     resized = image.resize(
                                         (max(1, int(image.width * scale)), max(1, int(image.height * scale))),
                                         Image.Resampling.LANCZOS,
@@ -374,18 +376,19 @@ def optimize_media(media, provider):
                                         resized.convert('RGBA').save(buffer, format='PNG', optimize=True)
                                         std_mime = 'image/png'
                                     else:
-                                        resized.convert('RGB').save(buffer, format='JPEG', quality=88, optimize=True)
+                                        resized.convert('RGB').save(buffer, format='JPEG', quality=86, optimize=True)
                                         std_mime = 'image/jpeg'
                                     prepared.update(mime_type=std_mime, data=base64.b64encode(buffer.getvalue()).decode())
                 except (OSError, ValueError, Image.DecompressionBombError):
                     # A codec/optimization failure must not remove the original.
                     prepared = {'mime_type': item['mime_type'], 'data': item['data'], 'signature': digest}
             cache.set(key, prepared, 86400 * 7)
-        if item['mime_type'].startswith('image/') and prepared['signature'] in covered:
+        if item['mime_type'].startswith('image/') and not item.get('document_id') and prepared['signature'] in covered:
             owner = covered[prepared['signature']]
-            if item.get('source'):
-                owner['source'] = owner.get('source','PDF') + '\nТакож містить повне зображення: ' + item['source']
-            continue
+            if owner is not item:
+                if item.get('source'):
+                    owner['source'] = owner.get('source', 'PDF') + '\nТакож містить повне зображення: ' + item['source']
+                continue
         identity = (prepared['mime_type'],prepared['signature'])
         if identity in seen:
             previous = seen[identity]
@@ -396,6 +399,7 @@ def optimize_media(media, provider):
                     covered[signature] = previous
             continue
         entry = dict(item, mime_type=prepared['mime_type'], data=prepared['data'])
+        entry.pop('covered_signatures', None)
         optimized.append(entry)
         seen[identity] = entry
         for signature, owner in list(covered.items()):

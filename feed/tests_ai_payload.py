@@ -149,8 +149,19 @@ class MediaPayloadTests(SimpleTestCase):
         scaled = optimize_media([large], 'custom')[0]
         raw = base64.b64decode(scaled['data'])
         with Image.open(io.BytesIO(raw)) as img:
-            self.assertLessEqual(max(img.size), 1280)
+            self.assertLessEqual(max(img.size), 1024)
         self.assertEqual(scaled['mime_type'], 'image/jpeg')
+
+        import hashlib
+        from .ai_context import media_for_provider, evidence_cache
+        embed = picture(color='teal', size=(80, 60))
+        pdf_doc = document(embed)
+        pdf_digest = hashlib.sha256(base64.b64decode(pdf_doc['data'])).hexdigest()
+        evidence_cache().set('pdf-pages-' + pdf_digest, [{'mime_type': embed['mime_type'], 'data': embed['data']}], 60)
+        converted = media_for_provider([pdf_doc, embed], 'custom')
+        deduped = optimize_media(converted, 'custom')
+        self.assertEqual(len(deduped), 1)
+        self.assertNotIn('covered_signatures', deduped[0])
 
         lm_err = ('Engine protocol predict request returned 400: '
                   '{"error":{"code":400,"message":"request (67905 tokens) exceeds the available context size (22016 tokens)",'

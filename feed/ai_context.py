@@ -488,8 +488,23 @@ def media_for_provider(media, provider):
                     pages = [{'mime_type': 'image/jpeg', 'data': base64.b64encode(p.read_bytes()).decode()} for p in files]
                 evidence_cache().set(key, pages, 86400 * 7)
         document_id = hashlib.sha256(raw).hexdigest()
-        converted.extend(dict(item, **page, document_id=document_id, page_number=i, page_count=len(pages),
-                              source=f'{item.get("source", "PDF")}, сторінка {i}') for i, page in enumerate(pages, 1))
+        from .ai_payload import _pdf_covered_images
+        cov_key = 'pdf-visible-images-v4-' + document_id
+        covered_sigs = evidence_cache().get(cov_key)
+        if covered_sigs is None:
+            try:
+                covered_sigs = sorted(_pdf_covered_images(raw))
+            except Exception:
+                covered_sigs = []
+            evidence_cache().set(cov_key, covered_sigs, 86400 * 7)
+        else:
+            covered_sigs = sorted(covered_sigs)
+        for i, page in enumerate(pages, 1):
+            page_entry = dict(item, **page, document_id=document_id, page_number=i, page_count=len(pages),
+                              source=f'{item.get("source", "PDF")}, сторінка {i}')
+            if i == 1 and covered_sigs:
+                page_entry['covered_signatures'] = covered_sigs
+            converted.append(page_entry)
     return converted
 
 
