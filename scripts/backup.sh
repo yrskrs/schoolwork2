@@ -34,8 +34,6 @@ printf 'Архівуємо /app/media (gzip -1)…\n' >&2
 docker compose run --rm --no-deps -T --entrypoint tar app -I 'gzip -1' --hard-dereference -cf - -C /app/media . < /dev/null > "$BACKUP_PATH/media.tar.gz.partial"
 printf 'Перевіряємо цілісність дампу PostgreSQL…\n' >&2
 docker compose exec -T postgres pg_restore --list < "$BACKUP_PATH/database.dump.partial" > /dev/null
-printf 'Перевіряємо цілісність архіву media.tar.gz…\n' >&2
-gzip -t "$BACKUP_PATH/media.tar.gz.partial"
 mv "$BACKUP_PATH/database.dump.partial" "$BACKUP_PATH/database.dump"
 mv "$BACKUP_PATH/media.tar.gz.partial" "$BACKUP_PATH/media.tar.gz"
 git rev-parse HEAD > "$BACKUP_PATH/code-commit.txt" 2>/dev/null || echo "unknown" > "$BACKUP_PATH/code-commit.txt"
@@ -45,6 +43,19 @@ else
     APP_CONTAINER=$(docker compose ps -aq app)
     docker inspect --format '{{.Image}}' "$APP_CONTAINER" > "$BACKUP_PATH/docker-image.txt"
 fi
-(cd "$BACKUP_PATH" && sha256sum database.dump media.tar.gz > SHA256SUMS)
+# Both checks only read the same 1.4 GB archive, so run them together: the full
+# decompression and the hash used to take two complete passes over the backup.
+printf 'Перевіряємо архів media.tar.gz і контрольні суми паралельно…\n' >&2
+gzip -t "$BACKUP_PATH/media.tar.gz" &
+gzip_check=$!
+( cd "$BACKUP_PATH" && sha256sum database.dump media.tar.gz > SHA256SUMS ) &
+sha_check=$!
+verification_failed=0
+wait "$gzip_check" || verification_failed=1
+wait "$sha_check" || verification_failed=1
+if [ "$verification_failed" -ne 0 ]; then
+    printf 'Перевірка резервної копії не пройдена; копію видалено.\n' >&2
+    exit 1
+fi
 BACKUP_COMPLETE=1
 printf 'Резервна копія перевірена: %s\n' "$BACKUP_PATH"

@@ -37,6 +37,8 @@ ROOT = Path(os.environ.get('PROJECT_ROOT', Path(__file__).resolve().parent.paren
 STATUS_FILE = ROOT / 'backups/update_status.json'
 LOCK_FILE = ROOT / '.maintenance.lock'
 STATE_LOCK = threading.RLock()
+STATUS_WRITE_INTERVAL = 0.5
+_last_status_write = [0.0]
 CURRENT_STATE = {'state': 'idle', 'step': 0, 'step_name': 'Готово до роботи', 'progress': 0,
                  'logs': [], 'error': None, 'rolled_back': False, 'rollback_error': None,
                  'target_version': None, 'current_version': None, 'releases': [],
@@ -50,7 +52,18 @@ def get_current_version():
     return read_version(ROOT)
 
 
-def save_status():
+def save_status(force=True):
+    """Persist the readable status file, at most twice per second unless forced.
+
+    `docker build --progress=plain` prints thousands of lines; rewriting a JSON
+    file with up to 1500 log entries for every line burned tens of seconds and
+    hundreds of megabytes of writes per update. Step, progress and terminal
+    state changes are always written immediately.
+    """
+    now = time.monotonic()
+    if not force and now - _last_status_write[0] < STATUS_WRITE_INTERVAL:
+        return
+    _last_status_write[0] = now
     STATUS_FILE.parent.mkdir(parents=True, exist_ok=True)
     temporary = STATUS_FILE.with_suffix('.tmp')
     temporary.write_text(json.dumps(CURRENT_STATE, ensure_ascii=False, indent=2), encoding='utf-8')
@@ -60,9 +73,13 @@ def save_status():
 
 def update_state(**kwargs):
     with STATE_LOCK:
+        previous_state = CURRENT_STATE.get('state')
         CURRENT_STATE.update(kwargs)
         CURRENT_STATE['updated_at'] = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
-        save_status()
+        # Only pure log growth may be throttled; anything a person waits for is
+        # written at once and survives a restart of the service.
+        important = ({'state', 'step', 'progress', 'step_name', 'error', 'rolled_back'} & set(kwargs))
+        save_status(force=bool(important) or CURRENT_STATE.get('state') != previous_state)
 
 
 def _local_timestamp(fmt):
@@ -442,8 +459,8 @@ def execute_update_job(target_ref='origin/main', target_ver=None, releases_list=
                           'python', 'manage.py', 'check')
             deployment.dc('run', '--rm', '--no-deps', '-T', '-e', 'SKIP_INIT=1', APP_SERVICE,
                           'python', 'manage.py', 'migrate', '--noinput')
-            deployment.dc('run', '--rm', '--no-deps', '-T', '-e', 'SKIP_INIT=1', APP_SERVICE,
-                          'python', 'manage.py', 'collectstatic', '--noinput')
+            # `collectstatic` runs once inside the container command on start; a
+            # second explicit pass only duplicated the brotli/gzip compression.
         deployment.dc('up', '-d', '--no-build', '--no-deps', '--wait', '--wait-timeout', '180', *WRITERS, timeout=240)
         run_command(['python3', str(ROOT / 'scripts/configure_integration_network.py')], deployment.env, 90)
         if PROJECT == 'schooljournal':

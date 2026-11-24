@@ -104,6 +104,13 @@
             bar.append(barInner);
         }
 
+        const timer = document.createElement('p');
+        timer.className = isStudent ? 'ai-kid-timer' : 'ai-event-timer';
+        timer.setAttribute('role', 'status');
+        timer.setAttribute('aria-live', 'polite');
+        timer.style.cssText = 'margin:6px 0 2px;font-size:12px;font-weight:600;color:var(--color-text-secondary);font-variant-numeric:tabular-nums;';
+        timer.hidden = true;
+
         const details = document.createElement('details');
         const summary = document.createElement('summary');
         summary.textContent = isStudent ? '⚙️ Деталі перевірки (для допитливих)' : 'Перебіг перевірки';
@@ -114,7 +121,7 @@
         }
         const list = document.createElement('ol');
         details.append(summary, list);
-        root.append(title, status, bar, details);
+        root.append(title, status, bar, timer, details);
         root.dataset.state = 'running';
         let stages = null;
         if (isStudent) {
@@ -150,8 +157,53 @@
             });
         }
         let lastSequence = 0;
+        let deadlineAt = null;
+        let timerHandle = null;
+        function formatLeft(seconds) {
+            const total = Math.max(1, Math.round(seconds));
+            const minutes = Math.floor(total / 60);
+            const rest = total % 60;
+            return minutes ? minutes + ' хв ' + String(rest).padStart(2, '0') + ' с' : rest + ' с';
+        }
+        // The server sends a rough expected duration; the panel counts it down
+        // locally and keeps running (with an honest note) when the estimate is
+        // exceeded, so nobody has to guess whether the check is stuck.
+        function paintTimer() {
+            if (deadlineAt === null) return;
+            const left = Math.round((deadlineAt - Date.now()) / 1000);
+            timer.hidden = false;
+            if (left > 0) {
+                timer.textContent = (isStudent ? '⏳ Залишилось приблизно: ' : '⏳ Орієнтовно залишилось: ') + formatLeft(left);
+            } else {
+                timer.textContent = isStudent
+                    ? '⏳ Триває трохи довше, ніж очікували — ще працюю…'
+                    : '⏳ Перевірка триває на ' + formatLeft(-left) + ' довше за оцінку; результат з’явиться автоматично.';
+            }
+        }
+        function syncTimer(job) {
+            if (job.status === 'running' && Number.isFinite(job.eta_remaining_seconds)) {
+                deadlineAt = Date.now() + Math.max(0, job.eta_remaining_seconds) * 1000;
+                if (!timerHandle) timerHandle = setInterval(paintTimer, 1000);
+                paintTimer();
+            } else if (job.status === 'queued') {
+                deadlineAt = null;
+                timer.hidden = false;
+                timer.textContent = isStudent
+                    ? '⏳ Перевірка в черзі — почнеться автоматично.'
+                    : '⏳ Перевірка в черзі: очікує вільного працівника.';
+            }
+        }
+        function stopTimer() {
+            if (timerHandle) {
+                clearInterval(timerHandle);
+                timerHandle = null;
+            }
+            deadlineAt = null;
+            timer.hidden = true;
+        }
         return {
             update(job) {
+                syncTimer(job);
                 (job.events || []).forEach(event => {
                     if (event.sequence <= lastSequence) return;
                     const row = document.createElement('li');
@@ -175,6 +227,7 @@
             },
             finish(job) {
                 this.update(job);
+                stopTimer();
                 const success = job.ok || job.status === 'success' || job.status === 'ok';
                 root.dataset.state = success ? 'success' : 'failed';
                 if (!lastSequence) {
@@ -199,6 +252,7 @@
                 }
             },
             disconnected() {
+                stopTimer();
                 root.dataset.state = 'disconnected';
                 status.textContent = isStudent ? '📡 Ой, з’єднання перервано. Спробуй оновити сторінку.' : 'З’єднання перервано. Перевірка може тривати; оновіть сторінку для перегляду статусу.';
             }

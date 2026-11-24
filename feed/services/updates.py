@@ -127,7 +127,7 @@ def get_update_status():
     # Try updater daemon
     try:
         req = urllib.request.Request(f"{UPDATER_URL}/api/status")
-        with urllib.request.urlopen(req, timeout=2) as resp:
+        with urllib.request.urlopen(req, timeout=5) as resp:
             status = json.loads(resp.read().decode('utf-8'))
             if isinstance(status, dict):
                 return {**status, 'installed_version': installed_version}

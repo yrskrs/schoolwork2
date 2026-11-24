@@ -345,6 +345,81 @@ def _student_check_public_result(result):
     return public
 
 
+def _job_provider(job):
+    """Provider of the model that is actually running the job, if known."""
+    for event in reversed(job.events or []):
+        provider = str(event.get('provider') or '').strip()
+        if provider:
+            return provider
+    return ''
+
+
+def _job_work_units(job):
+    """Rough count of pages/items the model has to read (cheap upper bound).
+
+    The job already keeps the snapshot of the graded files, so the directory is
+    not queried on every status poll (the panel asks every 1.5 seconds).
+    """
+    paths = []
+    snapshot = job.parameters.get('snapshot_files') if isinstance(job.parameters, dict) else None
+    if isinstance(snapshot, dict):
+        for bucket in ('submission', 'assignment'):
+            paths.extend(str(value) for value in (snapshot.get(bucket) or {}).values())
+    if not paths:
+        files = []
+        try:
+            if job.submission is not None:
+                files = list(job.submission.get_files())
+            elif job.assignment is not None:
+                files = list(job.assignment.files.all())
+        except Exception:
+            files = []
+        paths = [str(getattr(file, 'original_name', '') or getattr(getattr(file, 'file', None), 'name', ''))
+                 for file in files]
+    units = 0
+    for name in paths:
+        name = name.lower()
+        if name.endswith(('.pdf', '.pptx', '.ppt', '.docx', '.doc', '.odt')):
+            units += 3  # documents are rendered page by page
+        else:
+            units += 1
+    return max(1, units)
+
+
+def job_expected_seconds(job, now=None):
+    """Theoretical duration of one check, used for the UI countdown.
+
+    Local models spend most of the time on the vision prefill (~15-18 s per
+    page on an RTX 4060) and generate ~13 tokens per second, so a single-page
+    local check takes about two minutes. Hosted providers answer in seconds.
+    The value is a UI hint only: it never bounds the evaluation itself.
+    """
+    units = _job_work_units(job)
+    provider = _job_provider(job)
+    if provider == 'custom':
+        expected = 120 + 18 * units
+    elif provider:
+        expected = 15 + 3 * units
+    else:
+        # Provider is not known yet (queued or just started): a middle estimate.
+        expected = 45 + 6 * units
+    if job.kind in ('understanding', 'prepare'):
+        expected = min(expected, 180)
+    return max(20, min(1800, int(expected)))
+
+
+def job_timing(job, now=None):
+    """Countdown fields for the progress panel: expected, elapsed and remaining."""
+    from django.utils import timezone
+    now = now or timezone.now()
+    started = job.started_at or job.created_at
+    elapsed = max(0, int((now - started).total_seconds())) if started else 0
+    expected = job_expected_seconds(job, now)
+    return {'eta_seconds': expected, 'elapsed_seconds': elapsed,
+            'eta_remaining_seconds': max(0, expected - elapsed),
+            'eta_provider': _job_provider(job)}
+
+
 def job_response(job, is_teacher=False, request=None):
     if job.status in ('succeeded', 'failed', 'cancelled'):
         result = dict(job.result)
@@ -370,6 +445,7 @@ def job_response(job, is_teacher=False, request=None):
     return JsonResponse({'status': job.status, 'job_id': str(job.pk),
                          'events': job.events,
                          'retry_at': job.not_before.isoformat() if job.not_before else None,
+                         **job_timing(job),
                          'status_url': reverse('ai_job_status', args=[job.pk])}, status=202)
 
 

@@ -1,16 +1,19 @@
 name: ${COMPOSE_PROJECT_NAME:-schoolwork2}
 services:
   app:
-    image: ${SCHOOLWORK_IMAGE:-schoolwork2-app:4.15.0}
+    image: ${SCHOOLWORK_IMAGE:-schoolwork2-app:4.16.0}
     build:
       context: .
       dockerfile: Dockerfile
       args:
         VCS_REF: ${VCS_REF:-local}
         SOURCE_DIGEST: ${SOURCE_DIGEST:-unknown}
-        APP_VERSION: '4.15.0'
+        APP_VERSION: '4.16.0'
     container_name: schoolnet_app
     restart: unless-stopped
+    # Let gunicorn finish in-flight requests (graceful_timeout = 30 s) instead
+    # of the default 10-second SIGKILL while an upload or save is still writing.
+    stop_grace_period: 35s
     depends_on:
       postgres:
         condition: service_healthy
@@ -36,15 +39,18 @@ services:
       - app_cache:/var/cache/schoolnet
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz/', timeout=5)"]
-      interval: 15s
+      interval: 10s
       timeout: 6s
       retries: 5
       start_period: 45s
 
   ai_worker:
-    image: ${SCHOOLWORK_IMAGE:-schoolwork2-app:4.15.0}
+    image: ${SCHOOLWORK_IMAGE:-schoolwork2-app:4.16.0}
     container_name: schoolnet_ai_worker
     restart: unless-stopped
+    # A running job gets its SIGTERM handler and a short window to mark the job
+    # failed cleanly instead of an immediate SIGKILL.
+    stop_grace_period: 20s
     command: ["python", "manage.py", "process_ai_jobs"]
     env_file:
       - .env
@@ -66,10 +72,10 @@ services:
       - app_cache:/var/cache/schoolnet
     healthcheck:
       test: ["CMD", "python", "-c", "import os,time; assert all(time.time()-os.path.getmtime(p)<60 for p in ['/tmp/schoolnet-ai-worker-heartbeat','/tmp/schoolnet-cloud-worker-heartbeat'])"]
-      interval: 30s
+      interval: 10s
       timeout: 5s
-      retries: 3
-      start_period: 20s
+      retries: 4
+      start_period: 15s
 
   code_runner:
     image: ${CODE_RUNNER_IMAGE:-schoolwork2-python-runner:4.5.7}
