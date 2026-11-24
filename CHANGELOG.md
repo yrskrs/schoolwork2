@@ -1,3 +1,8 @@
+## 4.14.1 — 2026-11-24 — [CORE] Сумісний формат зображень (PNG/JPEG без WebP) для локальних OpenAI-сумісних ШІ-серверів
+
+- **Заборона WebP у `image_url` для `custom`-провайдера (`feed/ai_payload.py`, `feed/gemini_service.py`).** У `optimize_media` для `provider == 'custom'` вимкнено перетворення зображень у `image/webp` (зі збереженням окремого кешу `lossless-ai-image-std-v1-`), а вхідні `image/webp`/нестандартні растри перетворюються у `image/png` або `image/jpeg`. Також очищено `base64`-дані перед складанням `data:...;base64,...` в OpenAI-сумісних запитах. Це усуває помилку LM Studio `'url' field must be a base64 encoded image.` при перевірці робіт локальними ШІ-моделями.
+- **Автотести:** додано `test_custom_provider_keeps_png_jpeg_and_converts_webp` у `feed.tests_ai_payload`.
+
 ## 4.14.0 — 2026-11-24 — [UI] Керування ручним введенням учнів, компактна кнопка співавтора та вибір моделі ШІ при перевірці
 
 - **Дозвіл ручного введення учня на рівні завдання (`feed/models.py`, `feed/migrations/0084_assignment_allow_manual_student_entry.py`, `feed/forms.py`, `recipients.html`, `submit_assignment.html`).** Додано прапорець `allow_manual_student_entry` (за замовчуванням `False`), яким вчитель визначає, чи дозволено учням користуватися кнопкою `✏️ Ввести вручну` («поза списком класу»). За замовчуванням кнопка, пункт «Ввести власноруч» та чекбокс `other_student` приховані у формі здачі й заблоковані у `SubmissionForm` на сервері.

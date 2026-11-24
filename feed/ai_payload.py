@@ -338,26 +338,39 @@ def optimize_media(media, provider):
                     cache.set(key, signatures, 86400 * 7)
                 for signature in signatures:
                     covered.setdefault(signature,item)
+    allow_webp = (provider or '').lower() != 'custom'
     for item in media:
         raw = base64.b64decode(item['data'])
         digest = hashlib.sha256(raw).hexdigest()
-        key = 'lossless-ai-image-v1-' + digest
+        key = ('lossless-ai-image-v1-' if allow_webp else 'lossless-ai-image-std-v1-') + digest
         prepared = cache.get(key)
         if prepared is None:
-            prepared = {'mime_type':item['mime_type'], 'data':item['data'], 'signature':digest}
+            prepared = {'mime_type': item['mime_type'], 'data': item['data'], 'signature': digest}
             if item['mime_type'].startswith('image/'):
                 try:
                     with Image.open(io.BytesIO(raw)) as image:
                         # Preserve animation and exact decoded pixels, including alpha.
-                        if not getattr(image,'is_animated',False):
+                        if not getattr(image, 'is_animated', False):
                             prepared['signature'] = image_signature(image)
-                            buffer = io.BytesIO()
-                            image.save(buffer,format='WEBP',lossless=True,exact=True,method=4)
-                            if buffer.tell() < len(raw):
-                                prepared.update(mime_type='image/webp',data=base64.b64encode(buffer.getvalue()).decode())
-                except (OSError,ValueError,Image.DecompressionBombError):
+                            if allow_webp:
+                                buffer = io.BytesIO()
+                                image.save(buffer, format='WEBP', lossless=True, exact=True, method=4)
+                                if buffer.tell() < len(raw):
+                                    prepared.update(mime_type='image/webp', data=base64.b64encode(buffer.getvalue()).decode())
+                            elif item['mime_type'] not in ('image/png', 'image/jpeg'):
+                                # Local OpenAI-compatible backends (e.g. LM Studio) only accept PNG/JPEG data URIs.
+                                buffer = io.BytesIO()
+                                has_alpha = image.mode in ('RGBA', 'LA') or (image.mode == 'P' and 'transparency' in image.info)
+                                if has_alpha:
+                                    image.convert('RGBA').save(buffer, format='PNG', optimize=True)
+                                    std_mime = 'image/png'
+                                else:
+                                    image.convert('RGB').save(buffer, format='JPEG', quality=90, optimize=True)
+                                    std_mime = 'image/jpeg'
+                                prepared.update(mime_type=std_mime, data=base64.b64encode(buffer.getvalue()).decode())
+                except (OSError, ValueError, Image.DecompressionBombError):
                     # A codec/optimization failure must not remove the original.
-                    prepared = {'mime_type':item['mime_type'], 'data':item['data'], 'signature':digest}
+                    prepared = {'mime_type': item['mime_type'], 'data': item['data'], 'signature': digest}
             cache.set(key, prepared, 86400 * 7)
         if item['mime_type'].startswith('image/') and prepared['signature'] in covered:
             owner = covered[prepared['signature']]

@@ -1,5 +1,15 @@
 [
   {
+    "version": "4.14.1",
+    "date": "2026-11-24",
+    "title": "[CORE] Сумісний формат зображень (PNG/JPEG без WebP) для локальних OpenAI-сумісних ШІ-серверів",
+    "changes": [
+      "Виправлено помилку 400 «'url' field must be a base64 encoded image.» при перевірці робіт із візуальними доказами через провайдер custom (LM Studio, Ollama, vLLM): у feed/ai_payload.py (optimize_media) для provider == 'custom' вимкнено примусове стиснення зображень у WebP (використовується окремий ключ кешу lossless-ai-image-std-v1-), збережено нативні PNG/JPEG, а будь-які вхідні WebP/BMP/GIF перетворюються на стандартні image/png або image/jpeg.",
+      "Нормалізовано формування data-URI у feed/gemini_service.py для image_url (очищення пробілів і захист від повторного префікса data:).",
+      "Додано регресійний тест test_custom_provider_keeps_png_jpeg_and_converts_webp у feed.tests_ai_payload."
+    ]
+  },
+  {
     "version": "4.14.0",
     "date": "2026-11-24",
     "title": "[UI] Керування ручним введенням учнів, компактна кнопка співавтора та вибір моделі ШІ при перевірці",

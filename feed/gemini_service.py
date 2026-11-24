@@ -640,10 +640,13 @@ def _raw_call_ai_api(prompt_text, system_prompt="", inline_media=None, provider=
                         'filename':f'document-{len(user_content)}.pdf',
                         'file_data':f"data:application/pdf;base64,{item['data']}"}})
                 else:
+                    raw_b64 = str(item.get('data') or '').strip()
+                    if raw_b64.startswith('data:'):
+                        raw_b64 = raw_b64.split(',', 1)[-1].strip()
                     user_content.append({
                         "type": "image_url",
                         "image_url": {
-                            "url": f"data:{item['mime_type']};base64,{item['data']}"
+                            "url": f"data:{item['mime_type']};base64,{raw_b64}"
                         }
                     })
 

@@ -122,6 +122,27 @@ class MediaPayloadTests(SimpleTestCase):
         result=optimize_media(items,'gemini')
         self.assertEqual([item['data'] for item in result],[item['data'] for item in items])
 
+    @patch('feed.gemini_service._http_post_json', return_value=(200, {'choices': [{'message': {'content': 'OK'}}]}, 'OK'))
+    def test_custom_provider_keeps_png_jpeg_and_converts_webp(self, http):
+        png_item = picture(color='navy', size=(240, 180))
+        # Warm shared WebP cache with gemini first to ensure custom uses its own standard format.
+        optimize_media([png_item], 'gemini')
+        custom_from_png = optimize_media([png_item], 'custom')
+        self.assertEqual(custom_from_png[0]['mime_type'], 'image/png')
+
+        buf = io.BytesIO()
+        Image.new('RGB', (40, 40), 'navy').save(buf, format='WEBP')
+        webp_item = {'mime_type': 'image/webp', 'data': base64.b64encode(buf.getvalue()).decode()}
+        custom_from_webp = optimize_media([webp_item], 'custom')
+        self.assertIn(custom_from_webp[0]['mime_type'], ('image/png', 'image/jpeg'))
+
+        _raw_call_ai_api('Перевір фото', provider='custom', custom_url='http://192.168.1.12:1234',
+                         model_name='qwen3-vl-8b-instruct', inline_media=[png_item])
+        sent_parts = http.call_args.args[1]['messages'][-1]['content']
+        image_urls = [p['image_url']['url'] for p in sent_parts if p.get('type') == 'image_url']
+        self.assertEqual(len(image_urls), 1)
+        self.assertTrue(image_urls[0].startswith('data:image/png;base64,'))
+
 
 class TransportTests(TestCase):
     @patch('feed.gemini_service._http_post_json',return_value=(200,{'error':{'code':503,'message':'backend unavailable'}},''))
