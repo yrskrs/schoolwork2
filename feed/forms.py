@@ -736,7 +736,11 @@ class SubmissionForm(forms.Form):
         if pupil and cleaned_data.get('other_student'):
             self.add_error('full_name', 'Оберіть своє ім’я або позначте, що вас немає у списку.')
         if shared and not pupil and not cleaned_data.get('other_student'):
-            self.add_error('full_name', 'Оберіть своє ім’я зі списку або позначте «Мене немає у списку класу» та введіть його вручну.')
+            message = ('Оберіть своє ім’я зі списку або позначте «Мене немає у списку класу» та введіть його вручну.'
+                       if allow_manual else
+                       'Оберіть своє ім’я зі списку класу. Якщо вас у списку немає, попросіть учителя '
+                       'додати вас до списку або дозволити ручне введення в цьому завданні.')
+            self.add_error('full_name', message)
         if pupil:
             cleaned_data['full_name'] = pupil.get_full_name()
         cleaned_data['selected_student'] = pupil

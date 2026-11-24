@@ -192,6 +192,7 @@ class StudentSubmissionLayoutTests(TestCase):
         ))
         self.assertEqual(post_disabled.status_code, 200)
         self.assertIn('full_name', post_disabled.context['form'].errors)
+        self.assertIn('вчитель заборонив', post_disabled.context['form'].errors['full_name'][0])
         self.assertFalse(Submission.objects.exists())
 
         self.assignment.allow_manual_student_entry = True
@@ -206,3 +207,43 @@ class StudentSubmissionLayoutTests(TestCase):
         ))
         self.assertEqual(post_enabled.status_code, 302)
         self.assertEqual(Submission.objects.count(), 1)
+
+    def test_disabled_manual_entry_explains_whom_to_ask(self):
+        from .forms import SubmissionForm
+        from .models import RosterState, Student
+
+        group = self.classes[1]
+        Student.objects.create(class_group=group, last_name='Шевченко', first_name='Тарас')
+        RosterState.objects.update_or_create(pk=1, defaults={'data': {'journal_imports': {
+            f'{self.teacher.pk}:synthetic': {'class_id': group.pk, 'students': {}}}}})
+        self.assertFalse(self.assignment.allow_manual_student_entry)
+        form = SubmissionForm({
+            'full_name': 'Гість Позакласом', 'class_group': str(group.pk),
+            'comment_student': 'Відповідь на завдання',
+        }, {}, assignment=self.assignment)
+        self.assertFalse(form.is_valid())
+        self.assertIn('попросіть учителя', form.errors['full_name'][0])
+
+    def test_legacy_assignments_keep_manual_entry_and_new_ones_stay_opt_in(self):
+        from importlib import import_module
+        from django.apps import apps as django_apps
+
+        legacy = Assignment.objects.create(
+            teacher=self.teacher, subject=self.subject, title='Завдання до 4.14.0',
+            description='Створене раніше.', status=Assignment.STATUS_PUBLISHED,
+        )
+        # 0084 added the switch with default=False, so old rows start disabled.
+        self.assertFalse(legacy.allow_manual_student_entry)
+
+        backfill = import_module('feed.migrations.0085_assignment_manual_entry_backfill')
+        backfill.enable_manual_entry_for_existing(django_apps, None)
+
+        legacy.refresh_from_db()
+        self.assertTrue(legacy.allow_manual_student_entry)
+        # New assignments keep the teacher-controlled opt-in default.
+        fresh = Assignment.objects.create(
+            teacher=self.teacher, subject=self.subject, title='Завдання після 4.15.0',
+            description='Створене після оновлення.', status=Assignment.STATUS_PUBLISHED,
+        )
+        fresh.refresh_from_db()
+        self.assertFalse(fresh.allow_manual_student_entry)
