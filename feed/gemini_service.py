@@ -6957,8 +6957,14 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
 
     if pinned:
         # Keep a cohort on one model; fallbacks are allowed but explicitly flagged.
-        attempts_configs = ([cfg for cfg in attempts_configs if _matches_pinned(cfg)]
-                            + [cfg for cfg in attempts_configs if not _matches_pinned(cfg)])
+        matched = [cfg for cfg in attempts_configs if _matches_pinned(cfg)]
+        if not matched and pinned.get('explicit'):
+            from .ai_connections import resolve_explicit_pinned_config
+            explicit_cfg = resolve_explicit_pinned_config(settings, pinned)
+            if explicit_cfg:
+                matched = [explicit_cfg]
+        remaining = [cfg for cfg in attempts_configs if not _matches_pinned(cfg)]
+        attempts_configs = matched + (remaining if (settings.auto_failover_enabled or not pinned.get('explicit')) else [])
 
     attempted_errors = []
     deferred_waits = []

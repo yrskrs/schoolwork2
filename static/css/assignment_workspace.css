@@ -51,7 +51,9 @@ body .submission-workspace .submission-form-card { padding: 24px !important; gap
 body .submission-workspace .school-submission-step { margin: 0; padding: 0; border: 0; font-size: 21px; }
 body .submission-workspace .school-step-number { width: 32px; height: 32px; font-size: 17px; }
 body .submission-workspace .school-form-help { font-size: 15px; line-height: 1.65; }
-body .submission-workspace .submission-identification-grid { grid-template-columns: minmax(0, .8fr) minmax(0, 1.8fr); gap: 18px; }
+body .submission-workspace .submission-identification-grid { grid-template-columns: minmax(0, .65fr) minmax(0, 2fr); gap: 18px; }
+body .submission-workspace .submission-student-row { display: flex; align-items: flex-start; gap: 10px; }
+body .submission-workspace #student-roster-picker-wrapper { flex: 1 1 auto; min-width: 0; }
 body .submission-workspace #btn-toggle-student-mode { font-size: 13px !important; min-height: 32px; }
 body .submission-workspace #submit-form .form-input,
 body .submission-workspace #submit-form .form-select { min-height: 48px !important; font-size: 16px !important; }
@@ -162,11 +164,13 @@ body .submission-workspace .submission-readiness dd[data-ready="true"],
 body .submission-workspace .submission-readiness [data-submission-class][data-ready="true"] { color: var(--color-success); }
 body .submission-workspace .submission-tools-card { padding: 16px; border-radius: var(--radius-lg); }
 body .submission-workspace .submission-side-actions .btn { font-size: 15px; min-height: 46px; padding: 12px; justify-content: flex-start; text-align: left; }
-body .submission-workspace #btn-add-coauthor { display: flex; align-items: center; gap: 12px; border: 2px solid var(--color-primary); background: var(--color-primary-light); color: var(--color-primary-text); min-height: 68px; font-weight: 750; }
+body .submission-workspace #btn-add-coauthor { flex: 0 0 185px; max-width: 44%; min-width: 0; height: 48px; min-height: 48px; max-height: 48px; padding: 4px 10px; display: inline-flex; align-items: center; gap: 8px; border: 2px solid var(--color-primary); background: var(--color-primary-light); color: var(--color-primary-text); font-weight: 750; box-sizing: border-box; overflow: hidden; text-align: left; }
 body .submission-workspace #btn-add-coauthor[hidden] { display: none; }
 body .submission-workspace #btn-add-coauthor:hover { box-shadow: 0 0 0 2px var(--color-primary-light); }
-body .submission-workspace #btn-add-coauthor > span:first-child { font-size: 23px; flex-shrink: 0; }
-body .submission-workspace #btn-add-coauthor small { display: block; font-size: 12px; font-weight: 500; margin-top: 4px; }
+body .submission-workspace #btn-add-coauthor > span:first-child { font-size: 18px; flex-shrink: 0; line-height: 1; }
+body .submission-workspace #btn-add-coauthor .coauthor-btn-text { min-width: 0; flex: 1 1 auto; overflow: hidden; display: flex; flex-direction: column; justify-content: center; }
+body .submission-workspace #btn-add-coauthor .coauthor-btn-title { font-size: 13px; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+body .submission-workspace #btn-add-coauthor small { display: block; font-size: 11px; font-weight: 500; margin-top: 1px; line-height: 1.15; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 body .submission-workspace .submission-side-disclosure { margin-top: 12px; padding-top: 12px; }
 body .submission-workspace .submission-side-disclosure > summary { min-height: 32px; font-size: 14px; line-height: 1.5; }
 body .submission-workspace .submission-ai-card {
@@ -199,6 +203,7 @@ body .submission-workspace :is(a, button, summary, [role="button"]):focus-visibl
     body .assignment-workspace .assignment-detail-file-actions { width: 100%; }
     body .assignment-workspace .assignment-detail-file-actions .btn { flex: 1; justify-content: center; }
     body .submission-workspace .submission-identification-grid { grid-template-columns: minmax(0, 1fr); }
+    body .submission-workspace #btn-add-coauthor { flex: 0 0 148px; max-width: 46%; padding: 4px 8px; gap: 6px; }
     body .submission-workspace .school-submission-step { font-size: 19px; }
     body .submission-workspace #submit-form .file-drop-zone { padding: 22px 12px !important; }
 }

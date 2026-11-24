@@ -459,3 +459,54 @@ class EvaluationProgressTests(TestCase):
         self.assertIn('timed out', result[2])
         self.assertIs(pool.return_value.request.call_args.kwargs['retries'], False)
         urlopen.assert_not_called()
+
+    @patch('feed.gemini_service.call_ai_api')
+    def test_view_file_ai_model_selector_defaults_auto_and_allows_explicit_choice(self, call):
+        from lxml import html as lxml_html
+        self.add_connection('gemini', 'first-auto-model')
+        self.add_connection('custom', 'qwen/qwen3-14b', connection_url='http://192.168.1.12:1234')
+        self.settings.auto_failover_enabled = False
+        self.settings.save(update_fields=['auto_failover_enabled'])
+
+        self.client.force_login(self.user)
+        viewer = self.client.get(reverse('view_file', args=[self.sub.pk]))
+        self.assertEqual(viewer.status_code, 200)
+        doc = lxml_html.fromstring(viewer.content)
+        select_el = doc.get_element_by_id('single-ai-model')
+        selected_vals = [opt.get('value', '') for opt in select_el.xpath('./option[@selected]')]
+        self.assertEqual(selected_vals, [''])
+        all_labels = ' '.join(opt.text_content() for opt in select_el.xpath('./option'))
+        self.assertIn('first-auto-model', all_labels)
+        self.assertIn('qwen/qwen3-14b', all_labels)
+        custom_opt_val = next(
+            opt.get('value') for opt in select_el.xpath('./option') if 'qwen/qwen3-14b' in opt.text_content()
+        )
+
+        # 1. Default automatic check uses first model in queue.
+        call.return_value = self.answer()
+        auto_resp = self.client.post(reverse('ai_check_single_submission', args=[self.sub.pk]) + '?format=json')
+        self.assertIn(auto_resp.status_code, (200, 202))
+        auto_job = AIJob.objects.filter(submission=self.sub).order_by('-created_at').first()
+        if auto_job.status == 'queued':
+            execute_job(auto_job.pk)
+        self.assertEqual(call.call_args.kwargs['model_name'], 'first-auto-model')
+
+        # 2. Explicit teacher selection overrides default even when auto_failover_enabled=False.
+        call.reset_mock()
+        custom_resp = self.client.post(
+            reverse('ai_check_single_submission', args=[self.sub.pk]) + '?format=json',
+            {'ai_model': custom_opt_val},
+        )
+        self.assertIn(custom_resp.status_code, (200, 202))
+        custom_job = AIJob.objects.filter(submission=self.sub).order_by('-created_at').first()
+        if custom_job.status == 'queued':
+            execute_job(custom_job.pk)
+        self.assertEqual(call.call_args.kwargs['model_name'], 'qwen/qwen3-14b')
+        self.assertEqual(call.call_args.kwargs['provider'], 'custom')
+
+        # 3. Unknown choice returns 400.
+        bad_resp = self.client.post(
+            reverse('ai_check_single_submission', args=[self.sub.pk]) + '?format=json',
+            {'ai_model': 'nonexistent|bad-model'},
+        )
+        self.assertEqual(bad_resp.status_code, 400)

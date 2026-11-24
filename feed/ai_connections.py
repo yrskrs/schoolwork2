@@ -234,6 +234,94 @@ def request_configs(settings, custom_model=None):
     return configs if settings.auto_failover_enabled else configs[:1]
 
 
+def selectable_ai_models(settings):
+    """Return configured AI models selectable for an individual teacher check."""
+    from .gemini_service import clean_model_name
+    options = []
+    if settings.unified_model_queue:
+        connections = {c['id']: c for c in settings.provider_connections}
+        for row in model_queue(settings):
+            connection = connections.get(row['connection_id'])
+            if not (connection and configured(connection)):
+                continue
+            model_name = clean_model_name(row['name'], connection['provider'])
+            suffix = '' if row['enabled'] else ' [вимк. у черзі]'
+            conn_label = connection.get('label') or connection['provider']
+            options.append({
+                'key': f"{connection['id']}|{row['name']}",
+                'connection_id': connection['id'],
+                'provider': connection['provider'],
+                'model': model_name,
+                'raw_name': row['name'],
+                'enabled': bool(row['enabled']),
+                'label': f"{row['name']} ({conn_label}){suffix}",
+            })
+        return options
+    for item in settings.get_models_with_priority():
+        cfg = settings.get_provider_config(item['provider'], include_alternative=True)
+        if not cfg:
+            continue
+        model_name = clean_model_name(item['name'], item['provider'])
+        suffix = '' if item['enabled'] else ' [вимк. у черзі]'
+        options.append({
+            'key': f"|{item['provider']}|{item['name']}",
+            'connection_id': '',
+            'provider': item['provider'],
+            'model': model_name,
+            'raw_name': item['name'],
+            'enabled': bool(item['enabled']),
+            'label': f"{item['name']} ({item['provider']}){suffix}",
+        })
+    return options
+
+
+def resolve_selectable_model(settings, choice_key):
+    """Validate and resolve a teacher's explicit per-submission AI model choice."""
+    key = (choice_key or '').strip()
+    if not key:
+        return None
+    for option in selectable_ai_models(settings):
+        if option['key'] == key:
+            return {
+                'provider': option['provider'],
+                'model': option['model'],
+                'connection_id': option['connection_id'],
+                'explicit': True,
+            }
+    raise ValueError('Обрана модель більше недоступна в налаштуваннях ШІ.')
+
+
+def resolve_explicit_pinned_config(settings, pinned):
+    """Build a request config for an explicitly chosen teacher model even if disabled in auto-queue."""
+    if not (pinned and pinned.get('explicit')):
+        return None
+    from .gemini_service import clean_model_name
+    provider = pinned.get('provider')
+    model_name = pinned.get('model')
+    connection_id = pinned.get('connection_id') or ''
+    if not provider or not model_name:
+        return None
+    if settings.unified_model_queue:
+        connection = settings.get_connection(connection_id) if connection_id else next(
+            (c for c in settings.provider_connections if c.get('provider') == provider and configured(c)),
+            None,
+        )
+        if connection and configured(connection):
+            return {
+                'provider': connection['provider'],
+                'api_key': connection['api_key'],
+                'custom_url': connection['custom_url'],
+                'connection_id': connection['id'],
+                'is_backup': False,
+                'model': clean_model_name(model_name, connection['provider']),
+            }
+        return None
+    cfg = settings.get_provider_config(provider, include_alternative=True)
+    if cfg:
+        return {**cfg, 'model': clean_model_name(model_name, provider)}
+    return None
+
+
 def mutate_model(settings, action, name, provider=None, connection_id=None, priority=None, enabled=None, direction=None):
     rows = model_queue(settings)
     matches = [c for c in settings.provider_connections if (not connection_id or c['id'] == connection_id)

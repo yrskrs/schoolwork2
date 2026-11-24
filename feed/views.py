@@ -1894,6 +1894,7 @@ def assignment_duplicate(request, pk):
         class_ai_overrides={str(c.pk): original.class_ai_overrides[str(c.pk)] for c in target_classes if str(c.pk) in original.class_ai_overrides},
         allow_student_ai_check=original.allow_student_ai_check,
         allow_student_ai_understanding=original.allow_student_ai_understanding,
+        allow_manual_student_entry=original.allow_manual_student_entry,
         allow_ai_usage=original.allow_ai_usage,
         custom_criteria=original.custom_criteria,
         teacher_ai_instructions=getattr(original, 'teacher_ai_instructions', ''),
@@ -4042,6 +4043,7 @@ def view_file(request, submission_id):
     if submission.link:
         web_proxy_url = reverse('view_submission_web_proxy', args=[submission.id])
 
+    from .ai_connections import selectable_ai_models
     prefetch_submission = next_submission or next_submission_fallback or next_assignment_first_sub
     context = {
         'submission': submission,
@@ -4085,6 +4087,7 @@ def view_file(request, submission_id):
         'viewer_gr_codes': viewer_gr_codes,
         'viewer_preset': viewer_preset,
         'viewer_thinking_mode': viewer_thinking_mode,
+        'viewer_ai_models': selectable_ai_models(AISettings.get_solo()),
         'last_evaluated_gr_codes': last_evaluated_gr_codes,
         'dup_info': dup_info,
         'review_async': review_async,
@@ -8673,13 +8676,25 @@ def ai_check_single_submission(request, submission_id):
     if force_thinking_raw is not None:
         force_thinking = str(force_thinking_raw).strip().lower() in ('1', 'true', 'yes', 'on')
 
+    ai_model_choice = (request.POST.get('ai_model') or '').strip()
+    pinned_override = None
+    if ai_model_choice:
+        from .ai_connections import resolve_selectable_model
+        try:
+            pinned_override = resolve_selectable_model(AISettings.get_solo(), ai_model_choice)
+        except ValueError as exc:
+            return JsonResponse({'status': 'error', 'error': str(exc)}, status=400)
+
     from .ai_jobs import enqueue_submission_job, job_response, SelfCheckUnavailable
     try:
-        job = enqueue_submission_job(submission, 'teacher_check', user=request.user, parameters={
+        parameters = {
             'custom_prompt': custom_prompt, 'preset_id': preset_id,
             'selected_gr_codes': selected_gr_codes, 'force_thinking': force_thinking,
             **_teacher_ai_privacy_options(request),
-        })
+        }
+        if pinned_override:
+            parameters['pinned_model'] = pinned_override
+        job = enqueue_submission_job(submission, 'teacher_check', user=request.user, parameters=parameters)
     except SelfCheckUnavailable as exc:
         return JsonResponse({'status': 'error', 'error': str(exc)}, status=exc.http_status)
     return job_response(job, request=request)

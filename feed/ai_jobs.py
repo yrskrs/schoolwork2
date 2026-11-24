@@ -267,7 +267,7 @@ def enqueue_submission_job(submission, kind, user=None, parameters=None):
                 reservations.append(reservation)
         parameters = dict(parameters or {})
         parameters['snapshot'] = source_snapshot(submission)
-        pinned = pinned_model_for_assessment(submission)
+        pinned = parameters.get('pinned_model') or pinned_model_for_assessment(submission)
         if pinned:
             parameters['pinned_model'] = pinned
         import uuid as _uuid

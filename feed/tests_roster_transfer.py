@@ -121,6 +121,8 @@ class JournalRosterReceiveTests(TestCase):
 
     def test_unlisted_name_is_saved_without_merging_pupil_or_previous_attempt(self):
         from feed.forms import SubmissionForm
+        self.assignment.allow_manual_student_entry = True
+        self.assignment.save(update_fields=['allow_manual_student_entry'])
         previous = fixtures.SchoolAPIV2Tests.sub(self)
         self.assertEqual(self.send(self.payload()).status_code, 200)
         for name in ('Вигаданий Учень', 'Вигадан У.'):

@@ -415,6 +415,7 @@ class AssignmentForm(forms.ModelForm):
             'allow_student_ai_check', 'allow_ai_usage',
             'ai_thinking_mode',
             'allow_student_ai_understanding',
+            'allow_manual_student_entry',
             'custom_criteria',
             'teacher_ai_instructions',
         ]
@@ -433,6 +434,7 @@ class AssignmentForm(forms.ModelForm):
             'allow_ai_usage': 'Дозволити учням використання ШІ при виконанні завдання',
             'ai_thinking_mode': 'Режим глибокого мислення ШІ (Thinking mode)',
             'allow_student_ai_understanding': 'Дозволити учням бачити аналіз ШІ («Як ШІ розуміє завдання»)',
+            'allow_manual_student_entry': 'Дозволити ручне введення учня («Ввести вручну»)',
             'custom_criteria': 'Індивідуальні критерії оцінювання для цього завдання',
             'teacher_ai_instructions': 'Вказівки для ШІ при оцінюванні (приховано від учнів)',
         }
@@ -472,6 +474,7 @@ class AssignmentForm(forms.ModelForm):
             'allow_student_ai_check': forms.CheckboxInput(attrs={'class': 'form-checkbox'}),
             'allow_ai_usage': forms.CheckboxInput(attrs={'class': 'form-checkbox'}),
             'allow_student_ai_understanding': forms.CheckboxInput(attrs={'class': 'form-checkbox'}),
+            'allow_manual_student_entry': forms.CheckboxInput(attrs={'class': 'form-checkbox'}),
             'custom_criteria': forms.Textarea(attrs={
                 'class': 'form-textarea',
                 'rows': 4,
@@ -723,10 +726,13 @@ class SubmissionForm(forms.Form):
         import json
         group = cleaned_data.get('class_group')
         shared = has_stable_class_roster(group)
+        allow_manual = bool(getattr(self.assignment, 'allow_manual_student_entry', False)) if self.assignment else True
         pupil_id = cleaned_data.get('student_id')
         pupil = Student.objects.filter(pk=pupil_id, class_group=group, integration_active=True).first() if pupil_id else None
         if pupil_id and not pupil:
             self.add_error('full_name', 'Оберіть активного учня цього класу.')
+        if not allow_manual and not getattr(self, 'public_personal_access', False) and cleaned_data.get('other_student'):
+            self.add_error('full_name', 'Для цього завдання вчитель заборонив ручне введення поза списком класу.')
         if pupil and cleaned_data.get('other_student'):
             self.add_error('full_name', 'Оберіть своє ім’я або позначте, що вас немає у списку.')
         if shared and not pupil and not cleaned_data.get('other_student'):
@@ -894,6 +900,8 @@ class SubmissionForm(forms.Form):
             student_obj = Student.objects.get(pk=student_obj.pk, class_group=class_grp, integration_active=True)
             last_name, first_name = student_obj.last_name, student_obj.first_name
         elif self.cleaned_data.get('other_student'):
+            if not getattr(assignment, 'allow_manual_student_entry', False):
+                raise forms.ValidationError('Для цього завдання вчитель заборонив ручне введення поза списком класу.')
             parts = self.cleaned_data['full_name'].strip().split(maxsplit=1)
             last_name, first_name = parts[0], parts[1] if len(parts) > 1 else ''
         else:

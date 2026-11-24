@@ -6,7 +6,7 @@
 
 {% block extra_head %}
 <link rel="stylesheet" href="{% static 'css/submission_layout.css' %}?ui=20261107-r2">
-<link rel="stylesheet" href="{% static 'css/assignment_workspace.css' %}?ui=20261115">
+<link rel="stylesheet" href="{% static 'css/assignment_workspace.css' %}?ui=20261124c">
 {% endblock %}
 
 {% block content %}
@@ -56,7 +56,6 @@
                 <div class="submission-side-card submission-tools-card">
                     <div class="submission-side-actions">
                         <button type="button" onclick="openCriteriaModal()" class="btn btn-secondary">Критерії оцінювання</button>
-                        <button {% if form.public_personal_access %}hidden{% endif %} type="button" id="btn-add-coauthor" onclick="addCoauthorField()" class="btn submission-coauthor-button" aria-controls="coauthors-wrapper" title="Для роботи, виконаної в парі чи групі"><span aria-hidden="true">👥 ＋</span><span>Додати співавтора<small>Для роботи в парі чи групі</small></span></button>
                     </div>
                     <details class="submission-condition-card submission-side-disclosure" id="submission-condition-details">
                         <summary>Умова й матеріали вчителя</summary>
@@ -534,6 +533,7 @@ const rosterOptionsList = document.getElementById('student-roster-options-list')
 const rosterSearchInput = document.getElementById('student-roster-search');
 const manualWrapper = document.getElementById('student-manual-input-wrapper');
 const toggleModeBtn = document.getElementById('btn-toggle-student-mode');
+const ALLOW_MANUAL_STUDENT_ENTRY = {% if assignment.allow_manual_student_entry %}true{% else %}false{% endif %};
 let isManualStudentMode = false;
 let isStableClassRoster = false;
 let cachedRosterStudents = [];
@@ -574,18 +574,20 @@ function populateCustomRosterDropdown(students) {
         rosterOptionsList.appendChild(item);
     });
 
-    const manItem = document.createElement('div');
-    manItem.className = 'autocomplete-item';
-    manItem.style.cssText = 'padding:7px 10px;cursor:pointer;font-size:13px;border-radius:4px;color:var(--color-primary);font-weight:700;border-top:1px dashed var(--color-border);margin-top:4px;';
-    manItem.textContent = '✏️ Ввести власноруч / Немає в списку';
-    manItem.addEventListener('click', function() {
-        if (rosterSelect) {
-            rosterSelect.value = '__manual__';
-            onRosterStudentSelected('__manual__');
-        }
-        closeRosterCustomDropdown();
-    });
-    rosterOptionsList.appendChild(manItem);
+    if (ALLOW_MANUAL_STUDENT_ENTRY) {
+        const manItem = document.createElement('div');
+        manItem.className = 'autocomplete-item';
+        manItem.style.cssText = 'padding:7px 10px;cursor:pointer;font-size:13px;border-radius:4px;color:var(--color-primary);font-weight:700;border-top:1px dashed var(--color-border);margin-top:4px;';
+        manItem.textContent = '✏️ Ввести власноруч / Немає в списку';
+        manItem.addEventListener('click', function() {
+            if (rosterSelect) {
+                rosterSelect.value = '__manual__';
+                onRosterStudentSelected('__manual__');
+            }
+            closeRosterCustomDropdown();
+        });
+        rosterOptionsList.appendChild(manItem);
+    }
 }
 
 function openRosterCustomDropdown() {
@@ -693,10 +695,16 @@ function loadClassRoster(classId) {
                     option.dataset.name=st.full_name;option.selected=!!currentId && String(st.id)===currentId;
                     if(option.selected)matchedVal=st.full_name;rosterSelect.add(option);
                 });
-                rosterSelect.add(new Option('✏️ Ввести власноруч / Немає в списку','__manual__'));
+                if (ALLOW_MANUAL_STUDENT_ENTRY) {
+                    rosterSelect.add(new Option('✏️ Ввести власноруч / Немає в списку','__manual__'));
+                }
                 populateCustomRosterDropdown(students);
 
-                if (currentVal && !matchedVal) {
+                if (!ALLOW_MANUAL_STUDENT_ENTRY) {
+                    isManualStudentMode = false;
+                    const otherCb = document.getElementById('id_other_student');
+                    if (otherCb) otherCb.checked = false;
+                } else if (currentVal && !matchedVal) {
                     isManualStudentMode = true;
                 }
 
@@ -704,8 +712,12 @@ function loadClassRoster(classId) {
                     rosterSelect.style.display = 'block';
                     if (manualWrapper) manualWrapper.style.display = 'none';
                     if (toggleModeBtn) {
-                        toggleModeBtn.style.display = 'inline-block';
-                        toggleModeBtn.textContent = '✏️ Ввести вручну';
+                        if (ALLOW_MANUAL_STUDENT_ENTRY) {
+                            toggleModeBtn.style.display = 'inline-block';
+                            toggleModeBtn.textContent = '✏️ Ввести вручну';
+                        } else {
+                            toggleModeBtn.style.display = 'none';
+                        }
                     }
                 } else {
                     rosterSelect.style.display = 'none';
@@ -749,6 +761,9 @@ function onRosterStudentSelected(val) {
 }
 
 function toggleStudentInputMode(forceManual) {
+    if (!ALLOW_MANUAL_STUDENT_ENTRY && (forceManual === true || !isManualStudentMode)) {
+        return;
+    }
     if (forceManual === true || !isManualStudentMode) {
         isManualStudentMode = true;
         document.getElementById('id_student_id').value='';
@@ -949,7 +964,7 @@ function updateCoauthorsUI() {
             addBtn.disabled = false;
             addBtn.style.opacity = '1';
             addBtn.style.cursor = 'pointer';
-            addBtn.title = 'Додати співавтора (якщо завдання виконували разом у парі чи групі)';
+            addBtn.title = 'Додати співавтора — Для роботи в парі чи групі';
         }
         if (maxWarning) maxWarning.style.display = 'none';
     }
@@ -1004,10 +1019,14 @@ function populateCoauthorSelect(rowId) {
             sel.add(opt);
         });
 
-        sel.add(new Option('✏️ Ввести власноруч / Немає в списку', '__manual__'));
+        if (ALLOW_MANUAL_STUDENT_ENTRY) {
+            sel.add(new Option('✏️ Ввести власноруч / Немає в списку', '__manual__'));
+        } else {
+            sel.dataset.mode = 'select';
+        }
 
         if (toggleBtn) {
-            toggleBtn.style.display = 'inline-block';
+            toggleBtn.style.display = ALLOW_MANUAL_STUDENT_ENTRY ? 'inline-block' : 'none';
         }
         if (sel.dataset.mode !== 'manual') {
             sel.style.display = 'block';
@@ -1070,7 +1089,7 @@ window.addCoauthorField = function() {
             '</span>' +
             '<div style="display:flex;align-items:center;gap:8px;">' +
                 '<button type="button" class="btn-toggle-coauthor-mode" onclick="toggleCoauthorInputMode(' + rowId + ')" ' +
-                        'style="display:' + (hasRoster ? 'inline-block' : 'none') + ';background:none;border:none;color:var(--color-primary);cursor:pointer;font-size:11px;font-weight:700;padding:0;text-decoration:underline;">' +
+                        'style="display:' + (hasRoster && ALLOW_MANUAL_STUDENT_ENTRY ? 'inline-block' : 'none') + ';background:none;border:none;color:var(--color-primary);cursor:pointer;font-size:11px;font-weight:700;padding:0;text-decoration:underline;">' +
                     '✏️ Ввести вручну' +
                 '</button>' +
                 '<button type="button" onclick="removeCoauthorField(' + rowId + ')" ' +
@@ -1157,6 +1176,9 @@ window.toggleCoauthorInputMode = function(rowId, forceManual) {
     const inp = row.querySelector('.coauthor-input');
 
     const isCurrentlyManual = manualWrap && manualWrap.style.display !== 'none';
+    if (!ALLOW_MANUAL_STUDENT_ENTRY && cachedRosterStudents && cachedRosterStudents.length > 0 && (forceManual === true || !isCurrentlyManual)) {
+        return;
+    }
 
     if (forceManual === true || !isCurrentlyManual) {
         if (sel) {

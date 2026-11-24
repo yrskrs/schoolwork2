@@ -51,9 +51,14 @@ class StudentSubmissionLayoutTests(TestCase):
         form = page.get_element_by_id('submit-form')
         self.assertEqual(len(page.xpath('//form[@id="submit-form"]')), 1)
         self.assertFalse(form.xpath('.//form'))
-        self.assertTrue(form.xpath('.//aside//button[@id="btn-add-coauthor" and @type="button"]'))
+        self.assertTrue(form.xpath('.//*[@id="group_full_name"]//div[contains(@class,"submission-student-row")]//button[@id="btn-add-coauthor" and @type="button"]'))
+        self.assertTrue(form.xpath('.//*[@id="group_full_name"]//div[contains(@class,"submission-student-row")]//div[@id="student-roster-picker-wrapper"]'))
         self.assertTrue(form.xpath('.//aside//button[@onclick="openCriteriaModal()"]'))
-        self.assertTrue(form.xpath('.//aside//button[@id="btn-add-coauthor" and contains(@class,"submission-coauthor-button")]'))
+        self.assertFalse(form.xpath('.//aside//button[@id="btn-add-coauthor"]'))
+        self.assertTrue(form.xpath('.//*[@id="group_full_name"]//button[@id="btn-add-coauthor" and contains(@class,"submission-coauthor-button")]'))
+        coauthor_btn = page.get_element_by_id('btn-add-coauthor')
+        self.assertIn('Додати співавтора', coauthor_btn.get('title', ''))
+        self.assertIn('Для роботи в парі чи групі', coauthor_btn.get('title', ''))
         self.assertEqual(form.xpath('.//section[contains(@class,"submission-form-card")]/@aria-labelledby'), ['submission-identity-title', 'submission-work-title'])
         self.assertTrue(form.xpath('.//a[@href="#id_class_group"]'))
         self.assertTrue(form.xpath('.//*[@data-submission-name]'))
@@ -171,3 +176,33 @@ class StudentSubmissionLayoutTests(TestCase):
                 page = self.page(self.client.post(self.url, self.data(full_name='', **{field: value})))
                 self.assertEqual(page.xpath('//*[@data-submission-work]/text()'), ['Відповідь додано'])
                 self.assertTrue(page.get_element_by_id('submission-send-button').getparent().xpath('.//*[@data-submission-work]'))
+
+    def test_manual_student_entry_toggle_controls_ui_and_post_submission(self):
+        from .models import Student
+        Student.objects.create(class_group=self.classes[1], last_name='Шевченко', first_name='Тарас')
+
+        get_disabled = self.client.get(self.url, {'class': self.classes[1].pk})
+        self.assertFalse(self.assignment.allow_manual_student_entry)
+        self.assertContains(get_disabled, 'const ALLOW_MANUAL_STUDENT_ENTRY = false;')
+        page_disabled = self.page(get_disabled)
+        self.assertTrue(page_disabled.xpath('//input[@id="id_other_student"]/ancestor::label[@hidden]'))
+
+        post_disabled = self.client.post(self.url, self.data(
+            full_name='Гість Позакласом', other_student='on',
+        ))
+        self.assertEqual(post_disabled.status_code, 200)
+        self.assertIn('full_name', post_disabled.context['form'].errors)
+        self.assertFalse(Submission.objects.exists())
+
+        self.assignment.allow_manual_student_entry = True
+        self.assignment.save(update_fields=['allow_manual_student_entry'])
+        get_enabled = self.client.get(self.url, {'class': self.classes[1].pk})
+        self.assertContains(get_enabled, 'const ALLOW_MANUAL_STUDENT_ENTRY = true;')
+        page_enabled = self.page(get_enabled)
+        self.assertFalse(page_enabled.xpath('//input[@id="id_other_student"]/ancestor::label[@hidden]'))
+
+        post_enabled = self.client.post(self.url, self.data(
+            full_name='Гість Позакласом', other_student='on',
+        ))
+        self.assertEqual(post_enabled.status_code, 302)
+        self.assertEqual(Submission.objects.count(), 1)

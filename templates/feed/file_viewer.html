@@ -1165,6 +1165,8 @@ function runSingleAICheck(subId) {
     if (box) box.setAttribute('aria-busy', 'true');
     var presetEl = document.getElementById('single-ai-preset');
     var presetId = presetEl ? presetEl.value : '';
+    var modelEl = document.getElementById('single-ai-model');
+    var aiModel = modelEl ? modelEl.value : '';
 
     // Збираємо обрані вчителем прапорці ГР
     var checkedGrCodes = [];
@@ -1200,6 +1202,9 @@ function runSingleAICheck(subId) {
     formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
     if (presetId) {
         formData.append('preset_id', presetId);
+    }
+    if (aiModel) {
+        formData.append('ai_model', aiModel);
     }
     if (checkedGrCodes.length > 0) {
         formData.append('selected_gr_codes', JSON.stringify(checkedGrCodes));

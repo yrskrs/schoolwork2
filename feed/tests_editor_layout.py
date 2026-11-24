@@ -321,3 +321,25 @@ class AssignmentEditorLayoutTests(TestCase):
             self.assertEqual(str(called_prompt).count(secret_notes), 1)
             self.assertIn("СУВОРО КОНФІДЕНЦІЙНО", str(called_prompt))
 
+    def test_allow_manual_student_entry_defaults_false_and_persists_when_enabled(self):
+        create_page = self.page(reverse('assignment_create'))
+        self.assertTrue(create_page.xpath('//input[@name="allow_manual_student_entry" and not(@checked)]'))
+
+        resp_default = self.client.post(reverse('assignment_create'), self.data(title='Без ручного вводу'))
+        self.assertEqual(resp_default.status_code, 302)
+        asg_default = Assignment.objects.get(title='Без ручного вводу')
+        self.assertFalse(asg_default.allow_manual_student_entry)
+
+        resp_enabled = self.client.post(reverse('assignment_create'), self.data(
+            title='З ручним вводом', allow_manual_student_entry='1',
+        ))
+        self.assertEqual(resp_enabled.status_code, 302)
+        asg_enabled = Assignment.objects.get(title='З ручним вводом')
+        self.assertTrue(asg_enabled.allow_manual_student_entry)
+
+        dup_resp = self.client.post(reverse('assignment_duplicate', args=[asg_enabled.pk]), {
+            'duplicate_title': 'Копія з ручним вводом', 'duplicate_classes': [str(self.classes[0].pk)],
+        })
+        self.assertEqual(dup_resp.status_code, 302)
+        self.assertTrue(Assignment.objects.get(title='Копія з ручним вводом').allow_manual_student_entry)
+

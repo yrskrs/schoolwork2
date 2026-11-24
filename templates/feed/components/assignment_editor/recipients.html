@@ -54,6 +54,15 @@
     {% endif %}
 </div>
 
+<!-- Ручне введення учня (поза класом) -->
+<div class="form-group" style="padding:12px 16px; background:var(--color-bg-secondary); border-radius:var(--radius-md); border:1px solid var(--color-border); margin-top:14px; margin-bottom:0;">
+    <label for="{{ form.allow_manual_student_entry.id_for_label }}" style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;font-size:13.5px;font-weight:700;color:var(--color-text-primary);margin:0;">
+        {{ form.allow_manual_student_entry }}
+        <span>✏️ Дозволити учням «Ввести вручну» (здачу поза списком класу)</span>
+    </label>
+    <p class="form-hint" style="margin-top:4px; margin-bottom:0;">За замовчуванням вимкнено: учень обирає своє ім’я зі списку класу. Увімкніть, якщо роботу може здавати учень поза переліком класу.</p>
+</div>
+
 <!-- 📅 2.1. Цільовий урок за розкладом (необов'язково) -->
 {% if teacher_lesson_schedules %}
 <details id="schedule-targeting-block" class="assignment-schedule-details" {% if is_edit or form.errors %}open{% endif %}>

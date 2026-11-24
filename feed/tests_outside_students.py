@@ -121,6 +121,9 @@ class OutsideStudentsTests(TestCase):
         self.assertIn(solo.pk, [m['local_id'] for m in confirmed.json()['mappings']])
 
     def submit(self, identity):
+        if not self.assignment.allow_manual_student_entry:
+            self.assignment.allow_manual_student_entry = True
+            self.assignment.save(update_fields=['allow_manual_student_entry'])
         form = SubmissionForm({'full_name': 'Підмінний Учень', 'class_group': self.group.pk,
             'other_student': 'on', 'comment_student': 'Синтетична відповідь'}, assignment=self.assignment)
         self.assertTrue(form.is_valid(), form.errors)
@@ -159,6 +162,7 @@ class OutsideStudentsTests(TestCase):
 
     def test_real_submit_route_reuses_the_browser_identity(self):
         self.assignment.status = self.assignment.STATUS_PUBLISHED
+        self.assignment.allow_manual_student_entry = True
         self.assignment.save()
         pupil = Client()
         url = reverse('submit_assignment', args=[self.assignment.pk])

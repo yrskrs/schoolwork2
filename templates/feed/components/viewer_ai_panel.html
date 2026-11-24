@@ -14,6 +14,19 @@
                         </select>
                     </div>
 
+                    <!-- Вибір моделі ШІ для цієї перевірки -->
+                    <div style="margin-bottom:10px;">
+                        <label for="single-ai-model" style="font-size:11px;font-weight:800;color:var(--color-text-secondary);text-transform:uppercase;display:block;margin-bottom:4px;">
+                            🤖 Модель ШІ:
+                        </label>
+                        <select id="single-ai-model" class="form-input" style="font-size:12px;padding:6px 10px;font-weight:700;width:100%;border-color:rgba(var(--accent-rgb),0.4);background:var(--color-bg-secondary);">
+                            <option value="" selected>🤖 Автоматично (як у черзі)</option>
+                            {% for m in viewer_ai_models %}
+                            <option value="{{ m.key }}">{{ m.label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
                     <!-- Приховані вказівки вчителя для ШІ (якщо задані) -->
                     {% if submission.assignment.teacher_ai_instructions %}
                     <div class="fv-teacher-ai-note" style="margin-bottom:12px;background:rgba(var(--accent-rgb),0.08);border:1.5px dashed rgba(var(--accent-rgb),0.35);border-radius:var(--radius-sm);padding:9px 12px;font-size:12px;">
