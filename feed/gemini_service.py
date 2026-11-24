@@ -332,7 +332,7 @@ def _capture_quota_headers(headers, status):
         return
 
 
-def _raw_call_ai_api(prompt_text, system_prompt="", inline_media=None, provider="gemini", api_key="", model_name="", custom_url="", temperature=0.2, max_output_tokens=3500, timeout=35, json_mode=False, thinking_budget=None, seed=None, manifest=None):
+def _raw_call_ai_api(prompt_text, system_prompt="", inline_media=None, provider="gemini", api_key="", model_name="", custom_url="", temperature=0.2, max_output_tokens=3500, timeout=35, json_mode=False, thinking_budget=None, seed=None, manifest=None, image_px=None):
     provider = (provider or 'gemini').lower().strip()
     from django.conf import settings as django_settings
     from .ai_privacy import outbound, PrivacyBlocked
@@ -368,7 +368,7 @@ def _raw_call_ai_api(prompt_text, system_prompt="", inline_media=None, provider=
         # processing unnecessarily restricts that pool; send actual page images.
         media_provider = 'openai' if provider == 'openrouter' and clean_model_name(model_name, provider) == 'openrouter/free' else provider
         inline_media = media_for_provider(inline_media or [], media_provider)
-        inline_media = optimize_media(inline_media, provider)
+        inline_media = optimize_media(inline_media, provider, image_px)
     except Exception:
         return 0, None, 'Не вдалося прочитати всі візуальні матеріали для цього провайдера. Спробуйте PDF-сумісну модель.', None
     if manifest is not None:
@@ -758,7 +758,7 @@ def _raw_call_ai_api(prompt_text, system_prompt="", inline_media=None, provider=
 
 
 @configured_call
-def call_ai_api(prompt_text, system_prompt="", inline_media=None, provider="gemini", api_key="", model_name="", custom_url="", temperature=0.2, max_output_tokens=3500, timeout=35, json_mode=False, thinking_budget=None, action="evaluation", connection_id=None, seed=None, manifest=None):
+def call_ai_api(prompt_text, system_prompt="", inline_media=None, provider="gemini", api_key="", model_name="", custom_url="", temperature=0.2, max_output_tokens=3500, timeout=35, json_mode=False, thinking_budget=None, action="evaluation", connection_id=None, seed=None, manifest=None, image_px=None):
     """
     Універсальна функція для звернення до будь-якого ШІ-провайдера
     (Google Gemini, OpenAI, DeepSeek, Groq, OpenRouter, Custom/Ollama).
@@ -780,7 +780,8 @@ def call_ai_api(prompt_text, system_prompt="", inline_media=None, provider="gemi
         json_mode=json_mode,
         thinking_budget=thinking_budget,
         seed=seed,
-        manifest=manifest
+        manifest=manifest,
+        image_px=image_px
     )
     latency_ms = int((time.time() - t_start) * 1000)
 
@@ -6588,7 +6589,7 @@ def normalized_level(level, grade):
 
 def evaluate_media_in_batches(prompt_text, system_prompt, media, *, provider, api_key, model_name,
                               custom_url='', max_images, max_output_tokens, timeout,
-                              thinking_budget=None, connection_id=None, seed=42):
+                              thinking_budget=None, connection_id=None, seed=42, image_px=None):
     """Assess visual evidence in provider-sized batches, then synthesize one JSON.
 
     Every batch sees the same plan but only its own pages; the synthesis request
@@ -6618,7 +6619,8 @@ def evaluate_media_in_batches(prompt_text, system_prompt, media, *, provider, ap
                 prompt_text=batch_prompt, system_prompt=system_prompt, inline_media=chunk,
                 provider=provider, api_key=api_key, model_name=model_name, custom_url=custom_url,
                 temperature=0.0, max_output_tokens=batch_out_budget, timeout=timeout,
-                json_mode=True, thinking_budget=thinking_budget, connection_id=connection_id, seed=seed)
+                json_mode=True, thinking_budget=thinking_budget, connection_id=connection_id, seed=seed,
+                image_px=image_px)
             parsed = (extract_json_from_text(batch_text, allow_partial=False)
                       if batch_status == 200 and batch_text else None)
             return {'index': index, 'status': batch_status, 'media': len(chunk),
@@ -7019,6 +7021,19 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
 
     for cfg_idx, cfg in enumerate(attempts_configs):
         from .ai_transport import evaluation_deadline
+        # A local model gets its own, longer budget: the hosted 300 s default is
+        # too small for GPU prefill on the school's own computer. The connection
+        # owns these limits, so hosted providers keep their short timeouts.
+        local_deadline = int(cfg.get('local_deadline') or 0) if cfg.get('local') else 0
+        if local_deadline:
+            wanted = time.monotonic() + max(60, local_deadline)
+            current = evaluation_deadline.get()
+            if current is None or current < wanted:
+                evaluation_deadline.set(wanted)
+            emit_event('context_prepared',
+                       f'Локальна модель: ліміт перевірки до {max(1, round(local_deadline / 60))} хв. '
+                       'Тривалість залежить від відеокарти та кількості сторінок.',
+                       provider=cfg['provider'], model=cfg['model'])
         deadline = evaluation_deadline.get()
         if deadline is not None and time.monotonic() >= deadline:
             attempted_errors.append('Вичерпано загальний бюджет часу перевірки; повтори зупинено.')
@@ -7253,7 +7268,8 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                         provider_prompt, provider_system, provider_media,
                         provider=c_provider, api_key=c_key, model_name=c_model, custom_url=c_url,
                         max_images=batching_limit, max_output_tokens=output_budget,
-                        timeout=50 if c_provider == 'gemini' else (240 if c_provider == 'custom' else (90 if router_retry else 35)),
+                        timeout=50 if c_provider == 'gemini' else ((local_deadline and int(cfg.get('local_timeout') or 240) or 240) if c_provider == 'custom' else (90 if router_retry else 35)),
+                        image_px=(int(cfg.get('local_image_px') or 1024) if local_deadline else None),
                         thinking_budget=thinking_budget_val, connection_id=c_conn_id, seed=42)
                     from .ai_payload import payload_manifest as _payload_manifest
                     payload_info.update(_payload_manifest(
@@ -7275,7 +7291,8 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                         custom_url=c_url,
                         temperature=0.0,
                         max_output_tokens=output_budget,
-                        timeout=50 if c_provider == 'gemini' else (240 if c_provider == 'custom' else (90 if router_retry else 35)),
+                        timeout=50 if c_provider == 'gemini' else ((local_deadline and int(cfg.get('local_timeout') or 240) or 240) if c_provider == 'custom' else (90 if router_retry else 35)),
+                        image_px=(int(cfg.get('local_image_px') or 1024) if local_deadline else None),
                         json_mode=True,
                         thinking_budget=thinking_budget_val,
                         connection_id=c_conn_id,
@@ -7347,7 +7364,9 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                         provider_prompt, provider_system, provider_media,
                         provider=c_provider, api_key=c_key, model_name=c_model, custom_url=c_url,
                         max_images=recovery_limit, max_output_tokens=recovery_out_budget,
-                        timeout=240, thinking_budget=thinking_budget_val, connection_id=c_conn_id, seed=42)
+                        timeout=(int(cfg.get('local_timeout') or 240) if local_deadline else 240),
+                        image_px=(int(cfg.get('local_image_px') or 1024) if local_deadline else None),
+                        thinking_budget=thinking_budget_val, connection_id=c_conn_id, seed=42)
                     payload_info.update(_payload_manifest(
                         provider_prompt, provider_system, provider_media, c_provider, c_model))
                     payload_info['batching'] = {

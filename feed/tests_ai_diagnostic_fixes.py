@@ -58,7 +58,7 @@ class AIDiagnosticFixesTests(TestCase):
 
         valid_png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAA="
         with patch("feed.gemini_service._http_post_json", side_effect=fake_post), \
-             patch("feed.ai_payload.optimize_media", side_effect=lambda media, provider: media):
+             patch("feed.ai_payload.optimize_media", side_effect=lambda media, provider, image_px=None: media):
             # Test empty prompt_text -> parts must not be empty
             # Test unsupported mime_type (e.g., application/zip) -> must not be sent in inlineData
             # Test timeout <= 35 -> gemini gets at least 50

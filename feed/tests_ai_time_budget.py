@@ -91,8 +91,17 @@ class CustomProviderTimeoutTests(TestCase):
         return (200, json.dumps(result), '', {})
 
     @patch('feed.gemini_service.call_ai_api')
-    def test_custom_evaluation_allows_a_long_local_generation(self, call):
+    def test_custom_local_evaluation_allows_a_long_generation(self, call):
         self.add_connection('custom', 'qwen3-vl-8b-instruct', connection_url='http://192.168.1.12:1234')
+        call.return_value = self.answer()
+        result = evaluate_submission_with_gemini(self.sub)
+        self.assertEqual(result['status'], 'success')
+        # A LAN address is a local model: it gets the connection's own timeout.
+        self.assertEqual(call.call_args.kwargs['timeout'], 300)
+
+    @patch('feed.gemini_service.call_ai_api')
+    def test_public_custom_endpoint_keeps_the_shorter_timeout(self, call):
+        self.add_connection('custom', 'hosted-compatible', connection_url='https://api.example.com/v1')
         call.return_value = self.answer()
         result = evaluate_submission_with_gemini(self.sub)
         self.assertEqual(result['status'], 'success')

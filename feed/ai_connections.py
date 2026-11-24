@@ -82,6 +82,28 @@ def save_connection(settings_id, data, delete=False):
                         raise ValueError('Некоректне значення квоти або паралельності.')
                     limits[limit] = value
             connection.update(quota_group=quota_group, quota_limits=limits)
+            from .ai_local import LOCAL_DEADLINE_RANGE, LOCAL_TIMEOUT_RANGE
+            mode = str(data.get('local') or '').strip().lower()
+            if mode in ('yes', 'true', '1'):
+                connection['local'] = True
+            elif mode in ('no', 'false', '0'):
+                connection['local'] = False
+            elif existing and 'local' in existing:
+                connection['local'] = bool(existing['local'])
+            for field, (low, high) in (('local_deadline', LOCAL_DEADLINE_RANGE),
+                                       ('local_timeout', LOCAL_TIMEOUT_RANGE),
+                                       ('local_image_px', (512, 1024))):
+                raw = str(data.get(field) or '').strip()
+                if raw:
+                    try:
+                        value = int(raw)
+                    except (TypeError, ValueError):
+                        raise ValueError('Час локальної моделі має бути цілим числом.')
+                    if not low <= value <= high:
+                        raise ValueError(f'Значення «{field}» має бути в межах {low}–{high}.')
+                    connection[field] = value
+                elif existing and field in existing:
+                    connection[field] = existing[field]
             if existing:
                 # Editing a label must not discard installed model budgets.
                 # Provider-derived model limits must not follow a different key.
@@ -217,6 +239,7 @@ def model_queue(settings):
 
 def request_configs(settings, custom_model=None):
     from .gemini_service import clean_model_name
+    from .ai_local import local_limits
     connections = {c['id']: c for c in settings.provider_connections}
     configs = []
     for row in model_queue(settings):
@@ -224,7 +247,8 @@ def request_configs(settings, custom_model=None):
         if row['enabled'] and configured(connection):
             configs.append({'provider': connection['provider'], 'api_key': connection['api_key'],
                             'custom_url': connection['custom_url'], 'connection_id': connection['id'],
-                            'is_backup': False, 'model': clean_model_name(row['name'], connection['provider'])})
+                            'is_backup': False, 'model': clean_model_name(row['name'], connection['provider']),
+                            **local_limits(connection)})
     if custom_model:
         # Explicit choices reuse only their own saved connection, never another supplier's key.
         selected = next((item for item in configs if item['model'] == custom_model), None)
@@ -237,6 +261,7 @@ def request_configs(settings, custom_model=None):
 def selectable_ai_models(settings):
     """Return configured AI models selectable for an individual teacher check."""
     from .gemini_service import clean_model_name
+    from .ai_local import local_limits
     options = []
     if settings.unified_model_queue:
         connections = {c['id']: c for c in settings.provider_connections}
@@ -247,6 +272,10 @@ def selectable_ai_models(settings):
             model_name = clean_model_name(row['name'], connection['provider'])
             suffix = '' if row['enabled'] else ' [вимк. у черзі]'
             conn_label = connection.get('label') or connection['provider']
+            limits = local_limits(connection)
+            local_suffix = ''
+            if limits['local']:
+                local_suffix = f" · локальна, ліміт {max(1, round(limits['local_deadline'] / 60))} хв"
             options.append({
                 'key': f"{connection['id']}|{row['name']}",
                 'connection_id': connection['id'],
@@ -254,7 +283,10 @@ def selectable_ai_models(settings):
                 'model': model_name,
                 'raw_name': row['name'],
                 'enabled': bool(row['enabled']),
-                'label': f"{row['name']} ({conn_label}){suffix}",
+                'label': f"{row['name']} ({conn_label}){local_suffix}{suffix}",
+                'local': limits['local'],
+                'local_deadline': limits['local_deadline'],
+                'local_timeout': limits['local_timeout'],
             })
         return options
     for item in settings.get_models_with_priority():
@@ -263,6 +295,10 @@ def selectable_ai_models(settings):
             continue
         model_name = clean_model_name(item['name'], item['provider'])
         suffix = '' if item['enabled'] else ' [вимк. у черзі]'
+        limits = local_limits({'provider': item['provider'], 'custom_url': (cfg or {}).get('custom_url', '')})
+        local_suffix = ''
+        if limits['local']:
+            local_suffix = f" · локальна, ліміт {max(1, round(limits['local_deadline'] / 60))} хв"
         options.append({
             'key': f"|{item['provider']}|{item['name']}",
             'connection_id': '',
@@ -270,7 +306,10 @@ def selectable_ai_models(settings):
             'model': model_name,
             'raw_name': item['name'],
             'enabled': bool(item['enabled']),
-            'label': f"{item['name']} ({item['provider']}){suffix}",
+            'label': f"{item['name']} ({item['provider']}){local_suffix}{suffix}",
+            'local': limits['local'],
+            'local_deadline': limits['local_deadline'],
+            'local_timeout': limits['local_timeout'],
         })
     return options
 
@@ -307,6 +346,7 @@ def resolve_explicit_pinned_config(settings, pinned):
             None,
         )
         if connection and configured(connection):
+            from .ai_local import local_limits
             return {
                 'provider': connection['provider'],
                 'api_key': connection['api_key'],
@@ -314,6 +354,7 @@ def resolve_explicit_pinned_config(settings, pinned):
                 'connection_id': connection['id'],
                 'is_backup': False,
                 'model': clean_model_name(model_name, connection['provider']),
+                **local_limits(connection),
             }
         return None
     cfg = settings.get_provider_config(provider, include_alternative=True)

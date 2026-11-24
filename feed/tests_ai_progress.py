@@ -406,7 +406,7 @@ class EvaluationProgressTests(TestCase):
         self.assertEqual(AIRequestLog.objects.count(), 1)
 
     @patch('feed.gemini_service._http_post_json')
-    @patch('feed.ai_payload.optimize_media', side_effect=lambda items, provider: items)
+    @patch('feed.ai_payload.optimize_media', side_effect=lambda items, provider, image_px=None: items)
     def test_known_groq_image_limit_rejects_instead_of_capping(self, optimize, post):
         from .tests_ai_payload import picture
         media = [picture(color) for color in ('red', 'blue', 'green', 'black')]
@@ -416,7 +416,7 @@ class EvaluationProgressTests(TestCase):
         self.assertEqual(len(media), 4)
 
     @patch('feed.gemini_service._http_post_json')
-    @patch('feed.ai_payload.optimize_media', side_effect=lambda items, provider: items)
+    @patch('feed.ai_payload.optimize_media', side_effect=lambda items, provider, image_px=None: items)
     def test_text_only_groq_is_skipped_then_gemini_gets_complete_visual(self, optimize, post):
         self.add_connection('groq', 'openai/gpt-oss-120b')
         self.add_connection('gemini', 'vision-model')
@@ -523,7 +523,7 @@ class EvaluationProgressTests(TestCase):
         # First single-request attempt hits n_ctx=22016; batch recovery splits into chunks + 1 synthesis.
         call.side_effect = [(400, None, lm_err, {})] + [self.answer() for _ in range(10)]
         with patch('feed.gemini_service.extract_submission_content', return_value=(['Відповідь з фото'], media, None)), \
-             patch('feed.ai_payload.optimize_media', side_effect=lambda items, provider: items):
+             patch('feed.ai_payload.optimize_media', side_effect=lambda items, provider, image_px=None: items):
             result = evaluate_submission_with_gemini(self.sub)
         self.assertEqual(result['status'], 'success')
         self.assertGreater(call.call_count, 2)

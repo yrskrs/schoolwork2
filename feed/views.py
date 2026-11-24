@@ -74,6 +74,7 @@ from .models import (
 )
 
 from .login_throttle import record_failure, wait_seconds
+from .ai_local import LOCAL_IMAGE_PX_CHOICES
 from .forms import (
     AssignmentForm, TeacherLoginForm, ClassSelectForm,
     TeacherProfileForm, SubjectForm, ClassGroupForm,
@@ -8445,6 +8446,7 @@ def teacher_settings_view(request):
         'active_fallback_chain': active_fallback_chain,
         'model_stats': model_stats,
         'ai_connections': ai_settings.public_connections(),
+        'local_image_px_choices': LOCAL_IMAGE_PX_CHOICES,
         'provider_catalog': PROVIDER_CATALOG,
         'catalog_checked_at': CATALOG_CHECKED_AT,
         'stats_view': stats_view,

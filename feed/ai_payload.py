@@ -319,7 +319,7 @@ def media_guard_error(media, provider, model_name):
             return 415, 'Непідтримуваний тип візуального матеріалу: ' + ', '.join(sorted(set(unsupported))[:3])
     return None
 
-def optimize_media(media, provider):
+def optimize_media(media, provider, image_px=None):
     from .ai_context import evidence_cache
     cache = evidence_cache()
     media = [dict(item) for item in media]
@@ -341,10 +341,11 @@ def optimize_media(media, provider):
             for signature in signatures:
                 covered.setdefault(signature, item)
     allow_webp = (provider or '').lower() != 'custom'
+    max_px = max(256, int(image_px or 1024)) if not allow_webp else 0
     for item in media:
         raw = base64.b64decode(item['data'])
         digest = hashlib.sha256(raw).hexdigest()
-        key = ('lossless-ai-image-v1-' if allow_webp else 'lossless-ai-image-std-v3-') + digest
+        key = (('lossless-ai-image-v1-' if allow_webp else f'lossless-ai-image-std-v4-{max_px}-') + digest)
         prepared = cache.get(key)
         if prepared is None:
             prepared = {'mime_type': item['mime_type'], 'data': item['data'], 'signature': digest}
@@ -360,11 +361,13 @@ def optimize_media(media, provider):
                                 if buffer.tell() < len(raw):
                                     prepared.update(mime_type='image/webp', data=base64.b64encode(buffer.getvalue()).decode())
                             else:
-                                # Local OpenAI-compatible backends (e.g. LM Studio) only accept PNG/JPEG
-                                # and allocate high vision token counts above 1024px.
+                                # Local OpenAI-compatible backends (e.g. LM Studio) only accept PNG/JPEG.
+                                # Vision prefill grows with pixels, so a local connection may ask for a
+                                # smaller page: 512px prefill is ~5x faster than 1024px, at the cost of
+                                # fine print readability.
                                 resized = image
-                                if max(image.size) > 1024:
-                                    scale = 1024.0 / max(image.size)
+                                if max(image.size) > max_px:
+                                    scale = max_px / max(image.size)
                                     resized = image.resize(
                                         (max(1, int(image.width * scale)), max(1, int(image.height * scale))),
                                         Image.Resampling.LANCZOS,

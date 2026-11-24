@@ -31,6 +31,27 @@
             <div><label class="form-label" for="connection-key-{{ connection.id }}">API ключ</label><input id="connection-key-{{ connection.id }}" class="form-input" name="connection_key" type="password" maxlength="4096" autocomplete="new-password" placeholder="{% if connection.has_key %}Ключ збережено; залиште порожнім, щоб зберегти його{% else %}Вставте API ключ{% endif %}"></div>
             {% if connection.provider == 'custom' or connection.provider == 'cloudflare' %}<div><label class="form-label" for="connection-url-{{ connection.id }}">{% if connection.provider == 'cloudflare' %}Cloudflare Account ID або Base URL{% else %}Base URL{% endif %}</label><input id="connection-url-{{ connection.id }}" class="form-input" name="connection_url" type="text" maxlength="255" value="{{ connection.custom_url }}" required placeholder="{% if connection.provider == 'cloudflare' %}Account ID або повний URL{% else %}http://localhost:11434/v1{% endif %}"></div>{% else %}<input type="hidden" name="connection_url" value="{{ connection.custom_url }}">{% endif %}
             <div><label class="form-label" for="connection-model-{{ connection.id }}">Додати модель до черги (необов’язково)</label><input id="connection-model-{{ connection.id }}" class="form-input" name="connection_model" maxlength="100" placeholder="Точний ідентифікатор моделі з API"></div>
+            {% if connection.provider == 'custom' %}
+            <details class="ai-local-block" {% if connection.local %}open{% endif %} style="margin:8px 0;padding:8px 10px;border:1px solid var(--color-border);border-radius:var(--radius-sm);background:var(--color-bg-secondary);">
+                <summary style="cursor:pointer;font-weight:700;">🖥 Локальна модель (власний сервер ШІ)</summary>
+                <p class="form-hint">{% if connection.local %}Виявлено локальну адресу.{% else %}Адресу не визнано локальною — можна позначити вручну.{% endif %} Швидкість залежить від відеокарти: на RTX 4060 сторінка коштує ≈11–18 с підготовки, відповідь генерується ≈13 токенів/с. Менший розмір сторінки = швидше, але дрібний текст може стати нечитабельним.</p>
+                <label class="form-label">Тип моделі
+                    <select class="form-input" name="local">
+                        <option value="auto" {% if connection.local_auto %}selected{% endif %}>Визначати автоматично за адресою</option>
+                        <option value="yes" {% if not connection.local_auto and connection.local %}selected{% endif %}>Локальна (шкільний комп’ютер або LAN)</option>
+                        <option value="no" {% if not connection.local_auto and not connection.local %}selected{% endif %}>Не локальна (зовнішній API)</option>
+                    </select>
+                </label>
+                <label class="form-label">Ліміт часу однієї перевірки, с (120–1800)<input class="form-input" type="number" name="local_deadline" min="120" max="1800" value="{{ connection.local_deadline }}"></label>
+                <label class="form-label">Таймаут одного запиту, с (60–600)<input class="form-input" type="number" name="local_timeout" min="60" max="600" value="{{ connection.local_timeout }}"></label>
+                <label class="form-label">Розмір сторінки для локальної моделі
+                    <select class="form-input" name="local_image_px">
+                        {% for px in local_image_px_choices %}<option value="{{ px }}" {% if connection.local_image_px == px %}selected{% endif %}>{{ px }} px{% if px == 1024 %} (якість){% elif px == 768 %} (швидше){% elif px == 512 %} (найшвидше){% endif %}</option>{% endfor %}
+                    </select>
+                </label>
+                <p class="form-hint">Орієнтовно: один файл/фото — до 3 хв, кожна наступна сторінка — ще ≈30–60 с. Загальний ліміт обмежений жорстким таймаутом завдання (AI_JOB_TIMEOUT).</p>
+            </details>
+            {% endif %}
             <div class="ai-connection-actions"><button class="btn btn-primary" type="submit">Зберегти підключення</button><button class="btn btn-danger" type="submit" name="action" value="delete_ai_connection" formnovalidate onclick="return confirm('Видалити підключення разом із його моделями?');">Видалити</button></div>
         </form>
     </article>
@@ -44,7 +65,23 @@
             <div><label class="form-label" for="connection-provider-new">Постачальник</label><select class="form-input" id="connection-provider-new" name="connection_provider">{% for value,label in ai_providers %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></div>
             <div><label class="form-label" for="connection-label-new">Назва підключення</label><input id="connection-label-new" class="form-input" name="connection_label" maxlength="80" placeholder="Наприклад, Groq — шкільний ключ"></div>
             <div><label class="form-label" for="connection-key-new">API ключ / токен</label><input id="connection-key-new" class="form-input" name="connection_key" type="password" maxlength="4096" autocomplete="new-password" placeholder="Вставте ключ або API токен"></div>
-            <div data-new-connection-url hidden><label class="form-label" for="connection-url-new">Base URL власного API</label><input id="connection-url-new" class="form-input" name="connection_url" type="text" maxlength="255" placeholder="http://localhost:11434/v1"></div>
+            <div data-new-connection-url hidden><label class="form-label" for="connection-url-new">Base URL власного API</label><input id="connection-url-new" class="form-input" name="connection_url" type="text" maxlength="255" placeholder="http://localhost:11434/v1">
+                <label class="form-label">Тип моделі
+                    <select class="form-input" name="local">
+                        <option value="auto" selected>Визначати автоматично за адресою</option>
+                        <option value="yes">Локальна (шкільний комп’ютер або LAN)</option>
+                        <option value="no">Не локальна (зовнішній API)</option>
+                    </select>
+                </label>
+                <label class="form-label">Ліміт часу перевірки, с<input class="form-input" type="number" name="local_deadline" min="120" max="1800" value="600"></label>
+                <label class="form-label">Таймаут запиту, с<input class="form-input" type="number" name="local_timeout" min="60" max="600" value="300"></label>
+                <label class="form-label">Розмір сторінки
+                    <select class="form-input" name="local_image_px">
+                        {% for px in local_image_px_choices %}<option value="{{ px }}" {% if px == 1024 %}selected{% endif %}>{{ px }} px</option>{% endfor %}
+                    </select>
+                </label>
+                <p class="form-hint">Для локальної моделі: більший ліміт часу й менший розмір сторінки прискорюють перевірку; швидкість залежить від відеокарти.</p>
+            </div>
             <div><label class="form-label" for="connection-model-new">Ідентифікатор моделі (необов’язково)</label><input id="connection-model-new" class="form-input" name="connection_model" maxlength="100" placeholder="Точна назва з API постачальника"></div>
             <div class="ai-connection-actions"><button class="btn btn-primary" type="submit">Додати підключення</button></div>
         </form>

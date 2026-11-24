@@ -3588,13 +3588,26 @@ class AISettings(models.Model):
 
     def public_connections(self):
         from .ai_connections import configured
-        return [{k: c[k] for k in ('id', 'provider', 'label', 'custom_url')} |
-                {'configured': configured(c), 'has_key': bool(c.get('api_key')),
-                 'quota_group': c.get('quota_group', ''), 'quota_limits': c.get('quota_limits', {}),
-                 'quota_model_rows': [{'name': name, **limits} for name, limits in sorted((c.get('model_quota_limits') or {}).items())],
-                 'quota_source_note': (c.get('quota_provenance') or {}).get('summary', ''),
-                 'quota_fallback_limits': c.get('quota_fallback_limits', {}),
-                 'quota_fallback_note': c.get('quota_fallback_note', '')} for c in self.provider_connections]
+        from .ai_local import local_limits
+        rows = []
+        for connection in self.provider_connections:
+            limits = local_limits(connection)
+            rows.append({k: connection[k] for k in ('id', 'provider', 'label', 'custom_url')} |
+                        {'configured': configured(connection), 'has_key': bool(connection.get('api_key')),
+                         'quota_group': connection.get('quota_group', ''), 'quota_limits': connection.get('quota_limits', {}),
+                         'quota_model_rows': [{'name': name, **limits} for name, limits in sorted((connection.get('model_quota_limits') or {}).items())],
+                         'quota_source_note': (connection.get('quota_provenance') or {}).get('summary', ''),
+                         'quota_fallback_limits': connection.get('quota_fallback_limits', {}),
+                         'quota_fallback_note': connection.get('quota_fallback_note', ''),
+                         'local': limits['local'],
+                         'local_auto': 'local' not in connection,
+                         'local_deadline': limits['local_deadline'],
+                         'local_timeout': limits['local_timeout'],
+                         'local_image_px': limits['local_image_px'],
+                         'local_hint': (f"Локальна адреса: орієнтовно "
+                                        f"{max(1, round(limits['local_deadline'] / 60))} хв на перевірку, "
+                                        f"швидкість залежить від відеокарти.") if limits['local'] else ''})
+        return rows
 
     # ── Основний API ──────────────────────────────────────────────────────────
     ai_provider = models.CharField(

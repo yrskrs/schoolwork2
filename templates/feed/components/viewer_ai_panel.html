@@ -22,9 +22,10 @@
                         <select id="single-ai-model" class="form-input" style="font-size:12px;padding:6px 10px;font-weight:700;width:100%;border-color:rgba(var(--accent-rgb),0.4);background:var(--color-bg-secondary);">
                             <option value="" selected>🤖 Автоматично (як у черзі)</option>
                             {% for m in viewer_ai_models %}
-                            <option value="{{ m.key }}">{{ m.label }}</option>
+                            <option value="{{ m.key }}" {% if m.local %}data-local="1" data-deadline="{{ m.local_deadline }}"{% endif %}>{{ m.label }}</option>
                             {% endfor %}
                         </select>
+                        <p id="single-ai-model-hint" class="form-hint" style="margin:4px 0 0;font-size:11px;line-height:1.35;" hidden></p>
                     </div>
 
                     <!-- Приховані вказівки вчителя для ШІ (якщо задані) -->

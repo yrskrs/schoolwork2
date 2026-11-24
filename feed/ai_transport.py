@@ -34,6 +34,9 @@ def configured_call(function):
         config = {'provider': values.get('provider', 'gemini'), 'connection_id': values.get('connection_id') or '',
                   'model': values.get('model_name', ''),
                   'deadline': evaluation_deadline.get() or time.monotonic() + settings.AI_REQUEST_DEADLINE}
+        # A local model may hold a concurrency slot for the whole extended budget;
+        # the scheduler must not free it after the shorter hosted default.
+        config['budget_seconds'] = max(0.0, config['deadline'] - time.monotonic())
         from .ai_quotas import credential_fingerprint
         config['credential_fingerprint'] = credential_fingerprint(values.get('api_key', ''), values.get('custom_url', ''))
         token = request_config.set(config)

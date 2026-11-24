@@ -114,7 +114,9 @@ def reserve(config, holder, input_tokens, output_tokens):
                     return False, max(1, int(reset - now) + 1)
         records.append({'id': holder, 'at': now, 'input': input_tokens, 'output': output_tokens,
                         'tokens': input_tokens + output_tokens, 'model': model})
-        leases[holder] = now + settings.AI_REQUEST_DEADLINE + 15
+        # Local models may run for a much longer budget than the hosted default.
+        held_seconds = max(float(settings.AI_REQUEST_DEADLINE), float(config.get('budget_seconds') or 0))
+        leases[holder] = now + held_seconds + 15
         data.update(requests=records, leases=leases)
         return True, 0
 

@@ -357,8 +357,28 @@
             '</div>' +
         '</div>';
     }
+    function updateSingleModelHint() {
+        const select = document.getElementById('single-ai-model');
+        const hint = document.getElementById('single-ai-model-hint');
+        if (!select || !hint) return;
+        const option = select.options[select.selectedIndex];
+        if (!option || option.dataset.local !== '1') {
+            hint.hidden = true;
+            hint.textContent = '';
+            return;
+        }
+        const minutes = Math.max(1, Math.round(Number(option.dataset.deadline || 600) / 60));
+        hint.hidden = false;
+        hint.textContent = '🖥 Локальна модель: орієнтовно 2 хв + до 2 хв на сторінку; ліміт ' + minutes +
+            ' хв. Швидкість залежить від відеокарти та розміру сторінок у налаштуваннях ШІ.';
+    }
     window.SchoolNetAI = {fetch: fetchResult, escapeResult: escapeResult, getSadRobotHtml: getSadRobotHtml};
     document.addEventListener('DOMContentLoaded', function () {
+        const modelSelect = document.getElementById('single-ai-model');
+        if (modelSelect) {
+            modelSelect.addEventListener('change', updateSingleModelHint);
+            updateSingleModelHint();
+        }
         document.querySelectorAll('[data-ai-job-status]').forEach(async function (element) {
             try {
                 const response = await fetchResult(element.dataset.aiJobStatus, undefined, {existing: element});
