@@ -7253,7 +7253,7 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                         provider_prompt, provider_system, provider_media,
                         provider=c_provider, api_key=c_key, model_name=c_model, custom_url=c_url,
                         max_images=batching_limit, max_output_tokens=output_budget,
-                        timeout=50 if c_provider == 'gemini' else (120 if c_provider == 'custom' else (90 if router_retry else 35)),
+                        timeout=50 if c_provider == 'gemini' else (240 if c_provider == 'custom' else (90 if router_retry else 35)),
                         thinking_budget=thinking_budget_val, connection_id=c_conn_id, seed=42)
                     from .ai_payload import payload_manifest as _payload_manifest
                     payload_info.update(_payload_manifest(
@@ -7275,7 +7275,7 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                         custom_url=c_url,
                         temperature=0.0,
                         max_output_tokens=output_budget,
-                        timeout=50 if c_provider == 'gemini' else (120 if c_provider == 'custom' else (90 if router_retry else 35)),
+                        timeout=50 if c_provider == 'gemini' else (240 if c_provider == 'custom' else (90 if router_retry else 35)),
                         json_mode=True,
                         thinking_budget=thinking_budget_val,
                         connection_id=c_conn_id,
@@ -7347,7 +7347,7 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                         provider_prompt, provider_system, provider_media,
                         provider=c_provider, api_key=c_key, model_name=c_model, custom_url=c_url,
                         max_images=recovery_limit, max_output_tokens=recovery_out_budget,
-                        timeout=120, thinking_budget=thinking_budget_val, connection_id=c_conn_id, seed=42)
+                        timeout=240, thinking_budget=thinking_budget_val, connection_id=c_conn_id, seed=42)
                     payload_info.update(_payload_manifest(
                         provider_prompt, provider_system, provider_media, c_provider, c_model))
                     payload_info['batching'] = {

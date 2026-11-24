@@ -37,7 +37,7 @@ def main():
             f'DATABASES = {{"default": {{"ENGINE": "django.db.backends.sqlite3", "NAME": {str(folder / "trial.sqlite3")!r}, "OPTIONS": {{"timeout": 20, "transaction_mode": "IMMEDIATE"}}}}}}\n'
             f'MEDIA_ROOT = {str(folder / "media")!r}\n'
             f'AI_PREPARATION_LOCK_DIR = {str(folder / "locks")!r}\n'
-            'AI_JOBS_EAGER = False\nAI_REQUEST_DEADLINE = 150\n'
+            'AI_JOBS_EAGER = False\nAI_REQUEST_DEADLINE = 300\n'
             'CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}, "ai_materials": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}\n')
         os.environ.pop('DATABASE_URL', None)
         os.environ.update(DJANGO_SETTINGS_MODULE='live_ai_settings', PYTHON_DOTENV_DISABLED='1',

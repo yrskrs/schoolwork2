@@ -168,7 +168,7 @@ AI_FILE_API_MAX_FILE_MB = max(1, int(os.environ.get('AI_FILE_API_MAX_FILE_MB', '
 AI_FILE_API_MAX_TOTAL_MB = max(1, int(os.environ.get('AI_FILE_API_MAX_TOTAL_MB', '400')))
 AI_STUDENT_RESERVED = max(0, min(AI_WORKER_CONCURRENCY - 1, int(os.environ.get('AI_STUDENT_RESERVED', '1'))))
 AI_PREP_CONCURRENCY = max(1, min(2, int(os.environ.get('AI_PREP_CONCURRENCY', '1'))))
-AI_REQUEST_DEADLINE = max(30, min(AI_JOB_TIMEOUT - 10, int(os.environ.get('AI_REQUEST_DEADLINE', '150'))))
+AI_REQUEST_DEADLINE = max(30, min(AI_JOB_TIMEOUT - 10, int(os.environ.get('AI_REQUEST_DEADLINE', '300'))))
 AI_PRIVACY_ALLOWED_PROVIDERS = [p.strip() for p in os.environ.get('AI_PRIVACY_ALLOWED_PROVIDERS',
     'gemini,openai,deepseek,groq,openrouter,cloudflare,custom').split(',') if p.strip()]
 
