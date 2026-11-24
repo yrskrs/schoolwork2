@@ -1,3 +1,9 @@
+## 4.14.2 — 2026-11-24 — [CORE] Адаптивне стиснення зображень і автоматичний пакетний поділ при малому контексті локального ШІ
+
+- **Оптимізація візуальних токенів для `custom` (`feed/ai_payload.py`, `feed/gemini_service.py`).** Для провайдера `custom` зображення понад `1280px` масштабуються до `1280px` по довгій стороні, а в `evaluate_submission_with_gemini` використовується компактний варіант промпта та правил (`prompt_compact`, `system_compact`).
+- **Автоматичний перехід на пакетну перевірку при `exceed_context_size_error` (`feed/ai_concurrency.py`, `feed/gemini_service.py`).** Додано розпізнавання помилок LM Studio (`context size`, `exceed_context_size_error`, витягнення `n_ctx` і `n_prompt_tokens`) та вимкнено зайвий повтор зі зняттям `seed` при 400-помилці контексту. Якщо багатосторінкова робота перевищує `n_ctx` локальної моделі (наприклад, `22016` токенів), перевірка автоматично розбивається на малі партії (`evaluate_media_in_batches` послідовно з `workers=1`), фіксуючи реальний ліміт моделі.
+- **Автотести:** додано регресійні перевірки масштабування, парсингу `n_ctx` та автоматичного відновлення пакетною перевіркою у `feed.tests_ai_payload` та `feed.tests_ai_progress`.
+
 ## 4.14.1 — 2026-11-24 — [CORE] Сумісний формат зображень (PNG/JPEG без WebP) для локальних OpenAI-сумісних ШІ-серверів
 
 - **Заборона WebP у `image_url` для `custom`-провайдера (`feed/ai_payload.py`, `feed/gemini_service.py`).** У `optimize_media` для `provider == 'custom'` вимкнено перетворення зображень у `image/webp` (зі збереженням окремого кешу `lossless-ai-image-std-v1-`), а вхідні `image/webp`/нестандартні растри перетворюються у `image/png` або `image/jpeg`. Також очищено `base64`-дані перед складанням `data:...;base64,...` в OpenAI-сумісних запитах. Це усуває помилку LM Studio `'url' field must be a base64 encoded image.` при перевірці робіт локальними ШІ-моделями.

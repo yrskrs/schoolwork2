@@ -1,5 +1,17 @@
 [
   {
+    "version": "4.14.2",
+    "date": "2026-11-24",
+    "title": "[CORE] Адаптивне стиснення зображень і автоматичний пакетний поділ при малому контексті локального ШІ",
+    "changes": [
+      "Адаптивний розмір зображень для провайдера custom у feed/ai_payload.py (optimize_media, кеш lossless-ai-image-std-v2-): зображення понад 1280px зменшуються до 1280px по довгій стороні (LANCZOS), що суттєво зменшує кількість візуальних токенів у LM Studio / Ollama / Qwen3-VL.",
+      "Використання компактного промпта й системних правил (prompt_compact, system_compact) для custom у feed/gemini_service.py.",
+      "Розпізнавання помилки LM Studio exceed_context_size_error у feed/ai_concurrency.py (is_context_limit_error, parse_context_limit_tokens) із фіксацією реального n_ctx (наприклад, 22016 токенів) замість завищеної оцінки.",
+      "Автоматичний пакетний перехід (evaluate_media_in_batches із workers=1 для custom): при отриманні exceed_context_size_error або при перевищенні зафіксованого n_ctx багатосторінкові роботи автоматично діляться на малі партії сторінок без перемикання на резервний провайдер і без повторного запиту seed на 400-помилку контексту.",
+      "Додано регресійні тести в feed.tests_ai_payload та feed.tests_ai_progress."
+    ]
+  },
+  {
     "version": "4.14.1",
     "date": "2026-11-24",
     "title": "[CORE] Сумісний формат зображень (PNG/JPEG без WebP) для локальних OpenAI-сумісних ШІ-серверів",

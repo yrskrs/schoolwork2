@@ -695,8 +695,9 @@ def _raw_call_ai_api(prompt_text, system_prompt="", inline_media=None, provider=
                     payload.pop('reasoning')
                     status_code, data, text = post_chat(payload)
 
-            # Якщо провайдер не приймає seed, повторюємо без нього.
-            if status_code == 400 and 'seed' in payload:
+            # Якщо провайдер не приймає seed, повторюємо без нього (не для помилок ліміту контексту).
+            from .ai_concurrency import is_context_limit_error as _is_ctx_err
+            if status_code == 400 and 'seed' in payload and not _is_ctx_err(status_code, text):
                 payload.pop('seed', None)
                 status_code, data, text = post_chat(payload)
 
@@ -6642,7 +6643,7 @@ def evaluate_media_in_batches(prompt_text, system_prompt, media, *, provider, ap
         from concurrent.futures import ThreadPoolExecutor
         from django.conf import settings as django_settings
         import contextvars
-        workers = max(1, min(len(runnable), int(getattr(django_settings, 'AI_BATCH_CONCURRENCY', 3))))
+        workers = 1 if provider == 'custom' else max(1, min(len(runnable), int(getattr(django_settings, 'AI_BATCH_CONCURRENCY', 3))))
         if workers == 1:
             batch_results.extend(run_batch(index, chunk) for index, chunk in runnable)
         else:
@@ -7036,11 +7037,11 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
         )
 
         provider_prompt, provider_system = prompt_content, system_instruction
-        if c_provider in ('gemini', 'groq', 'openrouter'):
+        if c_provider in ('gemini', 'groq', 'openrouter', 'custom'):
             provider_prompt, provider_system = prompt_compact, system_compact
 
         from .ai_payload import estimate_text_tokens
-        media_tokens_per_item = 1500 if clean_model_name(c_model, c_provider) == 'qwen/qwen3.8-27b' else 1000
+        media_tokens_per_item = 2200 if c_provider == 'custom' else (1500 if clean_model_name(c_model, c_provider) == 'qwen/qwen3.8-27b' else 1000)
         from .ai_payload import media_image_units
         # Gemini and native-PDF OpenRouter receive one PDF object; other
         # providers receive one image per converted page.
@@ -7053,10 +7054,19 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
             get_model_capabilities(c['model'], c['provider']).get('supports_vision', True)
             for i, c in enumerate(attempts_configs) if i > cfg_idx
         )
-        # No larger multimodal model in the queue: split pages instead of refusing.
+        batching_limit = max_images_allowed
         batching_plan = bool(max_images_allowed is not None and current_images_count > max_images_allowed
                              and model_supports_vision and not has_other_multimodal)
-        est_tokens = estimate_text_tokens(provider_prompt + provider_system) + len(inline_media or []) * media_tokens_per_item
+        text_est_tokens = estimate_text_tokens(provider_prompt + provider_system)
+        est_tokens = text_est_tokens + len(inline_media or []) * media_tokens_per_item
+        if (not batching_plan and c_provider == 'custom' and model_supports_vision
+                and current_images_count > 1 and est_tokens > model_context_tokens
+                and text_est_tokens + media_tokens_per_item < model_context_tokens):
+            image_budget = max(0, int(model_context_tokens * 0.65) - text_est_tokens)
+            token_batch_limit = max(1, min(4, image_budget // media_tokens_per_item))
+            if token_batch_limit < current_images_count:
+                batching_plan = True
+                batching_limit = token_batch_limit
 
         if caps.get('media_policy') == 'text_only' and (
                 current_images_count or any((item.get('mime_type') or '').startswith(('audio/', 'video/'))
@@ -7081,7 +7091,7 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
             continue
 
         # 0. Перевірка зафіксованого ліміту контексту (якщо раніше виникала помилка 413 / перевищення контексту)
-        if caps.get('is_context_flagged') and est_tokens > model_context_tokens:
+        if caps.get('is_context_flagged') and est_tokens > model_context_tokens and not batching_plan:
             if has_other_models:
                 skip_msg = f"{c_provider}/{c_model}: зафіксовано ліміт контексту ({model_context_tokens} токенів). Пропускаю для збереження якості."
                 emit_event('model_skipped', skip_msg, provider=c_provider, model=c_model, position=cfg_idx + 1, total=len(attempts_configs))
@@ -7150,7 +7160,7 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
             continue
 
         # 4. Якщо розрахунковий обсяг даних перевищує ліміт контексту моделі:
-        if est_tokens > model_context_tokens:
+        if est_tokens > model_context_tokens and not batching_plan:
             has_larger_model = any(
                 get_model_capabilities(c['model'], c['provider']).get('context_tokens', 128000) > model_context_tokens
                 for i, c in enumerate(attempts_configs) if i > cfg_idx
@@ -7209,6 +7219,8 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                     thinking_budget_val = 0 if (c_provider in ('groq', 'openrouter') or ('flash' in c_model.lower() and c_provider == 'gemini')) else None
 
                 output_budget = max(output_budget_base, boosted_output_budget)
+                if c_provider == 'custom' and model_context_tokens <= 32768:
+                    output_budget = min(output_budget, max(1500, int(model_context_tokens * 0.20)))
                 if c_provider == 'openrouter' and clean_model_name(c_model, c_provider) == 'openrouter/free':
                     # Dynamic free routers may select a reasoning model. A 4K
                     # output budget is consumed by reasoning before JSON, which
@@ -7220,7 +7232,7 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                     status_code, raw_text, err_msg, raw_data, batch_meta = evaluate_media_in_batches(
                         provider_prompt, provider_system, inline_media,
                         provider=c_provider, api_key=c_key, model_name=c_model, custom_url=c_url,
-                        max_images=max_images_allowed, max_output_tokens=output_budget,
+                        max_images=batching_limit, max_output_tokens=output_budget,
                         timeout=50 if c_provider == 'gemini' else (120 if c_provider == 'custom' else (90 if router_retry else 35)),
                         thinking_budget=thinking_budget_val, connection_id=c_conn_id, seed=42)
                     from .ai_payload import payload_manifest as _payload_manifest
@@ -7297,6 +7309,33 @@ def evaluate_submission_with_gemini(submission, custom_prompt=None, ai_settings=
                                provider=c_provider, model=c_model, position=cfg_idx + 1, total=len(attempts_configs), status_code=status_code)
                     time.sleep(delay)
                     continue
+
+                if (c_provider == 'custom' and not batching_plan and len(inline_media or []) > 1
+                        and is_context_limit_error(status_code, str(err_msg or ''))):
+                    from .ai_concurrency import parse_context_limit_tokens
+                    parsed_ctx, parsed_prompt_toks = parse_context_limit_tokens(str(err_msg or ''))
+                    actual_ctx = parsed_ctx or model_context_tokens
+                    actual_prompt_toks = parsed_prompt_toks or est_tokens
+                    tokens_per_img = max(1200, (actual_prompt_toks - text_est_tokens) // max(1, len(inline_media)))
+                    recovery_limit = max(1, min(4, int(max(0, actual_ctx * 0.60 - text_est_tokens) // tokens_per_img)))
+                    recovery_out_budget = min(output_budget, max(1500, int(actual_ctx * 0.20)))
+                    record_model_context_limit(c_provider, c_model, error_message=str(err_msg or ''), est_tokens=actual_ctx)
+                    emit_event('retry', f'{c_provider}/{c_model}: контекст {actual_ctx} токенів; перемикаю на пакетну перевірку (по {recovery_limit} стор.).',
+                               provider=c_provider, model=c_model, position=cfg_idx + 1, total=len(attempts_configs), status_code=status_code)
+                    from .ai_payload import payload_manifest as _payload_manifest
+                    status_code, raw_text, err_msg, raw_data, batch_meta = evaluate_media_in_batches(
+                        provider_prompt, provider_system, inline_media,
+                        provider=c_provider, api_key=c_key, model_name=c_model, custom_url=c_url,
+                        max_images=recovery_limit, max_output_tokens=recovery_out_budget,
+                        timeout=120, thinking_budget=thinking_budget_val, connection_id=c_conn_id, seed=42)
+                    payload_info.update(_payload_manifest(
+                        provider_prompt, provider_system, inline_media, c_provider, c_model))
+                    payload_info['batching'] = {
+                        'limit': batch_meta.get('limit'), 'batch_count': batch_meta.get('batch_count'),
+                        'synthesis_status': batch_meta.get('synthesis_status')}
+                    emit_event('batched', f'{c_provider}/{c_model}: оцінено партіями '
+                               f'({batch_meta.get("batch_count")} × до {batch_meta.get("limit")} сторінок).',
+                               provider=c_provider, model=c_model)
 
                 if status_code != 200 or not raw_text:
                     if status_code == 429:

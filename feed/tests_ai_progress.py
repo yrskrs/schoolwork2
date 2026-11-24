@@ -510,3 +510,21 @@ class EvaluationProgressTests(TestCase):
             {'ai_model': 'nonexistent|bad-model'},
         )
         self.assertEqual(bad_resp.status_code, 400)
+
+    @patch('feed.gemini_service.call_ai_api')
+    def test_custom_exceed_context_size_auto_switches_to_batched_evaluation(self, call):
+        from .tests_ai_payload import picture
+        from .ai_concurrency import get_model_context_limit
+        self.add_connection('custom', 'qwen3-vl-8b-instruct', connection_url='http://192.168.1.12:1234')
+        media = [picture(color=c) for c in ('red', 'blue', 'green', 'yellow', 'navy', 'purple')]
+        lm_err = ('HTTP 400: Engine protocol predict request returned 400: '
+                  '{"error":{"code":400,"message":"request (67905 tokens) exceeds the available context size (22016 tokens)",'
+                  '"type":"exceed_context_size_error","n_prompt_tokens":67905,"n_ctx":22016}}')
+        # First single-request attempt hits n_ctx=22016; batch recovery splits into chunks + 1 synthesis.
+        call.side_effect = [(400, None, lm_err, {})] + [self.answer() for _ in range(10)]
+        with patch('feed.gemini_service.extract_submission_content', return_value=(['Відповідь з фото'], media, None)), \
+             patch('feed.ai_payload.optimize_media', side_effect=lambda items, provider: items):
+            result = evaluate_submission_with_gemini(self.sub)
+        self.assertEqual(result['status'], 'success')
+        self.assertGreater(call.call_count, 2)
+        self.assertEqual(get_model_context_limit('custom', 'qwen3-vl-8b-instruct')['est_tokens'], 22016)

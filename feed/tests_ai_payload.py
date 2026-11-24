@@ -143,6 +143,21 @@ class MediaPayloadTests(SimpleTestCase):
         self.assertEqual(len(image_urls), 1)
         self.assertTrue(image_urls[0].startswith('data:image/png;base64,'))
 
+    def test_custom_provider_downscales_large_pages_and_parses_lm_studio_ctx(self):
+        from .ai_concurrency import is_context_limit_error, parse_context_limit_tokens
+        large = picture(color='navy', size=(2000, 1400))
+        scaled = optimize_media([large], 'custom')[0]
+        raw = base64.b64decode(scaled['data'])
+        with Image.open(io.BytesIO(raw)) as img:
+            self.assertLessEqual(max(img.size), 1280)
+        self.assertEqual(scaled['mime_type'], 'image/jpeg')
+
+        lm_err = ('Engine protocol predict request returned 400: '
+                  '{"error":{"code":400,"message":"request (67905 tokens) exceeds the available context size (22016 tokens)",'
+                  '"type":"exceed_context_size_error","n_prompt_tokens":67905,"n_ctx":22016}}')
+        self.assertTrue(is_context_limit_error(400, lm_err))
+        self.assertEqual(parse_context_limit_tokens(lm_err), (22016, 67905))
+
 
 class TransportTests(TestCase):
     @patch('feed.gemini_service._http_post_json',return_value=(200,{'error':{'code':503,'message':'backend unavailable'}},''))

@@ -1,6 +1,7 @@
 """Concurrency control, model cooldowns, and context limits memory for AI models."""
 import json
 import logging
+import re
 import time
 from typing import Dict, Optional, Tuple
 from django.core.cache import caches
@@ -114,6 +115,22 @@ def clear_model_cooldown(provider: str, model: str) -> None:
 # 3. Persistent context / volume limit memory
 # ─────────────────────────────────────────────────────────────────────────────
 
+def parse_context_limit_tokens(error_text: str):
+    """Extract (n_ctx, n_prompt_tokens) from provider context-overflow errors when reported."""
+    text = str(error_text or '')
+    ctx = None
+    prompt_toks = None
+    m_ctx = re.search(r'"n_ctx"\s*:\s*(\d+)', text) or re.search(
+        r'context\s*(?:size|length|limit|window)\s*\(?(\d+)\s*tokens?\)?', text, re.I)
+    if m_ctx:
+        ctx = int(m_ctx.group(1))
+    m_prompt = re.search(r'"n_prompt_tokens"\s*:\s*(\d+)', text) or re.search(
+        r'request\s*\(?(\d+)\s*tokens?\)?', text, re.I)
+    if m_prompt:
+        prompt_toks = int(m_prompt.group(1))
+    return ctx, prompt_toks
+
+
 def record_model_context_limit(provider: str, model: str, error_message: str, est_tokens: Optional[int] = None) -> None:
     """
     Запам'ятовує та позначає помилку перевищення контексту для моделі (413, context exceeded тощо).
@@ -121,6 +138,8 @@ def record_model_context_limit(provider: str, model: str, error_message: str, es
     """
     prov_key = _model_cache_key(provider, model)
     clean_err = str(error_message or 'Перевищено допустимий обсяг контексту моделі')[:400]
+    parsed_ctx, _ = parse_context_limit_tokens(error_message)
+    recorded_tokens = min(parsed_ctx, est_tokens) if (parsed_ctx and est_tokens) else (parsed_ctx or est_tokens or 0)
     
     # 1. Зберігаємо у cache
     cache = _get_cache()
@@ -132,7 +151,7 @@ def record_model_context_limit(provider: str, model: str, error_message: str, es
             'provider': provider,
             'model': model,
             'error': clean_err,
-            'est_tokens': est_tokens or 0,
+            'est_tokens': recorded_tokens,
             'flagged_at': timezone.localtime(timezone.now()).strftime('%d.%m.%Y %H:%M'),
         }
         cache.set(LIMIT_KEY, limits, timeout=86400 * 30)
@@ -153,8 +172,8 @@ def record_model_context_limit(provider: str, model: str, error_message: str, es
             if isinstance(m, dict) and m.get('name', '').lower() == str(model).lower():
                 m['context_limit_flagged'] = True
                 m['context_limit_error'] = clean_err
-                if est_tokens:
-                    m['context_limit_tokens'] = est_tokens
+                if recorded_tokens:
+                    m['context_limit_tokens'] = recorded_tokens
                 updated = True
         if updated:
             settings.saved_models_list = json.dumps(models_data, ensure_ascii=False)
@@ -221,7 +240,8 @@ def is_context_limit_error(status_code: Optional[int], error_text: str) -> bool:
     text = (error_text or '').lower()
     patterns = [
         '413', 'payload too large', 'request entity too large',
-        'context length', 'context window', 'too many tokens',
+        'context length', 'context window', 'context size', 'exceed_context_size',
+        'exceeds the available context', 'too many tokens',
         'maximum context length', 'token limit exceeded',
         'prompt is too long', 'exceeds maximum context',
         'input is too large', 'maximum prompt length'

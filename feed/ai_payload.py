@@ -342,7 +342,7 @@ def optimize_media(media, provider):
     for item in media:
         raw = base64.b64decode(item['data'])
         digest = hashlib.sha256(raw).hexdigest()
-        key = ('lossless-ai-image-v1-' if allow_webp else 'lossless-ai-image-std-v1-') + digest
+        key = ('lossless-ai-image-v1-' if allow_webp else 'lossless-ai-image-std-v2-') + digest
         prepared = cache.get(key)
         if prepared is None:
             prepared = {'mime_type': item['mime_type'], 'data': item['data'], 'signature': digest}
@@ -357,17 +357,26 @@ def optimize_media(media, provider):
                                 image.save(buffer, format='WEBP', lossless=True, exact=True, method=4)
                                 if buffer.tell() < len(raw):
                                     prepared.update(mime_type='image/webp', data=base64.b64encode(buffer.getvalue()).decode())
-                            elif item['mime_type'] not in ('image/png', 'image/jpeg'):
-                                # Local OpenAI-compatible backends (e.g. LM Studio) only accept PNG/JPEG data URIs.
-                                buffer = io.BytesIO()
-                                has_alpha = image.mode in ('RGBA', 'LA') or (image.mode == 'P' and 'transparency' in image.info)
-                                if has_alpha:
-                                    image.convert('RGBA').save(buffer, format='PNG', optimize=True)
-                                    std_mime = 'image/png'
-                                else:
-                                    image.convert('RGB').save(buffer, format='JPEG', quality=90, optimize=True)
-                                    std_mime = 'image/jpeg'
-                                prepared.update(mime_type=std_mime, data=base64.b64encode(buffer.getvalue()).decode())
+                            else:
+                                # Local OpenAI-compatible backends (e.g. LM Studio) only accept PNG/JPEG
+                                # and allocate high vision token counts for very large pages.
+                                resized = image
+                                if max(image.size) > 1280:
+                                    scale = 1280.0 / max(image.size)
+                                    resized = image.resize(
+                                        (max(1, int(image.width * scale)), max(1, int(image.height * scale))),
+                                        Image.Resampling.LANCZOS,
+                                    )
+                                if resized is not image or item['mime_type'] not in ('image/png', 'image/jpeg'):
+                                    buffer = io.BytesIO()
+                                    has_alpha = resized.mode in ('RGBA', 'LA') or (resized.mode == 'P' and 'transparency' in resized.info)
+                                    if has_alpha:
+                                        resized.convert('RGBA').save(buffer, format='PNG', optimize=True)
+                                        std_mime = 'image/png'
+                                    else:
+                                        resized.convert('RGB').save(buffer, format='JPEG', quality=88, optimize=True)
+                                        std_mime = 'image/jpeg'
+                                    prepared.update(mime_type=std_mime, data=base64.b64encode(buffer.getvalue()).decode())
                 except (OSError, ValueError, Image.DecompressionBombError):
                     # A codec/optimization failure must not remove the original.
                     prepared = {'mime_type': item['mime_type'], 'data': item['data'], 'signature': digest}
